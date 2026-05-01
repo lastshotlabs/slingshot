@@ -92,3 +92,11 @@ export { createPermissionsPlugin } from './plugin';
  * Configuration accepted by `createPermissionsPlugin()`.
  */
 export type { PermissionsPluginConfig } from './plugin';
+/**
+ * Permissions error classes with machine-readable codes.
+ */
+export {
+  PermissionsError,
+  PermissionsConfigError,
+  PermissionsAdapterError,
+} from './errors';

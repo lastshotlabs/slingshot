@@ -909,9 +909,8 @@ export function buildSsrMiddleware(
           return drainAfterCallbacks();
         },
       });
-      // P-SSR-2: replace bare console.error with structured logger output and
-      // an optional onStreamError callback so apps can wire metrics/circuit
-      // breakers without subscribing to a logger sink.
+      // Stream error logged via structured logger below with route/requestId
+      // context, and forwarded to onStreamError when configured.
       const requestId =
         c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? undefined;
       response.body.pipeTo(writable).catch((err: unknown) => {

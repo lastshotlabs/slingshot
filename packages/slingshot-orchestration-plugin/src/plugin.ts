@@ -72,6 +72,8 @@ export function createOrchestrationPlugin(
   const startBackoffMs = options.startBackoffMs ?? DEFAULT_START_BACKOFF_MS;
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
   let eventSink: SlingshotEventSink | null = null;
+  /** Tracks whether the adapter (when provided) has started successfully. */
+  let adapterStarted = providedAdapter === undefined;
 
   return {
     name: ORCHESTRATION_PLUGIN_KEY,
@@ -119,6 +121,7 @@ export function createOrchestrationPlugin(
     async setupPost() {
       if (providedAdapter) {
         await startAdapterWithRetry(providedAdapter, startMaxAttempts, startBackoffMs);
+        adapterStarted = true;
       }
     },
     async teardown() {
@@ -132,6 +135,10 @@ export function createOrchestrationPlugin(
           eventSink = null;
         }
       }
+    },
+    health() {
+      const status: 'healthy' | 'degraded' = adapterStarted ? 'healthy' : 'degraded';
+      return { status, adapterAvailable: adapterStarted };
     },
   };
 }

@@ -1,7 +1,7 @@
 /**
  * Create the Temporal-backed orchestration adapter used by Slingshot servers.
  */
-export { createTemporalOrchestrationAdapter } from './adapter';
+export { createTemporalOrchestrationAdapter, type TemporalOrchestrationHealthCapability } from './adapter';
 /**
  * Create a Temporal worker supervisor for Slingshot task and workflow definitions.
  */
@@ -38,3 +38,13 @@ export {
  * Derive the deterministic Temporal workflow ID used for a portable Slingshot run.
  */
 export { deriveTemporalRunId } from './ids';
+/**
+ * Temporal-specific error classes and Temporal-to-portable error mapping.
+ */
+export {
+  TemporalConnectionError,
+  TemporalOrchestrationError,
+  mapTemporalFailure,
+  toRunError,
+  wrapTemporalError,
+} from './errors';

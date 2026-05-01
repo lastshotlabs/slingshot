@@ -22,7 +22,6 @@ import {
   type RunHandle,
   type ScheduleCapability,
   type ScheduleHandle,
-  type SlingshotLogger,
   type StepRun,
   type WorkflowRun,
   createCachedRunHandle,
@@ -143,6 +142,7 @@ function serializeRunSnapshot(run: Run | WorkflowRun): SerializedRunSnapshot {
 
 function deserializeRunSnapshot(
   value: string,
+  logger?: Logger,
   reportError?: (err: unknown) => void,
 ): Run | WorkflowRun | null {
   try {
@@ -174,13 +174,26 @@ function deserializeRunSnapshot(
     }
     return base;
   } catch (err) {
-    if (reportError) {
-      reportError(err);
+    if (logger) {
+      logger.error('Failed to deserialize run snapshot', { err: errInfo(err) });
     } else {
       console.error('[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:', err);
     }
     return null;
   }
+}
+
+function errInfo(err: unknown): Record<string, unknown> | string {
+  if (err === null || err === undefined) return String(err);
+  if (typeof err !== 'object') return String(err);
+  const e = err as { name?: string; message?: string; code?: string; cause?: unknown };
+  const out: Record<string, unknown> = {};
+  if (typeof e.name === 'string') out.name = e.name;
+  if (typeof e.message === 'string') out.message = e.message;
+  if (typeof e.code === 'string') out.code = e.code;
+  if (e.cause !== undefined)
+    out.cause = e.cause instanceof Error ? e.cause.message : String(e.cause);
+  return out;
 }
 
 function getRunId(job: Job<Record<string, unknown>>): string {
@@ -316,6 +329,19 @@ export interface BullMQOrchestrationResetCapability {
 }
 
 /**
+ * Health-check capability for the BullMQ orchestration adapter.
+ *
+ * Returns the current health state of the adapter including Redis connectivity,
+ * worker presence, disposal state, and start-state status.
+ */
+export interface BullMQOrchestrationHealthCapability {
+  health(): Promise<{
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    details: Record<string, unknown>;
+  }>;
+}
+
+/**
  * Create the BullMQ-backed orchestration adapter.
  *
  * Use this adapter when the app already runs Redis and wants durable queues, repeatable
@@ -325,7 +351,6 @@ export function createBullMQOrchestrationAdapter(
   rawOptions: BullMQOrchestrationAdapterOptions & {
     eventSink?: OrchestrationEventSink;
     workflowConcurrency?: number;
-    logger?: SlingshotLogger;
     /**
      * Structured Logger used for prod-track diagnostics (snapshot malformation,
      * cancellation outcomes, retry classification). Falls back to `noopLogger`
@@ -337,11 +362,11 @@ export function createBullMQOrchestrationAdapter(
   ObservabilityCapability &
   ScheduleCapability &
   BullMQOrchestrationMetricsCapability &
-  BullMQOrchestrationResetCapability {
+  BullMQOrchestrationResetCapability &
+  BullMQOrchestrationHealthCapability {
   const {
     eventSink,
     workflowConcurrency,
-    logger: legacyLogger,
     structuredLogger: rawStructuredLogger,
     ...parsedInput
   } = rawOptions;
@@ -425,16 +450,10 @@ export function createBullMQOrchestrationAdapter(
       if (oldest !== undefined) {
         runIdToJobId.delete(oldest);
         metrics.runIdCacheEvictions += 1;
-        const payload = {
-          event: 'orchestration.bullmq.runIdCacheEvicted',
+        structuredLogger.warn('Run ID cache evicted', {
           evictedRunId: oldest,
           cacheSize: runIdToJobId.size,
-        };
-        if (legacyLogger) {
-          legacyLogger.warn(payload);
-        } else {
-          console.warn('[slingshot-orchestration-bullmq] runId cache eviction', payload);
-        }
+        });
       }
     }
     runIdToJobId.set(runId, jobId);
@@ -515,6 +534,7 @@ export function createBullMQOrchestrationAdapter(
           createBullMQTaskProcessor({
             taskRegistry,
             eventSink,
+            logger: structuredLogger,
           }),
           {
             connection,
@@ -525,7 +545,7 @@ export function createBullMQOrchestrationAdapter(
           },
         );
         taskWorker.on('stalled', (jobId: string) => {
-          console.error(`[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`);
+          structuredLogger.error('Job stalled in task queue', { jobId, queue: taskQueueName });
         });
       }
       if (!workflowWorker) {
@@ -551,6 +571,7 @@ export function createBullMQOrchestrationAdapter(
               return getQueueEventsForTaskName(taskName);
             },
             eventSink,
+            logger: structuredLogger,
           }),
           {
             connection,
@@ -560,7 +581,7 @@ export function createBullMQOrchestrationAdapter(
           },
         );
         workflowWorker.on('stalled', (jobId: string) => {
-          console.error(`[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`);
+          structuredLogger.error('Job stalled in workflow queue', { jobId, queue: workflowQueueName });
         });
       }
       for (const task of taskRegistry.values()) {
@@ -571,6 +592,7 @@ export function createBullMQOrchestrationAdapter(
           createBullMQTaskProcessor({
             taskRegistry,
             eventSink,
+            logger: structuredLogger,
           }),
           {
             connection,
@@ -580,9 +602,7 @@ export function createBullMQOrchestrationAdapter(
           },
         );
         worker.on('stalled', (jobId: string) => {
-          console.error(
-            `[slingshot-orchestration-bullmq] Job stalled in named queue '${task.queue}': ${jobId}`,
-          );
+          structuredLogger.error('Job stalled in named queue', { jobId, queue: task.queue });
         });
         const queueEvents = new QueueEvents(queueName, { connection });
         namedWorkers.set(task.queue, worker);
@@ -596,6 +616,11 @@ export function createBullMQOrchestrationAdapter(
         startState = 'started';
         startError = null;
         startPromise = null;
+        structuredLogger.info('BullMQ orchestration adapter started', {
+          taskQueue: taskQueueName,
+          workflowQueue: workflowQueueName,
+          namedWorkerCount: namedWorkers.size,
+        });
       },
       err => {
         // Retain the error and the failed state. Subsequent ensureStarted()
@@ -621,6 +646,7 @@ export function createBullMQOrchestrationAdapter(
         `reset() is only valid when start state is 'failed' (current: ${startState}).`,
       );
     }
+    structuredLogger.warn('Resetting adapter start state after failure');
     startState = 'idle';
     startError = null;
     startPromise = null;
@@ -730,7 +756,7 @@ export function createBullMQOrchestrationAdapter(
       return null;
     }
     let parseError: unknown = null;
-    const snapshot = deserializeRunSnapshot(payload, err => {
+    const snapshot = deserializeRunSnapshot(payload, structuredLogger, err => {
       parseError = err;
     });
     if (snapshot) {
@@ -762,7 +788,7 @@ export function createBullMQOrchestrationAdapter(
         continue;
       }
       let parseError: unknown = null;
-      const snapshot = deserializeRunSnapshot(payload, err => {
+      const snapshot = deserializeRunSnapshot(payload, structuredLogger, err => {
         parseError = err;
       });
       if (!snapshot) {
@@ -1036,17 +1062,11 @@ export function createBullMQOrchestrationAdapter(
       }) ?? null;
     if (!match) {
       metrics.runIdScanMisses += 1;
-      const payload = {
-        event: 'orchestration.bullmq.runIdScanMiss',
+      structuredLogger.warn('Run ID scan miss', {
         runId,
         scannedCount: jobs.length,
         maxScan: RUN_ID_SCAN_LIMIT,
-      };
-      if (legacyLogger) {
-        legacyLogger.warn(payload);
-      } else {
-        console.warn('[slingshot-orchestration-bullmq] runId scan miss', payload);
-      }
+      });
     }
     return match;
   }
@@ -1064,6 +1084,42 @@ export function createBullMQOrchestrationAdapter(
      */
     reset() {
       resetStartState();
+    },
+    async health() {
+      const details: Record<string, unknown> = {
+        disposed,
+        startState,
+        taskWorkerRunning: taskWorker !== null,
+        workflowWorkerRunning: workflowWorker !== null,
+      };
+
+      if (disposed) {
+        return { status: 'unhealthy', details };
+      }
+
+      // Ping Redis through the default task queue's client.
+      try {
+        const client = await defaultTaskQueue.client;
+        await client.ping();
+        details.redisPing = 'ok';
+      } catch (err) {
+        details.redisPing = 'error';
+        details.redisError =
+          err instanceof Error ? err.message : String(err);
+        return { status: 'unhealthy', details };
+      }
+
+      // Not yet started — operational but limited.
+      if (startState !== 'started') {
+        return { status: 'degraded', details };
+      }
+
+      // Workers missing when the adapter claims to be started.
+      if (!taskWorker || !workflowWorker) {
+        return { status: 'degraded', details };
+      }
+
+      return { status: 'healthy', details };
     },
     registerTask(def) {
       taskRegistry.set(def.name, def);
@@ -1216,6 +1272,7 @@ export function createBullMQOrchestrationAdapter(
       if (disposed) {
         return;
       }
+      structuredLogger.info('BullMQ orchestration adapter shutting down');
       // Wait for any in-flight start to finish BEFORE tearing down. Otherwise
       // a start racing with a shutdown can leave fresh workers/queues
       // connected to Redis after teardown completed — leaking connections
@@ -1247,10 +1304,10 @@ export function createBullMQOrchestrationAdapter(
           // pause(true) stops the worker from picking up new jobs immediately.
           await worker.pause(true);
         } catch (error) {
-          console.error(
-            `[slingshot-orchestration-bullmq] Failed to pause worker '${label}' during shutdown:`,
-            error,
-          );
+          structuredLogger.error('Failed to pause worker during shutdown', {
+            worker: label,
+            err: errInfo(error),
+          });
         }
 
         const deadline = Date.now() + shutdownDrainTimeoutMs;
@@ -1267,10 +1324,10 @@ export function createBullMQOrchestrationAdapter(
             try {
               activeCount = await getActiveCount.call(worker);
             } catch (error) {
-              console.error(
-                `[slingshot-orchestration-bullmq] getActiveCount failed for worker '${label}':`,
-                error,
-              );
+              structuredLogger.error('getActiveCount failed during shutdown drain', {
+                worker: label,
+                err: errInfo(error),
+              });
               break;
             }
             if (activeCount === 0) break;
@@ -1282,24 +1339,20 @@ export function createBullMQOrchestrationAdapter(
         // BullMQ to skip waiting for jobs and to release the connection promptly.
         const forceClose = activeCount > 0;
         if (forceClose) {
-          console.warn(
-            `[slingshot-orchestration-bullmq] Worker '${label}' force-closed with ${activeCount} ` +
-              `active job(s) still in flight after ${shutdownDrainTimeoutMs}ms drain timeout.`,
-            {
-              worker: label,
-              activeCount,
-              shutdownDrainTimeoutMs,
-              errorCode: 'WORKER_DRAIN_TIMEOUT',
-            },
-          );
+          structuredLogger.warn('Worker force-closed after drain timeout', {
+            worker: label,
+            activeCount,
+            shutdownDrainTimeoutMs,
+            errorCode: 'WORKER_DRAIN_TIMEOUT',
+          });
         }
         try {
           await worker.close(forceClose);
         } catch (error) {
-          console.error(
-            `[slingshot-orchestration-bullmq] Failed to close worker '${label}':`,
-            error,
-          );
+          structuredLogger.error('Failed to close worker during shutdown', {
+            worker: label,
+            err: errInfo(error),
+          });
         }
       };
 
@@ -1339,14 +1392,15 @@ export function createBullMQOrchestrationAdapter(
       const totalTimeoutMs = shutdownDrainTimeoutMs * 2 + 5_000;
       const timeoutPromise = new Promise<void>(resolve => {
         setTimeout(() => {
-          console.warn(
-            `[slingshot-orchestration-bullmq] Shutdown exceeded ${totalTimeoutMs}ms; forcing exit.`,
-          );
+          structuredLogger.warn('Shutdown exceeded total timeout; forcing exit', {
+            totalTimeoutMs,
+          });
           resolve();
         }, totalTimeoutMs);
       });
 
       await Promise.race([shutdownSequence(), timeoutPromise]);
+      structuredLogger.info('BullMQ orchestration adapter shutdown completed');
     },
     async listRuns(filter) {
       await ensureStarted();

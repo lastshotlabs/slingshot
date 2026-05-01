@@ -1,18 +1,9 @@
-import { getContextOrNull } from './context/index';
+import { getContextOrNull } from './context/contextStore';
+import type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginStateTypes';
+
+export type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginStateTypes';
 
 const sealedPluginStates = new WeakSet<ReadonlyMap<string, unknown>>();
-
-/**
- * Instance-scoped map of plugin name -> plugin-owned state.
- *
- * Each plugin stores its runtime state under its own {@link SlingshotPlugin.name}
- * key. Values are opaque to the framework - plugins own the shape of their
- * own entries and expose typed accessors for dependent plugins.
- *
- * The public surface is read-only. Framework-owned contexts use a guarded
- * writable implementation during bootstrap, then seal it after app finalization.
- */
-export type PluginStateMap = ReadonlyMap<string, unknown>;
 
 /**
  * Writable plugin state used internally by the framework bootstrap lifecycle.
@@ -111,30 +102,6 @@ export function sealPluginState(pluginState: PluginStateMap): void {
  */
 export function isPluginStateSealed(pluginState: PluginStateMap): boolean {
   return sealedPluginStates.has(pluginState);
-}
-
-/**
- * Any object that carries a {@link PluginStateMap}.
- *
- * Used as an input type so callers can pass either a raw `PluginStateMap` or
- * any container that embeds one (e.g. {@link SlingshotContext}).
- */
-export interface PluginStateCarrier {
-  /** The instance-scoped plugin state map. */
-  readonly pluginState: PluginStateMap;
-}
-
-/**
- * Coordinates for locating an entity adapter within plugin state.
- *
- * Used by {@link maybeEntityAdapter} and {@link requireEntityAdapter} to look
- * up a specific entity's adapter from the owning plugin's state entry.
- */
-export interface EntityAdapterLookup {
-  /** Name of the plugin that owns the entity adapter. */
-  readonly plugin: string;
-  /** Name of the entity whose adapter to retrieve. */
-  readonly entity: string;
 }
 
 type EntityAdapterMap<TAdapter extends object = object> = Readonly<Record<string, TAdapter>>;

@@ -260,12 +260,15 @@ function createInviteLookupRateLimit(args: {
   };
 }
 
-/**
- * Create the organizations plugin using the manifest-driven entity system.
- */
-
 const logger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-organizations' } });
 
+/**
+ * Create the organizations plugin using the manifest-driven entity system.
+ *
+ * The plugin mounts organization, membership, invitation, and optional group
+ * management routes while publishing organization services into plugin state
+ * for peer packages.
+ */
 export function createOrganizationsPlugin(
   rawConfig: OrganizationsPluginConfig = {},
   deps: OrganizationsPluginDeps = {},

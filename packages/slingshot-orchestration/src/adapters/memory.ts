@@ -1,3 +1,4 @@
+import { logger } from '../internal/logger';
 import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
@@ -58,7 +59,9 @@ export function createMemoryAdapter(
     maxPayloadBytes?: number;
     logger?: import('@lastshotlabs/slingshot-core').Logger;
   } = {},
-): OrchestrationAdapter & ObservabilityCapability {
+): OrchestrationAdapter & ObservabilityCapability & {
+  health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
+} {
   const parsed = memoryAdapterOptionsSchema.parse({
     concurrency: options.concurrency,
     maxPayloadBytes: options.maxPayloadBytes,
@@ -478,15 +481,22 @@ export function createMemoryAdapter(
         controller.abort(new Error('Run cancelled'));
       }
       const SHUTDOWN_TIMEOUT_MS = 30_000;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<void>(resolve => {
-        setTimeout(() => {
-          console.warn(
-            '[orchestration] shutdown timed out after 30s — some tasks may still be running',
-          );
+        timeoutHandle = setTimeout(() => {
+          logger.warn('shutdown timed out — some tasks may still be running', {
+            timeoutMs: SHUTDOWN_TIMEOUT_MS,
+          });
           resolve();
         }, SHUTDOWN_TIMEOUT_MS);
       });
-      await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
+      try {
+        await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
+      } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+      }
     },
     async listRuns(filter) {
       const entries = [...runs.values()].filter(run => {
@@ -522,6 +532,16 @@ export function createMemoryAdapter(
           progressListeners.delete(runId);
         }
       };
+    },
+    health() {
+      const details: Record<string, unknown> = {
+        started,
+        shuttingDown,
+      };
+      if (shuttingDown) {
+        return { status: 'degraded', details };
+      }
+      return { status: 'healthy', details };
     },
   };
 }

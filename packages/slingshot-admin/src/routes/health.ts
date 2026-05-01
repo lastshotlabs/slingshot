@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createRoute } from '@lastshotlabs/slingshot-core';
 import type { AdminCircuitBreakerHealth } from '../lib/circuitBreaker';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
-import type { AdminPluginHealth } from '../plugin';
+import type { AdminPluginHealth } from '../types/health';
 
 // ---------------------------------------------------------------------------
 // Response schemas

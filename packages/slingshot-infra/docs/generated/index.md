@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-infra
 ## Export Paths
 
 - `.`
+- `./testing`
 
 ## Package Scripts
 

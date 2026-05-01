@@ -23,6 +23,8 @@
  * Slingshot handler API surface.
  */
 
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
 type LambdaContextLike = { awsRequestId?: string };
 
 type StandardHandler = (event: unknown, context: LambdaContextLike) => Promise<unknown>;
@@ -83,7 +85,7 @@ export function isStreamingSupported(): boolean {
  * rejecting — Lambda will turn that into a `502` style response per its standard
  * streaming contract.
  */
-export function wrapStreamingHandler(handler: StandardHandler): StandardHandler {
+export function wrapStreamingHandler(handler: StandardHandler, logger?: Logger): StandardHandler {
   const shim = getAwslambdaShim();
   if (!shim || typeof shim.streamifyResponse !== 'function') {
     // Non-streaming environment — return the handler unchanged. The caller's
@@ -125,7 +127,7 @@ export function wrapStreamingHandler(handler: StandardHandler): StandardHandler 
       }
       responseStream.end(JSON.stringify(payload));
     } catch (err) {
-      console.error('[lambda] streaming write failed:', err);
+      logger?.error('streaming-write-failed', { err: String(err) });
       try {
         responseStream.end();
       } catch {

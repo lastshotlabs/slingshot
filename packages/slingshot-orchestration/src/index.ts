@@ -1,7 +1,12 @@
 /**
  * Portable orchestration surface for tasks, workflows, and built-in adapters.
  */
-export { OrchestrationError } from './errors';
+export {
+  OrchestrationError,
+  OrchestrationTimeoutError,
+  OrchestrationAdapterError,
+  OrchestrationRunNotFoundError,
+} from './errors';
 /**
  * Error raised when a workflow lifecycle hook fails.
  */

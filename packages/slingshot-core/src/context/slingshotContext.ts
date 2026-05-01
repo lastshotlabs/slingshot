@@ -16,7 +16,7 @@ import type { IdempotencyAdapter } from '../idempotencyAdapter';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { MetricsEmitter } from '../metrics';
-import type { PluginStateMap } from '../pluginState';
+import type { PluginStateMap } from '../pluginStateTypes';
 import type { RuntimeSqliteDatabase } from '../runtime';
 import type { SecretRepository } from '../secrets';
 import type { SigningConfig } from '../signing';

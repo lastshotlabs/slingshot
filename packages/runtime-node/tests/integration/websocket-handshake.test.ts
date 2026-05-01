@@ -23,6 +23,8 @@ function createBufferedClient(url: string): Promise<{
     const ws = new WsClient(url);
     const buffer: string[] = [];
     const waiting: Array<(msg: string) => void> = [];
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout>;
 
     ws.on('message', (data: unknown) => {
       const str = Buffer.isBuffer(data) ? data.toString() : String(data);
@@ -35,10 +37,33 @@ function createBufferedClient(url: string): Promise<{
 
     ws.on('error', () => {});
 
-    const timeout = setTimeout(() => reject(new Error(`connect timeout: ${url}`)), 4_000);
+    function cleanup() {
+      clearTimeout(timeout);
+      ws.removeListener('error', onConnectError);
+      ws.removeListener('close', onCloseBeforeOpen);
+    }
+    function fail(err: Error) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      ws.terminate();
+      reject(err);
+    }
+    function onConnectError(err: Error) {
+      fail(err);
+    }
+    function onCloseBeforeOpen(code: number, reason: Buffer) {
+      fail(
+        new Error(`connection closed before open: ${url} code=${code} reason=${reason.toString()}`),
+      );
+    }
+
+    timeout = setTimeout(() => fail(new Error(`connect timeout: ${url}`)), 4_000);
 
     ws.once('open', () => {
-      clearTimeout(timeout);
+      if (settled) return;
+      settled = true;
+      cleanup();
       const nextMessage = (): Promise<string> =>
         new Promise<string>((res, rej) => {
           if (buffer.length > 0) {
@@ -54,10 +79,8 @@ function createBufferedClient(url: string): Promise<{
       resolve({ ws, nextMessage });
     });
 
-    ws.once('error', (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+    ws.once('error', onConnectError);
+    ws.once('close', onCloseBeforeOpen);
   });
 }
 

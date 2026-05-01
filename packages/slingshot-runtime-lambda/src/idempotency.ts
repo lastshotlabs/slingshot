@@ -1,5 +1,6 @@
 import {
   type HandlerMeta,
+  type Logger,
   type SlingshotContext,
   resolveActor,
   sha256,
@@ -112,6 +113,7 @@ export async function invokeWithRecordIdempotency<T>(
   record: { body: unknown; meta: Record<string, unknown>; naturalKey?: string },
   config: RuntimeIdempotencyConfig | undefined,
   invoke: () => Promise<T>,
+  logger?: Logger,
 ): Promise<T> {
   const ttl = config?.ttl ?? 86400;
   const scope = config?.scope ?? 'global';
@@ -134,7 +136,7 @@ export async function invokeWithRecordIdempotency<T>(
   try {
     cached = await ctx.persistence.idempotency.get(key);
   } catch (err) {
-    console.error('[lambda] idempotency.get failed; proceeding without replay:', err);
+    if (logger) logger.error('idempotency.get failed; proceeding without replay', { err: String(err) });
   }
   if (cached) {
     if (fingerprint && cached.requestFingerprint && cached.requestFingerprint !== fingerprint) {
@@ -155,7 +157,7 @@ export async function invokeWithRecordIdempotency<T>(
           );
         } catch (err) {
           // Buggy hook must NOT bypass the safety check — fall back to reject.
-          console.error('[lambda] onIdempotencyConflict hook threw; falling back to reject:', err);
+          if (logger) logger.error('onIdempotencyConflict hook threw; falling back to reject', { err: String(err) });
           resolution = 'reject';
         }
       }
@@ -181,7 +183,7 @@ export async function invokeWithRecordIdempotency<T>(
     // Failing to persist the result means a future replay won't see it — same
     // outcome as if the store were unreachable on read. Log and continue; the
     // handler already produced its output.
-    console.error('[lambda] idempotency.set failed; result will not be replay-cached:', err);
+    if (logger) logger.error('idempotency.set failed; result will not be replay-cached', { err: String(err) });
   }
   return output;
 }

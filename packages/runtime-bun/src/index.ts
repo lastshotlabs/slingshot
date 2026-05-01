@@ -47,6 +47,20 @@ const DEFAULT_WS_GRACEFUL_CLOSE_TIMEOUT_MS = 30_000;
  * itself never resolves under Bun 1.3.11. We wait long enough that the port
  * has been released by the time our own `stop()` resolves.
  */
+/**
+ * Grace window we give Bun's `stop(true)` after a server-side `ws.close()`.
+ *
+ * Empirically the OS port is released within ~10 ms even though the promise
+ * itself never resolves under Bun 1.3.11. We wait long enough that the port
+ * has been released by the time our own `stop()` resolves.
+ *
+ * 50 ms was chosen as a safe lower bound: Bun's stop(true) hang-after-close
+ * was empirically verified to resolve within ~10 ms on Bun 1.3.11 (the port
+ * is released before the promise settles). 50 ms provides 5x headroom to
+ * absorb scheduler jitter without meaningfully delaying shutdown. This value
+ * was determined through empirical testing, not derived from any Bun
+ * specification — see `docs/bun-upstream-bugs.md` for the full investigation.
+ */
 const BUN_STOP_GRACE_MS = 50;
 
 // ---------------------------------------------------------------------------

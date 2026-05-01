@@ -17,3 +17,34 @@ export class OrchestrationError extends Error {
     this.cause = cause;
   }
 }
+
+/**
+ * Error raised when an orchestration operation exceeds its configured timeout.
+ */
+export class OrchestrationTimeoutError extends OrchestrationError {
+  constructor(message: string, cause?: Error) {
+    super('ORCHESTRATION_TIMEOUT', message, cause);
+    this.name = 'OrchestrationTimeoutError';
+  }
+}
+
+/**
+ * Error raised when an underlying adapter (BullMQ, Temporal, etc.) encounters a failure
+ * that is not covered by a more specific error type.
+ */
+export class OrchestrationAdapterError extends OrchestrationError {
+  constructor(message: string, cause?: Error) {
+    super('ADAPTER_ERROR', message, cause);
+    this.name = 'OrchestrationAdapterError';
+  }
+}
+
+/**
+ * Error raised when a run lookup (by run id or filter) yields no result.
+ */
+export class OrchestrationRunNotFoundError extends OrchestrationError {
+  constructor(message: string, cause?: Error) {
+    super('RUN_NOT_FOUND', message, cause);
+    this.name = 'OrchestrationRunNotFoundError';
+  }
+}

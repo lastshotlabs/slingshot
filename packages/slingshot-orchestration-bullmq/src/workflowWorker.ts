@@ -1,4 +1,6 @@
 import type { Job, Queue, QueueEvents } from 'bullmq';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import { OrchestrationError, generateRunId } from '@lastshotlabs/slingshot-orchestration';
 import type {
   AnyResolvedTask,
@@ -18,11 +20,18 @@ function toRunError(error: unknown): RunError {
 
 function reportWorkflowHookError(options: {
   eventSink?: OrchestrationEventSink;
+  logger: Logger;
   runId: string;
   workflow: string;
   hook: 'onStart' | 'onComplete' | 'onFail';
   error: unknown;
 }): void {
+  options.logger.error(`Workflow ${options.hook} hook failed`, {
+    runId: options.runId,
+    workflow: options.workflow,
+    hook: options.hook,
+    err: toRunError(options.error),
+  });
   if (options.eventSink) {
     void options.eventSink.emit('orchestration.workflow.hookError', {
       runId: options.runId,
@@ -30,9 +39,7 @@ function reportWorkflowHookError(options: {
       hook: options.hook,
       error: toRunError(options.error),
     });
-    return;
   }
-  console.error(`[orchestration] workflow ${options.hook} hook failed`, options.error);
 }
 
 type WorkflowHookHandler<TPayload> = (payload: TPayload) => Promise<void> | void;
@@ -75,7 +82,9 @@ export function createBullMQWorkflowProcessor(options: {
   getTaskQueue(taskName: string): Queue;
   getTaskQueueEvents(taskName: string): QueueEvents;
   eventSink?: OrchestrationEventSink;
+  logger?: Logger;
 }) {
+  const logger = options.logger ?? noopLogger;
   function resolveTask(step: StepEntry): AnyResolvedTask {
     if (step.taskRef) return step.taskRef;
     const task = options.taskRegistry.get(step.task);
@@ -96,9 +105,8 @@ export function createBullMQWorkflowProcessor(options: {
     if (rawWorkflowName === undefined || rawWorkflowName.length === 0) {
       const msg = `BullMQ job ${job.id} has invalid data: missing 'workflowName' field`;
       // NOTE: never log job.data — payload may contain PII / secrets / large blobs.
-      console.error(`[slingshot-orchestration-bullmq] ${msg}`, {
+      logger.error('Workflow job missing workflowName', {
         runId: runIdForLog,
-        workflowName: rawWorkflowName,
         errorCode: 'WORKFLOW_DATA_MISSING_WORKFLOW_NAME',
       });
       throw new Error(msg);
@@ -140,6 +148,7 @@ export function createBullMQWorkflowProcessor(options: {
       } catch (error) {
         reportWorkflowHookError({
           eventSink: options.eventSink,
+          logger,
           runId,
           workflow: workflowName,
           hook: 'onStart',
@@ -351,6 +360,7 @@ export function createBullMQWorkflowProcessor(options: {
         } catch (hookError) {
           reportWorkflowHookError({
             eventSink: options.eventSink,
+            logger,
             runId,
             workflow: workflowName,
             hook: 'onComplete',
@@ -380,6 +390,7 @@ export function createBullMQWorkflowProcessor(options: {
         } catch (hookError) {
           reportWorkflowHookError({
             eventSink: options.eventSink,
+            logger,
             runId,
             workflow: workflowName,
             hook: 'onFail',

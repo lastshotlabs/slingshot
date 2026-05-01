@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { logger } from '../internal/logger';
 import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
@@ -132,7 +133,9 @@ export function createSqliteAdapter(options: {
   eventSink?: OrchestrationEventSink;
   maxPayloadBytes?: number;
   logger?: import('@lastshotlabs/slingshot-core').Logger;
-}): OrchestrationAdapter & ObservabilityCapability {
+}): OrchestrationAdapter & ObservabilityCapability & {
+  health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
+} {
   const parsed = sqliteAdapterOptionsSchema.parse(options);
   const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'sqlite adapter');
   let db: Database.Database;
@@ -207,16 +210,15 @@ export function createSqliteAdapter(options: {
     try {
       db.close();
     } catch (err) {
-      const logger = options.logger;
-      if (logger) {
-        logger.error('orchestration.sqlite.closeFailed', {
+      if (options.logger) {
+        options.logger.error('orchestration.sqlite.closeFailed', {
           error:
             err instanceof Error
               ? { message: err.message, stack: err.stack }
               : { message: String(err) },
         });
       } else {
-        console.error('[orchestration] sqlite db close failed', err);
+        logger.error('sqlite db close failed', { err: String(err) });
       }
     }
   }
@@ -918,15 +920,22 @@ export function createSqliteAdapter(options: {
           controller.abort(new Error('Run cancelled'));
         }
         const SHUTDOWN_TIMEOUT_MS = 30_000;
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<void>(resolve => {
-          setTimeout(() => {
-            console.warn(
-              '[orchestration] shutdown timed out after 30s — some tasks may still be running',
-            );
+          timeoutHandle = setTimeout(() => {
+            logger.warn('shutdown timed out — some tasks may still be running', {
+              timeoutMs: SHUTDOWN_TIMEOUT_MS,
+            });
             resolve();
           }, SHUTDOWN_TIMEOUT_MS);
         });
-        await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
+        try {
+          await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
+        } finally {
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        }
       } finally {
         closeDb();
       }
@@ -969,6 +978,26 @@ export function createSqliteAdapter(options: {
           progressListeners.delete(runId);
         }
       };
+    },
+    health() {
+      const details: Record<string, unknown> = {
+        started,
+        shuttingDown,
+        dbClosed,
+      };
+      if (shuttingDown || dbClosed) {
+        return { status: 'degraded', details };
+      }
+      try {
+        db.prepare('SELECT 1').get();
+        details.dbCheck = 'ok';
+      } catch (err) {
+        details.dbCheck = 'error';
+        details.dbError =
+          err instanceof Error ? err.message : String(err);
+        return { status: 'degraded', details };
+      }
+      return { status: 'healthy', details };
     },
   };
 }

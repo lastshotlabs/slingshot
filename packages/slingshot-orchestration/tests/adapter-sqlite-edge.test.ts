@@ -548,6 +548,37 @@ describe('sqlite adapter — shutdown', () => {
     await expect(adapter.shutdown()).resolves.toBeUndefined();
   });
 
+  sqliteTest('shutdown clears the timeout guard when the adapter is already idle', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orch-sqlite-ss-clear-'));
+    tempDirs.push(dir);
+    const dbPath = join(dir, 'ss-clear.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    let scheduledDelay: number | undefined;
+    const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      void handler;
+      void args;
+      scheduledDelay = timeout;
+      return 456 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as typeof setTimeout);
+    const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout');
+
+    try {
+      const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+      await expect(adapter.shutdown()).resolves.toBeUndefined();
+
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(scheduledDelay).toBe(30_000);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(456);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
   sqliteTest('shutdown is idempotent', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'slingshot-orch-sqlite-ss2-'));
     tempDirs.push(dir);

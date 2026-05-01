@@ -3,8 +3,8 @@ import {
   type Logger,
   TimeoutError,
   createConsoleLogger,
-  timeoutSignal,
 } from '@lastshotlabs/slingshot-core';
+import { withAbortTimeout } from './lib/withAbortTimeout';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 import { EdgeFileSizeExceededError, EdgePasswordConfigError, EdgeUnsupportedError } from './errors';
 
@@ -149,9 +149,9 @@ export interface EdgeRuntimeOptions {
    * rather than a stalled isolate.
    *
    * **AbortController:** unlike the earlier `withTimeout`-only approach, this
-   * implementation uses `timeoutSignal()` so the underlying `AbortController`
-   * is properly aborted when the deadline fires. Implementations that accept
-   * the optional `AbortSignal` parameter can cancel their work early.
+   * implementation creates an `AbortController` whose signal is passed to the
+   * store function. Implementations that accept the optional `AbortSignal`
+   * parameter can cancel their work early.
    *
    * Defaults to {@link DEFAULT_FILE_STORE_TIMEOUT_MS} (5 s). Set to 0 to
    * disable the timeout entirely (not recommended for production).
@@ -416,55 +416,6 @@ const edgeServer = Object.freeze({
     );
   },
 });
-
-// ---------------------------------------------------------------------------
-// AbortController-based timeout helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Wrap an async operation with an AbortController-based timeout.
- *
- * Unlike `withTimeout` from slingshot-core (which races a timer against a
- * promise and abandons the loser), this helper creates an `AbortController`,
- * passes its signal to the operation via a callback, and aborts the controller
- * when the deadline fires. The operation can use the signal to cancel its
- * underlying work (e.g., pass it to `fetch()` or `kv.get()`). The returned
- * promise rejects with `TimeoutError` when the deadline is reached.
- *
- * @param op - Factory that receives an `AbortSignal` and returns the operation promise.
- * @param timeoutMs - Timeout in milliseconds. If 0 or negative, the operation runs
- *   without a timeout and a no-op signal (never aborted) is passed.
- * @param label - Optional label for the `TimeoutError` message.
- * @returns The operation's result, or rejects with `TimeoutError`.
- * @internal
- */
-async function withAbortTimeout<T>(
-  op: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number,
-  label?: string,
-): Promise<T> {
-  if (timeoutMs <= 0) {
-    return op(new AbortController().signal);
-  }
-  const signal = timeoutSignal(timeoutMs);
-  const opPromise = op(signal);
-  // Race the operation against the abort signal. This ensures the promise
-  // rejects as soon as the signal fires, even if the op does not check the
-  // signal internally.
-  return Promise.race([
-    opPromise,
-    new Promise<T>((_, reject) => {
-      if (signal.aborted) {
-        reject(new TimeoutError(timeoutMs, label));
-        return;
-      }
-      const onAbort = (): void => {
-        reject(new TimeoutError(timeoutMs, label));
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    }),
-  ]);
-}
 
 function resolveRuntimeTimeoutMs(operationTimeoutMs: number, heartbeatTimeoutMs: number): number {
   if (heartbeatTimeoutMs <= 0) return operationTimeoutMs;

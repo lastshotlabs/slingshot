@@ -2,6 +2,8 @@ import { Context } from '@temporalio/activity';
 import { Client } from '@temporalio/client';
 import type { ClientInterceptors, ConnectionLike } from '@temporalio/client';
 import type { DataConverter } from '@temporalio/common';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
@@ -55,6 +57,7 @@ export function createTemporalActivities(options: {
   connection: ConnectionLike;
   namespace?: string;
   eventSink?: OrchestrationEventSink;
+  logger?: Logger;
   /**
    * Optional Temporal `DataConverter` forwarded to the internal `Client`.
    * Required for codec symmetry: without it, signals emitted from activities
@@ -78,6 +81,7 @@ export function createTemporalActivities(options: {
     ...(options.dataConverter ? { dataConverter: options.dataConverter } : {}),
     ...(options.interceptors ? { interceptors: options.interceptors } : {}),
   });
+  const logger = options.logger ?? noopLogger;
 
   return {
     async executeSlingshotTask(
@@ -103,7 +107,12 @@ export function createTemporalActivities(options: {
         attempt: activityContext.info.attempt,
         runId: args.runId,
         signal: activityContext.cancellationSignal,
-        log: console,
+        log: {
+          info: (msg: string) => logger.info(msg),
+          warn: (msg: string) => logger.warn(msg),
+          error: (msg: string) => logger.error(msg),
+          debug: (msg: string) => logger.debug ? logger.debug(msg) : undefined,
+        } as Console,
         tenantId: args.tenantId,
         reportProgress(data) {
           void handle.signal('slingshot-progress', {
@@ -159,7 +168,7 @@ export function createTemporalActivities(options: {
         // Log and emit the error, then rethrow so Temporal can retry the activity.
         // Swallowing hook errors would allow a workflow to appear successful even
         // when its completion hook failed — better to be loud and retryable.
-        console.error('[slingshot-orchestration-temporal] workflow hook failed', error);
+        logger.error('Workflow hook failed', { err: error instanceof Error ? error.message : String(error) });
         await options.eventSink?.emit('orchestration.workflow.hookError', {
           runId: args.runId,
           workflow: args.workflowName,

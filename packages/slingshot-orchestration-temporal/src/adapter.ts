@@ -6,6 +6,8 @@ import {
   WorkflowFailedError,
 } from '@temporalio/client';
 import { withTimeout } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -200,6 +202,19 @@ async function maybeQueryState(
 }
 
 /**
+ * Health-check capability for the Temporal orchestration adapter.
+ *
+ * Returns the current health state including Temporal connection status
+ * and whether the adapter has been started.
+ */
+export interface TemporalOrchestrationHealthCapability {
+  health(): Promise<{
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    details: Record<string, unknown>;
+  }>;
+}
+
+/**
  * Creates a Temporal-backed {@link OrchestrationAdapter} that translates the
  * framework's task/workflow operations into Temporal Client calls.
  *
@@ -223,9 +238,14 @@ async function maybeQueryState(
  * @returns A fully wired {@link OrchestrationAdapter}.
  */
 export function createTemporalOrchestrationAdapter(
-  rawOptions: TemporalOrchestrationAdapterOptions,
-): OrchestrationAdapter {
-  const options = temporalAdapterOptionsSchema.parse(rawOptions);
+  rawOptions: TemporalOrchestrationAdapterOptions & {
+    structuredLogger?: Logger;
+    logger?: Logger;
+  },
+): OrchestrationAdapter & TemporalOrchestrationHealthCapability {
+  const { structuredLogger: rawLogger, ...parsedInput } = rawOptions;
+  const options = temporalAdapterOptionsSchema.parse(parsedInput);
+  const logger: Logger = rawLogger ?? noopLogger;
   const client = options.client as Client;
   const connection = options.connection as Connection | undefined;
   const tasks = new Map<string, AnyResolvedTask>();
@@ -347,6 +367,28 @@ export function createTemporalOrchestrationAdapter(
       }
       workflows.set(def.name, def);
       rebuildRegistry();
+    },
+    async health() {
+      const details: Record<string, unknown> = {
+        started,
+        ownsConnection: !!options.ownsConnection,
+      };
+
+      if (!started) {
+        return { status: 'degraded', details };
+      }
+
+      try {
+        await client.connection.ensureConnected();
+        details.connection = 'ok';
+      } catch (err) {
+        details.connection = 'error';
+        details.connectionError =
+          err instanceof Error ? err.message : String(err);
+        return { status: 'unhealthy', details };
+      }
+
+      return { status: 'healthy', details };
     },
     async runTask(name, input, opts) {
       getTask(name);
@@ -631,10 +673,9 @@ export function createTemporalOrchestrationAdapter(
               } catch (callbackError) {
                 // If the caller's callback throws, log it and stop polling
                 // to prevent the timer from accumulating unhandled errors.
-                console.error(
-                  '[slingshot-orchestration-temporal] onProgress callback threw; stopping poll',
-                  callbackError,
-                );
+                logger.error('onProgress callback threw; stopping poll', {
+                  err: callbackError instanceof Error ? callbackError.message : String(callbackError),
+                });
                 stop();
                 return;
               }
@@ -685,10 +726,9 @@ export function createTemporalOrchestrationAdapter(
         try {
           dispose();
         } catch (error) {
-          console.error(
-            '[slingshot-orchestration-temporal] failed to dispose onProgress poller during shutdown',
-            error,
-          );
+          logger.error('Failed to dispose onProgress poller during shutdown', {
+            err: error instanceof Error ? error.message : String(error),
+          });
         }
       }
       progressIntervals.clear();
@@ -703,10 +743,9 @@ export function createTemporalOrchestrationAdapter(
         try {
           await maybeClient.close();
         } catch (error) {
-          console.error(
-            '[slingshot-orchestration-temporal] failed to close Temporal client during shutdown',
-            error,
-          );
+          logger.error('Failed to close Temporal client during shutdown', {
+            err: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -714,10 +753,9 @@ export function createTemporalOrchestrationAdapter(
         try {
           await connection.close();
         } catch (error) {
-          console.error(
-            '[slingshot-orchestration-temporal] failed to close Temporal connection during shutdown',
-            error,
-          );
+          logger.error('Failed to close Temporal connection during shutdown', {
+            err: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     },

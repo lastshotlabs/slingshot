@@ -1,3 +1,4 @@
+import type { OrchestrationErrorCode } from '@lastshotlabs/slingshot-orchestration';
 import {
   CancelledFailure,
   TerminatedFailure,
@@ -7,6 +8,32 @@ import {
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 
 export { toRunError } from './runError';
+
+/**
+ * Base error for Temporal-specific orchestration failures.
+ *
+ * Adds an `adapter` field so consumers can identify which adapter backend
+ * produced the error when multiple orchestration adapters are in use.
+ */
+export class TemporalOrchestrationError extends OrchestrationError {
+  readonly adapter: string = 'temporal';
+
+  constructor(code: OrchestrationErrorCode, message: string, cause?: Error) {
+    super(code, `[temporal] ${message}`, cause);
+    this.name = 'TemporalOrchestrationError';
+  }
+}
+
+/**
+ * Error raised when the Temporal adapter cannot establish or maintain a
+ * connection to the Temporal server.
+ */
+export class TemporalConnectionError extends TemporalOrchestrationError {
+  constructor(message: string, cause?: Error) {
+    super('ADAPTER_ERROR', `connection failed: ${message}`, cause);
+    this.name = 'TemporalConnectionError';
+  }
+}
 
 /**
  * Map a Temporal failure to a typed {@link OrchestrationError} so that callers

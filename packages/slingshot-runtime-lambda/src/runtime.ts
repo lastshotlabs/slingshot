@@ -132,8 +132,8 @@ export function createLambdaRuntime(
   // fallback visible in CloudWatch even before the first invocation.
   const streamingActive = streamingRequested && isStreamingSupported();
   if (streamingRequested && !streamingActive) {
-    console.warn(
-      '[lambda] streamingHandler:true requested but globalThis.awslambda.streamifyResponse is not available — falling back to non-streaming handlers',
+    runtimeLogger.warn(
+      'streamingHandler requested but streamifyResponse is not available — falling back to non-streaming',
     );
   }
 
@@ -268,7 +268,7 @@ export function createLambdaRuntime(
       // a drop-in replacement; the streaming shim is a passthrough for non-HTTP
       // payloads.
       if (streamingActive) {
-        return wrapStreamingHandler(baseHandler);
+        return wrapStreamingHandler(baseHandler, runtimeLogger);
       }
       return baseHandler;
     },
@@ -280,7 +280,7 @@ export function createLambdaRuntime(
       try {
         await config.hooks?.onShutdown?.(cached.ctx);
       } catch (err) {
-        console.error('[lambda] onShutdown hook threw during shutdown():', err);
+        runtimeLogger.error('onShutdown-hook-threw-during-shutdown', { err: String(err) });
       }
       await cached.teardown();
       cached = null;

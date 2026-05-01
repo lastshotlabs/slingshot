@@ -1,3 +1,21 @@
+/**
+ * This file is intentionally large. It packs multiple runtime subsystems into a
+ * single module to keep the public API surface simple (one `import` provides
+ * everything) and because the factory pattern used here — `nodeRuntime()` —
+ * must close over all subsystem state.
+ *
+ * Subsystems contained in this file:
+ *   - Logger (text-format and structured)
+ *   - Process safety net (unhandledRejection, uncaughtException)
+ *   - Password hashing via argon2
+ *   - SQLite via better-sqlite3
+ *   - HTTP/WebSocket server via @hono/node-server + ws
+ *   - Filesystem via node:fs/promises
+ *   - Glob via fast-glob
+ *
+ * See the peer files in src/ for shared error types and the README for usage.
+ */
+
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
@@ -588,53 +606,6 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
         }
       };
 
-      await new Promise<void>((resolve, reject) => {
-        const onError = (err: Error) => reject(err);
-        httpServer.on('error', onError);
-
-        if (opts.unix !== undefined) {
-          // Unix-socket bind: bypass `serve()` (which always calls
-          // `httpServer.listen(port, hostname, ...)`) and wire the request
-          // listener up directly via @hono/node-server's `getRequestListener`.
-          // This keeps Request/Response translation identical to the TCP path.
-          const listener = getRequestListener(fetchHandler);
-          attachNodeRequestListener(
-            httpServer as {
-              on(event: 'request', listener: (...args: unknown[]) => void): unknown;
-            },
-            listener,
-          );
-          httpServer.listen(opts.unix, () => {
-            httpServer.removeListener('error', onError);
-            resolve();
-          });
-          return;
-        }
-
-        serve(
-          {
-            fetch: fetchHandler,
-            port,
-            hostname: opts.hostname,
-            createServer: ((first: unknown, second?: unknown) => {
-              attachNodeRequestListener(
-                httpServer as {
-                  on(event: 'request', listener: (...args: unknown[]) => void): unknown;
-                },
-                first,
-                second,
-              );
-              return httpServer;
-            }) as typeof import('node:http').createServer,
-          },
-          info => {
-            port = info.port;
-            httpServer.removeListener('error', onError);
-            resolve();
-          },
-        );
-      });
-
       // Track active sockets so graceful drain can wait for in-flight responses
       // to complete before closing the server.
       const activeSockets = new Set<import('node:net').Socket>();
@@ -848,6 +819,53 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
           (heartbeatTimer as { unref?: () => void }).unref?.();
         }
       }
+
+      await new Promise<void>((resolve, reject) => {
+        const onError = (err: Error) => reject(err);
+        httpServer.on('error', onError);
+
+        if (opts.unix !== undefined) {
+          // Unix-socket bind: bypass `serve()` (which always calls
+          // `httpServer.listen(port, hostname, ...)`) and wire the request
+          // listener up directly via @hono/node-server's `getRequestListener`.
+          // This keeps Request/Response translation identical to the TCP path.
+          const listener = getRequestListener(fetchHandler);
+          attachNodeRequestListener(
+            httpServer as {
+              on(event: 'request', listener: (...args: unknown[]) => void): unknown;
+            },
+            listener,
+          );
+          httpServer.listen(opts.unix, () => {
+            httpServer.removeListener('error', onError);
+            resolve();
+          });
+          return;
+        }
+
+        serve(
+          {
+            fetch: fetchHandler,
+            port,
+            hostname: opts.hostname,
+            createServer: ((first: unknown, second?: unknown) => {
+              attachNodeRequestListener(
+                httpServer as {
+                  on(event: 'request', listener: (...args: unknown[]) => void): unknown;
+                },
+                first,
+                second,
+              );
+              return httpServer;
+            }) as typeof import('node:http').createServer,
+          },
+          info => {
+            port = info.port;
+            httpServer.removeListener('error', onError);
+            resolve();
+          },
+        );
+      });
 
       function wrapWs(ws: WsWebSocket, data: unknown): RuntimeWebSocket {
         const handler = wsHandler;

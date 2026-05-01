@@ -1,3 +1,5 @@
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
 /**
  * Shared serialization helpers for HTTP-flavoured Lambda triggers (apigw,
  * apigw-v2, alb).
@@ -68,7 +70,7 @@ export interface EncodeHttpBodyResult {
  */
 export function encodeHttpBody(
   body: unknown,
-  opts: { contentType?: string; maxBytes?: number } = {},
+  opts: { contentType?: string; maxBytes?: number; logger?: Logger } = {},
 ): EncodeHttpBodyResult {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BODY_BYTES;
 
@@ -86,9 +88,10 @@ export function encodeHttpBody(
       buf = Buffer.from(view.buffer, view.byteOffset, view.byteLength);
     }
     if (maxBytes > 0 && buf.byteLength > maxBytes) {
-      console.error(
-        `[lambda] response body ${buf.byteLength} bytes exceeds maxBytes=${maxBytes}; returning 500`,
-      );
+      opts.logger?.error('response-body-too-large', {
+        bytes: buf.byteLength,
+        maxBytes,
+      });
       return {
         body: JSON.stringify({
           error: 'Response too large',
@@ -113,9 +116,10 @@ export function encodeHttpBody(
     if (maxBytes > 0) {
       const byteLength = Buffer.byteLength(body, 'utf8');
       if (byteLength > maxBytes) {
-        console.error(
-          `[lambda] response body ${byteLength} bytes exceeds maxBytes=${maxBytes}; returning 500`,
-        );
+        opts.logger?.error('response-body-too-large', {
+          bytes: byteLength,
+          maxBytes,
+        });
         return {
           body: JSON.stringify({
             error: 'Response too large',
@@ -131,7 +135,7 @@ export function encodeHttpBody(
   }
 
   // Default JSON path.
-  const json = safeStringify(body, { maxBytes });
+  const json = safeStringify(body, { maxBytes, logger: opts.logger });
   return {
     body: json.body,
     isBase64Encoded: false,
@@ -151,7 +155,7 @@ export interface SafeStringifyResult {
 
 export function safeStringify(
   value: unknown,
-  opts: { maxBytes?: number } = {},
+  opts: { maxBytes?: number; logger?: Logger } = {},
 ): SafeStringifyResult {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BODY_BYTES;
   let serialized: string;
@@ -161,7 +165,7 @@ export function safeStringify(
     // Circular references, BigInt, or other reasons JSON.stringify rejects.
     // Surface a structured error so the client sees something useful and the
     // runtime keeps responding.
-    console.error('[lambda] response serialization failed:', err);
+    opts.logger?.error('response-serialization-failed', { err: String(err) });
     return {
       body: JSON.stringify({
         error: 'Response serialization failed',
@@ -179,9 +183,10 @@ export function safeStringify(
     // UTF-8 byte length, not character count. API Gateway measures bytes.
     const byteLength = Buffer.byteLength(serialized, 'utf8');
     if (byteLength > maxBytes) {
-      console.error(
-        `[lambda] response body ${byteLength} bytes exceeds maxBytes=${maxBytes}; returning 500`,
-      );
+      opts.logger?.error('response-body-too-large', {
+        bytes: byteLength,
+        maxBytes,
+      });
       return {
         body: JSON.stringify({
           error: 'Response too large',

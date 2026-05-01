@@ -1,7 +1,7 @@
 // packages/slingshot-ssg/src/renderer.ts
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { PathTraversalError, deepFreeze, safeJoin } from '@lastshotlabs/slingshot-core';
+import { PathTraversalError, createConsoleLogger, deepFreeze, safeJoin } from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import {
@@ -10,6 +10,8 @@ import {
   createSsgCircuitBreaker,
 } from './circuitBreaker';
 import type { SsgConfig, SsgPageResult, SsgResult } from './types';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssg' } });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -135,7 +137,7 @@ async function renderSsgPageInternal(
     // surfaces it in the summary instead of silently writing outside outDir.
     if (err instanceof PathTraversalError) {
       const error = new Error(`[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`);
-      console.warn(error.message);
+      logger.warn(error.message);
       return makeFailedResult(urlPath, '', start, error);
     }
     throw err;
@@ -292,7 +294,7 @@ async function renderSsgPageUnchecked(
       response = await renderer.renderChain(chain, shell, bsCtxStub);
     } catch (err) {
       const error = toError(err);
-      console.warn(`[slingshot-ssg] renderChain() failed for ${urlPath}:`, error.message);
+      logger.warn(`[slingshot-ssg] renderChain() failed for ${urlPath}:`, error.message);
       return makeFailedResult(urlPath, filePath, start, error);
     }
 
@@ -300,7 +302,7 @@ async function renderSsgPageUnchecked(
       const error = new Error(
         `Renderer returned HTTP ${response.status} for "${urlPath}" — skipping.`,
       );
-      console.warn(`[slingshot-ssg] ${error.message}`);
+      logger.warn(`[slingshot-ssg] ${error.message}`);
       return makeFailedResult(urlPath, filePath, start, error);
     }
 
@@ -309,7 +311,7 @@ async function renderSsgPageUnchecked(
       writeFileAtomicSync(filePath, html);
     } catch (err) {
       const error = toError(err);
-      console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
+      logger.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
       return makeFailedResult(urlPath, filePath, start, error);
     }
 
@@ -327,13 +329,13 @@ async function renderSsgPageUnchecked(
     match = await renderer.resolve(url, bsCtxStub);
   } catch (err) {
     const error = toError(err);
-    console.warn(`[slingshot-ssg] resolve() failed for ${urlPath}:`, error.message);
+    logger.warn(`[slingshot-ssg] resolve() failed for ${urlPath}:`, error.message);
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
   if (!match) {
     const error = new Error(`No route matched "${urlPath}" — skipping.`);
-    console.warn(`[slingshot-ssg] ${error.message}`);
+    logger.warn(`[slingshot-ssg] ${error.message}`);
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -342,7 +344,7 @@ async function renderSsgPageUnchecked(
     response = await renderer.render(match, shell, bsCtxStub);
   } catch (err) {
     const error = toError(err);
-    console.warn(`[slingshot-ssg] render() failed for ${urlPath}:`, error.message);
+    logger.warn(`[slingshot-ssg] render() failed for ${urlPath}:`, error.message);
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -351,7 +353,7 @@ async function renderSsgPageUnchecked(
     const error = new Error(
       `Renderer returned HTTP ${response.status} for "${urlPath}" — skipping.`,
     );
-    console.warn(`[slingshot-ssg] ${error.message}`);
+    logger.warn(`[slingshot-ssg] ${error.message}`);
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -361,7 +363,7 @@ async function renderSsgPageUnchecked(
     writeFileAtomicSync(filePath, html);
   } catch (err) {
     const error = toError(err);
-    console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
+    logger.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -445,7 +447,7 @@ async function withPageTimeout(
       new Promise<SsgPageResult>(resolve => {
         timeout = setTimeout(() => {
           const error = new Error(`SSG render timed out after ${timeoutMs}ms for "${urlPath}"`);
-          console.warn(`[slingshot-ssg] ${error.message}`);
+          logger.warn(`[slingshot-ssg] ${error.message}`);
           resolve(makeFailedResult(urlPath, filePath, start, error));
         }, timeoutMs);
       }),

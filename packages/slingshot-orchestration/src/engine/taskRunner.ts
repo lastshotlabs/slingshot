@@ -1,5 +1,6 @@
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { logger } from '../internal/logger';
 import { createCachedRunHandle } from '../adapter';
 import { OrchestrationError } from '../errors';
 import type {
@@ -87,11 +88,11 @@ function safeEmit<TName extends keyof OrchestrationEventMap>(
     const result = eventSink.emit(name, payload);
     if (result && typeof (result as Promise<void>).catch === 'function') {
       (result as Promise<void>).catch(err => {
-        console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+        logger.error('eventSink.emit error', { label, err: String(err) });
       });
     }
   } catch (err) {
-    console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+    logger.error('eventSink.emit error', { label, err: String(err) });
   }
 }
 

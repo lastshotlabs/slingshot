@@ -9,7 +9,7 @@ export { createAdminPlugin } from './plugin';
 /**
  * Health payload returned by the admin plugin runtime.
  */
-export type { AdminPluginHealth } from './plugin';
+export type { AdminPluginHealth } from './types/health';
 /**
  * Zod schema used to validate admin plugin configuration.
  */

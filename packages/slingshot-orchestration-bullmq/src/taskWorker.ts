@@ -1,4 +1,6 @@
 import type { Job } from 'bullmq';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   OrchestrationEventSink,
@@ -49,7 +51,9 @@ function shouldShortCircuitRetry(error: unknown): boolean {
 export function createBullMQTaskProcessor(options: {
   taskRegistry: Map<string, AnyResolvedTask>;
   eventSink?: OrchestrationEventSink;
+  logger?: Logger;
 }) {
+  const logger = options.logger ?? noopLogger;
   return async function process(job: Job<Record<string, unknown>>) {
     if (job.name === '__slingshot_sleep') {
       return { sleptMs: job.data['durationMs'] };
@@ -63,9 +67,8 @@ export function createBullMQTaskProcessor(options: {
     if (rawTaskName === undefined || rawTaskName.length === 0) {
       const msg = `BullMQ job ${job.id} has invalid data: missing 'taskName' field`;
       // NOTE: never log job.data — payload may contain PII / secrets / large blobs.
-      console.error(`[slingshot-orchestration-bullmq] ${msg}`, {
+      logger.error('Task job missing taskName', {
         runId: runIdForLog,
-        taskName: rawTaskName,
         errorCode: 'TASK_DATA_MISSING_TASK_NAME',
       });
       throw new Error(msg);
@@ -74,7 +77,7 @@ export function createBullMQTaskProcessor(options: {
     if (!('input' in job.data)) {
       const msg = `BullMQ job ${job.id} has invalid data: missing 'input' field`;
       // NOTE: never log job.data — payload may contain PII / secrets / large blobs.
-      console.error(`[slingshot-orchestration-bullmq] ${msg}`, {
+      logger.error('Task job missing input', {
         runId: runIdForLog,
         taskName: rawTaskName,
         errorCode: 'TASK_DATA_MISSING_INPUT',
@@ -117,7 +120,7 @@ export function createBullMQTaskProcessor(options: {
         tenantId,
         reportProgress: data => {
           job.updateProgress(data).catch((err: unknown) => {
-            console.error('[slingshot-orchestration-bullmq] Failed to update job progress:', err);
+            logger.error('Failed to update job progress', { runId, err: String(err) });
           });
           void options.eventSink
             ?.emit('orchestration.task.progress', {
@@ -126,7 +129,7 @@ export function createBullMQTaskProcessor(options: {
               data,
             })
             ?.catch?.((err: unknown) => {
-              console.error('[slingshot-orchestration-bullmq] Failed to emit progress event:', err);
+              logger.error('Failed to emit progress event', { runId, err: String(err) });
             });
         },
       };

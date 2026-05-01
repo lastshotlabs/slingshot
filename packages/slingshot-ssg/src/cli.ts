@@ -34,11 +34,14 @@ import { watch } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
 import { MAX_CONCURRENCY } from './constants';
 import { collectSsgRoutes } from './crawler';
 import { renderSsgPages } from './renderer';
 import type { SsgConfig } from './types';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssg' } });
 
 // ─── Help text ─────────────────────────────────────────────────────────────────
 
@@ -225,7 +228,7 @@ export function warnIfConcurrencyExceedsFdHeadroom(concurrency: number): void {
   // Allow a quarter of the remaining headroom for parallel renders.
   const safeMax = Math.max(1, Math.floor((nofile - 256) / 4));
   if (concurrency > safeMax) {
-    console.warn(
+    logger.warn(
       `[slingshot-ssg] concurrency=${concurrency} is high relative to FD ulimit (${nofile}). ` +
         `Recommended max ~${safeMax}. Large crawls may hit EMFILE — consider lowering ` +
         `--concurrency or raising the file-descriptor limit (\`ulimit -n\`).`,
@@ -263,7 +266,7 @@ export async function resolveAssetTagsHtml(
   clientEntry: string | undefined,
 ): Promise<string> {
   if (!existsSync(manifestPath)) {
-    console.warn(
+    logger.warn(
       `[slingshot-ssg] Asset manifest not found at ${manifestPath}. ` +
         `Asset tags will not be injected into pre-rendered pages.`,
     );
@@ -275,7 +278,7 @@ export async function resolveAssetTagsHtml(
     const raw = await readTextFile(manifestPath);
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      console.warn(
+      logger.warn(
         `[slingshot-ssg] Asset manifest at ${manifestPath} is not a JSON object. Asset tags will not be injected.`,
       );
       return '';
@@ -291,7 +294,7 @@ export async function resolveAssetTagsHtml(
     }
 
     if (!entryKey) {
-      console.warn(
+      logger.warn(
         `[slingshot-ssg] Could not find a client entry chunk in ${manifestPath}. ` +
           `Pass --client-entry <key> to specify the manifest key explicitly, or ensure ` +
           `the Vite build includes one of: ${CLIENT_ENTRY_CANDIDATES.join(', ')}.`,
@@ -301,7 +304,7 @@ export async function resolveAssetTagsHtml(
 
     const entry = manifest[entryKey];
     if (!entry) {
-      console.warn(
+      logger.warn(
         `[slingshot-ssg] Client entry key "${entryKey}" not found in manifest ${manifestPath}.`,
       );
       return '';
@@ -318,7 +321,7 @@ export async function resolveAssetTagsHtml(
     }
     return tags.join('\n');
   } catch (err: unknown) {
-    console.warn(`[slingshot-ssg] Failed to parse asset manifest:`, err);
+    logger.warn(`[slingshot-ssg] Failed to parse asset manifest`, { error: String(err) });
     return '';
   }
 }
@@ -534,7 +537,7 @@ function printSummary(result: {
   if (result.failed > 0) {
     for (const page of result.pages) {
       if (page.error) {
-        console.error(`  ✗ ${page.path}: ${page.error.message}`);
+        logger.error(`  ✗ ${page.path}: ${page.error.message}`);
       }
     }
   }
@@ -591,7 +594,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   if (opts.rscManifestPath) {
     const absRscManifest = resolve(cwd, opts.rscManifestPath);
     if (!existsSync(absRscManifest)) {
-      console.warn(
+      logger.warn(
         `[slingshot-ssg] --rsc-manifest file not found: ${absRscManifest}. ` +
           `RSC rendering will not be active for pre-rendered pages. ` +
           `Ensure the Vite build ran with rsc: true before running SSG.`,
@@ -601,7 +604,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       await renderer.ssgConfigure({ rscManifest });
       console.log(`[slingshot-ssg] RSC manifest loaded from ${absRscManifest}.`);
     } else {
-      console.warn(
+      logger.warn(
         `[slingshot-ssg] --rsc-manifest was provided but the renderer does not implement ` +
           `ssgConfigure(). RSC rendering will not be active. ` +
           `Ensure the renderer was created with createReactRenderer() from snapshot >= 0.x.`,
@@ -663,10 +666,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
         const newResult = await renderSsgPages(newPaths, renderer, config, newAssetTags);
         printSummary(newResult);
       } catch (err: unknown) {
-        console.error(
-          '[slingshot-ssg] Watch re-render failed:',
-          err instanceof Error ? err.message : String(err),
-        );
+        logger.error('[slingshot-ssg] Watch re-render failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }, WATCH_DEBOUNCE_MS);
   });
@@ -688,9 +690,11 @@ if (import.meta.main) {
     // trace. Unexpected errors (assertion failures, third-party bugs) are
     // dumped in full so the user can file a bug report.
     if (err instanceof Error && err.message.startsWith('[slingshot-ssg]')) {
-      console.error(err.message);
+      logger.error(err.message);
     } else {
-      console.error('[slingshot-ssg] Fatal error:', err);
+      logger.error('[slingshot-ssg] Fatal error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
     process.exit(1);
   });

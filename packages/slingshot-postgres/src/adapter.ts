@@ -1,8 +1,8 @@
 import { and, asc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool, PoolClient } from 'pg';
-import { HttpError, getPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
-import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
+import { HttpError, getPostgresPoolRuntime, noopLogger } from '@lastshotlabs/slingshot-core';
+import type { AuthAdapter, Logger } from '@lastshotlabs/slingshot-core';
 import {
   groupMemberships,
   groups,
@@ -401,6 +401,11 @@ export interface PostgresAdapterOptions {
    * a descriptive error.
    */
   verifyPassword?: (plain: string, hash: string) => Promise<boolean>;
+  /**
+   * Optional structured logger for operational events (migrations, connection,
+   * query errors). Defaults to a no-op logger.
+   */
+  logger?: Logger;
 }
 
 /**
@@ -424,10 +429,22 @@ export interface PostgresAdapterOptions {
  * ```
  */
 export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promise<AuthAdapter> {
+  const logger: Logger = opts.logger ?? noopLogger;
   if (getPostgresPoolRuntime(opts.pool)?.migrationMode !== 'assume-ready') {
-    await runMigrations(opts.pool);
+    logger.info('postgres.migration.start', { event: 'migration_start' });
+    try {
+      await runMigrations(opts.pool);
+      logger.info('postgres.migration.complete', { event: 'migration_complete' });
+    } catch (err) {
+      logger.error('postgres.migration.failed', {
+        event: 'migration_failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
   }
   const db = drizzle(opts.pool);
+  logger.info('postgres.adapter.initialized', { event: 'adapter_initialized' });
 
   return {
     // ── Tier 1 — CoreAuthAdapter ──────────────────────────────────────────────
@@ -456,6 +473,11 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
         if (isUniqueViolation(err)) {
           throw new HttpError(409, 'Email already registered');
         }
+        logger.error('postgres.query.create_user.failed', {
+          event: 'query_error',
+          method: 'create',
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
       return { id };
@@ -875,6 +897,11 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
             'GROUP_NAME_CONFLICT',
           );
         }
+        logger.error('postgres.query.group_create.failed', {
+          event: 'query_error',
+          method: 'createGroup',
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
       return { id };
@@ -980,6 +1007,11 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
             'GROUP_MEMBER_CONFLICT',
           );
         }
+        logger.error('postgres.query.group_add_membership.failed', {
+          event: 'query_error',
+          method: 'addGroupMembership',
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
     },

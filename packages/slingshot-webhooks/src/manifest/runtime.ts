@@ -1,12 +1,13 @@
 import { HTTPException } from 'hono/http-exception';
-import type {
-  EventDefinition,
-  EventDefinitionRegistry,
-  EventEnvelope,
-  EventKey,
-  EventScope,
-  EventSubscriptionPrincipal,
-  PaginatedResult,
+import {
+  createConsoleLogger,
+  type EventDefinition,
+  type EventDefinitionRegistry,
+  type EventEnvelope,
+  type EventKey,
+  type EventScope,
+  type EventSubscriptionPrincipal,
+  type PaginatedResult,
 } from '@lastshotlabs/slingshot-core';
 import { authorizeEventSubscriber } from '@lastshotlabs/slingshot-core';
 import type {
@@ -93,22 +94,9 @@ export interface RuntimeLogger {
   warn(message: string, fields?: Record<string, unknown>): void;
 }
 
-const consoleRuntimeLogger: RuntimeLogger = {
-  error(message, fields) {
-    if (fields) {
-      console.error(`[slingshot-webhooks] ${message}`, fields);
-    } else {
-      console.error(`[slingshot-webhooks] ${message}`);
-    }
-  },
-  warn(message, fields) {
-    if (fields) {
-      console.warn(`[slingshot-webhooks] ${message}`, fields);
-    } else {
-      console.warn(`[slingshot-webhooks] ${message}`);
-    }
-  },
-};
+const structuredRuntimeLogger: RuntimeLogger = createConsoleLogger({
+  base: { component: 'slingshot-webhooks' },
+}) as unknown as RuntimeLogger;
 
 type EndpointRuntimeAdapter = BareEntityAdapter & {
   reveal(id: string): Promise<EndpointRecord | null>;
@@ -1106,7 +1094,7 @@ export async function resolveWebhookDeliveries(
   definitions: EventDefinitionRegistry,
   envelope: EventEnvelope,
   maxAttempts: number,
-  logger: RuntimeLogger = consoleRuntimeLogger,
+  logger: RuntimeLogger = structuredRuntimeLogger,
 ): Promise<ResolvedWebhookDelivery[]> {
   const definition = definitions.get(envelope.key);
   if (!definition) {
@@ -1232,7 +1220,7 @@ export function createWebhooksManifestRuntime(
   const adapterTransforms = createEntityAdapterTransformRegistry();
   const customHandlers = createEntityHandlerRegistry();
   const hooks = createEntityPluginHookRegistry();
-  const logger = options.logger ?? consoleRuntimeLogger;
+  const logger = options.logger ?? structuredRuntimeLogger;
   const cipher: AsyncCipher = options.encryptor
     ? wrapSecretEncryptor(options.encryptor)
     : wrapSecretEncryptor(createSecretCipher(options.secretEncryptionKey ?? null));

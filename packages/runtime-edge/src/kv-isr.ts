@@ -1,5 +1,6 @@
 // packages/runtime-edge/src/kv-isr.ts
 import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
+import { withAbortTimeout } from './lib/withAbortTimeout';
 
 // ---------------------------------------------------------------------------
 // Cloudflare Workers platform constants
@@ -19,92 +20,6 @@ const DEFAULT_MAX_KV_CONCURRENCY = 25;
  * hung KV operation can consume the entire request budget.
  */
 const DEFAULT_KV_OP_TIMEOUT_MS = 5_000;
-
-// ---------------------------------------------------------------------------
-// AbortController-backed timeout for KV operations
-// ---------------------------------------------------------------------------
-
-/**
- * Custom error thrown when a KV operation exceeds its deadline.
- */
-class KvOperationTimeoutError extends Error {
-  constructor(opName: string, timeoutMs: number) {
-    super(`[runtime-edge] KV ${opName} timed out after ${timeoutMs}ms`);
-    this.name = 'KvOperationTimeoutError';
-  }
-}
-
-/**
- * Race an operation against an AbortController-backed timeout.
- *
- * Unlike the earlier implementation which only raced a timer and left the
- * underlying promise dangling, this version creates an `AbortController`,
- * passes its signal to the operation callback, and aborts the controller
- * when the deadline fires. Operations that accept the signal (e.g., via a
- * future `KvNamespace` that honours `AbortSignal`) can cancel their work.
- *
- * When `heartbeatTimeoutMs` is set and greater than `timeoutMs`, the shorter
- * of the two is used (the heartbeat acts as a global cap).
- *
- * @param opName - Human-readable name for the operation (e.g. `'get'`).
- * @param op - Factory that receives an `AbortSignal` and returns the op promise.
- * @param timeoutMs - Per-operation timeout in ms. 0 disables.
- * @param heartbeatMs - Optional global heartbeat cap. The effective timeout
- *   is `Math.min(timeoutMs, heartbeatMs)` when both are positive.
- * @returns The operation's result, or rejects with `KvOperationTimeoutError`.
- */
-function withAbortTimeout<T>(
-  opName: string,
-  op: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number,
-  heartbeatMs: number = 0,
-): Promise<T> {
-  const effectiveMs =
-    timeoutMs > 0 && heartbeatMs > 0
-      ? Math.min(timeoutMs, heartbeatMs)
-      : timeoutMs > 0
-        ? timeoutMs
-        : heartbeatMs;
-
-  if (effectiveMs <= 0) {
-    return op(new AbortController().signal);
-  }
-
-  const controller = new AbortController();
-  const signal = controller.signal;
-  const timer = setTimeout(() => controller.abort(), effectiveMs);
-
-  const cleanup = (): void => {
-    clearTimeout(timer);
-  };
-
-  const opPromise = op(signal).then(
-    v => {
-      cleanup();
-      return v;
-    },
-    err => {
-      cleanup();
-      throw err;
-    },
-  );
-
-  // Race the operation against the abort signal so we reject as soon as
-  // the timeout fires, even if the op doesn't check the signal.
-  return Promise.race([
-    opPromise,
-    new Promise<T>((_, reject) => {
-      if (signal.aborted) {
-        reject(new KvOperationTimeoutError(opName, effectiveMs));
-        return;
-      }
-      const onAbort = (): void => {
-        reject(new KvOperationTimeoutError(opName, effectiveMs));
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    }),
-  ]);
-}
 
 // ---------------------------------------------------------------------------
 // Concurrency-limited fan-out
@@ -339,9 +254,9 @@ function updateTagIndex(
 ): Promise<void> {
   return runUnderTagLock(tag, async () => {
     const raw = await withAbortTimeout(
-      'get',
       () => kv.get(tagKey(tag), { type: 'text' }),
       timeoutMs,
+      'get',
       heartbeatMs,
     );
     let paths: string[];
@@ -361,9 +276,9 @@ function updateTagIndex(
     if (!paths.includes(path)) {
       paths.push(path);
       await withAbortTimeout(
-        'put',
         () => kv.put(tagKey(tag), JSON.stringify(paths)),
         timeoutMs,
+        'put',
         heartbeatMs,
       );
     }
@@ -389,9 +304,9 @@ function removeFromTagIndex(
 ): Promise<void> {
   return runUnderTagLock(tag, async () => {
     const raw = await withAbortTimeout(
-      'get',
       () => kv.get(tagKey(tag), { type: 'text' }),
       timeoutMs,
+      'get',
       heartbeatMs,
     );
     if (raw === null) return;
@@ -405,12 +320,12 @@ function removeFromTagIndex(
     const filtered = paths.filter(p => p !== path);
     if (filtered.length === paths.length) return; // path wasn't present
     if (filtered.length === 0) {
-      await withAbortTimeout('delete', () => kv.delete(tagKey(tag)), timeoutMs, heartbeatMs);
+      await withAbortTimeout(() => kv.delete(tagKey(tag)), timeoutMs, 'delete', heartbeatMs);
     } else {
       await withAbortTimeout(
-        'put',
         () => kv.put(tagKey(tag), JSON.stringify(filtered)),
         timeoutMs,
+        'put',
         heartbeatMs,
       );
     }
@@ -538,9 +453,9 @@ export function createKvIsrCache(
      */
     async get(path: string): Promise<IsrCacheEntry | null> {
       const raw = await withAbortTimeout(
-        'get',
         () => kv.get(pageKey(path), { type: 'text' }),
         timeoutMs,
+        'get',
         heartbeatMs,
       );
       if (raw === null) return null;
@@ -557,9 +472,9 @@ export function createKvIsrCache(
      */
     async set(path: string, entry: IsrCacheEntry): Promise<void> {
       const existingRaw = await withAbortTimeout(
-        'get',
         () => kv.get(pageKey(path), { type: 'text' }),
         timeoutMs,
+        'get',
         heartbeatMs,
       );
       let oldTags: readonly string[] = [];
@@ -588,9 +503,9 @@ export function createKvIsrCache(
       // the tag fan-out concurrency at `concurrency - 1` (min 1).
       const pageOp = (): Promise<void> =>
         withAbortTimeout(
-          'put',
           () => kv.put(pageKey(path), JSON.stringify(entry)),
           timeoutMs,
+          'put',
           heartbeatMs,
         );
       const tagOps = [
@@ -612,7 +527,7 @@ export function createKvIsrCache(
      * @param path - The URL pathname to invalidate.
      */
     async invalidatePath(path: string): Promise<void> {
-      await withAbortTimeout('delete', () => kv.delete(pageKey(path)), timeoutMs, heartbeatMs);
+      await withAbortTimeout(() => kv.delete(pageKey(path)), timeoutMs, 'delete', heartbeatMs);
     },
 
     /**
@@ -621,9 +536,9 @@ export function createKvIsrCache(
     async invalidateTag(tag: string): Promise<void> {
       const indexKey = tagKey(tag);
       const raw = await withAbortTimeout(
-        'get',
         () => kv.get(indexKey, { type: 'text' }),
         timeoutMs,
+        'get',
         heartbeatMs,
       );
       if (raw === null) return;
@@ -632,18 +547,18 @@ export function createKvIsrCache(
       try {
         paths = JSON.parse(raw) as string[];
       } catch {
-        await withAbortTimeout('delete', () => kv.delete(indexKey), timeoutMs, heartbeatMs);
+        await withAbortTimeout(() => kv.delete(indexKey), timeoutMs, 'delete', heartbeatMs);
         return;
       }
 
       await runWithConcurrency(
         paths.map(
           p => () =>
-            withAbortTimeout('delete', () => kv.delete(pageKey(p)), timeoutMs, heartbeatMs),
+            withAbortTimeout(() => kv.delete(pageKey(p)), timeoutMs, 'delete', heartbeatMs),
         ),
         concurrency,
       );
-      await withAbortTimeout('delete', () => kv.delete(indexKey), timeoutMs, heartbeatMs);
+      await withAbortTimeout(() => kv.delete(indexKey), timeoutMs, 'delete', heartbeatMs);
     },
   };
 }

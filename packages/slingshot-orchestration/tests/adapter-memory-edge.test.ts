@@ -3,7 +3,7 @@
 // Edge-case tests for the memory adapter: listRuns with various filters,
 // empty run lists, tag filtering, duplicate task registration, shutdown
 // while tasks are running, and getRun for non-existent run IDs.
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createMemoryAdapter } from '../src/adapters/memory';
 import { defineTask } from '../src/defineTask';
@@ -241,6 +241,33 @@ describe('memory adapter — shutdown', () => {
   test('shutdown resolves even when no tasks have been run', async () => {
     const adapter = createMemoryAdapter({ concurrency: 1 });
     await expect(adapter.shutdown()).resolves.toBeUndefined();
+  });
+
+  test('shutdown clears the timeout guard when the adapter is already idle', async () => {
+    let scheduledDelay: number | undefined;
+    const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      void handler;
+      void args;
+      scheduledDelay = timeout;
+      return 123 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as typeof setTimeout);
+    const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout');
+
+    try {
+      const adapter = createMemoryAdapter({ concurrency: 1 });
+      await expect(adapter.shutdown()).resolves.toBeUndefined();
+
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(scheduledDelay).toBe(30_000);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(123);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
   });
 
   test('shutdown is idempotent', async () => {

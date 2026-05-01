@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { noopLogger } from './observability/logger';
+import type { Logger } from './observability/logger';
 
 /**
  * Build the standard `disableRoutes` Zod field for a plugin config schema.
@@ -35,7 +37,8 @@ export function disableRoutesSchema<T extends string>(values: readonly T[]) {
  * @param pluginName - Plugin name used as the warning prefix (e.g. `'slingshot-community'`).
  * @param raw - The raw config object whose keys are checked.
  * @param schema - The Zod object schema whose `shape` keys define the known property set.
- * @returns `void` — all results are reported via `console.warn`.
+ * @param logger - Optional structured logger; defaults to no-op.
+ * @returns `void` — all results are reported via the logger's `warn` level.
  *
  * @remarks
  * Because `validatePluginConfig` calls this after a successful `safeParse`, Zod's
@@ -49,18 +52,20 @@ export function disableRoutesSchema<T extends string>(values: readonly T[]) {
  *
  * const schema = z.object({ maxRetries: z.number() });
  * warnUnknownPluginKeys('slingshot-community', { maxRetries: 3, maxRtries: 3 }, schema);
- * // console.warn: [slingshot-community] Unknown config key "maxRtries" — will be ignored. Check for typos.
+ * // warn: [slingshot-community] Unknown config key "maxRtries" — will be ignored. Check for typos.
  * ```
  */
 export function warnUnknownPluginKeys(
   pluginName: string,
   raw: Record<string, unknown>,
   schema: z.ZodObject,
+  logger?: Logger,
 ): void {
+  const log = logger ?? noopLogger;
   const known = new Set(Object.keys(schema.shape));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) {
-      console.warn(
+      log.warn(
         `[${pluginName}] Unknown config key "${key}" — will be ignored. Check for typos.`,
       );
     }
@@ -156,6 +161,7 @@ export function validatePluginConfig<S extends z.ZodObject>(
   pluginName: string,
   rawConfig: unknown,
   schema: S,
+  logger?: Logger,
 ): z.infer<S> {
   const result = schema.safeParse(rawConfig);
   if (!result.success) {
@@ -163,7 +169,7 @@ export function validatePluginConfig<S extends z.ZodObject>(
     throw new Error(`[${pluginName}] Invalid plugin config:\n${issues}`);
   }
   if (rawConfig !== null && typeof rawConfig === 'object' && !Array.isArray(rawConfig)) {
-    warnUnknownPluginKeys(pluginName, rawConfig as Record<string, unknown>, schema);
+    warnUnknownPluginKeys(pluginName, rawConfig as Record<string, unknown>, schema, logger);
   }
   return result.data as z.infer<S>;
 }

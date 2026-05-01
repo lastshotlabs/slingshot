@@ -39,7 +39,8 @@
     "test": "bun test",
     "coverage": "bun test --coverage",
     "test:unit": "bun test tests/unit tests/kafkaShared.test.ts",
-    "test:integration": "bun test tests/integration"
+    "test:integration": "bun test tests/integration",
+    "bench": "bun run tests/bench/kafka-throughput.bench.ts"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

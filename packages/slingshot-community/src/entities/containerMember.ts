@@ -37,12 +37,11 @@ export const ContainerMember = defineEntity('ContainerMember', {
   uniques: [{ fields: ['containerId', 'userId'] }],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:actor.id' },
-
-    list: { auth: 'none' },
+    disable: ['update', 'getMember', 'isMember', 'removeUserMemberships'],
+    dataScope: { field: 'userId', from: 'ctx:actor.id', applyTo: ['create', 'get', 'list'] },
 
     create: {
-      middleware: ['memberJoinGuard', 'grantManager'],
+      middleware: ['memberJoinGuard', 'memberJoinPolicyGuard', 'grantManager'],
       event: {
         key: 'community:member.joined',
         payload: ['containerId', 'userId'],
@@ -73,17 +72,31 @@ export const ContainerMember = defineEntity('ContainerMember', {
     },
 
     operations: {
-      listByRole: { auth: 'none' },
+      listByRole: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'community:container.read',
+          scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
+        },
+      },
       assignRole: {
         permission: {
           requires: 'community:container.manage-moderators',
           scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
         },
-        middleware: ['grantManager'],
+        middleware: ['roleAssignmentGuard', 'grantManager'],
       },
+      getMember: { auth: 'userAuth' },
+      isMember: { auth: 'userAuth' },
+      removeUserMemberships: { auth: 'userAuth' },
     },
 
-    middleware: { grantManager: true, memberJoinGuard: true },
+    middleware: {
+      grantManager: true,
+      memberJoinGuard: true,
+      memberJoinPolicyGuard: true,
+      roleAssignmentGuard: true,
+    },
 
     cascades: [
       {

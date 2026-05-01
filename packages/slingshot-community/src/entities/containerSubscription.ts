@@ -21,10 +21,15 @@ export const ContainerSubscription = defineEntity('ContainerSubscription', {
   indexes: [index(['userId', 'containerId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['listSubscribers', 'getSubscription'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {
+      permission: {
+        requires: 'community:container.read',
+        scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+      },
       event: { key: 'community:subscription.created', payload: ['id', 'userId', 'containerId'] },
     },
     update: {},

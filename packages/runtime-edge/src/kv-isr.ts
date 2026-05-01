@@ -1,5 +1,6 @@
 // packages/runtime-edge/src/kv-isr.ts
 import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { withAbortTimeout } from './lib/withAbortTimeout';
 
 // ---------------------------------------------------------------------------
@@ -113,15 +114,9 @@ export interface RuntimeEdgeLogger {
   error(event: string, fields?: Record<string, unknown>): void;
 }
 
-let activeLogger: RuntimeEdgeLogger = {
-  error(event, fields) {
-    if (fields && Object.keys(fields).length > 0) {
-      console.error(`[runtime-edge] ${event}`, fields);
-    } else {
-      console.error(`[runtime-edge] ${event}`);
-    }
-  },
-};
+const defaultEdgeLogger = createConsoleLogger({ base: { component: 'runtime-edge' } });
+
+let activeLogger: RuntimeEdgeLogger = defaultEdgeLogger;
 
 /**
  * Replace the runtime-edge structured logger. Pass `null` to reset to the
@@ -129,15 +124,7 @@ let activeLogger: RuntimeEdgeLogger = {
  */
 export function configureRuntimeEdgeLogger(logger: RuntimeEdgeLogger | null): RuntimeEdgeLogger {
   const previous = activeLogger;
-  activeLogger = logger ?? {
-    error(event, fields) {
-      if (fields && Object.keys(fields).length > 0) {
-        console.error(`[runtime-edge] ${event}`, fields);
-      } else {
-        console.error(`[runtime-edge] ${event}`);
-      }
-    },
-  };
+  activeLogger = logger ?? defaultEdgeLogger;
   return previous;
 }
 

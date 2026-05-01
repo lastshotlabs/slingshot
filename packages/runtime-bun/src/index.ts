@@ -64,6 +64,76 @@ const DEFAULT_WS_GRACEFUL_CLOSE_TIMEOUT_MS = 30_000;
 const BUN_STOP_GRACE_MS = 50;
 
 // ---------------------------------------------------------------------------
+// Runtime capability reporting
+// ---------------------------------------------------------------------------
+
+/**
+ * Programmatic capability report for the Bun runtime platform.
+ *
+ * Consumers can use this to feature-detect at runtime without needing to
+ * instantiate a full runtime or catch errors from stubs.
+ *
+ * All boolean capabilities reflect what the **platform itself** supports
+ * (not what an individual `bunRuntime()` caller configured). Since Bun exposes
+ * all major runtime primitives natively, every capability is `true`.
+ *
+ * @example
+ * ```ts
+ * import { runtimeCapabilities } from '@lastshotlabs/slingshot-runtime-bun';
+ *
+ * const caps = runtimeCapabilities();
+ * if (!caps.filesystem.write) {
+ *   // never reached on Bun — Bun.write is always available
+ * }
+ * ```
+ */
+export interface BunRuntimeCapabilities {
+  /** Human-readable runtime identifier. Always `'bun'`. */
+  readonly runtime: 'bun';
+  /** Filesystem-related capabilities. */
+  readonly filesystem: {
+    /** Local filesystem reads are available via `Bun.file`. */
+    readonly read: true;
+    /** Local filesystem writes are available via `Bun.write`. */
+    readonly write: true;
+  };
+  /** SQLite is available via `bun:sqlite`. */
+  readonly sqlite: true;
+  /** `server.listen()` is available via `Bun.serve`. */
+  readonly httpServer: true;
+  /** Glob scanning is available via `Bun.Glob`. */
+  readonly glob: true;
+  /** `AsyncLocalStorage` is available on Bun. */
+  readonly asyncLocalStorage: true;
+  /** Password hashing mechanism used by the default implementation. */
+  readonly passwordHashing: 'bun-argon2';
+  /** WebSocket upgrade and pub/sub are available via `Bun.serve`. */
+  readonly webSocket: true;
+}
+
+/**
+ * Return a frozen capability descriptor for the Bun runtime platform.
+ *
+ * This is a static report — all capabilities are `true` because Bun provides
+ * every runtime primitive natively (password hashing, SQLite, HTTP server,
+ * filesystem, glob, AsyncLocalStorage, and WebSocket).
+ *
+ * @returns A frozen {@link BunRuntimeCapabilities} object.
+ */
+export function runtimeCapabilities(): BunRuntimeCapabilities {
+  return Object.freeze({
+    runtime: 'bun',
+    filesystem: Object.freeze({ read: true as const, write: true as const }),
+    sqlite: true as const,
+    httpServer: true as const,
+    glob: true as const,
+    asyncLocalStorage: true as const,
+    passwordHashing: 'bun-argon2' as const,
+    webSocket: true as const,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Logger — structured, redirectable, parity with runtime-node
 // ---------------------------------------------------------------------------
 

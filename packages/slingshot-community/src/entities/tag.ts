@@ -24,6 +24,7 @@ export const Tag = defineEntity('Tag', {
   indexes: [index(['slug', 'tenantId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['incrementUsage', 'decrementUsage'],
     get: { auth: 'none' },
     list: { auth: 'none' },
     create: {
@@ -43,6 +44,19 @@ export const Tag = defineEntity('Tag', {
     },
     delete: {
       permission: { requires: 'community:tag.write' },
+    },
+    operations: {
+      getBySlug: { auth: 'none' },
+      incrementUsage: { auth: 'userAuth' },
+      decrementUsage: { auth: 'userAuth' },
+    },
+    permissions: {
+      resourceType: 'community:tag',
+      actions: ['write'],
+      roles: {
+        owner: ['*'],
+        'community-admin': ['*'],
+      },
     },
   },
 });

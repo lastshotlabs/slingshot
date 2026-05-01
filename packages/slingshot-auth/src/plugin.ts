@@ -62,6 +62,7 @@ function readCookieHeaderValue(cookieHeader: string | null, name: string): strin
     try {
       return decodeURIComponent(value);
     } catch {
+      // Malformed percent-encoding; return the raw cookie value as-is
       return value;
     }
   }
@@ -633,6 +634,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               claims: {},
             };
           } catch {
+            // Any failure resolving the actor falls back to anonymous safely
             return ANONYMOUS_ACTOR;
           }
         },

@@ -50,6 +50,7 @@ export const createScimAuth =
       try {
         return timingSafeEqual(provided, token);
       } catch {
+        // timingSafeEqual threw (e.g. length mismatch); treat as non-match
         return false;
       }
     });

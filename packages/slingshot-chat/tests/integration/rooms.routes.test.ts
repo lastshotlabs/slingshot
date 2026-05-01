@@ -55,16 +55,14 @@ describe('GET /chat/rooms/:id — get room', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns room for any authenticated user (no permission on get)', async () => {
+  it('returns 403 for authenticated users without room read permission', async () => {
     const { app, state } = await createChatTestApp();
     const room = await seedRoom(state, { name: 'Open' });
 
     const res = await app.request(`/chat/rooms/${room.id}`, {
       headers: { 'x-user-id': 'outsider' },
     });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { name: string };
-    expect(data.name).toBe('Open');
+    expect(res.status).toBe(403);
   });
 });
 
@@ -109,9 +107,9 @@ describe('DELETE /chat/rooms/:id — delete room', () => {
 });
 
 describe('GET /chat/rooms — list rooms', () => {
-  it('returns 401 without auth', async () => {
+  it('is not exposed as a broad room listing route', async () => {
     const { app } = await createChatTestApp();
     const res = await app.request('/chat/rooms');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 });

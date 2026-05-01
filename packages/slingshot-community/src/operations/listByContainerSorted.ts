@@ -81,12 +81,17 @@ function parseCursorOffset(cursor: string | undefined): number {
     const n = parseInt(decoded, 10);
     return isNaN(n) ? 0 : n;
   } catch {
+    // Malformed cursor; default to offset 0
     return 0;
   }
 }
 
 function encodeCursorOffset(offset: number): string {
   return Buffer.from(String(offset), 'utf8').toString('base64url');
+}
+
+function isPublishedRecord(record: Record<string, unknown>): boolean {
+  return record.status === undefined || record.status === 'published';
 }
 
 /**
@@ -109,7 +114,7 @@ export function createListSortedMemoryHandler(
       r => r._softDeleted !== true && r._deleted !== true,
     );
 
-    let items = all.filter(r => r.containerId === params.containerId);
+    let items = all.filter(r => r.containerId === params.containerId && isPublishedRecord(r));
 
     // Apply time-window filter for top/controversial
     if (sortPreset === 'top' || sortPreset === 'controversial') {
@@ -207,7 +212,7 @@ export function createListSortedPostgresHandler(
   return async params => {
     const sortPreset = toSortPreset(params.sort);
     const windowPreset = toWindowPreset(params.window);
-    const conditions = ['container_id = $1'];
+    const conditions = ['container_id = $1', "status = 'published'"];
     const values: unknown[] = [params.containerId];
     let paramIdx = 2;
 

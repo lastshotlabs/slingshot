@@ -89,4 +89,29 @@ describe('wsRateLimit — checkRateLimit', () => {
     // After cleanup, starts fresh
     expect(checkRateLimit(state, '/ws', 's1', config)).toBe('allow');
   });
+
+  it('zero windowMs — always allows (guard clause)', () => {
+    const config = { windowMs: 0, maxMessages: 5 };
+    for (let i = 0; i < 20; i++) {
+      expect(checkRateLimit(state, '/ws', 's1', config)).toBe('allow');
+    }
+  });
+
+  it('negative windowMs — always allows (guard clause)', () => {
+    const config = { windowMs: -100, maxMessages: 5 };
+    for (let i = 0; i < 20; i++) {
+      expect(checkRateLimit(state, '/ws', 's1', config)).toBe('allow');
+    }
+  });
+
+  it('zero maxMessages — always allows (guard clause)', () => {
+    const config = { windowMs: 1000, maxMessages: 0 };
+    for (let i = 0; i < 20; i++) {
+      expect(checkRateLimit(state, '/ws', 's1', config)).toBe('allow');
+    }
+  });
+
+  it('cleanupRateLimitBucket on non-existent bucket — no error', () => {
+    expect(() => cleanupRateLimitBucket(state, '/ws', 'nonexistent')).not.toThrow();
+  });
 });

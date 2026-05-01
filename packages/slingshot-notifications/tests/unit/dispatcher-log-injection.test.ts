@@ -44,10 +44,13 @@ describe('createIntervalDispatcher — log-line sanitization', () => {
     // listPendingDispatch call on the adapter to inject the id.
     const originalList = adapters.notifications.listPendingDispatch.bind(adapters.notifications);
     adapters.notifications.listPendingDispatch = async (...args) => {
-      const rows = await originalList(...args);
-      return rows.map(row =>
-        row.id === notification.id ? { ...row, id: `${row.id}\r\nX-Injected: yes` } : row,
-      );
+      const result = await originalList(...args);
+      return {
+        records: result.records.map(row =>
+          row.id === notification.id ? { ...row, id: `${row.id}\r\nX-Injected: yes` } : row,
+        ),
+        nextCursor: result.nextCursor,
+      };
     };
 
     // Force publish failure so the dispatcher takes the failure-log path.

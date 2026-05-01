@@ -190,6 +190,8 @@ export function createStateMachine(
   }
 
   // ---- ensureStarted ----
+
+  async function ensureStarted(): Promise<void> {
     if (ss.disposed) {
       throw new OrchestrationAdapterDisposedError();
     }

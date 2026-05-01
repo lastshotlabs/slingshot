@@ -225,11 +225,11 @@ describe('searchInContainer — memory handler — status filter', () => {
     ]);
   });
 
-  test('filters by status', async () => {
+  test('ignores draft status requests and returns only published threads', async () => {
     const handler = createSearchInContainerMemoryHandler(store);
     const result = await handler({ containerId: 'c1', status: 'draft' });
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].id).toBe('t2');
+    expect(result.items).toHaveLength(2);
+    expect(new Set(result.items.map(item => item.id))).toEqual(new Set(['t1', 't3']));
   });
 });
 

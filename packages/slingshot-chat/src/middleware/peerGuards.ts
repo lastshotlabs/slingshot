@@ -36,6 +36,7 @@ export function buildPollRequiredGuard(app: ChatPluginApp | Hono) {
     try {
       body = await c.req.json();
     } catch {
+      // No JSON body; skip poll check and continue
       await next();
       return;
     }
@@ -68,6 +69,7 @@ export function buildAttachmentRequiredGuard(app: ChatPluginApp | Hono) {
     try {
       body = await c.req.json();
     } catch {
+      // No JSON body; skip attachment check and continue
       await next();
       return;
     }

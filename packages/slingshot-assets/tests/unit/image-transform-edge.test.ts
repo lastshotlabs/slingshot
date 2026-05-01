@@ -235,3 +235,117 @@ describe('transformImage invalid input handling', () => {
     await expect(transformImage(garbage, 'image/png', imageOptions())).rejects.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Format conversion edge cases
+// ---------------------------------------------------------------------------
+
+describe('transformImage format conversion', () => {
+  test('PNG → JPEG conversion produces image/jpeg content type', async () => {
+    const result = await transformImage(tinyPngBuffer(), 'image/png', {
+      width: 50,
+      format: 'jpeg',
+      quality: 80,
+      maxWidth: 500,
+      maxHeight: 500,
+      timeoutMs: 500,
+    });
+    expect(result.contentType).toBe('image/jpeg');
+    expect(result.buffer.byteLength).toBeGreaterThan(0);
+  });
+
+  test('PNG → WebP conversion produces image/webp content type', async () => {
+    const result = await transformImage(tinyPngBuffer(), 'image/png', {
+      width: 50,
+      format: 'webp',
+      quality: 80,
+      maxWidth: 500,
+      maxHeight: 500,
+      timeoutMs: 500,
+    });
+    expect(result.contentType).toBe('image/webp');
+    expect(result.buffer.byteLength).toBeGreaterThan(0);
+  });
+
+  test('PNG → AVIF conversion produces image/avif content type', async () => {
+    const result = await transformImage(tinyPngBuffer(), 'image/png', {
+      width: 50,
+      format: 'avif',
+      quality: 50,
+      maxWidth: 500,
+      maxHeight: 500,
+      timeoutMs: 500,
+    });
+    expect(result.contentType).toBe('image/avif');
+    expect(result.buffer.byteLength).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dimension boundary edge cases
+// ---------------------------------------------------------------------------
+
+describe('transformImage dimension boundary edge cases', () => {
+  test('width exceeding maxWidth throws ImageTransformError', async () => {
+    await expect(
+      transformImage(tinyPngBuffer(), 'image/png', {
+        width: 501,
+        format: 'original',
+        quality: 75,
+        maxWidth: 500,
+        maxHeight: 500,
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(ImageTransformError);
+  });
+
+  test('height exceeding maxHeight throws ImageTransformError', async () => {
+    await expect(
+      transformImage(tinyPngBuffer(), 'image/png', {
+        width: 50,
+        height: 501,
+        format: 'original',
+        quality: 75,
+        maxWidth: 500,
+        maxHeight: 500,
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(ImageTransformError);
+  });
+
+  test('width=1 at minimum boundary passes validation', async () => {
+    const result = await transformImage(tinyPngBuffer(), 'image/png', {
+      width: 1,
+      format: 'original',
+      quality: 75,
+      maxWidth: 500,
+      maxHeight: 500,
+      timeoutMs: 100,
+    });
+    expect(result.buffer.byteLength).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Concurrent execution
+// ---------------------------------------------------------------------------
+
+describe('transformImage concurrent execution', () => {
+  test('multiple concurrent transforms do not interfere', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        transformImage(tinyPngBuffer(), 'image/png', {
+          width: 10 + i,
+          format: 'original',
+          quality: 75,
+          maxWidth: 500,
+          maxHeight: 500,
+          timeoutMs: 1_000,
+        }),
+      ),
+    );
+    for (const result of results) {
+      expect(result.buffer.byteLength).toBeGreaterThan(0);
+    }
+  });
+});

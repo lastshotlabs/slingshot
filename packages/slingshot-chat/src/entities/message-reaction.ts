@@ -34,10 +34,15 @@ export const MessageReaction = defineEntity('MessageReaction', {
   uniques: [{ fields: ['userId', 'messageId', 'emoji'] }],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['addReaction', 'removeReaction', 'countByEmoji', 'listAggregated', 'hasReacted'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      permission: {
+        requires: 'chat:room.write',
+        scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
+      },
       event: {
         key: 'chat:message.reaction.added',
         payload: ['messageId', 'roomId', 'userId', 'emoji'],
@@ -49,8 +54,12 @@ export const MessageReaction = defineEntity('MessageReaction', {
         },
       },
     },
-    update: { auth: 'none' },
+    update: { auth: 'userAuth' },
     delete: {
+      permission: {
+        requires: 'chat:room.write',
+        scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
+      },
       event: {
         key: 'chat:message.reaction.removed',
         payload: ['messageId', 'roomId', 'userId', 'emoji'],

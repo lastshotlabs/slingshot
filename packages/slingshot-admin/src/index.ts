@@ -89,3 +89,15 @@ export { createAdminMetricsCollector } from './lib/metrics';
  * Metrics collector interface and snapshot types.
  */
 export type { AdminMetricsCollector, AdminMetricsSnapshot } from './lib/metrics';
+/**
+ * Admin audit logger for CRUD operations.
+ *
+ * Provides a higher-level audit abstraction for admin operations.
+ * Use `createMemoryAuditLogger()` for testing or `createConsoleAuditLogger()`
+ * for structured JSON log output.
+ */
+export { createMemoryAuditLogger, createConsoleAuditLogger } from './lib/auditLogger';
+/**
+ * Admin audit event shape and logger interface.
+ */
+export type { AdminAuditEvent, AdminAuditLogger } from './lib/auditLogger';

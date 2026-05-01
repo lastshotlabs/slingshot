@@ -88,6 +88,7 @@ export function validateUrl(
   try {
     parsed = new URL(url);
   } catch {
+    // URL constructor failed — treat as invalid
     return { valid: false, reason: 'Invalid URL format' };
   }
 
@@ -168,6 +169,7 @@ export async function resolveAndValidate(hostname: string): Promise<ResolveValid
       addresses = results.map(r => ({ address: r.address }));
     }
   } catch {
+    // DNS lookup threw — report resolution failure
     return { ok: false, reason: `DNS resolution failed for: ${hostname}` };
   }
 

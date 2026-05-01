@@ -35,7 +35,7 @@ class FakeNotificationsPostgresPool {
 
     if (
       sql ===
-      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC LIMIT $2'
+      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2'
     ) {
       const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const limit = Number(params[1]);
@@ -43,7 +43,40 @@ class FakeNotificationsPostgresPool {
         .filter(row => !row.dispatched && row.deliverAt != null && new Date(row.deliverAt) <= now)
         .sort(
           (left, right) =>
-            new Date(left.deliverAt ?? 0).getTime() - new Date(right.deliverAt ?? 0).getTime(),
+            new Date(left.deliverAt ?? 0).getTime() -
+              new Date(right.deliverAt ?? 0).getTime() ||
+            left.id.localeCompare(right.id),
+        )
+        .slice(0, limit);
+      return Promise.resolve({ rows });
+    }
+
+    if (
+      sql ===
+      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 AND ("deliverAt", "id") > (SELECT "deliverAt", "id" FROM "Notification" WHERE "id" = $2) ORDER BY "deliverAt" ASC, "id" ASC LIMIT $3'
+    ) {
+      const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
+      const cursor = String(params[1]);
+      const limit = Number(params[2]);
+      const cursorRow = this.notifications.find(row => row.id === cursor);
+      if (!cursorRow) return Promise.resolve({ rows: [] });
+      const cursorDeliverAt = new Date(cursorRow.deliverAt!).getTime();
+      const rows = this.notifications
+        .filter(row => {
+          if (row.dispatched) return false;
+          if (row.deliverAt == null) return false;
+          const deliverAt = new Date(row.deliverAt).getTime();
+          if (deliverAt > now.getTime()) return false;
+          // Tuple comparison: (deliverAt, id) > (cursorDeliverAt, cursor)
+          if (deliverAt < cursorDeliverAt) return false;
+          if (deliverAt === cursorDeliverAt && row.id <= cursor) return false;
+          return true;
+        })
+        .sort(
+          (left, right) =>
+            new Date(left.deliverAt ?? 0).getTime() -
+              new Date(right.deliverAt ?? 0).getTime() ||
+            left.id.localeCompare(right.id),
         )
         .slice(0, limit);
       return Promise.resolve({ rows });
@@ -220,15 +253,131 @@ describe('slingshot-notifications postgres handlers', () => {
       'listPendingDispatch',
     );
     const listPendingDispatch = factory(pool);
-    const rows = await listPendingDispatch({
+    const result = await listPendingDispatch({
       limit: 2,
       now: new Date('2026-04-18T09:10:00.000Z'),
     });
 
-    expect(rows.map(row => row.id)).toEqual(['n-earliest', 'n-late']);
+    expect(result.records.map(row => row.id)).toEqual(['n-earliest', 'n-late']);
+    // Only 2 eligible rows with limit=2 — no more pages.
+    expect(result.nextCursor).toBeNull();
     expect(pool.queries).toContain(
-      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC LIMIT $2',
+      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2',
     );
+  });
+
+  test('listPendingDispatch postgres handler returns nextCursor=null when no more pages', async () => {
+    const pool = new FakeNotificationsPostgresPool(
+      [],
+      [
+        {
+          id: 'n-1',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:01:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T09:00:00.000Z'),
+        },
+      ],
+    );
+
+    const factory = requirePostgresFactory(
+      notificationOperations.operations.listPendingDispatch,
+      'listPendingDispatch',
+    );
+    const listPendingDispatch = factory(pool);
+    const result = await listPendingDispatch({
+      limit: 10,
+      now: new Date('2026-04-18T09:10:00.000Z'),
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  test('listPendingDispatch postgres handler supports cursor-based pagination', async () => {
+    const pool = new FakeNotificationsPostgresPool(
+      [],
+      [
+        {
+          id: 'n-first',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:01:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T09:00:00.000Z'),
+        },
+        {
+          id: 'n-second',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:reply',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:02:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T09:01:00.000Z'),
+        },
+      ],
+    );
+
+    const factory = requirePostgresFactory(
+      notificationOperations.operations.listPendingDispatch,
+      'listPendingDispatch',
+    );
+    const listPendingDispatch = factory(pool);
+
+    // First page: get first item.
+    const page1 = await listPendingDispatch({
+      limit: 1,
+      now: new Date('2026-04-18T09:10:00.000Z'),
+    });
+    expect(page1.records).toHaveLength(1);
+    expect(page1.records[0]?.id).toBe('n-first');
+    expect(page1.nextCursor).toBe('n-first');
+
+    // Second page: use cursor from first page.
+    const page2 = await listPendingDispatch({
+      limit: 1,
+      now: new Date('2026-04-18T09:10:00.000Z'),
+      cursor: page1.nextCursor,
+    });
+    expect(page2.records).toHaveLength(1);
+    expect(page2.records[0]?.id).toBe('n-second');
+    expect(page2.nextCursor).toBeNull();
   });
 
   test('countPendingDispatch postgres handler returns exact count of due, undispatched rows', async () => {

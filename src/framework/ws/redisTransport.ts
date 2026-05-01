@@ -92,7 +92,10 @@ export function createRedisTransport(opts: RedisTransportOptions): WsTransportAd
 
   return {
     async publish(endpoint: string, room: string, message: string, origin: string): Promise<void> {
-      if (!pubClient) throw new Error('[RedisTransport] Not connected — call connect() first');
+      if (!pubClient)
+        return Promise.reject(
+          new Error('[RedisTransport] Not connected — call connect() first'),
+        );
       const payload = JSON.stringify({ msg: message, origin });
       await pubClient.publish(channelForKey(wsEndpointKey(endpoint, room)), payload);
     },
@@ -103,6 +106,10 @@ export function createRedisTransport(opts: RedisTransportOptions): WsTransportAd
       const { pub, sub } = buildClients();
       pubClient = pub;
       subClient = sub;
+
+      // ioredis v5+ requires error listeners to avoid crashing on connection errors
+      pubClient.on('error', (err: Error) => console.error('[RedisTransport] pub error:', err));
+      subClient.on('error', (err: Error) => console.error('[RedisTransport] sub error:', err));
 
       // psubscribe covers all rooms under the prefix — avoids per-room subscribe churn
       await subClient.psubscribe(`${channelPrefix}*`);
@@ -119,8 +126,14 @@ export function createRedisTransport(opts: RedisTransportOptions): WsTransportAd
         const compositeKey = keyFromChannel(channel);
         const colonIdx = compositeKey.indexOf(':');
         if (colonIdx === -1) return;
-        const endpoint = decodeURIComponent(compositeKey.slice(0, colonIdx));
-        const room = decodeURIComponent(compositeKey.slice(colonIdx + 1));
+        let endpoint: string;
+        let room: string;
+        try {
+          endpoint = decodeURIComponent(compositeKey.slice(0, colonIdx));
+          room = decodeURIComponent(compositeKey.slice(colonIdx + 1));
+        } catch {
+          return;
+        }
         onMessage(endpoint, room, parsed.msg, parsed.origin);
       });
     },

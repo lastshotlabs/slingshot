@@ -109,8 +109,16 @@ describe('tags — thread-tag linking', () => {
     await harness.teardown();
   });
 
-  test('thread-tag list is initially empty', async () => {
-    const res = await get(harness.app, '/community/thread-tags');
+  test('thread-tag list is initially empty for a published thread', async () => {
+    const threadRes = await post(harness.app, '/community/threads', {
+      containerId: 'c-empty-tags',
+      title: 'Thread without tags',
+      status: 'published',
+    });
+    expect(threadRes.status).toBeLessThan(300);
+    const thread = (await threadRes.json()) as { id: string };
+
+    const res = await get(harness.app, `/community/thread-tags/list-by-thread/${thread.id}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
     expect(Array.isArray(body.items)).toBe(true);
@@ -142,10 +150,22 @@ describe('tags — thread-tag linking', () => {
     });
     expect(linkRes.status).toBeLessThan(300);
 
-    // Verify it's listed
-    const listRes = await get(harness.app, '/community/thread-tags');
+    // Verify it's listed through the thread-scoped public route.
+    const listRes = await get(harness.app, `/community/thread-tags/list-by-thread/${thread.id}`);
     const body = (await listRes.json()) as { items: Array<{ threadId: string; tagId: string }> };
     const link = body.items.find(l => l.threadId === thread.id && l.tagId === tag.id);
     expect(link).toBeDefined();
+  });
+
+  test('thread-tag reads hide draft threads', async () => {
+    const threadRes = await post(harness.app, '/community/threads', {
+      containerId: 'c-draft-tags',
+      title: 'Draft thread',
+    });
+    expect(threadRes.status).toBeLessThan(300);
+    const thread = (await threadRes.json()) as { id: string };
+
+    const listRes = await get(harness.app, `/community/thread-tags/list-by-thread/${thread.id}`);
+    expect(listRes.status).toBe(404);
   });
 });

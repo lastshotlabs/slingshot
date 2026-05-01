@@ -78,7 +78,11 @@ export type { MemoryWebhookAdapter } from './adapters/memory';
 /**
  * Create the in-memory delivery queue for webhook jobs.
  */
-export { createWebhookMemoryQueue } from './queues/memory';
+export { createWebhookMemoryQueue, replayWebhookDlq } from './queues/memory';
+/**
+ * Memory queue configuration including optional file-backed DLQ path.
+ */
+export type { MemoryQueueConfig } from './queues/memory';
 
 /**
  * Sign and verify webhook payloads using the framework signing helpers.

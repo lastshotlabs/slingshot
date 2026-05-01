@@ -1,3 +1,6 @@
+import { noopLogger } from './observability/logger';
+import type { Logger } from './observability/logger';
+
 /**
  * Unified metrics emitter contract.
  *
@@ -258,7 +261,7 @@ function percentile(sortedSamples: number[], p: number): number {
  *   safe to call concurrently with `snapshot()` — snapshots are best-effort
  *   point-in-time views and may include partial concurrent writes.
  */
-export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
+export function createInProcessMetricsEmitter(logger?: Logger): InProcessMetricsEmitter {
   // Outer key: metric name. Inner key: label fingerprint.
   const counters = new Map<string, Map<string, CounterCell>>();
   const gauges = new Map<string, Map<string, GaugeCell>>();
@@ -267,12 +270,13 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
   // warning so we don't spam the console when a high-cardinality label is
   // accidentally used on a hot path.
   const cardinalityCapWarned = new Set<string>();
+  const log = logger ?? noopLogger;
 
   function warnCardinalityCap(kind: 'counter' | 'gauge' | 'timing', name: string): void {
     const key = `${kind}:${name}`;
     if (cardinalityCapWarned.has(key)) return;
     cardinalityCapWarned.add(key);
-    console.warn(
+    log.warn(
       `[slingshot-core/metrics] ${kind} '${name}' reached the per-metric label cardinality cap ` +
         `(${LABEL_CARDINALITY_LIMIT} unique label sets). Additional label combinations will be ` +
         `dropped. Check that no high-cardinality value (request id, user id, full URL) is being ` +

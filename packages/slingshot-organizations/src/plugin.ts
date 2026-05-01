@@ -213,11 +213,13 @@ function composeAuthenticatedGuard(
 }
 
 function getClientIp(c: Parameters<MiddlewareHandler>[0]): string {
+  // Only trust x-forwarded-for — single-hop headers (x-real-ip, cf-connecting-ip)
+  // are trivially spoofed by clients without a trusted proxy in front.
   const fwd = c.req.header('x-forwarded-for');
   if (typeof fwd === 'string' && fwd.length > 0) {
     return fwd.split(',')[0]?.trim() ?? 'unknown';
   }
-  return c.req.header('x-real-ip') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+  return 'unknown';
 }
 
 function rateLimitResponse(c: Parameters<MiddlewareHandler>[0], retryAfterMs: number): Response {
@@ -294,6 +296,17 @@ export function createOrganizationsPlugin(
   const orgSlugSchema = createOrgSlugSchema(reservedSlugs);
 
   const rateLimitStore = deps.rateLimitStore ?? createMemoryOrganizationsRateLimitStore();
+  if (
+    !deps.rateLimitStore &&
+    typeof process !== 'undefined' &&
+    process.env?.NODE_ENV === 'production'
+  ) {
+    logger.warn(
+      '[slingshot-organizations] No rateLimitStore configured — using in-memory store. ' +
+        'Rate-limit state will not be shared across instances. Provide a Redis-backed ' +
+        'store via deps.rateLimitStore for multi-instance production deployments.',
+    );
+  }
   const inviteCreateLimit = config.organizations?.inviteRateLimit?.create?.limit ?? 10;
   const inviteCreateWindow = config.organizations?.inviteRateLimit?.create?.windowMs ?? 60_000;
   const inviteLookupLimit = config.organizations?.inviteRateLimit?.lookup?.limit ?? 30;

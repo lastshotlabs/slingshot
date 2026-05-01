@@ -322,7 +322,20 @@ export function createAssetsManifestRuntime(args: {
       return { url, key, assetId: asset.id };
     };
 
-    if (!cacheKey) return performPresign();
+    if (!cacheKey) {
+      try {
+        return await performPresign();
+      } catch (err) {
+        logger.error('[slingshot-assets] presignUpload failed', {
+          component: 'slingshot-assets.runtime',
+          userId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+        throw err instanceof HTTPException
+          ? err
+          : new HTTPException(502, { message: 'Storage operation failed during presign upload' });
+      }
+    }
 
     const inFlight = performPresign();
     presignUploadIdempotencyCache.set(cacheKey, {
@@ -345,7 +358,15 @@ export function createAssetsManifestRuntime(args: {
       // Failed presigns are not cached — the caller can retry without
       // poisoning the slot.
       presignUploadIdempotencyCache.delete(cacheKey);
-      throw err;
+      logger.error('[slingshot-assets] presignUpload (idempotent) failed', {
+        component: 'slingshot-assets.runtime',
+        userId,
+        idempotencyKey,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw err instanceof HTTPException
+        ? err
+        : new HTTPException(502, { message: 'Storage operation failed during presign upload' });
     }
   });
 
@@ -365,7 +386,20 @@ export function createAssetsManifestRuntime(args: {
     const tenantId = readOptionalString(params, 'tenantId');
     const expirySeconds = readPresignedExpiry(config, params);
 
-    const asset = await assetAdapter.findByKey({ key });
+    let asset;
+    try {
+      asset = await assetAdapter.findByKey({ key });
+    } catch (err) {
+      logger.error('[slingshot-assets] presignDownload: asset lookup failed', {
+        component: 'slingshot-assets.runtime',
+        key,
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw new HTTPException(502, {
+        message: 'Asset lookup failed during presign download',
+      });
+    }
     if (!asset) {
       throw new HTTPException(404, { message: 'Not found' });
     }
@@ -410,7 +444,20 @@ export function createAssetsManifestRuntime(args: {
       });
     }
 
-    const url = await storage.presignGet(key, { expirySeconds });
+    let url;
+    try {
+      url = await storage.presignGet(key, { expirySeconds });
+    } catch (err) {
+      logger.error('[slingshot-assets] presignDownload: storage presignGet failed', {
+        component: 'slingshot-assets.runtime',
+        key,
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw new HTTPException(502, {
+        message: 'Storage operation failed during presign download',
+      });
+    }
     const expiresAt = Math.floor(Date.now() / 1000) + expirySeconds;
     // Surface the safe response-header recommendation in the JSON payload so
     // operators using a custom edge / proxy can apply it to the download
@@ -447,7 +494,18 @@ export function createAssetsManifestRuntime(args: {
     const id = readRequiredString(params, 'id', 'id is required');
     const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
     const tenantId = readOptionalString(params, 'tenantId');
-    const asset = await assetAdapter.getById(id);
+    let asset;
+    try {
+      asset = await assetAdapter.getById(id);
+    } catch (err) {
+      logger.error('[slingshot-assets] serveImage: asset lookup failed', {
+        component: 'slingshot-assets.runtime',
+        id,
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw new HTTPException(502, { message: 'Asset lookup failed during image serve' });
+    }
     if (!asset) {
       throw new HTTPException(404, { message: 'Not found' });
     }
@@ -458,19 +516,31 @@ export function createAssetsManifestRuntime(args: {
       throw new HTTPException(403, { message: 'Forbidden' });
     }
 
-    return createServeImageResponse({
-      asset,
-      storage,
-      cache: imageCache,
-      imageConfig,
-      params: {
+    try {
+      return await createServeImageResponse({
+        asset,
+        storage,
+        cache: imageCache,
+        imageConfig,
+        params: {
+          id,
+          w: params.w,
+          h: params.h,
+          f: params.f,
+          q: params.q,
+        },
+      });
+    } catch (err) {
+      logger.error('[slingshot-assets] serveImage: image creation failed', {
+        component: 'slingshot-assets.runtime',
         id,
-        w: params.w,
-        h: params.h,
-        f: params.f,
-        q: params.q,
-      },
-    });
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw err instanceof HTTPException
+        ? err
+        : new HTTPException(502, { message: 'Image creation failed' });
+    }
   });
 
   return {

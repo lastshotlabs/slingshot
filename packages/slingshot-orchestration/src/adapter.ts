@@ -81,7 +81,7 @@ export function supportsCapability(
 export function throwUnsupported(capability: OrchestrationCapability): never {
   const hint =
     capability === 'signals' || capability === 'scheduling'
-      ? ' Not implemented in memory/sqlite adapters — use Temporal adapter for signal support.'
+      ? ' Not implemented in the sqlite adapter — use the memory or Temporal adapter for signal/schedule support.'
       : '';
   throw new OrchestrationError(
     'CAPABILITY_NOT_SUPPORTED',

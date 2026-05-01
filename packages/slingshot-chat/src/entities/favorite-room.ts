@@ -27,6 +27,7 @@ export const FavoriteRoom = defineEntity('FavoriteRoom', {
   indexes: [index(['userId', 'roomId'], { unique: true }), index(['userId', 'sortOrder'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['listByUser', 'isFavorite', 'unfavorite', 'updateOrder'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },

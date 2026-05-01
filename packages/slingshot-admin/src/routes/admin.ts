@@ -22,6 +22,7 @@ import type {
   ManagedUserScope,
   SessionRecord,
 } from '@lastshotlabs/slingshot-core';
+import type { AdminAuditEvent, AdminAuditLogger } from '../lib/auditLogger';
 import type { AdminRateLimitStore } from '../lib/rateLimitStore';
 import { createMemoryRateLimitStore } from '../lib/rateLimitStore';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
@@ -225,6 +226,7 @@ export interface AdminRouterConfig {
   bus: SlingshotEventBus;
   evaluator: PermissionEvaluator;
   auditLog?: AuditLogProvider;
+  auditLogger?: AdminAuditLogger;
   destructiveRateLimit?: {
     /** Window length in milliseconds. Default: 60000. */
     windowMs?: number;
@@ -379,6 +381,27 @@ function auditEntry(
   };
 }
 
+/**
+ * Safe audit-logger call that never propagates errors to the HTTP response.
+ * Catches and logs sync throws and async rejections from the logger.
+ */
+async function tryLogAdminAuditEvent(
+  auditLogger: AdminAuditLogger | undefined,
+  event: AdminAuditEvent,
+): Promise<void> {
+  if (!auditLogger) return;
+  try {
+    const result = auditLogger.log(event);
+    if (result instanceof Promise) await result;
+  } catch (err) {
+    logger.error('[slingshot-admin] Failed to write admin audit event', {
+      action: event.action,
+      target: event.target,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export function createAdminRouter(config: AdminRouterConfig) {
   const { managedUserProvider, bus, evaluator } = config;
   const router = createTypedRouter();
@@ -477,6 +500,16 @@ export function createAdminRouter(config: AdminRouterConfig) {
       });
 
       const cappedItems = result.items.length > limit ? result.items.slice(0, limit) : result.items;
+      await tryLogAdminAuditEvent(config.auditLogger, {
+        timestamp: new Date().toISOString(),
+        route: '/users',
+        method: 'GET',
+        actor: c.get('adminPrincipal').subject,
+        action: 'user.list',
+        target: '',
+        result: 'success',
+        tenantId: c.get('adminPrincipal').tenantId,
+      });
       return c.json(
         {
           users: cappedItems.map(toAdminUser),
@@ -526,6 +559,16 @@ export function createAdminRouter(config: AdminRouterConfig) {
         return errorResponse(c, 'Forbidden', 403);
       const user = await getScopedUser(c, managedUserProvider, userId);
       if (!user) return errorResponse(c, 'User not found', 404);
+      await tryLogAdminAuditEvent(config.auditLogger, {
+        timestamp: new Date().toISOString(),
+        route: '/users/:userId',
+        method: 'GET',
+        actor: c.get('adminPrincipal').subject,
+        action: 'user.get',
+        target: userId,
+        result: 'success',
+        tenantId: c.get('adminPrincipal').tenantId,
+      });
       return c.json(toAdminUser(user), 200);
     },
   );
@@ -767,6 +810,16 @@ export function createAdminRouter(config: AdminRouterConfig) {
           config.auditLog,
           auditEntry(c, 'admin.user.suspend', 'user', userId, 200, { target: userId }),
         );
+        await tryLogAdminAuditEvent(config.auditLogger, {
+          timestamp: new Date().toISOString(),
+          route: '/users/:userId/suspend',
+          method: 'POST',
+          actor: c.get('adminPrincipal').subject,
+          action: 'user.suspend',
+          target: userId,
+          result: 'success',
+          tenantId: c.get('adminPrincipal').tenantId,
+        });
         return c.json({ message: 'User suspended' }, 200);
       }),
   );
@@ -1167,6 +1220,16 @@ export function createAdminRouter(config: AdminRouterConfig) {
           config.auditLog,
           auditEntry(c, 'admin.user.delete', 'user', userId, 200, { target: userId }),
         );
+        await tryLogAdminAuditEvent(config.auditLogger, {
+          timestamp: new Date().toISOString(),
+          route: '/users/:userId',
+          method: 'DELETE',
+          actor: c.get('adminPrincipal').subject,
+          action: 'user.delete',
+          target: userId,
+          result: 'success',
+          tenantId: c.get('adminPrincipal').tenantId,
+        });
         return c.json({ message: 'User deleted' }, 200);
       }),
   );

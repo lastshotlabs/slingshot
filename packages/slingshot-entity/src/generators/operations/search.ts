@@ -91,7 +91,7 @@ export function generateSearch(
     ? `
       const effectiveLimit = limit ?? 50;
       let startIdx = 0;
-      if (cursor) { try { startIdx = JSON.parse(Buffer.from(cursor, 'base64url').toString()).offset ?? 0; } catch {} }
+      if (cursor) { try { startIdx = JSON.parse(Buffer.from(cursor, 'base64url').toString()).offset ?? 0; } catch { console.warn('[search] failed to parse cursor, using offset 0:', cursor); } }
       const page = filtered.slice(startIdx, startIdx + effectiveLimit + 1);
       const hasMore = page.length > effectiveLimit;
       return { items: page.slice(0, effectiveLimit), nextCursor: hasMore ? Buffer.from(JSON.stringify({ offset: startIdx + effectiveLimit })).toString('base64url') : undefined, hasMore };`

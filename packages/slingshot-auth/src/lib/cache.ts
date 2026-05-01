@@ -274,6 +274,7 @@ export function createRedisCacheAdapter(getRedis: () => RedisLike, appName: stri
         getRedis();
         return true;
       } catch {
+        // Redis not connected; report as not ready
         return false;
       }
     },

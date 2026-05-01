@@ -289,11 +289,13 @@ async function listAuthorizedRuns(
   const authorizedRuns: Array<Run | WorkflowRun> = [];
   let authorizedTotal = 0;
   let scanOffset = 0;
+  let truncated = false;
 
   while (true) {
     // Stop scanning when we have hit MAX_AUTH_SCAN records — this prevents a single HTTP
     // request from scanning the entire run history when authorizeRun rejects aggressively.
     if (scanOffset >= MAX_AUTH_SCAN) {
+      truncated = true;
       break;
     }
 
@@ -327,6 +329,7 @@ async function listAuthorizedRuns(
   return {
     runs: authorizedRuns,
     total: authorizedTotal,
+    ...(truncated ? { truncated: true } : {}),
   };
 }
 
@@ -697,7 +700,11 @@ export function createOrchestrationRouter(options: {
   router.get('/runs/:id/progress', async c => {
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
-      const run = await options.runtime.getRun(c.req.param('id'));
+      const run = await withTimeout(
+        options.runtime.getRun(c.req.param('id')),
+        routeTimeoutMs,
+        `orchestration-routes.getRun(${c.req.param('id')})`,
+      );
       if (!run || !(await canAccessRun(c, run, requestContext, 'read', options.authorizeRun))) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },

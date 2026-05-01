@@ -1,5 +1,7 @@
 import { type z } from 'zod';
 import type { ValidationMode } from './eventTypes';
+import { noopLogger } from './observability/logger';
+import type { Logger } from './observability/logger';
 
 /**
  * Result of validating an event payload against a registered schema.
@@ -111,6 +113,7 @@ export function validateEventPayload(
   payload: unknown,
   registry: EventSchemaRegistry | undefined,
   mode: ValidationMode,
+  logger?: Logger,
 ): unknown {
   if (mode === 'off' || !registry) return payload;
 
@@ -124,6 +127,6 @@ export function validateEventPayload(
     throw new Error(message, { cause: result.error });
   }
 
-  console.warn(message);
+  (logger ?? noopLogger).warn(message);
   return payload;
 }

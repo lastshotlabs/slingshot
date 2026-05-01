@@ -33,9 +33,27 @@ export const Ban = defineEntity('Ban', {
   indexes: [index(['userId', 'containerId']), index(['userId']), index(['tenantId'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['isUserBanned', 'getUserBan'],
+    dataScope: { field: 'bannedBy', from: 'ctx:actor.id', applyTo: ['create'] },
+
+    get: {
+      permission: {
+        requires: 'community:container.review-report',
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+      },
+    },
+    list: {
+      permission: {
+        requires: 'community:container.review-report',
+        scope: { resourceType: 'community:container', resourceId: 'query:containerId' },
+      },
+    },
 
     create: {
-      permission: { requires: 'community:container.apply-ban' },
+      permission: {
+        requires: 'community:container.apply-ban',
+        scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+      },
       event: {
         key: 'community:user.banned',
         payload: ['userId', 'containerId', 'bannedBy', 'reason', 'expiresAt'],
@@ -53,7 +71,10 @@ export const Ban = defineEntity('Ban', {
       isUserBanned: { auth: 'userAuth' },
       getUserBan: { auth: 'userAuth' },
       removeBan: {
-        permission: { requires: 'community:container.lift-ban' },
+        permission: {
+          requires: 'community:container.lift-ban',
+          scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
+        },
         event: {
           key: 'community:user.unbanned',
           payload: ['userId', 'containerId'],
@@ -94,7 +115,7 @@ export const banOperations = defineOperations(Ban, {
   removeBan: op.batch({
     action: 'update',
     filter: { userId: 'param:userId', containerId: 'param:containerId' },
-    set: { unbannedBy: 'param:unbannedBy', unbannedAt: 'now' },
+    set: { unbannedBy: 'param:actor.id', unbannedAt: 'now' },
     returns: 'count',
   }),
 });

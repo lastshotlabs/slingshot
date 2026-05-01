@@ -4,6 +4,7 @@ import type {
   SlingshotEvents,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { type RuntimeLogger, resolveWebhookDeliveries } from '../manifest/runtime';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
@@ -19,6 +20,8 @@ export interface EventWiringLogger {
   warn(fields: Record<string, unknown>): void;
 }
 
+const eventWiringLogger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
+
 /**
  * Emit a structured log line with a stable shape so production log
  * aggregators can index by `endpointId`, `deliveryId`, and `event`.
@@ -28,17 +31,10 @@ function defaultStructuredLog(
   message: string,
   fields: Record<string, unknown>,
 ): void {
-  const line = JSON.stringify({
-    level,
-    plugin: 'slingshot-webhooks',
-    message,
-    ...fields,
-    timestamp: new Date().toISOString(),
-  });
   if (level === 'error') {
-    console.error(line);
+    eventWiringLogger.error(message, fields);
   } else {
-    console.warn(line);
+    eventWiringLogger.warn(message, fields);
   }
 }
 

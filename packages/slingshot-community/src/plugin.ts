@@ -30,6 +30,7 @@ import { createContainerCreationGuardMiddleware } from './middleware/containerCr
 import { createGrantManagerMiddleware } from './middleware/grantManager';
 import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
 import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middleware/peerGuards';
+import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
 import { probePushFormatterRegistrar } from './peers/push';
@@ -232,6 +233,11 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
   const banCheckRef: LazyMiddleware = { handler: noop };
   const autoModRef: LazyMiddleware = { handler: noop };
   const threadStateGuardRef: LazyMiddleware = { handler: noop };
+  const publishedThreadGuardRef: LazyMiddleware = { handler: noop };
+  const targetVisibilityGuardRef: LazyMiddleware = { handler: noop };
+  const reportTargetGuardRef: LazyMiddleware = { handler: noop };
+  const memberJoinPolicyGuardRef: LazyMiddleware = { handler: noop };
+  const solutionReplyGuardRef: LazyMiddleware = { handler: noop };
   const banNotifyRef: LazyMiddleware = { handler: noop };
   const containerCreationGuardRef: LazyMiddleware = { handler: noop };
   const grantManagerRef: LazyMiddleware = { handler: noop };
@@ -380,6 +386,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         },
       });
       const memberJoinGuard = createMemberJoinGuardMiddleware();
+      const roleAssignmentGuard = createRoleAssignmentGuardMiddleware({
+        evaluator: permissions.evaluator,
+      });
       const manifest = structuredClone(communityManifest);
       const manifestRuntime = createCommunityManifestRuntime({
         scoring: scoringConfig,
@@ -410,6 +419,21 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         setThreadStateGuardHandler(handler) {
           threadStateGuardRef.handler = handler;
         },
+        setPublishedThreadGuardHandler(handler) {
+          publishedThreadGuardRef.handler = handler;
+        },
+        setTargetVisibilityGuardHandler(handler) {
+          targetVisibilityGuardRef.handler = handler;
+        },
+        setReportTargetGuardHandler(handler) {
+          reportTargetGuardRef.handler = handler;
+        },
+        setMemberJoinPolicyGuardHandler(handler) {
+          memberJoinPolicyGuardRef.handler = handler;
+        },
+        setSolutionReplyGuardHandler(handler) {
+          solutionReplyGuardRef.handler = handler;
+        },
         setReplyCountUpdateHandler(handler) {
           replyCountUpdateRef.handler = handler;
         },
@@ -435,11 +459,17 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           banCheck: async (c, next) => banCheckRef.handler(c, next),
           autoMod: async (c, next) => autoModRef.handler(c, next),
           threadStateGuard: async (c, next) => threadStateGuardRef.handler(c, next),
+          publishedThreadGuard: async (c, next) => publishedThreadGuardRef.handler(c, next),
+          targetVisibilityGuard: async (c, next) => targetVisibilityGuardRef.handler(c, next),
+          reportTargetGuard: async (c, next) => reportTargetGuardRef.handler(c, next),
+          memberJoinPolicyGuard: async (c, next) => memberJoinPolicyGuardRef.handler(c, next),
+          solutionReplyGuard: async (c, next) => solutionReplyGuardRef.handler(c, next),
           auditLog: async (c, next) => auditLogRef.handler(c, next),
           grantManager: async (c, next) => grantManagerRef.handler(c, next),
           containerCreationGuard: async (c, next) => containerCreationGuardRef.handler(c, next),
           banNotify: async (c, next) => banNotifyRef.handler(c, next),
           memberJoinGuard,
+          roleAssignmentGuard,
           pollRequiredGuard: buildPollRequiredGuard(app),
           attachmentRequiredGuard: buildAttachmentRequiredGuard(app),
           threadPostCreate: createThreadPostCreateMiddleware(),

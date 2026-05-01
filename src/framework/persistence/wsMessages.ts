@@ -22,13 +22,20 @@ function isStoredMessage(value: unknown): value is StoredMessage {
 }
 
 function parseStoredMessage(raw: string): StoredMessage | null {
-  const parsed: unknown = JSON.parse(raw);
-  return isStoredMessage(parsed) ? parsed : null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isStoredMessage(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseJsonValue(raw: string): unknown {
-  const parsed: unknown = JSON.parse(raw);
-  return parsed;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -84,9 +91,12 @@ export function createMemoryWsMessageRepository(): WsMessageRepository {
 
       if (opts?.before) {
         const idx = filtered.findIndex(m => m.id === opts.before);
+        if (idx === -1) return Promise.resolve([]);
         if (idx > 0) filtered = filtered.slice(0, idx);
+        else return Promise.resolve([]);
       } else if (opts?.after) {
         const idx = filtered.findIndex(m => m.id === opts.after);
+        if (idx === -1) return Promise.resolve([]);
         if (idx >= 0) filtered = filtered.slice(idx + 1);
       }
 
@@ -161,9 +171,12 @@ export function createRedisWsMessageRepository(redis: {
 
       if (opts?.before) {
         const idx = msgs.findIndex(m => m.id === opts.before);
+        if (idx === -1) return [];
         if (idx > 0) msgs = msgs.slice(0, idx);
+        else return [];
       } else if (opts?.after) {
         const idx = msgs.findIndex(m => m.id === opts.after);
+        if (idx === -1) return [];
         if (idx >= 0) msgs = msgs.slice(idx + 1);
       }
 
@@ -287,20 +300,18 @@ export function createMongoWsMessageRepository(
 
       if (opts?.before) {
         const cursor = await Model.findById(opts.before).lean();
-        if (cursor) {
-          filter['$or'] = [
-            { createdAt: { $lt: cursor.createdAt } },
-            { createdAt: cursor.createdAt, _id: { $lt: opts.before } },
-          ];
-        }
+        if (!cursor) return [];
+        filter['$or'] = [
+          { createdAt: { $lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, _id: { $lt: opts.before } },
+        ];
       } else if (opts?.after) {
         const cursor = await Model.findById(opts.after).lean();
-        if (cursor) {
-          filter['$or'] = [
-            { createdAt: { $gt: cursor.createdAt } },
-            { createdAt: cursor.createdAt, _id: { $gt: opts.after } },
-          ];
-        }
+        if (!cursor) return [];
+        filter['$or'] = [
+          { createdAt: { $gt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, _id: { $gt: opts.after } },
+        ];
       }
 
       const docs = await Model.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
@@ -396,6 +407,11 @@ export function createSqliteWsMessageRepository(db: {
       const counter = (trimCounters.get(key) ?? 0) + 1;
       const trimInterval = Math.max(10, Math.floor(config.maxCount * 0.1));
       trimCounters.set(key, counter);
+      // Cap the counter map to prevent unbounded growth from abandoned rooms
+      if (trimCounters.size > 10_000) {
+        const oldest = trimCounters.keys().next().value;
+        if (oldest) trimCounters.delete(oldest);
+      }
 
       if (counter >= trimInterval) {
         trimCounters.set(key, 0);

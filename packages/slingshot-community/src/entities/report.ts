@@ -17,6 +17,7 @@ export const Report = defineEntity('Report', {
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     tenantId: field.string({ optional: true }),
+    containerId: field.string({ optional: true }),
     targetId: field.string(),
     targetType: field.enum(['thread', 'reply', 'user'] as const),
     reporterId: field.string(),
@@ -27,35 +28,54 @@ export const Report = defineEntity('Report', {
     createdAt: field.date({ default: 'now' }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
-  indexes: [index(['status']), index(['targetId', 'targetType']), index(['tenantId'])],
+  indexes: [
+    index(['status']),
+    index(['containerId', 'status']),
+    index(['targetId', 'targetType']),
+    index(['tenantId']),
+  ],
   routes: {
     defaults: { auth: 'userAuth' },
+    dataScope: { field: 'reporterId', from: 'ctx:actor.id', applyTo: ['create'] },
 
     create: {
+      middleware: ['reportTargetGuard'],
       event: {
         key: 'community:content.reported',
-        payload: ['id', 'targetId', 'targetType', 'reporterId', 'reason'],
+        payload: ['id', 'containerId', 'targetId', 'targetType', 'reporterId', 'reason'],
       },
     },
     get: {
-      permission: { requires: 'community:container.review-report' },
+      permission: {
+        requires: 'community:container.review-report',
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+      },
     },
     list: {
-      permission: { requires: 'community:container.review-report' },
+      permission: {
+        requires: 'community:container.review-report',
+        scope: { resourceType: 'community:container', resourceId: 'query:containerId' },
+      },
     },
 
     operations: {
       resolve: {
-        permission: { requires: 'community:container.review-report' },
+        permission: {
+          requires: 'community:container.review-report',
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+        },
         middleware: ['auditLog'],
       },
       dismiss: {
-        permission: { requires: 'community:container.review-report' },
+        permission: {
+          requires: 'community:container.review-report',
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+        },
         middleware: ['auditLog'],
       },
     },
 
-    middleware: { auditLog: true },
+    middleware: { auditLog: true, reportTargetGuard: true },
   },
 });
 
@@ -76,7 +96,7 @@ export const reportOperations = defineOperations(Report, {
     from: 'pending',
     to: 'resolved',
     match: { id: 'param:id' },
-    set: { resolvedBy: 'param:resolvedBy', resolvedAction: 'param:action' },
+    set: { resolvedBy: 'param:actor.id', resolvedAction: 'param:action' },
     returns: 'entity',
   }),
 
@@ -85,7 +105,7 @@ export const reportOperations = defineOperations(Report, {
     from: 'pending',
     to: 'dismissed',
     match: { id: 'param:id' },
-    set: { resolvedBy: 'param:dismissedBy' },
+    set: { resolvedBy: 'param:actor.id' },
     returns: 'entity',
   }),
 });

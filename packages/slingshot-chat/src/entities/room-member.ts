@@ -32,6 +32,7 @@ export const RoomMember = defineEntity('RoomMember', {
   indexes: [index(['roomId', 'userId'], { unique: true }), index(['userId']), index(['roomId'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['listByUser', 'updateLastRead', 'countMembers'],
     dataScope: { field: 'userId', from: 'ctx:actor.id', applyTo: ['list'] },
     get: {
       permission: {
@@ -90,9 +91,21 @@ export const RoomMember = defineEntity('RoomMember', {
       },
     },
     operations: {
-      listByRoom: { auth: 'userAuth' },
+      listByRoom: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
       listByUser: { auth: 'userAuth' },
-      findMember: { auth: 'userAuth' },
+      findMember: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
       updateLastRead: { auth: 'userAuth' },
       countMembers: { auth: 'userAuth' },
       unreadCount: { auth: 'userAuth' },

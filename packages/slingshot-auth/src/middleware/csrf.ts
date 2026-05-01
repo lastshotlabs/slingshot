@@ -218,6 +218,7 @@ function originFromReferer(referer: string | undefined): string | null {
   try {
     return new URL(referer).origin;
   } catch {
+    // Malformed referer URL; treat as absent
     return null;
   }
 }

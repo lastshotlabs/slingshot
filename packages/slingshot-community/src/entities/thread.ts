@@ -109,10 +109,17 @@ export const Thread = defineEntity('Thread', {
   },
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'authorId', from: 'ctx:actor.id' },
+    disable: [
+      'list',
+      'incrementReplyCount',
+      'decrementReplyCount',
+      'updateLastActivity',
+      'updateComponents',
+      'attachEmbeds',
+    ],
+    dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
 
-    get: { auth: 'none' },
-    list: { auth: 'none' },
+    get: { auth: 'none', middleware: ['publishedThreadGuard'] },
 
     create: {
       permission: {
@@ -178,7 +185,7 @@ export const Thread = defineEntity('Thread', {
       publish: {
         permission: {
           requires: 'community:container.write',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.published',
@@ -196,7 +203,7 @@ export const Thread = defineEntity('Thread', {
       lock: {
         permission: {
           requires: 'community:container.lock',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.locked',
@@ -213,7 +220,7 @@ export const Thread = defineEntity('Thread', {
       unlock: {
         permission: {
           requires: 'community:container.lock',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.unlocked',
@@ -230,7 +237,7 @@ export const Thread = defineEntity('Thread', {
       pin: {
         permission: {
           requires: 'community:container.pin',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.pinned',
@@ -247,7 +254,7 @@ export const Thread = defineEntity('Thread', {
       unpin: {
         permission: {
           requires: 'community:container.pin',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.unpinned',
@@ -265,13 +272,17 @@ export const Thread = defineEntity('Thread', {
       listByContainer: { auth: 'none' },
       searchInContainer: { auth: 'none' },
       listByContainerSorted: { auth: 'none' },
+      incrementReplyCount: { auth: 'userAuth' },
+      decrementReplyCount: { auth: 'userAuth' },
+      updateLastActivity: { auth: 'userAuth' },
       updateComponents: { auth: 'userAuth' },
       markAsSolution: {
         auth: 'userAuth',
         permission: {
           requires: 'community:container.write',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
+        middleware: ['solutionReplyGuard'],
         event: {
           key: 'community:thread.solved',
           payload: ['id', 'tenantId', 'containerId', 'solutionReplyId'],
@@ -288,7 +299,7 @@ export const Thread = defineEntity('Thread', {
         auth: 'userAuth',
         permission: {
           requires: 'community:container.write',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
         },
         event: {
           key: 'community:thread.unsolved',
@@ -302,7 +313,8 @@ export const Thread = defineEntity('Thread', {
           },
         },
       },
-      incrementView: { auth: 'none' },
+      incrementView: { auth: 'none', middleware: ['publishedThreadGuard'] },
+      attachEmbeds: { auth: 'userAuth' },
     },
     permissions: {
       resourceType: 'community:container',
@@ -314,16 +326,32 @@ export const Thread = defineEntity('Thread', {
         'manage-owners',
         'manage-moderators',
         'manage-members',
+        'manage-settings',
+        'manage-automod',
         'pin',
         'lock',
         'delete-content',
         'review-report',
+        'review-audit',
+        'warn-user',
         'apply-ban',
         'lift-ban',
       ],
       roles: {
         owner: ['*'],
-        moderator: ['pin', 'lock', 'delete-content', 'review-report', 'apply-ban', 'lift-ban'],
+        member: ['read', 'write'],
+        moderator: [
+          'read',
+          'write',
+          'pin',
+          'lock',
+          'delete-content',
+          'review-report',
+          'review-audit',
+          'warn-user',
+          'apply-ban',
+          'lift-ban',
+        ],
         'report-reviewer': ['review-report'],
         'community-admin': ['*'],
       },
@@ -334,6 +362,8 @@ export const Thread = defineEntity('Thread', {
       attachmentRequiredGuard: true,
       banCheck: true,
       autoMod: true,
+      publishedThreadGuard: true,
+      solutionReplyGuard: true,
       threadPostCreate: true,
     },
 
@@ -391,13 +421,13 @@ export const threadOperations = defineOperations(Thread, {
   }),
 
   listByContainer: op.lookup({
-    fields: { containerId: 'param:containerId' },
+    fields: { containerId: 'param:containerId', status: 'published' },
     returns: 'many',
   }),
 
   search: op.search({
     fields: ['title', 'body'],
-    filter: { containerId: 'param:containerId' },
+    filter: { containerId: 'param:containerId', status: 'published' },
     paginate: true,
   }),
 

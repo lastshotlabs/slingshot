@@ -433,11 +433,18 @@ describe('memory orchestration runtime', () => {
       // Task must complete normally despite the sink throwing
       await expect(handle.result()).resolves.toEqual({ v: 42 });
 
-      // console.error must have been called with the sink error
-      expect(consoleError).toHaveBeenCalledWith(
-        expect.stringContaining('[orchestration] eventSink.emit error'),
-        expect.any(Error),
-      );
+      // Structured logger writes JSON to console.error — verify the sink error was logged
+      const calls = consoleError.mock.calls;
+      const hasEmitError = calls.some((call: unknown[]) => {
+        const msg = typeof call[0] === 'string' ? call[0] : '';
+        try {
+          const parsed = JSON.parse(msg);
+          return parsed.msg?.includes('eventSink.emit error');
+        } catch {
+          return msg.includes('eventSink.emit error');
+        }
+      });
+      expect(hasEmitError).toBe(true);
     } finally {
       consoleError.mockRestore();
     }
@@ -476,10 +483,19 @@ describe('memory orchestration runtime', () => {
 
       const handle = await runtime.runWorkflow(workflow, {});
       await expect(handle.result()).resolves.toBeDefined();
-      expect(consoleError).toHaveBeenCalledWith(
-        expect.stringContaining('[orchestration] eventSink.emit error'),
-        expect.any(Error),
-      );
+
+      // Structured logger writes JSON to console.error — verify the sink error was logged
+      const calls = consoleError.mock.calls;
+      const hasEmitError = calls.some((call: unknown[]) => {
+        const msg = typeof call[0] === 'string' ? call[0] : '';
+        try {
+          const parsed = JSON.parse(msg);
+          return parsed.msg?.includes('eventSink.emit error');
+        } catch {
+          return msg.includes('eventSink.emit error');
+        }
+      });
+      expect(hasEmitError).toBe(true);
     } finally {
       consoleError.mockRestore();
     }

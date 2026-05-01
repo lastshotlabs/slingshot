@@ -3,6 +3,7 @@
  * to a sibling entity adapter.
  */
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { ActivityLogConfig, ManifestEntity } from '../manifest/entityManifestSchema';
 
 /** Dynamic event bus facade for string-keyed subscriptions. */
@@ -104,6 +105,7 @@ export function wireActivityLog(
   targetAdapter: { create(data: Record<string, unknown>): Promise<Record<string, unknown>> },
   resolvedFields?: { pkField?: string; tenantField?: string },
 ): void {
+  const activityLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
   const dynamicBus = bus as unknown as DynamicEventBus;
   const tenantIdKey = config.tenantIdField ?? resolvedFields?.tenantField ?? 'orgId';
   const resourceIdKey = config.resourceIdField ?? resolvedFields?.pkField ?? 'id';
@@ -112,10 +114,10 @@ export function wireActivityLog(
   for (const [shortname, eventConfig] of Object.entries(config.events)) {
     const eventKey = eventKeyMap[shortname];
     if (!eventKey) {
-      console.warn(
-        `[activityLog:${entityName}] No event key found for shortname "${shortname}". ` +
-          `Declare the event on the entity's routes config.`,
-      );
+      activityLogger.warn('No event key found for shortname — declare the event on the entity routes config', {
+        entityName,
+        shortname,
+      });
       continue;
     }
 
@@ -124,9 +126,11 @@ export function wireActivityLog(
       const resourceId = payload[resourceIdKey];
 
       if (!tenantId || !resourceId) {
-        console.warn(
-          `[activityLog:${entityName}:${shortname}] Skipping — payload missing ${tenantIdKey} or ${resourceIdKey}.`,
-        );
+        activityLogger.warn('Skipping activity log — payload missing required fields', {
+          entityName,
+          shortname,
+          missingFields: [tenantIdKey, resourceIdKey].filter(k => !payload[k]),
+        });
         return;
       }
 

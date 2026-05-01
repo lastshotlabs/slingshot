@@ -26,7 +26,7 @@ describe('dispatcher backpressure', () => {
       }
     ).countPendingDispatch = countPendingDispatch;
 
-    const listPendingDispatch = mock(async () => []);
+    const listPendingDispatch = mock(async () => ({ records: [], nextCursor: null }));
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
@@ -67,7 +67,7 @@ describe('dispatcher backpressure', () => {
       }
     ).countPendingDispatch = countPendingDispatch;
 
-    const listPendingDispatch = mock(async () => []);
+    const listPendingDispatch = mock(async () => ({ records: [], nextCursor: null }));
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
@@ -136,7 +136,7 @@ describe('dispatcher backpressure', () => {
       createdAt: new Date(),
     }));
 
-    const listPendingDispatch = mock(async () => oversizeRows);
+    const listPendingDispatch = mock(async () => ({ records: oversizeRows, nextCursor: null }));
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
@@ -181,7 +181,7 @@ describe('dispatcher backpressure', () => {
       }
     ).countPendingDispatch = countPendingDispatch;
 
-    const listPendingDispatch = mock(async () => []);
+    const listPendingDispatch = mock(async () => ({ records: [], nextCursor: null }));
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;

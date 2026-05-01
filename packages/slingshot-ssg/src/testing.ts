@@ -9,10 +9,14 @@ export const TEST_SSG_RENDER_TIMEOUT_MS = 30_000;
 export { SsgExitCode, resolveExitCode } from './cli';
 
 /** Create a minimal valid SSG config for testing. */
-export function createTestSsgConfig(overrides?: { outDir?: string; baseUrl?: string }) {
+export function createTestSsgConfig(overrides?: {
+  outDir?: string;
+  serverRoutesDir?: string;
+  assetsManifest?: string;
+}) {
   return {
     outDir: overrides?.outDir ?? '/tmp/ssg-test-out',
-    baseUrl: overrides?.baseUrl ?? 'http://localhost:3000',
-    routes: ['/'],
+    serverRoutesDir: overrides?.serverRoutesDir ?? '/tmp/ssg-test-routes',
+    assetsManifest: overrides?.assetsManifest ?? '/tmp/ssg-test-manifest.json',
   };
 }

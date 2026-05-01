@@ -205,6 +205,7 @@ function isEqual(a: unknown, b: unknown): boolean {
   try {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch {
+    // Circular reference or non-serializable — treat as not equal
     return false;
   }
 }

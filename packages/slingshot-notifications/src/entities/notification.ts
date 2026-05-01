@@ -565,11 +565,16 @@ export const notificationOperations = defineOperations(Notification, {
   }),
 
   listPendingDispatch: op.custom<
-    (args: { limit: number; now: Date; signal?: AbortSignal }) => Promise<NotificationRecord[]>
+    (args: {
+      limit: number;
+      now: Date;
+      signal?: AbortSignal;
+      cursor?: string;
+    }) => Promise<{ records: NotificationRecord[]; nextCursor: string | null }>
   >({
     memory:
       store =>
-      ({ limit, now }) => {
+      ({ limit, now, cursor }) => {
         const rows: NotificationRecord[] = [];
         for (const value of store.values()) {
           const row = materializeNotificationRecord(extractMemoryRow(value));
@@ -578,50 +583,130 @@ export const notificationOperations = defineOperations(Notification, {
             rows.push(row);
           }
         }
+        // Deterministic sort: deliverAt ASC, then id ASC as tiebreaker.
         rows.sort((left, right) => {
           const leftAt = toDate(left.deliverAt)?.getTime() ?? 0;
           const rightAt = toDate(right.deliverAt)?.getTime() ?? 0;
-          return leftAt - rightAt;
+          if (leftAt !== rightAt) return leftAt - rightAt;
+          return left.id.localeCompare(right.id);
         });
-        return Promise.resolve(rows.slice(0, limit));
+
+        let startIndex = 0;
+        if (cursor) {
+          const cursorIdx = rows.findIndex(r => r.id === cursor);
+          if (cursorIdx >= 0) {
+            startIndex = cursorIdx + 1;
+          }
+        }
+
+        const hasMore = rows.length - startIndex > limit;
+        return Promise.resolve({
+          records: rows.slice(startIndex, startIndex + limit),
+          nextCursor: hasMore
+            ? (rows[startIndex + limit - 1]?.id ?? null)
+            : null,
+        });
       },
     sqlite:
       db =>
-      ({ limit, now }) => {
+      ({ limit, now, cursor }) => {
         const database = db as { prepare(sql: string): { all(...args: unknown[]): unknown[] } };
-        return Promise.resolve(
-          database
+        let rows: unknown[];
+        if (cursor) {
+          rows = database
             .prepare(
-              'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? ORDER BY deliverAt ASC LIMIT ?',
+              'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? AND (deliverAt, id) > (SELECT deliverAt, id FROM Notification WHERE id = ?) ORDER BY deliverAt ASC, id ASC LIMIT ?',
             )
-            .all(now.toISOString(), limit) as NotificationRecord[],
-        );
+            .all(now.toISOString(), cursor, limit + 1);
+        } else {
+          rows = database
+            .prepare(
+              'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? ORDER BY deliverAt ASC, id ASC LIMIT ?',
+            )
+            .all(now.toISOString(), limit + 1);
+        }
+        const typed = rows as NotificationRecord[];
+        const hasMore = typed.length > limit;
+        return Promise.resolve({
+          records: hasMore ? typed.slice(0, limit) : typed,
+          nextCursor: hasMore
+            ? (typed[limit - 1] as unknown as Record<string, unknown>).id as string
+            : null,
+        });
       },
     postgres:
       pool =>
-      async ({ limit, now }) => {
+      async ({ limit, now, cursor }) => {
         const client = pool as {
           query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
         };
-        const result = await client.query(
-          'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC LIMIT $2',
-          [now, limit],
-        );
-        return result.rows as NotificationRecord[];
+        let rows: unknown[];
+        if (cursor) {
+          const result = await client.query(
+            'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 AND ("deliverAt", "id") > (SELECT "deliverAt", "id" FROM "Notification" WHERE "id" = $2) ORDER BY "deliverAt" ASC, "id" ASC LIMIT $3',
+            [now, cursor, limit + 1],
+          );
+          rows = result.rows;
+        } else {
+          const result = await client.query(
+            'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2',
+            [now, limit + 1],
+          );
+          rows = result.rows;
+        }
+        const hasMore = rows.length > limit;
+        return {
+          records: (hasMore ? rows.slice(0, limit) : rows) as NotificationRecord[],
+          nextCursor: hasMore
+            ? (rows[limit - 1] as Record<string, unknown>).id as string
+            : null,
+        };
       },
     mongo:
       collection =>
-      async ({ limit, now }) => {
+      async ({ limit, now, cursor }) => {
         const target = collection as {
           find(query: unknown): {
             sort(order: unknown): { limit(size: number): { toArray(): Promise<unknown[]> } };
           };
+          findOne(query: unknown): Promise<unknown>;
         };
-        return (await target
-          .find({ dispatched: false, deliverAt: { $ne: null, $lte: now } })
-          .sort({ deliverAt: 1 })
-          .limit(limit)
+
+        const baseQuery: Record<string, unknown> = {
+          dispatched: false,
+          deliverAt: { $ne: null, $lte: now },
+        };
+        let findQuery: Record<string, unknown> = baseQuery;
+
+        if (cursor) {
+          const cursorRow = (await target.findOne({ id: cursor })) as
+            | Record<string, unknown>
+            | null;
+          if (cursorRow) {
+            const cursorDeliverAt = cursorRow['deliverAt'];
+            findQuery = {
+              ...baseQuery,
+              $or: [
+                { deliverAt: { $gt: cursorDeliverAt } },
+                { deliverAt: cursorDeliverAt, id: { $gt: cursor } },
+              ],
+            };
+          }
+        }
+
+        const rows = (await target
+          .find(findQuery)
+          .sort({ deliverAt: 1, id: 1 })
+          .limit(limit + 1)
           .toArray()) as NotificationRecord[];
+
+        const hasMore = rows.length > limit;
+        return {
+          records: (hasMore ? rows.slice(0, limit) : rows) as NotificationRecord[],
+          nextCursor: hasMore
+            ? (rows[limit - 1] as NotificationRecord).id
+            : null,
+        };
       },
   }),
 

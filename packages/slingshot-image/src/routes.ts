@@ -30,6 +30,7 @@ function validateSourceUrl(rawUrl: string, allowedOrigins: readonly string[]): s
   try {
     parsed = new URL(rawUrl);
   } catch {
+    // Invalid URL — reject
     return null;
   }
 
@@ -175,7 +176,7 @@ export function buildImageRouter(
       buffer = fetched.buffer;
       originalContentType = fetched.contentType;
     } catch (err) {
-      console.error('[slingshot-image] Fetch error:', err);
+      console.warn('[slingshot-image] Fetch error:', err);
       return c.json({ error: 'Failed to fetch source image.' }, 502);
     }
 
@@ -194,7 +195,7 @@ export function buildImageRouter(
       if (err instanceof ImageTransformError) {
         return c.json({ error: err.message }, 400);
       }
-      console.error('[slingshot-image] Transform error:', err);
+      console.warn('[slingshot-image] Transform error:', err);
       return c.json({ error: 'Image transform failed.' }, 500);
     }
 

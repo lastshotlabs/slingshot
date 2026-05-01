@@ -26,8 +26,18 @@ export const ContainerSetting = defineEntity('ContainerSetting', {
   indexes: [index(['containerId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
-    get: { auth: 'none' },
-    list: { auth: 'none' },
+    get: {
+      permission: {
+        requires: 'community:container.manage-settings',
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+      },
+    },
+    list: {
+      permission: {
+        requires: 'community:container.manage-settings',
+        scope: { resourceType: 'community:container', resourceId: 'query:containerId' },
+      },
+    },
     create: {
       permission: {
         requires: 'community:container.manage-settings',
@@ -40,8 +50,20 @@ export const ContainerSetting = defineEntity('ContainerSetting', {
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
     },
+    delete: {
+      permission: {
+        requires: 'community:container.manage-settings',
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+      },
+    },
     operations: {
-      getByContainer: { auth: 'none' },
+      getByContainer: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'community:container.manage-settings',
+          scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
+        },
+      },
     },
   },
 });

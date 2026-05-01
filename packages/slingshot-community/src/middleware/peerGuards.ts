@@ -33,6 +33,7 @@ export function buildPollRequiredGuard(app: Hono<AppEnv>) {
     try {
       body = await c.req.json();
     } catch {
+      // No JSON body; skip poll check and continue
       await next();
       return;
     }
@@ -64,6 +65,7 @@ export function buildAttachmentRequiredGuard(app: Hono<AppEnv>) {
     try {
       body = await c.req.json();
     } catch {
+      // No JSON body; skip attachment check and continue
       await next();
       return;
     }

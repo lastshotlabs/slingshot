@@ -86,7 +86,7 @@ describe('notifications testing helpers', () => {
     ).resolves.toMatchObject({ id: first.id });
 
     const pending = await adapters.notifications.listPendingDispatch({ limit: 10, now });
-    expect(pending.map(item => item.id).sort()).toEqual([first.id, second.id].sort());
+    expect(pending.records.map(item => item.id).sort()).toEqual([first.id, second.id].sort());
 
     await adapters.notifications.markDispatched({ id: first.id, dispatchedAt: now });
     await expect(adapters.notifications.getById(first.id)).resolves.toMatchObject({

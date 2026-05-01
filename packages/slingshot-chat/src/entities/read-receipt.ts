@@ -32,10 +32,15 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
   uniques: [{ fields: ['userId', 'messageId'] }],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['upsertReceipt', 'latestForUserInRoom', 'listByMessage'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      permission: {
+        requires: 'chat:room.read',
+        scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
+      },
       event: {
         key: 'chat:read.created',
         payload: ['id', 'messageId', 'userId', 'roomId'],
@@ -47,8 +52,8 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
         },
       },
     },
-    update: { auth: 'none' },
-    delete: { auth: 'none' },
+    update: { auth: 'userAuth' },
+    delete: { auth: 'userAuth' },
     operations: {
       upsertReceipt: { auth: 'userAuth' },
       latestForUserInRoom: { auth: 'userAuth' },

@@ -377,5 +377,102 @@ describe('wsRecovery', () => {
       expect(state.sessionRegistry.size).toBe(1);
       expect(state.sessionRegistry.has('valid-1')).toBe(true);
     });
+
+    test('writeSession stores per-room cursors as JSON', () => {
+      // Simulate per-room lastEventIds (composite key format)
+      state.lastEventIds.set('s1\0room-a', 'msg-a3');
+      state.lastEventIds.set('s1\0room-b', 'msg-b1');
+
+      writeSession(state, 's1', 'session-123', new Set(['room-a', 'room-b']), 120_000);
+
+      const entry = state.sessionRegistry.get('session-123');
+      expect(entry).not.toBeUndefined();
+
+      // Parse the stored lastEventId to verify per-room cursors
+      const cursors = JSON.parse(entry!.lastEventId);
+      expect(cursors).toEqual({ 'room-a': 'msg-a3', 'room-b': 'msg-b1' });
+    });
+
+    test('recover uses per-room cursor from session', async () => {
+      const { getMessageHistory: mockHistory } = await mockGetHistory();
+      const socket = createSocket('s1');
+
+      // Store per-room cursors in session
+      const perRoomCursors = JSON.stringify({ 'room-a': 'msg-a2', 'room-b': 'msg-b0' });
+      state.sessionRegistry.set('sess-1', {
+        rooms: ['room-a', 'room-b'],
+        lastEventId: perRoomCursors,
+        expiresAt: Date.now() + 120_000,
+      });
+
+      const epCfg = { recovery: { windowMs: 120_000 }, persistence: {} };
+      const app = createMockApp();
+
+      await handleRecover(
+        state,
+        socket,
+        { sessionId: 'sess-1', rooms: ['room-a', 'room-b'], lastEventId: perRoomCursors },
+        epCfg,
+        app,
+      );
+
+      // Each room should have been queried with its own cursor
+      expect(mockHistory).toHaveBeenCalledTimes(2);
+      // First call: room-a with after: 'msg-a2'
+      expect(mockHistory).toHaveBeenNthCalledWith(
+        1,
+        '/ws',
+        'room-a',
+        { after: 'msg-a2' },
+        app,
+      );
+      // Second call: room-b with after: 'msg-b0'
+      expect(mockHistory).toHaveBeenNthCalledWith(
+        2,
+        '/ws',
+        'room-b',
+        { after: 'msg-b0' },
+        app,
+      );
+    });
+
+    test('recover falls back to plain string lastEventId (backward compat)', async () => {
+      const { getMessageHistory: mockHistory } = await mockGetHistory();
+      const socket = createSocket('s1');
+
+      // Plain string cursor (old client / old session format)
+      state.sessionRegistry.set('sess-2', {
+        rooms: ['room-a', 'room-b'],
+        lastEventId: 'msg-42',
+        expiresAt: Date.now() + 120_000,
+      });
+
+      const epCfg = { recovery: { windowMs: 120_000 }, persistence: {} };
+      const app = createMockApp();
+
+      await handleRecover(
+        state,
+        socket,
+        { sessionId: 'sess-2', rooms: ['room-a', 'room-b'], lastEventId: 'msg-42' },
+        epCfg,
+        app,
+      );
+
+      // Both rooms should use the same cursor for backward compat
+      expect(mockHistory).toHaveBeenNthCalledWith(
+        1,
+        '/ws',
+        'room-a',
+        { after: 'msg-42' },
+        app,
+      );
+      expect(mockHistory).toHaveBeenNthCalledWith(
+        2,
+        '/ws',
+        'room-b',
+        { after: 'msg-42' },
+        app,
+      );
+    });
   });
 });

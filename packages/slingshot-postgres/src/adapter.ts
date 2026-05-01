@@ -450,10 +450,11 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
     // ── Tier 1 — CoreAuthAdapter ──────────────────────────────────────────────
 
     async findByEmail(email) {
+      const normalized = email.toLowerCase();
       const row = await db
         .select({ id: users.id, passwordHash: users.passwordHash })
         .from(users)
-        .where(eq(users.email, email))
+        .where(eq(users.email, normalized))
         .then(firstRowOrNull);
       if (!row) return null;
       return { id: row.id, passwordHash: row.passwordHash ?? '' };

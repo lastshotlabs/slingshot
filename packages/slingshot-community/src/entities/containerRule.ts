@@ -12,8 +12,8 @@ import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
  * without deleting and re-creating records. There is no enforced uniqueness on
  * `order`, so stable sort by `createdAt` is used as a tie-breaker.
  *
- * Container rules have no auth gate on read (list/get are public). Write
- * operations inherit the `userAuth` default from the entity route defaults.
+ * Container rules have no auth gate on scoped reads. Write operations require
+ * container settings management permission.
  */
 export const ContainerRule = defineEntity('ContainerRule', {
   namespace: 'community',
@@ -30,25 +30,25 @@ export const ContainerRule = defineEntity('ContainerRule', {
   defaultSort: { field: 'order', direction: 'asc' },
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['list'],
 
     get: { auth: 'none' },
-    list: { auth: 'none' },
 
     create: {
       permission: {
-        requires: 'community:container.write',
+        requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
     },
     update: {
       permission: {
-        requires: 'community:container.write',
+        requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
     },
     delete: {
       permission: {
-        requires: 'community:container.write',
+        requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
     },

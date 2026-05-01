@@ -426,8 +426,11 @@ describe('createIntervalDispatcher — breaker independence', () => {
     // Make the listPendingDispatch return a stable order so user-A is first.
     const originalList = adapters.notifications.listPendingDispatch.bind(adapters.notifications);
     adapters.notifications.listPendingDispatch = mock(async params => {
-      const rows = await originalList(params);
-      return rows.sort((l, r) => (l.userId < r.userId ? -1 : 1));
+      const result = await originalList(params);
+      return {
+        records: result.records.sort((l, r) => (l.userId < r.userId ? -1 : 1)),
+        nextCursor: result.nextCursor,
+      };
     }) as typeof adapters.notifications.listPendingDispatch;
 
     const dispatcher = createIntervalDispatcher({

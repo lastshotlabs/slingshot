@@ -79,31 +79,39 @@ export async function createPostgresWsMessageRepository(pool: Pool): Promise<WsM
 
   return {
     async persist(message, config) {
-      await pool.query(
-        `INSERT INTO ws_messages (id, endpoint, room, sender_id, payload, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          message.id,
-          message.endpoint,
-          message.room,
-          message.senderId,
-          JSON.stringify(message.payload),
-          message.createdAt,
-        ],
-      );
+      await pool.query('BEGIN');
+      try {
+        await pool.query(
+          `INSERT INTO ws_messages (id, endpoint, room, sender_id, payload, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            message.id,
+            message.endpoint,
+            message.room,
+            message.senderId,
+            JSON.stringify(message.payload),
+            message.createdAt,
+          ],
+        );
 
-      // Enforce maxCount by deleting oldest messages beyond the limit
-      await pool.query(
-        `DELETE FROM ws_messages
-         WHERE endpoint = $1 AND room = $2
-           AND id NOT IN (
-             SELECT id FROM ws_messages
-             WHERE endpoint = $1 AND room = $2
-             ORDER BY created_at DESC, id DESC
-             LIMIT $3
-           )`,
-        [message.endpoint, message.room, config.maxCount],
-      );
+        // Enforce maxCount by deleting oldest messages beyond the limit
+        await pool.query(
+          `DELETE FROM ws_messages
+           WHERE endpoint = $1 AND room = $2
+             AND id NOT IN (
+               SELECT id FROM ws_messages
+               WHERE endpoint = $1 AND room = $2
+               ORDER BY created_at DESC, id DESC
+               LIMIT $3
+             )`,
+          [message.endpoint, message.room, config.maxCount],
+        );
+
+        await pool.query('COMMIT');
+      } catch (err) {
+        await pool.query('ROLLBACK').catch(() => {});
+        throw err;
+      }
 
       return message;
     },

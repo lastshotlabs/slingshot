@@ -145,6 +145,8 @@ export function createAuth0AccessProvider(
         const token = authHeader.slice(7);
 
         const timeoutMs = config.verifyTimeoutMs ?? 5_000;
+        let timerId: ReturnType<typeof setTimeout> | undefined;
+
         const { payload } = await Promise.race([
           deps.jwtVerify(token, JWKS, {
             audience: config.audience,
@@ -154,10 +156,17 @@ export function createAuth0AccessProvider(
             // tries to coerce verification into a weaker symmetric algorithm.
             algorithms: ['RS256'],
           }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('JWT verification timed out')), timeoutMs),
-          ),
-        ]);
+          new Promise<never>((_, reject) => {
+            timerId = setTimeout(
+              () => reject(new Error('JWT verification timed out')),
+              timeoutMs,
+            );
+          }),
+        ]).finally(() => {
+          // Always clear the timeout timer so it does not linger after the
+          // race resolves, preventing a timer leak under high QPS.
+          clearTimeout(timerId);
+        });
 
         // P-ADMIN-7: validate the claim shape before we propagate it to
         // downstream consumers. Returning a partial principal — e.g. one whose

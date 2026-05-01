@@ -66,10 +66,8 @@ export const Reply = defineEntity('Reply', {
   },
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'authorId', from: 'ctx:actor.id' },
-
-    get: { auth: 'none' },
-    list: { auth: 'none' },
+    disable: ['get', 'list', 'updateComponents', 'attachEmbeds'],
+    dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
 
     create: {
       permission: {
@@ -124,9 +122,10 @@ export const Reply = defineEntity('Reply', {
     },
 
     operations: {
-      search: { auth: 'none' },
-      listByThread: { auth: 'none' },
+      search: { auth: 'none', middleware: ['publishedThreadGuard'] },
+      listByThread: { auth: 'none', middleware: ['publishedThreadGuard'] },
       updateComponents: { auth: 'userAuth' },
+      attachEmbeds: { auth: 'userAuth' },
     },
     middleware: {
       pollRequiredGuard: true,
@@ -137,6 +136,7 @@ export const Reply = defineEntity('Reply', {
       replyPostCreate: true,
       replyCountUpdate: true,
       replyCountDecrement: true,
+      publishedThreadGuard: true,
     },
 
     cascades: [
@@ -160,13 +160,13 @@ export const Reply = defineEntity('Reply', {
  */
 export const replyOperations = defineOperations(Reply, {
   listByThread: op.lookup({
-    fields: { threadId: 'param:threadId' },
+    fields: { threadId: 'param:threadId', status: 'published' },
     returns: 'many',
   }),
 
   search: op.search({
     fields: ['body'],
-    filter: { threadId: 'param:threadId' },
+    filter: { threadId: 'param:threadId', status: 'published' },
     paginate: true,
   }),
 

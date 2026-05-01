@@ -18,7 +18,7 @@ import { type SocketData, createWsUpgradeHandler } from '@framework/ws/index';
 import { wsEndpointKey } from '@framework/ws/namespace';
 import { trackSocket, untrackSocket } from '@framework/ws/presence';
 import { checkRateLimit, cleanupRateLimitBucket } from '@framework/ws/rateLimit';
-import { writeSession } from '@framework/ws/recovery';
+import { startSessionGc, stopSessionGc, writeSession } from '@framework/ws/recovery';
 import { cleanupSocket, handleRoomActions, publish } from '@framework/ws/rooms';
 import { disconnectMongo } from '@lib/mongo';
 import { disconnectRedis } from '@lib/redis';
@@ -392,6 +392,7 @@ export const createServer = async <T extends object = object>(
     const wsHandler: WebSocketHandler<SD> = {
       async open(socket) {
         const ep = endpoints[socket.data.endpoint];
+        if (!ep) return;
         if (ep.heartbeat) registerSocket(wsState, socket, socket.data.id, socket.data.endpoint);
         if (ep.presence) trackSocket(wsState, socket.data.id, socket.data.actor.id);
         wsState.socketRegistry.set(socket.data.id, socket);
@@ -415,6 +416,7 @@ export const createServer = async <T extends object = object>(
       },
       async message(socket, message) {
         const ep = endpoints[socket.data.endpoint];
+        if (!ep) return;
         const maxSize = ep.maxMessageSize ?? 65_536;
         const size = typeof message === 'string' ? message.length : message.byteLength;
         if (size > maxSize) {
@@ -453,6 +455,7 @@ export const createServer = async <T extends object = object>(
       },
       async close(socket, code, reason) {
         const ep = endpoints[socket.data.endpoint];
+        if (!ep) return;
         if (ep.recovery && socket.data.sessionId) {
           writeSession(
             wsState,
@@ -468,7 +471,10 @@ export const createServer = async <T extends object = object>(
           trackDelivery: ep.recovery ? true : undefined,
         });
         wsState.socketRegistry.delete(socket.data.id);
-        wsState.lastEventIds.delete(socket.data.id);
+        // Clean up per-room lastEventIds entries for this socket
+        for (const room of socket.data.rooms) {
+          wsState.lastEventIds.delete(`${socket.data.id}\0${room}`);
+        }
         cleanupRateLimitBucket(wsState, socket.data.endpoint, socket.data.id);
         if (ep.on?.close) {
           try {
@@ -482,7 +488,9 @@ export const createServer = async <T extends object = object>(
         handlePong(wsState, socket.data.id);
       },
       drain(socket) {
-        void endpoints[socket.data.endpoint].on?.drain?.(socket);
+        const ep = endpoints[socket.data.endpoint];
+        if (!ep) return;
+        void ep.on?.drain?.(socket);
       },
     };
 
@@ -544,6 +552,9 @@ export const createServer = async <T extends object = object>(
       startHeartbeat(wsState, heartbeatConfigs);
     }
 
+    // Start periodic session GC so expired sessions don't accumulate
+    startSessionGc(wsState, 60_000);
+
     // Populate WS state on the SlingshotContext so instance-scoped consumers
     // can read it via getContext(app).ws instead of module-level singletons.
     // presenceEnabled already computed above.
@@ -602,6 +613,7 @@ export const createServer = async <T extends object = object>(
 
       try {
         if (ctx.ws) stopHeartbeat(ctx.ws);
+        stopSessionGc();
 
         // Close long-lived SSE responses before stopping the listener so
         // runtimes that wait on active connections do not hang shutdown.

@@ -139,9 +139,16 @@ function assertSleepDuration(stepName: string, durationMs: number): void {
 }
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    if (!signal) return;
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  let onAbort: (() => void) | undefined;
+  const promise = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      resolve();
+    }, ms);
+
     if (signal.aborted) {
       clearTimeout(timer);
       reject(
@@ -151,19 +158,29 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
       );
       return;
     }
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        reject(
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error(String(signal.reason ?? 'Run cancelled')),
-        );
-      },
-      { once: true },
-    );
+
+    onAbort = () => {
+      clearTimeout(timer);
+      reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new Error(String(signal.reason ?? 'Run cancelled')),
+      );
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
   });
+
+  // Remove the listener when the promise settles (timer fires without abort).
+  // If the signal aborted, { once: true } already removed it, so the
+  // removeEventListener is a harmless no-op.
+  const cleanup = () => {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  };
+  promise.then(cleanup, cleanup);
+
+  return promise;
 }
 
 function abortMessage(signal: AbortSignal): string | undefined {
@@ -451,10 +468,20 @@ export async function executeWorkflow(options: {
           }
         });
 
-        const settled = await Promise.all(pendingChildren);
+        const settled = await Promise.allSettled(pendingChildren);
         let hardFailure: unknown = null;
 
-        for (const item of settled) {
+        for (const settlement of settled) {
+          // An unexpected rejection (e.g. onStepStarted threw). We don't have a step
+          // reference so track as a hard failure and move on.
+          if (settlement.status === 'rejected') {
+            if (hardFailure === null) {
+              hardFailure = settlement.reason;
+            }
+            continue;
+          }
+
+          const item = settlement.value;
           const taskDef = withStepOverrides(
             resolveTask(item.step, options.taskRegistry),
             item.step.options,

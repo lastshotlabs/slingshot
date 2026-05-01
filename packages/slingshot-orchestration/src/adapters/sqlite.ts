@@ -58,7 +58,15 @@ function json(value: unknown): string {
 
 function parseJson<T>(value: string | null): T | undefined {
   if (!value) return undefined;
-  return JSON.parse(value) as T;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    logger.warn('[slingshot-orchestration] Failed to parse stored JSON', {
+      valueType: typeof value,
+      valueLen: value.length,
+    });
+    return undefined;
+  }
 }
 
 function toRun(row: SqliteRunRow, steps?: Record<string, StepRun>): Run | WorkflowRun {
@@ -67,7 +75,7 @@ function toRun(row: SqliteRunRow, steps?: Record<string, StepRun>): Run | Workfl
     type: row.type,
     name: row.name,
     status: row.status,
-    input: JSON.parse(row.input),
+    input: parseJson(row.input) ?? {},
     output: parseJson(row.output),
     error: parseJson(row.error),
     tenantId: row.tenant_id ?? undefined,
@@ -459,7 +467,7 @@ export function createSqliteAdapter(options: {
     );
     const promise = executeWorkflow({
       def,
-      input: JSON.parse(row.input),
+      input: parseJson(row.input) ?? {},
       runId: row.id,
       tenantId: row.tenant_id ?? undefined,
       signal: controller.signal,

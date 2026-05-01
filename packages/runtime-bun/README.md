@@ -47,6 +47,30 @@ const server = await createServer({
 - `server.stop(true)` closes open connections immediately. Pass `false` (or no argument) if
   you want graceful drain.
 
+## Capability Reporting
+
+Use `runtimeCapabilities()` to programmatically discover what the Bun runtime platform supports:
+
+```ts
+import { runtimeCapabilities } from '@lastshotlabs/slingshot-runtime-bun';
+
+const caps = runtimeCapabilities();
+// => {
+//   runtime: 'bun',
+//   filesystem: { read: true, write: true },
+//   sqlite: true,
+//   httpServer: true,
+//   glob: true,
+//   asyncLocalStorage: true,
+//   passwordHashing: 'bun-argon2',
+//   webSocket: true,
+// }
+```
+
+All boolean capabilities are `true` because Bun provides every runtime primitive
+natively. The returned object is frozen so consumers can rely on the values never
+changing during the lifetime of the process.
+
 ## Key Files
 
 - `src/index.ts`

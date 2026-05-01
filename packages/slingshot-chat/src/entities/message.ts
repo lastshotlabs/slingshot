@@ -93,6 +93,15 @@ export const Message = defineEntity('Message', {
   softDelete: { field: 'deletedAt', strategy: 'non-null' },
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: [
+      'incrementDelivered',
+      'incrementReadBy',
+      'incrementReplyCount',
+      'decrementReplyCount',
+      'updateComponents',
+      'attachEmbeds',
+      'claimDueScheduledMessages',
+    ],
     dataScope: { field: 'authorId', from: 'ctx:actor.id' },
     get: {
       permission: {
@@ -158,7 +167,13 @@ export const Message = defineEntity('Message', {
       middleware: ['replyCountDecrement'],
     },
     operations: {
-      listByRoom: { auth: 'userAuth' },
+      listByRoom: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
       listReplies: {
         auth: 'userAuth',
         permission: {
@@ -176,10 +191,18 @@ export const Message = defineEntity('Message', {
       forwardMessage: {
         auth: 'userAuth',
         path: 'forward',
+        permission: {
+          requires: 'chat:room.write',
+          scope: { resourceType: 'chat:room', resourceId: 'body:targetRoomId' },
+        },
       },
       incrementDelivered: { auth: 'userAuth' },
       incrementReadBy: { auth: 'userAuth' },
+      incrementReplyCount: { auth: 'userAuth' },
+      decrementReplyCount: { auth: 'userAuth' },
       updateComponents: { auth: 'userAuth' },
+      attachEmbeds: { auth: 'userAuth' },
+      claimDueScheduledMessages: { auth: 'userAuth' },
     },
     middleware: {
       archiveGuard: true,

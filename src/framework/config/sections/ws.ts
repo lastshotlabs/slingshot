@@ -67,37 +67,33 @@ export const wsEndpointSchema = z.object({
       close: fnSchema.optional(),
       drain: fnSchema.optional(),
     })
-    .loose()
+    .passthrough()
     .optional(),
   onRoomSubscribe: fnSchema.optional(),
-  maxMessageSize: z.number().optional(),
+  maxMessageSize: z.number().int().positive().optional(),
   heartbeat: z
     .union([
       z.boolean(),
-      z
-        .object({
-          intervalMs: z.number().optional(),
-          timeoutMs: z.number().optional(),
-        })
-        .loose(),
+      z.object({
+        intervalMs: z.number().int().positive().optional(),
+        timeoutMs: z.number().int().positive().optional(),
+      }),
     ])
     .optional(),
   presence: z
     .union([
       z.boolean(),
-      z
-        .object({
-          broadcastEvents: z.boolean().optional(),
-        })
-        .loose(),
+      z.object({
+        broadcastEvents: z.boolean().optional(),
+      }),
     ])
     .optional(),
   persistence: z
     .object({
-      store: z.any().optional(),
-      defaults: z.any().optional(),
+      store: z.enum(['redis', 'mongo', 'sqlite', 'memory', 'postgres']).optional(),
+      defaults: z.object({}).passthrough().optional(),
     })
-    .loose()
+    .passthrough()
     .optional(),
 });
 
@@ -150,10 +146,10 @@ export const wsEndpointSchema = z.object({
  * ```
  */
 export const wsSchema = z.object({
-  endpoints: z.record(z.string(), wsEndpointSchema.loose()),
-  transport: z.any().optional(),
-  idleTimeout: z.number().optional(),
-  backpressureLimit: z.number().optional(),
+  endpoints: z.record(z.string().min(1), wsEndpointSchema),
+  transport: z.object({}).passthrough().optional(),
+  idleTimeout: z.number().int().min(0).optional(),
+  backpressureLimit: z.number().int().positive().optional(),
   closeOnBackpressureLimit: z.boolean().optional(),
   perMessageDeflate: z.boolean().optional(),
   publishToSelf: z.boolean().optional(),

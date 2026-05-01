@@ -57,9 +57,8 @@ export function createOrchestrationRuntime(
     /**
      * Send a signal to an in-flight workflow run.
      *
-     * @not-implemented Signals are not yet supported by the memory or SQLite adapters.
-     * Use slingshot-orchestration-temporal for signal support.
-     * Check `runtime.supports('signals')` before calling.
+     * Supported by the memory and Temporal adapters. The sqlite adapter does not
+     * support signals. Check `runtime.supports('signals')` before calling.
      */
     signal(runId, name, payload) {
       if (!supportsCapability(options.adapter, 'signals')) {
@@ -70,9 +69,8 @@ export function createOrchestrationRuntime(
     /**
      * Schedule a task or workflow to run on a cron expression.
      *
-     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
-     * Use slingshot-orchestration-temporal for scheduling support.
-     * Check `runtime.supports('scheduling')` before calling.
+     * Supported by the memory and Temporal adapters. The sqlite adapter does not
+     * support scheduling. Check `runtime.supports('scheduling')` before calling.
      */
     schedule(target, cron, input) {
       if (!supportsCapability(options.adapter, 'scheduling')) {
@@ -81,8 +79,9 @@ export function createOrchestrationRuntime(
       return (options.adapter as ScheduleCapability).schedule(target, cron, input);
     },
     /**
-     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
-     * Use slingshot-orchestration-temporal for scheduling support.
+     * Unschedule a previously scheduled recurring run.
+     *
+     * Supported by the memory and Temporal adapters.
      */
     unschedule(scheduleId) {
       if (!supportsCapability(options.adapter, 'scheduling')) {
@@ -91,8 +90,9 @@ export function createOrchestrationRuntime(
       return (options.adapter as ScheduleCapability).unschedule(scheduleId);
     },
     /**
-     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
-     * Use slingshot-orchestration-temporal for scheduling support.
+     * List all registered schedules.
+     *
+     * Supported by the memory and Temporal adapters.
      */
     listSchedules() {
       if (!supportsCapability(options.adapter, 'scheduling')) {
@@ -108,7 +108,7 @@ export function createOrchestrationRuntime(
     },
     onProgress(runId, callback) {
       if (!supportsCapability(options.adapter, 'progress')) {
-        return throwUnsupported('progress');
+        return Promise.reject(throwUnsupported('progress'));
       }
       return (options.adapter as ProgressCapability).onProgress(runId, callback);
     },

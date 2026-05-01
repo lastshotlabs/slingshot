@@ -1,24 +1,36 @@
 ---
-title: AI Draft
-description: AI-assisted starting point for @lastshotlabs/slingshot-runtime-node
+title: slingshot-runtime-node
+description: Node.js runtime adapter for Slingshot — password, SQLite, fs, glob, HTTP server, WebSocket
 ---
 
-> AI-assisted draft. Use this page for fast orientation, then harden important details in the human guide.
+## Capabilities
 
-## Summary
+| Capability | API |
+|---|---|
+| Password | `bcryptjs` (bundled) — hash + verify |
+| SQLite | `better-sqlite3` (peer dep, lazy loaded) — CRUD, WAL, transactions |
+| Filesystem | `node:fs` — sync read/write/exists |
+| Glob | `tinyglobby` (peer dep) — async scan |
+| Server | `@hono/node-server` — HTTP + WebSocket via `ws` |
+| Process safety | `uncaughtException` + controlled exit |
 
-@lastshotlabs/slingshot-runtime-node is the runtime package in the Slingshot workspace.
+## Runtime Contract
 
-Package documentation for this Slingshot workspace module.
+`nodeRuntime(opts?)` returns `SlingshotRuntime`. All peer dependencies are lazy-loaded via
+dynamic `import()` or `createRequire` — missing deps surface at use-time, not at import time.
 
-## Quick Map
+## Operational Notes
 
-- Package kind: Workspace package
-- Public exports: `.`
-- API reference: /api/runtime-node/
+- WebSocket upgrade has configurable timeout (default 30s) with socket destruction on timeout
+- Per-upgrade promise chain prevents timer/socket double-free
+- Idle-timeout uses `terminate()` (not `close()`) for unresponsive peers
+- `stop()` supports three modes: graceful, forced, and timeout-bounded drain
+- Fetch error callback is doubly guarded — throw falls back to `uncaughtException`
+- Request body size enforcement at two levels: Content-Length header and streaming accumulation
+- Channel cleanup removes stale sockets on both `close` and `error` events
 
-## What To Clarify Next
+## Key Files
 
-- Add one real setup example for this package.
-- Explain how it integrates with neighboring packages.
-- Record any runtime assumptions or config shapes that changed recently.
+- `src/index.ts` — `nodeRuntime()` factory, all capability implementations
+- `src/errors.ts` — `NodeRuntimeError`, `NodeServerError`, `NodeWebSocketError`, `NodeContentLengthError`, `NodeRequestBodyTooLargeError`, `NodeShutdownError`
+- `src/testing.ts` — `createTestServer()`, `runtimeNodeInternals`

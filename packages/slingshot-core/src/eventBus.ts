@@ -3,6 +3,7 @@ import type { SecurityEventKey, SlingshotEventMap } from './eventMap';
 import { validateEventPayload } from './eventSchemaRegistry';
 import type { EventBusSerializationOptions, ValidationMode } from './eventSerializer';
 import type { EventEnvelope, EventKey } from './eventTypes';
+import type { Logger } from './observability/logger';
 
 // Plugin packages extend SlingshotEventMap via module augmentation in their own events.ts.
 // Example: slingshot-community augments with community:* events,
@@ -161,23 +162,27 @@ export interface SlingshotEventBus {
    * Unregister a previously registered listener.
    * @param event - The event key.
    * @param listener - The exact listener function reference to remove.
-   * @returns `void`. A no-op if the listener was never registered or was already removed.
+   * @returns `true` if a matching listener was found and removed, `false` if
+   *   no matching listener was registered (allows callers to detect a stale
+   *   reference or double-unsubscribe).
    */
   off<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (payload: SlingshotEventMap[K]) => void,
-  ): void;
+  ): boolean;
   /** Unregister a dynamically named event listener. */
-  off(event: string, listener: (payload: unknown) => void): void;
+  off(event: string, listener: (payload: unknown) => void): boolean;
   /**
    * Unregister a previously registered envelope listener.
+   * @returns `true` if a matching envelope listener was found and removed,
+   *   `false` otherwise.
    */
   offEnvelope<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (envelope: EventEnvelope<K>) => void,
-  ): void;
+  ): boolean;
   /** Unregister a dynamically named envelope listener. */
-  offEnvelope(event: string, listener: (envelope: EventEnvelope) => void): void;
+  offEnvelope(event: string, listener: (envelope: EventEnvelope) => void): boolean;
   /**
    * Drain in-flight handlers, remove listeners, and release resources on graceful shutdown.
    *
@@ -226,11 +231,11 @@ export class InProcessAdapter implements SlingshotEventBus {
   private pendingHandlers = new Set<Promise<void>>();
   private readonly registry?: EventBusSerializationOptions['schemaRegistry'];
   private readonly validation: ValidationMode;
-  private readonly logger?: { error(msg: string, fields?: Record<string, unknown>): void };
+  private readonly logger?: Logger;
 
   constructor(
     serializationOpts?: EventBusSerializationOptions,
-    logger?: { error(msg: string, fields?: Record<string, unknown>): void },
+    logger?: Logger,
   ) {
     this.registry = serializationOpts?.schemaRegistry;
     this.validation = serializationOpts?.validation ?? 'off';
@@ -247,6 +252,7 @@ export class InProcessAdapter implements SlingshotEventBus {
             payload,
             this.registry,
             this.validation,
+            this.logger,
           ) as SlingshotEventMap[K],
         );
     const fns = this.envelopeListeners.get(event as string);
@@ -257,16 +263,14 @@ export class InProcessAdapter implements SlingshotEventBus {
         result = fn(envelope as EventEnvelope);
       } catch (err) {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
-        if (this.logger) this.logger.error(msg, { event, error: err });
-        else console.error(msg, err);
+        this.logger?.error(msg, { event, error: err });
         continue;
       }
       const p = Promise.resolve(result);
       this.pendingHandlers.add(p);
       p.catch((err: unknown) => {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
-        if (this.logger) this.logger.error(msg, { event, error: err });
-        else console.error(msg, err);
+        this.logger?.error(msg, { event, error: err });
       }).finally(() => {
         this.pendingHandlers.delete(p);
       });
@@ -321,7 +325,7 @@ export class InProcessAdapter implements SlingshotEventBus {
         throw new Error('SlingshotEventBus: durable subscriptions require a name. Pass opts.name.');
       }
       // InProcessAdapter does not support durable subscriptions — degrade gracefully
-      console.warn(
+      this.logger?.warn(
         '[SlingshotEventBus] InProcessAdapter does not support durable subscriptions — listener registered as non-durable.',
       );
     }
@@ -334,26 +338,27 @@ export class InProcessAdapter implements SlingshotEventBus {
   off<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (payload: SlingshotEventMap[K]) => void,
-  ): void {
+  ): boolean {
     const wrappers = this.payloadListenerWrappers.get(event as string);
     const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
     if (!wrapper) {
-      return;
+      return false;
     }
     wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
     if (wrappers?.size === 0) {
       this.payloadListenerWrappers.delete(event as string);
     }
     this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+    return true;
   }
 
   offEnvelope<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (envelope: EventEnvelope<K>) => void,
-  ): void {
-    this.envelopeListeners
-      .get(event as string)
-      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+  ): boolean {
+    const set = this.envelopeListeners.get(event as string);
+    if (!set) return false;
+    return set.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   async shutdown(): Promise<void> {

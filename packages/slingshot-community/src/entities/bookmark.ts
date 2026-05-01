@@ -24,15 +24,18 @@ export const Bookmark = defineEntity('Bookmark', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['isBookmarked', 'listByUser'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
-    create: {},
+    create: { middleware: ['targetVisibilityGuard'] },
     update: {},
     delete: {},
     operations: {
       isBookmarked: { auth: 'userAuth' },
+      listByUser: { auth: 'userAuth' },
     },
+    middleware: { targetVisibilityGuard: true },
   },
 });
 

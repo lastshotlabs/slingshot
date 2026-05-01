@@ -29,8 +29,15 @@ export const Pin = defineEntity('Pin', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    get: { auth: 'userAuth' },
-    list: { auth: 'userAuth' },
+    disable: ['list', 'update'],
+    dataScope: { field: 'pinnedBy', from: 'ctx:actor.id', applyTo: ['create'] },
+    get: {
+      auth: 'userAuth',
+      permission: {
+        requires: 'chat:room.read',
+        scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
+      },
+    },
     create: {
       permission: {
         requires: 'chat:room.manage',
@@ -47,7 +54,6 @@ export const Pin = defineEntity('Pin', {
         },
       },
     },
-    update: { auth: 'none' },
     delete: {
       permission: {
         requires: 'chat:room.manage',
@@ -64,9 +70,27 @@ export const Pin = defineEntity('Pin', {
       },
     },
     operations: {
-      listByRoom: { auth: 'userAuth' },
-      unpin: { auth: 'userAuth' },
-      isPinned: { auth: 'userAuth' },
+      listByRoom: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
+      unpin: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.manage',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
+      isPinned: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
+        },
+      },
     },
   },
 });

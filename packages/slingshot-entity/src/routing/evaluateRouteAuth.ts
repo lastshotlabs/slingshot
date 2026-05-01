@@ -170,6 +170,7 @@ export async function evaluateRouteAuth(
     try {
       parsedBody = await c.req.json();
     } catch {
+      // Non-JSON body when scope references body fields — reject as bad request
       return {
         authorized: false,
         response: c.json({ error: 'Bad request' }, 400),

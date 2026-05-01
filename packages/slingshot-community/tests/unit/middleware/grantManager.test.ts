@@ -133,7 +133,7 @@ describe('grantManager middleware', () => {
     expect(created[0]?.roles).toEqual(['owner']);
   });
 
-  test('does nothing for member role', async () => {
+  test('creates member grant on member role', async () => {
     const { adapter, created } = stubAdapter();
     const app = buildApp(adapter, {
       userId: 'u1',
@@ -143,7 +143,8 @@ describe('grantManager middleware', () => {
 
     const res = await app.request('/containers/c1/members', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(created.length).toBe(0);
+    expect(created.length).toBe(1);
+    expect(created[0]?.roles).toEqual(['member']);
   });
 
   test('revokes stale owner grant before creating a moderator grant', async () => {

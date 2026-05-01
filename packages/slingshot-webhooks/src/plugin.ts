@@ -431,11 +431,18 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         runtimeAdapter = config.adapter;
       } else {
         if (!config.secretEncryptionKey && !config.encryptor) {
-          if (process.env.NODE_ENV === 'production' && !config.allowPlaintextSecrets) {
-            throw new WebhookConfigError(
-              'secret encryption is required in production. ' +
-                'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
-                'allowPlaintextSecrets: true if storage encryption is handled externally.',
+          if (process.env.NODE_ENV === 'production') {
+            if (!config.allowPlaintextSecrets) {
+              throw new WebhookConfigError(
+                'secret encryption is required in production. ' +
+                  'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
+                  'allowPlaintextSecrets: true if storage encryption is handled externally.',
+              );
+            }
+            pluginLogger.warn(
+              '[slingshot-webhooks] allowPlaintextSecrets is enabled in production. ' +
+                'Webhook secrets will be stored without encryption. Ensure storage-layer ' +
+                'encryption is handled externally (e.g. encrypted DB, KMS).',
             );
           }
           const pluginLogger: Logger = createConsoleLogger({

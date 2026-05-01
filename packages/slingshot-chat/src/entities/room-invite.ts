@@ -31,7 +31,8 @@ export const RoomInvite = defineEntity('RoomInvite', {
   indexes: [index(['token'], { unique: true }), index(['roomId']), index(['roomId', 'revoked'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'createdBy', from: 'ctx:actor.id' },
+    disable: ['claimInviteSlot', 'releaseInviteSlot'],
+    dataScope: { field: 'createdBy', from: 'ctx:actor.id', applyTo: ['create', 'get', 'list'] },
     get: {},
     list: {},
     create: {
@@ -41,7 +42,7 @@ export const RoomInvite = defineEntity('RoomInvite', {
       },
       event: {
         key: 'chat:invite.created',
-        payload: ['id', 'roomId', 'token'],
+        payload: ['id', 'roomId'],
         exposure: ['client-safe'],
         scope: {
           resourceType: 'chat:room',
@@ -60,6 +61,7 @@ export const RoomInvite = defineEntity('RoomInvite', {
       redeemInvite: { auth: 'userAuth' },
       revokeInvite: {
         auth: 'userAuth',
+        path: ':id/revoke',
         permission: {
           requires: 'chat:room.manage',
           scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
@@ -72,6 +74,8 @@ export const RoomInvite = defineEntity('RoomInvite', {
           scope: { resourceType: 'chat:room', resourceId: 'param:roomId' },
         },
       },
+      claimInviteSlot: { auth: 'userAuth' },
+      releaseInviteSlot: { auth: 'userAuth' },
     },
   },
 });

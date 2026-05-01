@@ -29,6 +29,7 @@ export const AuditLogEntry = defineEntity('AuditLogEntry', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['create', 'get', 'update', 'delete', 'listByActor'],
     list: {
       permission: {
         requires: 'community:container.review-audit',
@@ -40,16 +41,10 @@ export const AuditLogEntry = defineEntity('AuditLogEntry', {
         auth: 'userAuth',
         permission: {
           requires: 'community:container.review-audit',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
         },
       },
-      listByActor: {
-        auth: 'userAuth',
-        permission: {
-          requires: 'community:container.review-audit',
-          scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
-        },
-      },
+      listByActor: { auth: 'userAuth' },
     },
   },
 });

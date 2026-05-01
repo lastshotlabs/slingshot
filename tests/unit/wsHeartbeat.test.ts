@@ -167,4 +167,36 @@ describe('wsHeartbeat', () => {
     handlePong(state, 'does-not-exist');
     // No throw expected
   });
+
+  test('multi-endpoint heartbeats use minimum interval', () => {
+    clearHeartbeatState(state);
+    const ep1 = '/ws1';
+    const ep2 = '/ws2';
+    state.socketRegistry.set('s1', ws);
+    state.socketRegistry.set('s2', ws);
+
+    registerSocket(state, ws, 's1', ep1);
+    registerSocket(state, ws, 's2', ep2);
+
+    startHeartbeat(state, {
+      [ep1]: { intervalMs: 100, timeoutMs: 5000 },
+      [ep2]: { intervalMs: 50, timeoutMs: 5000 },
+    });
+
+    // Both endpoints should be registered
+    expect(state.heartbeatEndpointConfigs.has(ep1)).toBe(true);
+    expect(state.heartbeatEndpointConfigs.has(ep2)).toBe(true);
+    // Min interval should be 50 (from /ws2)
+    expect(state.heartbeatTimer).not.toBeNull();
+  });
+
+  test('stopHeartbeat before startHeartbeat is a no-op', () => {
+    clearHeartbeatState(state);
+    expect(() => stopHeartbeat(state)).not.toThrow();
+    expect(state.heartbeatTimer).toBeNull();
+  });
+
+  test('clearHeartbeatState on empty state is a no-op', () => {
+    expect(() => clearHeartbeatState(state)).not.toThrow();
+  });
 });

@@ -62,12 +62,23 @@ export {
 /**
  * Create a local-filesystem storage adapter.
  */
-export { localStorage, type LocalStorageConfig } from './adapters/local';
+export {
+  localStorage,
+  LocalCircuitOpenError,
+  type LocalCircuitBreakerHealth,
+  type LocalStorageAdapter,
+  type LocalStorageConfig,
+} from './adapters/local';
 
 /**
  * Create an in-memory storage adapter.
  */
-export { memoryStorage } from './adapters/memory';
+export {
+  memoryStorage,
+  MemoryCircuitOpenError,
+  type MemoryCircuitBreakerHealth,
+  type MemoryStorageAdapter,
+} from './adapters/memory';
 
 /**
  * Resolve a manifest-compatible storage adapter reference.

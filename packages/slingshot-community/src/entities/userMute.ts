@@ -20,6 +20,7 @@ export const UserMute = defineEntity('UserMute', {
   indexes: [index(['userId', 'mutedUserId', 'containerId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['isMuted', 'listByUser'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
@@ -27,6 +28,7 @@ export const UserMute = defineEntity('UserMute', {
     delete: {},
     operations: {
       isMuted: { auth: 'userAuth' },
+      listByUser: { auth: 'userAuth' },
     },
   },
 });

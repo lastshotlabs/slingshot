@@ -234,13 +234,13 @@ describe('presignPut error propagation', () => {
       presignedUrls: true,
     });
 
-    // Hono's default onError handler catches route handler errors and returns 500
+    // The manifest runtime wraps storage errors and returns 502
     const res = await app.request('/assets/assets/presign-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-id': 'user-1' },
       body: JSON.stringify({ filename: 'a.png', mimeType: 'image/png' }),
     });
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502);
   });
 });
 
@@ -288,12 +288,12 @@ describe('presignGet error propagation', () => {
     expect(uploadRes.status).toBe(200);
     const { key } = (await uploadRes.json()) as { key: string };
 
-    // Download should fail with Hono catching the error as 500
+    // The manifest runtime wraps storage errors and returns 502
     const downRes = await app.request('/assets/assets/presign-download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-id': 'user-1' },
       body: JSON.stringify({ key }),
     });
-    expect(downRes.status).toBe(500);
+    expect(downRes.status).toBe(502);
   });
 });

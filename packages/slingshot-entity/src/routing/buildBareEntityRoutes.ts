@@ -476,6 +476,7 @@ async function preparePlannedExecution(
       try {
         rawBody = readJsonRecord((await c.req.json()) as unknown);
       } catch {
+        // Body is optional for extra routes — treat unparseable input as absent
         rawBody = null;
       }
     }

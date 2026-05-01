@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { TemplateNotFoundError, createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
 import type { MailRenderer, PermissionEvaluator } from '@lastshotlabs/slingshot-core';
+import type { AdminAuditEvent, AdminAuditLogger } from '../lib/auditLogger';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
 import type { AdminEnv } from '../types/env';
 
@@ -38,6 +39,20 @@ const tags = ['Admin'];
 export interface MailRouterConfig {
   renderer: MailRenderer;
   evaluator: PermissionEvaluator;
+  auditLogger?: AdminAuditLogger;
+}
+
+async function tryLogMailAuditEvent(
+  auditLogger: AdminAuditLogger | undefined,
+  event: AdminAuditEvent,
+): Promise<void> {
+  if (!auditLogger) return;
+  try {
+    const result = auditLogger.log(event);
+    if (result instanceof Promise) await result;
+  } catch {
+    // Swallow — audit failures must never propagate to HTTP callers
+  }
 }
 
 async function checkMailPermission(
@@ -156,6 +171,17 @@ export function createMailRouter(config: MailRouterConfig) {
 
       try {
         const result = await renderer.render(name, data);
+        const principal = c.get('adminPrincipal');
+        await tryLogMailAuditEvent(config.auditLogger, {
+          timestamp: new Date().toISOString(),
+          route: '/mail/templates/:name/preview',
+          method: 'POST',
+          actor: principal.subject,
+          action: 'mail.preview',
+          target: name,
+          result: 'success',
+          tenantId: principal.tenantId,
+        });
         return c.json({
           subject: result.subject ?? null,
           html: result.html,

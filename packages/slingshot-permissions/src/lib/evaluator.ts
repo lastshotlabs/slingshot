@@ -8,6 +8,7 @@ import type {
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import { SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
+import type { EvaluationCache } from './evaluationCache';
 
 /**
  * Health snapshot describing the evaluator's recent error and timeout activity.
@@ -149,6 +150,24 @@ interface EvaluatorConfig {
    * `onGroupExpansionErrorSampleRate` (default `0.05`).
    */
   onGroupExpansionError?: (failures: GroupExpansionFailure[]) => void;
+
+  /**
+   * Optional TTL-based evaluation cache.
+   *
+   * When provided, every `can()` call first checks the cache for a fresh entry
+   * keyed by (subject + action + scope). On cache hit within the configured TTL
+   * the cached boolean is returned without hitting the backing adapter.
+   *
+   * Call `cache.invalidate()` after any permission change (create grant, revoke,
+   * delete) to prevent stale allow/deny decisions.
+   *
+   * @example
+   * ```ts
+   * const cache = createEvaluationCache({ ttlMs: 5000 });
+   * const evaluator = createPermissionEvaluator({ registry, adapter, cache });
+   * ```
+   */
+  cache?: EvaluationCache;
 }
 
 function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boolean {
@@ -343,6 +362,13 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
 
   return {
     async can(subject: SubjectRef, action: string, scope?: EvaluationScope): Promise<boolean> {
+      // ── Cache lookup ────────────────────────────────────────────────────
+      if (config.cache) {
+        const cached = config.cache.get(subject.subjectId, subject.subjectType, action, scope);
+        if (cached !== undefined) return cached.result;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       // Collect grants for the subject
       let grants = await collectGrantsForSubject(subject, scope);
 
@@ -439,6 +465,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
             }
           }
           if (!failOpenOnGroupExpansionError) {
+            if (config.cache) {
+              config.cache.set(subject.subjectId, subject.subjectType, action, scope, false);
+            }
             return false;
           }
         }
@@ -479,7 +508,12 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
       // Super-admin is the system's ultimate authority; deny grants apply only to
       // named roles, not to the super-admin principal itself.
       for (const grant of allowGrants) {
-        if (grant.roles.includes(SUPER_ADMIN_ROLE)) return true;
+        if (grant.roles.includes(SUPER_ADMIN_ROLE)) {
+          if (config.cache) {
+            config.cache.set(subject.subjectId, subject.subjectType, action, scope, true);
+          }
+          return true;
+        }
       }
 
       // CRITICAL: deny always wins for all non-super-admin roles
@@ -487,6 +521,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
         for (const role of grant.roles) {
           const actions = registry.getActionsForRole(resourceType, role);
           if (actions.includes('*') || actions.includes(action)) {
+            if (config.cache) {
+              config.cache.set(subject.subjectId, subject.subjectType, action, scope, false);
+            }
             return false;
           }
         }
@@ -497,12 +534,20 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
         for (const role of grant.roles) {
           const actions = registry.getActionsForRole(resourceType, role);
           if (actions.includes('*') || actions.includes(action)) {
+            if (config.cache) {
+              config.cache.set(subject.subjectId, subject.subjectType, action, scope, true);
+            }
             return true;
           }
         }
       }
 
-      return false;
+      // ── Cache store & return ──────────────────────────────────────────
+      const _result = false;
+      if (config.cache) {
+        config.cache.set(subject.subjectId, subject.subjectType, action, scope, _result);
+      }
+      return _result;
     },
     getHealth(): EvaluatorHealth {
       return {

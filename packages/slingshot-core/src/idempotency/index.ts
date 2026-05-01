@@ -77,11 +77,27 @@ export async function withIdempotency<T>(
  * In-memory adapter for tests and single-instance deployments.
  *
  * Uses simple FIFO eviction once `maxEntries` is reached.
+ *
+ * @remarks
+ * This adapter stores idempotency state in process memory only. For
+ * production multi-instance deployments, use a durable adapter backed by
+ * a shared store (e.g. Redis, Postgres).
  */
 export function createMemoryOperationIdempotencyAdapter(opts?: {
   defaultTtlMs?: number;
   maxEntries?: number;
 }): IdempotencyAdapter {
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.NODE_ENV === 'production' &&
+    typeof process.emitWarning === 'function'
+  ) {
+    process.emitWarning(
+      'createMemoryOperationIdempotencyAdapter is in-memory only and will not ' +
+        'deduplicate across instances. Use a shared-store adapter for production.',
+      'ExperimentalWarning',
+    );
+  }
   const map = new Map<string, { recordedAt: number; payload?: unknown; expiresAt: number }>();
   const defaultTtl = opts?.defaultTtlMs ?? 24 * 60 * 60 * 1000;
   const maxEntries = opts?.maxEntries ?? 10_000;

@@ -7,6 +7,9 @@ export function checkRateLimit(
   socketId: string,
   config: WsRateLimitConfig,
 ): 'allow' | 'drop' | 'close' {
+  // Guard against misconfigured limits: 0 window or 0 max disables rate limiting
+  if (config.windowMs <= 0 || config.maxMessages <= 0) return 'allow';
+
   const now = Date.now();
   let endpointBuckets = state.rateLimitState.get(endpoint);
   if (!endpointBuckets) {

@@ -5,7 +5,7 @@ import {
   ScheduleNotFoundError,
   WorkflowFailedError,
 } from '@temporalio/client';
-import { withTimeout } from '@lastshotlabs/slingshot-core';
+import { TimeoutError, withTimeout } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type {
@@ -190,6 +190,12 @@ async function maybeQueryState(
       }
       // TimeoutError still maps to undefined so callers can degrade gracefully
       // rather than failing the read path.
+      if (!(err instanceof TimeoutError)) {
+        logger.warn('temporal state query failed', {
+          runId,
+          error: (err as Error)?.message ?? String(err),
+        });
+      }
       return undefined;
     }
   })();
@@ -263,7 +269,16 @@ export function createTemporalOrchestrationAdapter(
   };
 
   function rebuildRegistry(): void {
-    // Reserved for future provider-manifest materialization.
+    // Rebuild the local worker registry from the current set of registered
+    // task/workflow definitions. This is a no-op until the adapter has been
+    // started and definitions have been registered.
+    if (!started) return;
+    for (const [name, def] of tasks) {
+      workerRegistry.registerTask(name, def);
+    }
+    for (const [name, def] of workflows) {
+      workerRegistry.registerWorkflow(name, def);
+    }
   }
 
   function ensureMutable(): void {
@@ -402,7 +417,11 @@ export function createTemporalOrchestrationAdapter(
       const handle = client.workflow.getHandle(runId);
       let description: Awaited<ReturnType<typeof handle.describe>>;
       try {
-        description = await handle.describe();
+        description = await withTimeout(
+          handle.describe(),
+          instrumentation.queryTimeoutMs ?? 10_000,
+          `temporal.describe(${runId})`,
+        );
       } catch (error) {
         if ((error as { name?: string }).name === 'WorkflowNotFoundError') {
           return null;
@@ -440,9 +459,11 @@ export function createTemporalOrchestrationAdapter(
       }
 
       try {
-        const result = (await handle.result()) as
-          | TemporalTaskResultEnvelope
-          | TemporalWorkflowResultEnvelope;
+        const result = (await withTimeout(
+          handle.result(),
+          instrumentation.queryTimeoutMs ?? 10_000,
+          `temporal.result(${runId})`,
+        )) as TemporalTaskResultEnvelope | TemporalWorkflowResultEnvelope;
         run.output = result.output;
         run.progress = result.progress ?? run.progress;
         if (memo.kind === 'workflow' && 'steps' in result) {

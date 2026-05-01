@@ -766,6 +766,7 @@ export const verifyWebAuthn = async (
     );
     return true;
   } catch {
+    // WebAuthn verification or counter update failed; treat as invalid
     return false;
   }
 };
@@ -945,6 +946,7 @@ export async function verifyAnyFactor(
       runtime,
     );
   } catch {
+    // Reauth challenge consumption or WebAuthn verification failed
     return false;
   }
 }

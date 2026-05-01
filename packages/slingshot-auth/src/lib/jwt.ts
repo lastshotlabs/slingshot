@@ -214,6 +214,7 @@ export const verifyToken = async (
         const { payload } = await jwtVerify(token, key, opts);
         return payload;
       } catch {
+        // Key didn't verify this token; try the next one
         continue;
       }
     }

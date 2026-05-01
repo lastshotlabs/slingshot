@@ -242,9 +242,11 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
 
         const { sessionId } = parsed.data;
 
-        // Unsubscribe from all session rooms
+        // Unsubscribe from all session rooms. Without player state we can't
+        // derive team/role rooms, but we cover the common ones.
         ctx.unsubscribe(sessionRoom(sessionId));
         ctx.unsubscribe(playerRoom(sessionId, ctx.actorId));
+        ctx.unsubscribe(streamRoom(sessionId, '*'));
       },
     },
 

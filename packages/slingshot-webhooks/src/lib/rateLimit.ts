@@ -44,6 +44,12 @@ export interface RateLimiter {
    * post-decision state so the caller can set `X-RateLimit-*` response headers.
    */
   check(key: string): RateLimitResult;
+  /**
+   * Release any background resources (timers, connections) held by this limiter.
+   * After calling `close()`, subsequent `check()` calls produce undefined behavior.
+   * Safe to call multiple times — subsequent calls are no-ops.
+   */
+  close?(): void;
 }
 
 /**
@@ -112,6 +118,8 @@ export function createSlidingWindowRateLimiter(
     (cleanupTimer as { unref(): void }).unref();
   }
 
+  let closed = false;
+
   return {
     check(key: string): RateLimitResult {
       const now = Date.now();
@@ -134,6 +142,12 @@ export function createSlidingWindowRateLimiter(
 
       timestamps.push(now);
       return { allowed: true, remaining: maxRequests - timestamps.length, resetMs: windowMs };
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      clearInterval(cleanupTimer);
+      windows.clear();
     },
   };
 }

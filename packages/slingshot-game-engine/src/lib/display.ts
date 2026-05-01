@@ -65,7 +65,7 @@ export function parseGameRoom(room: string): {
   target: string | null;
 } | null {
   const parts = room.split(':');
-  if (parts[0] !== ROOM_PREFIX || parts.length < 3) return null;
+  if (parts[0] !== ROOM_PREFIX || parts.length < 3 || parts.length > 4) return null;
 
   const sessionId = parts[1];
   const roomType = parts[2];
@@ -217,7 +217,7 @@ export function resolveCustomRelayTargets(
   ctx: ReadonlyHandlerContext,
   sessionId: string,
 ): string[] {
-  if (!Object.prototype.hasOwnProperty.call(relayFilters, filterName)) {
+  if (!Object.hasOwn(relayFilters, filterName)) {
     return [];
   }
   const filter = relayFilters[filterName];

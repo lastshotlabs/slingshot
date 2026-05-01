@@ -30,6 +30,7 @@ export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
       if (!isRecord(raw)) return c.json({ error: 'Invalid JSON body' }, 400);
       body = raw;
     } catch {
+      // Body is not valid JSON; reject with 400
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 

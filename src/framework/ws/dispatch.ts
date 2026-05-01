@@ -29,9 +29,13 @@ export async function handleIncomingEvent(
 
   const { event: eventName, payload, ackId } = data;
 
-  // 2. Unknown event — silently consume (do not fall through to on.message)
+  // 2. Unknown event — silently consume but log for debuggability
   const config = endpointConfig.incoming?.[eventName];
-  if (!config) return true;
+  if (!config) {
+    if (endpointConfig.incoming) {
+      console.debug(`[wsDispatch] unknown event '${eventName}' — no handler configured`);
+    }
+    return true;
 
   const context: WsEventContext = {
     socketId: ws.data.id,
@@ -56,7 +60,7 @@ export async function handleIncomingEvent(
       return true;
     }
   } else if (config.auth === 'bearer') {
-    if (!context.actor.id) {
+    if (!context.actor.id || context.actor.kind === 'anonymous') {
       sendAck(ws, ackId, { error: 'unauthenticated' });
       return true;
     }
@@ -65,7 +69,10 @@ export async function handleIncomingEvent(
   // 4. Middleware chain — first false short-circuits
   for (const name of config.middleware ?? []) {
     const guard = endpointConfig.middleware?.[name];
-    if (!guard) continue; // unknown middleware name: skip, do not fail
+    if (!guard) {
+      console.debug(`[wsDispatch] unknown middleware '${name}' — skipping`);
+      continue;
+    }
     let allowed: boolean;
     try {
       allowed = await guard(ws, context);
@@ -85,9 +92,7 @@ export async function handleIncomingEvent(
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     sendAck(ws, ackId, { error: message });
-    if (ackId === undefined) {
-      console.warn(`[wsDispatch] unhandled error in handler '${eventName}':`, e);
-    }
+    console.warn(`[wsDispatch] error in handler '${eventName}':`, e);
   }
 
   return true;

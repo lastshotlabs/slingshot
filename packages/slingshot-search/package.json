@@ -40,7 +40,8 @@
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/providers tests/routes",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache"
+    "lint": "eslint src/ --cache",
+    "bench": "bun run tests/bench/search-throughput.bench.ts"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

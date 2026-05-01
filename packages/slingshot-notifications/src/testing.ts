@@ -214,10 +214,18 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       };
     },
     async listPendingDispatch(params) {
-      const rows = (await listPendingDispatch(params)) as unknown[];
-      return rows
-        .filter((row): row is Record<string, unknown> => row != null && typeof row === 'object')
-        .map(row => toNotificationRecord(row));
+      const result = (await listPendingDispatch(params)) as {
+        records: unknown[];
+        nextCursor: string | null;
+      };
+      return {
+        records: (result.records ?? [])
+          .filter(
+            (row): row is Record<string, unknown> => row != null && typeof row === 'object',
+          )
+          .map(row => toNotificationRecord(row)),
+        nextCursor: result.nextCursor ?? null,
+      };
     },
     async countPendingDispatch(params) {
       const value = (await countPendingDispatch(params)) as unknown;

@@ -56,11 +56,21 @@ export async function handleRecover(
   // 5. Re-subscribe and replay
   const restoreSubscription = resubscribe ?? defaultResubscribe;
   let replayed = 0;
+
+  // Decode per-room cursors from session (backward compat: plain string applies to all rooms)
+  let perRoomCursors: Record<string, string> | null = null;
+  try {
+    perRoomCursors = JSON.parse(session.lastEventId) as Record<string, string>;
+  } catch {
+    // plain string — use for all rooms (backward compat)
+  }
+
   for (const room of session.rooms) {
     restoreSubscription(state, ws, room);
     let messages: Awaited<ReturnType<typeof getMessageHistory>>;
     try {
-      messages = await getMessageHistory(ws.data.endpoint, room, { after: data.lastEventId }, app);
+      const roomCursor = perRoomCursors?.[room] ?? session.lastEventId;
+    messages = await getMessageHistory(ws.data.endpoint, room, { after: roomCursor }, app);
     } catch (err) {
       // Abort recovery on any message-history failure so the client sees a
       // deterministic failure rather than a partially-replayed session.
@@ -70,7 +80,7 @@ export async function handleRecover(
     }
     for (const msg of messages) {
       ws.send(JSON.stringify(msg.payload));
-      state.lastEventIds.set(ws.data.id, msg.id);
+      state.lastEventIds.set(`${ws.data.id}\0${room}`, msg.id);
       replayed++;
     }
   }
@@ -96,7 +106,14 @@ export function writeSession(
   rooms: Set<string>,
   windowMs: number,
 ): void {
-  const lastEventId = state.lastEventIds.get(socketId) ?? '';
+  // Collect per-room cursors so recovery replays only missed messages per room.
+  const roomCursors: Record<string, string> = {};
+  for (const room of rooms) {
+    const cursor = state.lastEventIds.get(`${socketId}\0${room}`);
+    if (cursor) roomCursors[room] = cursor;
+  }
+  const lastEventId =
+    Object.keys(roomCursors).length > 0 ? JSON.stringify(roomCursors) : '';
   state.sessionRegistry.set(sessionId, {
     rooms: [...rooms],
     lastEventId,
@@ -108,5 +125,19 @@ export function pruneExpiredSessions(state: WsState): void {
   const now = Date.now();
   for (const [id, entry] of state.sessionRegistry) {
     if (entry.expiresAt < now) state.sessionRegistry.delete(id);
+  }
+}
+
+let sessionGcTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startSessionGc(state: WsState, intervalMs = 60_000): void {
+  if (sessionGcTimer) return;
+  sessionGcTimer = setInterval(() => pruneExpiredSessions(state), intervalMs);
+}
+
+export function stopSessionGc(): void {
+  if (sessionGcTimer) {
+    clearInterval(sessionGcTimer);
+    sessionGcTimer = null;
   }
 }

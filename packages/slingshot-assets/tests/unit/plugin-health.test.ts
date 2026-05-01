@@ -47,7 +47,9 @@ describe('createAssetsPlugin getHealth()', () => {
     expect(health.status).toBe('healthy');
     expect(health.details.storageAdapter).toBe('memory');
     expect(health.details.storageConfigured).toBe(true);
-    expect(health.details.storageCircuitBreaker).toBeUndefined();
+    // The memory adapter now exposes circuit breaker health for consistency
+    expect(health.details.storageCircuitBreaker).toBeDefined();
+    expect(health.details.storageCircuitBreaker?.state).toBe('closed');
     expect(health.details.imageCache).toBeUndefined();
   });
 

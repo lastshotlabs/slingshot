@@ -1,13 +1,15 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse, validateGrant } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, createRoute, errorResponse, validateGrant } from '@lastshotlabs/slingshot-core';
 import type {
   AdminPrincipal,
+  Logger,
   PermissionEvaluator,
   PermissionRegistry,
   PermissionsAdapter,
   SubjectType,
 } from '@lastshotlabs/slingshot-core';
+import type { AdminAuditEvent, AdminAuditLogger } from '../lib/auditLogger';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
 import type { AdminEnv } from '../types/env';
 
@@ -15,6 +17,7 @@ export interface PermissionsRouterConfig {
   evaluator: PermissionEvaluator;
   adapter: PermissionsAdapter;
   registry: PermissionRegistry;
+  auditLogger?: AdminAuditLogger;
 }
 
 const tags = ['Admin Permissions'];
@@ -106,6 +109,25 @@ async function checkPerm(
   });
 }
 
+const permissionLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-admin' } });
+
+async function tryLogPermissionAuditEvent(
+  auditLogger: AdminAuditLogger | undefined,
+  event: AdminAuditEvent,
+): Promise<void> {
+  if (!auditLogger) return;
+  try {
+    const result = auditLogger.log(event);
+    if (result instanceof Promise) await result;
+  } catch (err) {
+    permissionLogger.error('[slingshot-admin] Failed to write permission audit event', {
+      action: event.action,
+      target: event.target,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export function createPermissionsRouter(config: PermissionsRouterConfig) {
   const { evaluator, adapter, registry } = config;
   const router = createTypedRouter();
@@ -184,6 +206,16 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
         // validateGrant is also called inside createGrant, but call here for early error
         validateGrant(grantInput);
         const id = await adapter.createGrant(grantInput);
+        await tryLogPermissionAuditEvent(config.auditLogger, {
+          timestamp: new Date().toISOString(),
+          route: '/grants',
+          method: 'POST',
+          actor: principal.subject,
+          action: 'permission.evaluate',
+          target: id,
+          result: 'success',
+          tenantId: principal.tenantId,
+        });
         return c.json({ id }, 201);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Invalid grant';
@@ -233,7 +265,30 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
         principal.subject,
         principalTenant !== null ? principalTenant : undefined,
       );
-      if (!revoked) return errorResponse(c, 'Grant not found', 404);
+      if (!revoked) {
+        await tryLogPermissionAuditEvent(config.auditLogger, {
+          timestamp: new Date().toISOString(),
+          route: '/grants/:grantId',
+          method: 'DELETE',
+          actor: principal.subject,
+          action: 'permission.evaluate',
+          target: grantId,
+          result: 'failure',
+          error: 'Grant not found',
+          tenantId: principal.tenantId,
+        });
+        return errorResponse(c, 'Grant not found', 404);
+      }
+      await tryLogPermissionAuditEvent(config.auditLogger, {
+        timestamp: new Date().toISOString(),
+        route: '/grants/:grantId',
+        method: 'DELETE',
+        actor: principal.subject,
+        action: 'permission.evaluate',
+        target: grantId,
+        result: 'success',
+        tenantId: principal.tenantId,
+      });
       return c.json({ message: 'Grant revoked' }, 200);
     },
   );
@@ -389,6 +444,17 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
     async (c: Context<AdminEnv>) => {
       if (!(await checkPerm(c, evaluator, 'read'))) return errorResponse(c, 'Forbidden', 403);
       const resourceTypes = registry.listResourceTypes();
+      const principal = c.get('adminPrincipal');
+      await tryLogPermissionAuditEvent(config.auditLogger, {
+        timestamp: new Date().toISOString(),
+        route: '/resources',
+        method: 'GET',
+        actor: principal.subject,
+        action: 'permission.registry.read',
+        target: '',
+        result: 'success',
+        tenantId: principal.tenantId,
+      });
       return c.json({ resourceTypes }, 200);
     },
   );

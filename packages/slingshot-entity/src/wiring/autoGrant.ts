@@ -3,6 +3,7 @@
  * `permissionsAdapter.createGrant()` when the event fires with a valid payload.
  */
 import type { PermissionsAdapter, SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { AutoGrantConfig } from '../manifest/entityManifestSchema';
 
 /** Dynamic event bus facade for string-keyed subscriptions. */
@@ -59,6 +60,7 @@ export function wireAutoGrant(
   permissionsAdapter: PermissionsAdapter,
   resolvedFields?: { pkField?: string; tenantField?: string },
 ): void {
+  const autoGrantLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
   const dynamicBus = bus as unknown as DynamicEventBus;
   const resourceIdKey = config.resourceIdField ?? resolvedFields?.pkField ?? 'id';
   const tenantIdKey = config.tenantIdField ?? resolvedFields?.tenantField ?? 'orgId';
@@ -69,11 +71,13 @@ export function wireAutoGrant(
     const tenantId = payload[tenantIdKey] as string | undefined;
 
     if (!subjectId || !resourceId || !tenantId) {
-      console.warn(
-        `[autoGrant:${entityName}] Skipping grant — missing fields in payload.` +
-          ` Expected: ${config.subjectField}, ${resourceIdKey}, ${tenantIdKey}.` +
-          ` Got: ${JSON.stringify(Object.keys(payload))}`,
-      );
+      autoGrantLogger.warn('Skipping grant — missing fields in payload', {
+        entityName,
+        subjectField: config.subjectField,
+        resourceIdKey,
+        tenantIdKey,
+        payloadKeys: Object.keys(payload),
+      });
       return;
     }
 

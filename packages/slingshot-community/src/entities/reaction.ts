@@ -41,12 +41,15 @@ export const Reaction = defineEntity('Reaction', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['get', 'list', 'update', 'listByTarget', 'getUserReaction', 'updateScore'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
 
-    get: { auth: 'none' },
-    list: { auth: 'none' },
-
     create: {
+      permission: {
+        requires: 'community:container.write',
+        scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+      },
+      middleware: ['targetVisibilityGuard'],
       event: {
         key: 'community:reaction.added',
         payload: ['targetId', 'targetType', 'tenantId', 'containerId', 'userId', 'type', 'value'],
@@ -61,6 +64,10 @@ export const Reaction = defineEntity('Reaction', {
       },
     },
     delete: {
+      permission: {
+        requires: 'community:container.write',
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+      },
       event: {
         key: 'community:reaction.removed',
         payload: ['targetId', 'targetType', 'tenantId', 'containerId', 'userId', 'type'],
@@ -77,9 +84,10 @@ export const Reaction = defineEntity('Reaction', {
 
     operations: {
       listByTarget: { auth: 'none' },
-      getUserReaction: { auth: 'none' },
+      getUserReaction: { auth: 'userAuth' },
       updateScore: { auth: 'userAuth' },
     },
+    middleware: { targetVisibilityGuard: true },
     cascades: [
       {
         event: 'auth:user.deleted',

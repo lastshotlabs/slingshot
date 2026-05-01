@@ -20,15 +20,18 @@ export const ThreadSubscription = defineEntity('ThreadSubscription', {
   indexes: [index(['userId', 'threadId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['getSubscription', 'listByThread'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
-    create: {},
+    create: { middleware: ['publishedThreadGuard'] },
     update: {},
     delete: {},
     operations: {
       getSubscription: { auth: 'userAuth' },
+      listByThread: { auth: 'userAuth' },
     },
+    middleware: { publishedThreadGuard: true },
   },
 });
 

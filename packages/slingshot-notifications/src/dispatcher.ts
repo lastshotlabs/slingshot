@@ -410,7 +410,7 @@ export function createIntervalDispatcher(
         // `stopped` short-circuit before the first async hop. When stop() runs
         // between schedule and dispatch this guard prevents a wasted DB query.
         if (stopped) return 0;
-        const rows = await options.notifications.listPendingDispatch({
+        const { records: rows } = await options.notifications.listPendingDispatch({
           limit: maxPerTick,
           now: dispatchedAt,
           signal: abortController.signal,

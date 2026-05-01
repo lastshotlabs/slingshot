@@ -352,6 +352,8 @@ export interface ContainerRule {
 export interface Report {
   id: string;
   tenantId?: string;
+  /** Container scope for thread/reply reports. User reports may be platform scoped. */
+  containerId?: string;
   /** ID of the reported thread, reply, or user. */
   targetId: string;
   targetType: ReportTargetType;

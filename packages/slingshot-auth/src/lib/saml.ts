@@ -161,6 +161,7 @@ export async function initSaml(
 
     samlify.setSchemaValidator(validator);
   } catch {
+    // Schema validator import failed; enforce in prod, warn in dev
     if (isProd()) {
       throw new Error(
         'SAML in production requires @authenio/samlify-xsd-schema-validator. ' +

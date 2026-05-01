@@ -464,12 +464,12 @@ describe('createCommunityPlugin — route generation', () => {
 
   test('mounts thread list route under /community/threads', async () => {
     const res = await harness.app.request('/community/threads');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 
   test('mounts reply list route', async () => {
     const res = await harness.app.request('/community/replies');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 
   test('404 on unknown route', async () => {
@@ -523,10 +523,9 @@ describe('createCommunityPlugin — permission enforcement', () => {
     expect(res.status).toBe(403);
   });
 
-  test('anonymous GET on list route succeeds (auth:none)', async () => {
-    // No x-test-user header; userAuth middleware isn't registered for list.
+  test('anonymous GET on broad thread list route is not mounted', async () => {
     const res = await harness.app.request('/community/threads');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 
   test('container member create rejects self-promotion through the raw join route', async () => {
@@ -556,6 +555,144 @@ describe('createCommunityPlugin — permission enforcement', () => {
   });
 });
 
+describe('createCommunityPlugin — content visibility guards', () => {
+  let harness: Harness;
+
+  beforeEach(async () => {
+    harness = await createCommunityHarness();
+    harness.evaluator.grant('community:container.write');
+  });
+
+  test('side routes cannot target draft threads', async () => {
+    const draftRes = await harness.app.request('/community/threads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'author-1' },
+      body: JSON.stringify({
+        containerId: 'c-hidden',
+        title: 'Hidden draft',
+      }),
+    });
+    expect(draftRes.status).toBe(201);
+    const draft = (await draftRes.json()) as { id: string };
+
+    const reactionRes = await harness.app.request('/community/reactions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
+      body: JSON.stringify({
+        targetId: draft.id,
+        targetType: 'thread',
+        containerId: 'c-hidden',
+        type: 'upvote',
+      }),
+    });
+    expect(reactionRes.status).toBe(404);
+
+    const bookmarkRes = await harness.app.request('/community/bookmarks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
+      body: JSON.stringify({
+        targetId: draft.id,
+        targetType: 'thread',
+      }),
+    });
+    expect(bookmarkRes.status).toBe(404);
+
+    const viewRes = await harness.app.request('/community/threads/increment-view', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: draft.id }),
+    });
+    expect(viewRes.status).toBe(404);
+  });
+
+  test('reaction create rejects container spoofing', async () => {
+    const threadRes = await harness.app.request('/community/threads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'author-1' },
+      body: JSON.stringify({
+        containerId: 'c-real',
+        title: 'Published',
+        status: 'published',
+      }),
+    });
+    expect(threadRes.status).toBe(201);
+    const thread = (await threadRes.json()) as { id: string };
+
+    const reactionRes = await harness.app.request('/community/reactions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
+      body: JSON.stringify({
+        targetId: thread.id,
+        targetType: 'thread',
+        containerId: 'c-spoofed',
+        type: 'upvote',
+      }),
+    });
+    expect(reactionRes.status).toBe(400);
+  });
+
+  test('report create derives reporter and container from trusted context', async () => {
+    const threadRes = await harness.app.request('/community/threads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'author-1' },
+      body: JSON.stringify({
+        containerId: 'c-report',
+        title: 'Reportable',
+        status: 'published',
+      }),
+    });
+    expect(threadRes.status).toBe(201);
+    const thread = (await threadRes.json()) as { id: string };
+
+    const reportRes = await harness.app.request('/community/reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'reporter-1' },
+      body: JSON.stringify({
+        targetId: thread.id,
+        targetType: 'thread',
+        reporterId: 'spoofed',
+        containerId: 'spoofed-container',
+        reason: 'Needs review',
+      }),
+    });
+    expect(reportRes.status).toBe(201);
+    const report = (await reportRes.json()) as { reporterId: string; containerId: string };
+    expect(report.reporterId).toBe('reporter-1');
+    expect(report.containerId).toBe('c-report');
+  });
+});
+
+describe('createCommunityPlugin — container join policy', () => {
+  let harness: Harness;
+
+  beforeEach(async () => {
+    harness = await createCommunityHarness();
+    harness.evaluator.grant('community:container.write');
+  });
+
+  test('raw self-join is blocked for invite-only containers', async () => {
+    const containerRes = await harness.app.request('/community/containers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'owner-1' },
+      body: JSON.stringify({
+        id: 'invite-only',
+        slug: 'invite-only',
+        name: 'Invite Only',
+        joinPolicy: 'invite',
+        createdBy: 'spoofed',
+      }),
+    });
+    expect(containerRes.status).toBe(201);
+
+    const joinRes = await harness.app.request('/community/container-members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
+      body: JSON.stringify({ containerId: 'invite-only' }),
+    });
+    expect(joinRes.status).toBe(403);
+  });
+});
+
 describe('createCommunityPlugin — membership grant reconciliation', () => {
   let harness: Harness;
 
@@ -563,9 +700,23 @@ describe('createCommunityPlugin — membership grant reconciliation', () => {
     harness = await createCommunityHarness();
     harness.evaluator.grant('community:container.manage-members');
     harness.evaluator.grant('community:container.manage-moderators');
+    harness.evaluator.grant('community:container.manage-owners');
   });
 
   test('demotion revokes stale elevated grants and removal clears them', async () => {
+    harness.evaluator.grant('community:container.write');
+    const containerRes = await harness.app.request('/community/containers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-1' },
+      body: JSON.stringify({
+        id: 'c1',
+        slug: 'c1',
+        name: 'Container 1',
+        createdBy: 'spoofed',
+      }),
+    });
+    expect(containerRes.status).toBe(201);
+
     const joinRes = await harness.app.request('/community/container-members', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
@@ -606,21 +757,21 @@ describe('createCommunityPlugin — membership grant reconciliation', () => {
       }),
     });
     expect(demoteRes.status).toBe(200);
-    expect(
-      harness.grants.filter(
-        grant =>
-          grant.subjectId === 'user-2' &&
-          grant.resourceType === 'community:container' &&
-          grant.resourceId === 'c1' &&
-          !grant.revokedAt,
-      ),
-    ).toHaveLength(0);
+    const activeAfterDemote = harness.grants.filter(
+      grant =>
+        grant.subjectId === 'user-2' &&
+        grant.resourceType === 'community:container' &&
+        grant.resourceId === 'c1' &&
+        !grant.revokedAt,
+    );
+    expect(activeAfterDemote).toHaveLength(1);
+    expect(activeAfterDemote[0]?.roles).toEqual(['member']);
 
     const deleteRes = await harness.app.request(`/community/container-members/${member.id}`, {
       method: 'DELETE',
       headers: { 'x-test-user': 'user-1' },
     });
-    expect(deleteRes.status).toBe(404);
+    expect(deleteRes.status).toBe(204);
     expect(
       harness.grants.filter(
         grant =>
@@ -661,9 +812,9 @@ describe('createCommunityPlugin — cascades on auth:user.deleted', () => {
       // The cascade handler is wired during setupRoutes on auth:user.deleted.
       harness.bus.emit('auth:user.deleted', { userId: 'user-7' });
       await harness.bus.drain();
-      // No reply exists; list should still succeed.
+      // No broad reply list route is exposed.
       const listRes = await harness.app.request('/community/replies');
-      expect(listRes.status).toBe(401);
+      expect(listRes.status).toBe(404);
       return;
     }
 
@@ -686,7 +837,7 @@ describe('createCommunityPlugin — cascades on auth:user.deleted', () => {
     await harness.bus.drain();
 
     const res = await harness.app.request('/community/container-members');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
     return;
   });
 

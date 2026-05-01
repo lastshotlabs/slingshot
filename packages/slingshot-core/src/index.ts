@@ -749,3 +749,8 @@ export type { Logger, LogLevel, LogFields } from './observability/logger';
 // --- observability: health checks ---
 /** Per-component health-check contract used by framework-level aggregators. */
 export type { HealthCheck, HealthReport, HealthState } from './observability/health';
+
+// Emit a one-time pre-1.0 stability warning for the entire framework.
+// Deduplicated per-package per-stability-level across all Slingshot packages.
+import { emitPackageStabilityWarning } from './stability';
+emitPackageStabilityWarning('@lastshotlabs/slingshot-core', 'experimental');

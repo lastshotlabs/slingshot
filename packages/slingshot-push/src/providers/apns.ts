@@ -1,5 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
-import { HeaderInjectionError, sanitizeHeaderValue } from '@lastshotlabs/slingshot-core';
+import { HeaderInjectionError, TimeoutError, sanitizeHeaderValue, withTimeout } from '@lastshotlabs/slingshot-core';
 import { deriveUuidV4FromKey } from '../lib/idempotency';
 import type { ApnsAuthInput } from '../types/config';
 import type { PushSendResult } from '../types/models';
@@ -39,6 +39,12 @@ const DEFAULT_APNS_FAILURE_CIRCUIT = 5;
  * probe send.
  */
 const DEFAULT_APNS_CIRCUIT_COOLDOWN_MS = 30_000;
+
+/**
+ * Default timeout (ms) for APNS HTTP requests.
+ * A network hang should not block push delivery indefinitely.
+ */
+const DEFAULT_APNS_TIMEOUT_MS = 10_000;
 
 /**
  * JWT-based APNS auth token provider.
@@ -135,6 +141,8 @@ export function createApnsProvider(config: {
   defaultEnvironment?: 'sandbox' | 'production';
   failureCircuitThreshold?: number;
   circuitCooldownMs?: number;
+  /** Maximum milliseconds for APNS HTTP requests. Default: 10000. */
+  timeoutMs?: number;
 }): PushProvider {
   const circuitThreshold = Math.max(
     1,
@@ -144,6 +152,7 @@ export function createApnsProvider(config: {
     0,
     config.circuitCooldownMs ?? DEFAULT_APNS_CIRCUIT_COOLDOWN_MS,
   );
+  const timeoutMs = Math.max(1, config.timeoutMs ?? DEFAULT_APNS_TIMEOUT_MS);
   let consecutiveFailures = 0;
   let lastFailureAt: number | null = null;
 
@@ -255,11 +264,15 @@ export function createApnsProvider(config: {
           'content-type': 'application/json',
         };
         if (safeApnsId) headers['apns-id'] = safeApnsId;
-        const response = await fetch(`${origin}/3/device/${platformData.deviceToken}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-        });
+        const response = await withTimeout(
+          fetch(`${origin}/3/device/${platformData.deviceToken}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+          }),
+          timeoutMs,
+          'apns.message-send',
+        );
 
         if (response.ok) {
           recordSuccess();

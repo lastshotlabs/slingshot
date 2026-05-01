@@ -11,6 +11,15 @@ function readThreadIdFromBody(body: unknown): string {
   return typeof candidate === 'string' ? candidate : '';
 }
 
+function readContainerIdFromBody(body: unknown): string {
+  if (typeof body !== 'object' || body === null) {
+    return '';
+  }
+
+  const candidate = (body as { containerId?: unknown }).containerId;
+  return typeof candidate === 'string' ? candidate : '';
+}
+
 /**
  * Create a Hono middleware that guards reply creation against thread state.
  *
@@ -34,11 +43,14 @@ export function createThreadStateGuardMiddleware(deps: {
 }): MiddlewareHandler {
   return async (c, next) => {
     let threadId = c.req.param('threadId');
+    let requestedContainerId = '';
     if (!threadId) {
       try {
         const body: unknown = await c.req.json();
         threadId = readThreadIdFromBody(body);
+        requestedContainerId = readContainerIdFromBody(body);
       } catch {
+        // Body parse failed; fall through with empty threadId to skip guard
         threadId = '';
       }
     }
@@ -49,6 +61,9 @@ export function createThreadStateGuardMiddleware(deps: {
     }
     if (thread.locked) {
       return c.json({ error: 'Thread is locked' }, 403);
+    }
+    if (requestedContainerId && thread.containerId !== requestedContainerId) {
+      return c.json({ error: 'Thread/container mismatch' }, 400);
     }
     await next();
   };

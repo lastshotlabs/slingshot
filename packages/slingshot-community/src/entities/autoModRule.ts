@@ -28,10 +28,12 @@ export const AutoModRule = defineEntity('AutoModRule', {
   indexes: [index(['containerId', 'enabled']), index(['tenantId'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['listActive'],
+    dataScope: { field: 'createdBy', from: 'ctx:actor.id', applyTo: ['create'] },
     get: {
       permission: {
         requires: 'community:container.manage-automod',
-        scope: { resourceType: 'community:container', resourceId: 'query:containerId' },
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
     },
     list: {

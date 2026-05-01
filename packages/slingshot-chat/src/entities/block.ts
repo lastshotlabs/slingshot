@@ -27,13 +27,13 @@ export const Block = defineEntity('Block', {
   indexes: [index(['blockerId', 'blockedId'], { unique: true }), index(['blockerId'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['update', 'isBlocked', 'listByBlocker', 'unblockUser'],
     dataScope: { field: 'blockerId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
       event: { key: 'chat:user.blocked', payload: ['blockerId', 'blockedId'] },
     },
-    update: { auth: 'none' },
     delete: {
       event: { key: 'chat:user.unblocked', payload: ['blockerId', 'blockedId'] },
     },

@@ -42,8 +42,13 @@ export const Room = defineEntity('Room', {
   indexes: [index(['type']), index(['tenantId', 'type']), index(['archived'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    get: {},
-    list: {},
+    disable: ['list', 'updateLastMessage'],
+    get: {
+      permission: {
+        requires: 'chat:room.read',
+        scope: { resourceType: 'chat:room', resourceId: 'record:id' },
+      },
+    },
     create: {
       permission: { requires: 'chat:room.write' },
       event: {
@@ -88,11 +93,18 @@ export const Room = defineEntity('Room', {
       },
     },
     operations: {
-      findDm: { auth: 'userAuth' },
+      findDm: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'chat:room.read',
+          scope: { resourceType: 'chat:room', resourceId: 'param:id' },
+        },
+      },
       findOrCreateDm: { auth: 'userAuth' },
       updateLastMessage: { auth: 'userAuth' },
       archiveRoom: {
         auth: 'userAuth',
+        path: ':id/archive',
         permission: {
           requires: 'chat:room.manage',
           scope: { resourceType: 'chat:room', resourceId: 'param:id' },
@@ -109,6 +121,7 @@ export const Room = defineEntity('Room', {
       },
       unarchiveRoom: {
         auth: 'userAuth',
+        path: ':id/unarchive',
         permission: {
           requires: 'chat:room.manage',
           scope: { resourceType: 'chat:room', resourceId: 'param:id' },

@@ -9,7 +9,7 @@ type ContainerMemberSnapshot = {
   containerId?: string;
 } | null;
 
-const MANAGED_ROLES = new Set(['moderator', 'owner']);
+const PERMISSION_ROLES = new Set(['member', 'moderator', 'owner']);
 
 function resolveMemberId(c: Parameters<MiddlewareHandler>[0]): string | null {
   const fromParam = c.req.param('id');
@@ -24,10 +24,8 @@ function resolveMemberId(c: Parameters<MiddlewareHandler>[0]): string | null {
  *
  * The middleware runs after successful membership mutations and keeps the
  * permissions store aligned with the resolved role:
- * - `create` / `assignRole` revoke old managed grants and add the new one when
- *   the resulting role is `moderator` or `owner`
- * - `create` / `assignRole` revoke old managed grants and stop when the
- *   resulting role is `member`
+ * - `create` / `assignRole` revoke old container-role grants and add the new
+ *   role grant when the result is `member`, `moderator`, or `owner`
  * - `delete` revokes any managed grants for the removed member
  *
  * Grants are reconciled using the membership record itself rather than trusting
@@ -70,7 +68,7 @@ export function createGrantManagerMiddleware(deps: {
 
     if (opName === 'delete') return;
 
-    if (member.role === 'moderator' || member.role === 'owner') {
+    if (member.role === 'member' || member.role === 'moderator' || member.role === 'owner') {
       await createRoleGrant(
         deps.permissionsAdapter,
         member.role,
@@ -87,13 +85,14 @@ async function readMemberFromResponse(res: Response): Promise<ContainerMemberSna
   try {
     return (await res.json()) as ContainerMemberSnapshot;
   } catch {
+    // Response body is not valid JSON; treat as no member data
     return null;
   }
 }
 
 async function createRoleGrant(
   adapter: PermissionsAdapter,
-  role: 'moderator' | 'owner',
+  role: 'member' | 'moderator' | 'owner',
   userId: string,
   containerId: string,
   grantedBy: string,
@@ -129,7 +128,7 @@ async function revokeManagedRoleGrants(
       g.effect === 'allow' &&
       !g.revokedAt &&
       g.roles.length > 0 &&
-      g.roles.every(grantRole => MANAGED_ROLES.has(grantRole)),
+      g.roles.every(grantRole => PERMISSION_ROLES.has(grantRole)),
   );
   for (const grant of active) {
     await adapter.revokeGrant(grant.id, revokedBy, tenantId ?? undefined);

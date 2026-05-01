@@ -13,6 +13,9 @@ import type {
   OrchestrationEventSink,
   Run,
   RunProgress,
+  ScheduleCapability,
+  ScheduleHandle,
+  SignalCapability,
   WorkflowRun,
 } from '../types';
 import { memoryAdapterOptionsSchema } from '../validation';
@@ -26,23 +29,40 @@ function matchesTags(
 }
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    if (!signal) return;
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  let onAbort: (() => void) | undefined;
+  const promise = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      resolve();
+    }, ms);
+
     if (signal.aborted) {
       clearTimeout(timer);
       reject(signal.reason instanceof Error ? signal.reason : new Error('Run cancelled'));
       return;
     }
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason instanceof Error ? signal.reason : new Error('Run cancelled'));
-      },
-      { once: true },
-    );
+
+    onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Run cancelled'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
   });
+
+  // Remove the listener when the promise settles (timer fires without abort).
+  // If the signal aborted, { once: true } already removed it, so the
+  // removeEventListener is a harmless no-op.
+  const cleanup = () => {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  };
+  promise.then(cleanup, cleanup);
+
+  return promise;
 }
 
 /**
@@ -59,7 +79,7 @@ export function createMemoryAdapter(
     maxPayloadBytes?: number;
     logger?: import('@lastshotlabs/slingshot-core').Logger;
   } = {},
-): OrchestrationAdapter & ObservabilityCapability & {
+): OrchestrationAdapter & ObservabilityCapability & SignalCapability & ScheduleCapability & {
   health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
 } {
   const parsed = memoryAdapterOptionsSchema.parse({
@@ -82,6 +102,104 @@ export function createMemoryAdapter(
   const workflowControllers = new Map<string, AbortController>();
   const workflowChildren = new Map<string, Set<string>>();
   const delayedWorkflowStarts = new Map<string, AbortController>();
+  // Signal infrastructure
+  const signalQueues = new Map<string, Array<{ name: string; payload: unknown; receivedAt: Date }>>();
+  // Schedule infrastructure
+  const schedules = new Map<string, ScheduleHandle & { _timeout?: ReturnType<typeof setTimeout> }>();
+  let scheduleCheckerInterval: ReturnType<typeof setInterval> | undefined;
+
+  function parseCronNext(cron: string, from: Date = new Date()): Date | null {
+    const parts = cron.trim().split(/\s+/);
+    if (parts.length !== 5) return null;
+    const [minStr, hourStr, domStr, monthStr, dowStr] = parts;
+    const minute = parseInt(minStr, 10);
+    const hour = parseInt(hourStr, 10);
+    const dom = parseInt(domStr, 10);
+    const month = parseInt(monthStr, 10);
+    const dow = parseInt(dowStr, 10);
+    const next = new Date(from);
+    next.setSeconds(0, 0);
+    next.setMinutes(next.getMinutes() + 1);
+    const maxIter = 2 * 365 * 24 * 60;
+    for (let i = 0; i < maxIter; i++) {
+      const m = next.getMinutes();
+      const h = next.getHours();
+      const d = next.getDate();
+      const mo = next.getMonth() + 1;
+      const dw = next.getDay();
+      const minuteMatch = isNaN(minute) || minStr === '*' || minute === m;
+      const hourMatch = isNaN(hour) || hourStr === '*' || hour === h;
+      const domMatch = isNaN(dom) || domStr === '*' || dom === d;
+      const monthMatch = isNaN(month) || monthStr === '*' || month === mo;
+      const dowMatch = isNaN(dow) || dowStr === '*' || dow === dw;
+      if (minuteMatch && hourMatch && domMatch && monthMatch && dowMatch) {
+        return next;
+      }
+      next.setMinutes(next.getMinutes() + 1);
+    }
+    return null;
+  }
+
+  function startScheduleChecker(): void {
+    if (scheduleCheckerInterval) return;
+    scheduleCheckerInterval = setInterval(() => {
+      if (shuttingDown) return;
+      const now = new Date();
+      for (const [id, sched] of schedules) {
+        if (sched._timeout) continue;
+        const nextRun = sched.nextRunAt ?? parseCronNext(sched.cron, now);
+        if (!nextRun) continue;
+        schedules.set(id, { ...sched, nextRunAt: nextRun });
+        if (nextRun <= now) {
+          void (async () => {
+            try {
+              if (sched.target.type === 'task') {
+                await runTask(sched.target.name, sched.input ?? {});
+              } else {
+                await runWorkflow(sched.target.name, sched.input ?? {});
+              }
+            } catch (err) {
+              logger.error('[slingshot-orchestration] Scheduled run failed', {
+                scheduleId: id,
+                target: sched.target,
+                cron: sched.cron,
+                err: err instanceof Error ? err.message : String(err),
+              });
+            }
+          })();
+          const nextAfter = new Date(Date.now() + 60_000);
+          const computed = parseCronNext(sched.cron, nextAfter);
+          schedules.set(id, { ...schedules.get(id)!, nextRunAt: computed ?? undefined });
+        } else {
+          const delay = nextRun.getTime() - now.getTime();
+          const timeout = setTimeout(() => {
+            if (schedules.get(id)?._timeout) clearTimeout(schedules.get(id)?._timeout!);
+            void (async () => {
+              try {
+                if (sched.target.type === 'task') {
+                  await runTask(sched.target.name, sched.input ?? {});
+                } else {
+                  await runWorkflow(sched.target.name, sched.input ?? {});
+                }
+              } catch (err) {
+                logger.error('[slingshot-orchestration] Scheduled run failed', {
+                  scheduleId: id,
+                  target: sched.target,
+                  cron: sched.cron,
+                  err: err instanceof Error ? err.message : String(err),
+                });
+              }
+            })();
+            const nextAfter = new Date(Date.now() + 60_000);
+            const computed = parseCronNext(sched.cron, nextAfter);
+            schedules.set(id, { ...schedules.get(id)!, nextRunAt: computed ?? undefined, _timeout: undefined });
+          }, delay);
+          schedules.set(id, { ...schedules.get(id)!, _timeout: timeout });
+        }
+      }
+    }, 30_000);
+  }
+
   let started = false;
   let shuttingDown = false;
 
@@ -444,7 +562,13 @@ export function createMemoryAdapter(
       return createCachedRunHandle(runId, () => promise);
     },
     async getRun(runId) {
-      return runs.get(runId) ?? null;
+      const run = runs.get(runId);
+      if (!run) return null;
+      if (run.type === 'workflow') {
+        const pendingSignals = signalQueues.get(runId) ?? [];
+        (run as WorkflowRun & { pendingSignals?: unknown[] }).pendingSignals = [...pendingSignals];
+      }
+      return run;
     },
     async cancelRun(runId) {
       const run = runs.get(runId);
@@ -471,9 +595,18 @@ export function createMemoryAdapter(
     },
     async start() {
       started = true;
+      if (schedules.size > 0) startScheduleChecker();
     },
     async shutdown() {
       shuttingDown = true;
+      if (scheduleCheckerInterval) {
+        clearInterval(scheduleCheckerInterval);
+        scheduleCheckerInterval = undefined;
+      }
+      for (const [, sched] of schedules) {
+        if (sched._timeout) clearTimeout(sched._timeout);
+      }
+      schedules.clear();
       for (const controller of delayedWorkflowStarts.values()) {
         controller.abort(new Error('Run cancelled'));
       }
@@ -532,6 +665,48 @@ export function createMemoryAdapter(
           progressListeners.delete(runId);
         }
       };
+    },
+    // ── SignalCapability ──────────────────────────────────────────────────────
+    async signal(runId, name, payload) {
+      const run = runs.get(runId);
+      if (!run) {
+        throw new OrchestrationError('RUN_NOT_FOUND', `Run '${runId}' not found`);
+      }
+      if (run.type !== 'workflow') {
+        throw new OrchestrationError(
+          'VALIDATION_FAILED',
+          `Cannot signal '${runId}': only workflow runs accept signals.`,
+        );
+      }
+      const queue = signalQueues.get(runId) ?? [];
+      queue.push({ name, payload, receivedAt: new Date() });
+      signalQueues.set(runId, queue);
+    },
+    // ── ScheduleCapability ────────────────────────────────────────────────────
+    async schedule(target, cron, input) {
+      const id = generateRunId();
+      const nextRunAt = parseCronNext(cron);
+      const handle: ScheduleHandle & { _timeout?: ReturnType<typeof setTimeout> } = {
+        id,
+        target,
+        cron,
+        input,
+        nextRunAt: nextRunAt ?? undefined,
+      };
+      schedules.set(id, handle);
+      if (started) startScheduleChecker();
+      return { id, target, cron, input, nextRunAt: nextRunAt ?? undefined };
+    },
+    async unschedule(scheduleId) {
+      const sched = schedules.get(scheduleId);
+      if (!sched) {
+        throw new OrchestrationError('RUN_NOT_FOUND', `Schedule '${scheduleId}' not found`);
+      }
+      if (sched._timeout) clearTimeout(sched._timeout);
+      schedules.delete(scheduleId);
+    },
+    async listSchedules() {
+      return [...schedules.values()].map(({ _timeout: _, ...handle }) => handle);
     },
     health() {
       const details: Record<string, unknown> = {

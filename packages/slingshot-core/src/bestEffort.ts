@@ -1,3 +1,6 @@
+import { noopLogger } from './observability/logger';
+import type { Logger } from './observability/logger';
+
 /**
  * Swallow errors from a promise that must never block the main flow.
  *
@@ -6,13 +9,15 @@
  *
  * @param promise - The promise to run best-effort.
  * @param label  - Short context label for the warning (e.g. '[identify]').
+ * @param logger - Optional structured logger; defaults to no-op.
  *
  * @example
  *   bestEffort(sessionRepo.updateLastActive(id), '[identify]');
  */
-export function bestEffort(promise: Promise<unknown>, label?: string): void {
+export function bestEffort(promise: Promise<unknown>, label?: string, logger?: Logger): void {
+  const log = logger ?? noopLogger;
   promise.catch((err: unknown) => {
     const prefix = label ? `${label} ` : '';
-    console.warn(`${prefix}best-effort operation failed:`, err);
+    log.warn(`${prefix}best-effort operation failed`, { err: String(err) });
   });
 }

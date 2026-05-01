@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from 'bun';
 import type { WsState } from '@lastshotlabs/slingshot-core';
+import { sweepStalePresence } from './presence';
 
 /**
  * Per-endpoint WebSocket heartbeat configuration.
@@ -53,9 +54,11 @@ export const startHeartbeat = (
     });
   }
 
-  const minInterval = Math.min(
-    ...[...state.heartbeatEndpointConfigs.values()].map(c => c.intervalMs ?? DEFAULT_INTERVAL_MS),
+  const intervals = [...state.heartbeatEndpointConfigs.values()].map(
+    c => c.intervalMs ?? DEFAULT_INTERVAL_MS,
   );
+  if (intervals.length === 0) return;
+  const minInterval = Math.min(...intervals);
 
   state.heartbeatTimer = setInterval(() => {
     // Wrap in try/catch — an unhandled throw here would stop the interval
@@ -69,6 +72,8 @@ export const startHeartbeat = (
           (entry.ws as ServerWebSocket<Record<string, unknown>>).ping();
         }
       }
+      // Sweep stale presence entries for sockets that disconnected without cleanup
+      if (state.presenceEnabled) sweepStalePresence(state);
     } catch (e) {
       console.error('[ws] heartbeat tick error:', e);
     }

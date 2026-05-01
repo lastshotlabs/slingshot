@@ -27,6 +27,11 @@ export const Warning = defineEntity('Warning', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['listByUser'],
+    dataScope: [
+      { field: 'userId', from: 'ctx:actor.id', applyTo: ['get', 'list'] },
+      { field: 'issuedBy', from: 'ctx:actor.id', applyTo: ['create'] },
+    ],
     get: {},
     list: {},
     create: {
@@ -40,7 +45,14 @@ export const Warning = defineEntity('Warning', {
       },
     },
     operations: {
-      acknowledge: { auth: 'userAuth' },
+      acknowledge: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'community:container.warn-user',
+          ownerField: 'userId',
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+        },
+      },
       listByUser: { auth: 'userAuth' },
     },
   },

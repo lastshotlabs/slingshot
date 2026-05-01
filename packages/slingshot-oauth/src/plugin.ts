@@ -55,6 +55,7 @@ const redirectTargetSchema = z
       const url = new URL(value);
       return url.protocol === 'https:' || url.protocol === 'http:';
     } catch {
+      // Value is not a parseable URL; not a valid redirect target
       return false;
     }
   }, 'Expected a relative path or absolute HTTP(S) URL');

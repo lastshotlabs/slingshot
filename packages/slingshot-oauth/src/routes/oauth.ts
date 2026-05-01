@@ -75,6 +75,7 @@ function appendRedirectParams(base: string, params: Record<string, string | unde
     }
     return url.toString();
   } catch {
+    // base is not a valid URL; fall back to manual query-string construction
     const entries = Object.entries(params).filter((entry): entry is [string, string] => {
       return entry[1] !== undefined;
     });
@@ -2439,6 +2440,7 @@ export const createOAuthRouter = (
               providerUserId = String(info.id);
             }
           } catch {
+            // OAuth provider verification failed; return error to client
             return errorResponse(c, 'Failed to verify provider identity', 400);
           }
 

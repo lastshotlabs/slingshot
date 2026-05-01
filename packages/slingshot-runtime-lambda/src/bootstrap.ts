@@ -35,26 +35,55 @@ async function resolveManifestConfig(
   options?: { handlersPath?: string | { dir: string } | false },
 ) {
   const manifestModulePath = '@lastshotlabs/slingshot/manifest';
-  const mod = (await import(manifestModulePath)) as unknown as {
-    resolveManifestConfig: ResolveManifestConfig;
-  };
-  return mod.resolveManifestConfig(manifestPathOrObject, registry, options);
+  let mod: unknown;
+  try {
+    mod = await import(manifestModulePath);
+  } catch (err) {
+    throw new Error(
+      `Failed to import ${manifestModulePath}. The Lambda runtime requires the root ` +
+        `@lastshotlabs/slingshot package to be bundled in the deployment. ` +
+        `Ensure the manifest subpath is included in your bundle. ` +
+        `Original error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return (mod as { resolveManifestConfig: ResolveManifestConfig }).resolveManifestConfig(
+    manifestPathOrObject,
+    registry,
+    options,
+  );
 }
 
 async function createApp(config: Record<string, unknown>): Promise<{ ctx: SlingshotContext }> {
   const appModulePath = '@lastshotlabs/slingshot';
-  const mod = (await import(appModulePath)) as unknown as {
-    createApp(config: Record<string, unknown>): Promise<{ ctx: SlingshotContext }>;
-  };
-  return mod.createApp(config);
+  let mod: unknown;
+  try {
+    mod = await import(appModulePath);
+  } catch (err) {
+    throw new Error(
+      `Failed to import ${appModulePath}. The Lambda runtime requires the root ` +
+        `@lastshotlabs/slingshot package to be bundled in the deployment. ` +
+        `Original error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return (mod as { createApp(config: Record<string, unknown>): Promise<{ ctx: SlingshotContext }> }).createApp(config);
 }
 
 /**
  * Resolve the manifest, create the app, and return the Lambda bootstrap state.
  */
 export async function bootstrap(config: FunctionsRuntimeConfig): Promise<BootstrapResult> {
-  const runtime =
-    config.runtime ?? (await import('@lastshotlabs/slingshot-runtime-node')).nodeRuntime();
+  let runtime = config.runtime;
+  if (!runtime) {
+    try {
+      runtime = (await import('@lastshotlabs/slingshot-runtime-node')).nodeRuntime();
+    } catch (err) {
+      throw new Error(
+        `Failed to import @lastshotlabs/slingshot-runtime-node. The Lambda runtime requires ` +
+          `slingshot-runtime-node to be bundled in the deployment. ` +
+          `Original error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
   const resolved = await resolveManifestConfig(config.manifest, undefined, {
     handlersPath: config.handlersPath,
   });

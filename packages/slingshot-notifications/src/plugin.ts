@@ -22,6 +22,7 @@ import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { createNotificationBuilder } from './builder';
 import { createIntervalDispatcher } from './dispatcher';
+import type { DispatcherAdapter, DispatcherHealth } from './dispatcher';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
 import { Notification, notificationOperations } from './entities/notification';
 import { NotificationPreference, notificationPreferenceOperations } from './entities/preference';
@@ -43,6 +44,25 @@ const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-no
 
 type AdapterResult = BareEntityAdapter;
 type ActorParam = { 'actor.id': string };
+
+/**
+ * Aggregated health snapshot for the notifications plugin.
+ */
+export interface NotificationsHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    /** Whether the notification entity adapter was resolved. */
+    readonly adapterAvailable: boolean;
+    /** Whether the preference entity adapter was resolved. */
+    readonly preferencesAdapterAvailable: boolean;
+    /** Number of registered delivery adapters. */
+    readonly deliveryAdapterCount: number;
+    /** Configured rate-limit backend name. */
+    readonly rateLimitBackend: string;
+    /** Delegated dispatcher health snapshot. */
+    readonly dispatcherHealth: DispatcherHealth;
+  };
+}
 
 function errorLogFields(err: unknown): { err: string; name?: string } {
   if (err instanceof Error) return { err: err.message, name: err.name };
@@ -202,7 +222,7 @@ function wrapPreferenceAdapter(
  */
 export function createNotificationsPlugin(
   rawConfig: Partial<NotificationsPluginConfig> = {},
-): SlingshotPlugin {
+): SlingshotPlugin & { getHealth(): NotificationsHealth } {
   const config = deepFreeze(
     validatePluginConfig('slingshot-notifications', rawConfig, notificationsPluginConfigSchema),
   );
@@ -211,6 +231,8 @@ export function createNotificationsPlugin(
   let preferencesAdapter: NotificationPreferenceAdapter | undefined;
   let teardown: (() => Promise<void>) | undefined;
   const deliveryAdapters = new Set<DeliveryAdapter>();
+  // Hoisted so getHealth() can reference it. Assigned in setupPost.
+  let dispatcher!: DispatcherAdapter;
 
   // The unified metrics emitter is owned by the framework context and not
   // available until `setupPost` runs. Resolve lazily through this proxy so
@@ -323,7 +345,7 @@ export function createNotificationsPlugin(
       }
 
       const rateLimitBackend = resolveRateLimitBackend(config.rateLimit.backend);
-      const dispatcher = config.dispatcher.enabled
+      dispatcher = config.dispatcher.enabled
         ? createIntervalDispatcher({
             notifications,
             preferences,
@@ -433,6 +455,13 @@ export function createNotificationsPlugin(
               '[slingshot-notifications] expiry sweep failed',
               errorLogFields(err),
             );
+            try {
+              bus.emit('notifications:expiry-sweep.failed', {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            } catch {
+              // bus emission is best-effort
+            }
           }
         };
         // Fire-and-forget initial sweep so apps that just enabled TTL get
@@ -457,6 +486,30 @@ export function createNotificationsPlugin(
 
     teardown() {
       return teardown?.() ?? Promise.resolve();
+    },
+
+    getHealth(): NotificationsHealth {
+      const adapterAvailable = notificationsAdapter != null;
+      const preferencesAvailable = preferencesAdapter != null;
+      const dispatchCount = deliveryAdapters.size;
+
+      let status: NotificationsHealth['status'] = 'healthy';
+      if (!adapterAvailable || !preferencesAvailable) {
+        status = 'unhealthy';
+      } else if (dispatchCount === 0) {
+        status = 'degraded';
+      }
+
+      return {
+        status,
+        details: {
+          adapterAvailable,
+          preferencesAdapterAvailable: preferencesAvailable,
+          deliveryAdapterCount: dispatchCount,
+          rateLimitBackend: config.rateLimit.backend,
+          dispatcherHealth: dispatcher.getHealth(),
+        },
+      };
     },
   };
 }

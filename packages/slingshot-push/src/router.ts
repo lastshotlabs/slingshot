@@ -93,15 +93,16 @@ async function sendWithProviderTimeout(
   context: PushProviderSendContext,
 ): Promise<PushSendResult> {
   if (timeoutMs <= 0) return provider.send(subscription, message, context);
+  const ac = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      provider.send(subscription, message, context),
+      provider.send(subscription, message, { ...context, signal: ac.signal }),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`push provider timed out after ${timeoutMs}ms`)),
-          timeoutMs,
-        );
+        timer = setTimeout(() => {
+          ac.abort();
+          reject(new Error(`push provider timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
       }),
     ]);
   } finally {

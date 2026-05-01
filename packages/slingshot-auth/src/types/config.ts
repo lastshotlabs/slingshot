@@ -250,6 +250,7 @@ const redirectTargetSchema = z
       const url = new URL(value);
       return url.protocol === 'http:' || url.protocol === 'https:';
     } catch {
+      // Invalid URL format; reject the value
       return false;
     }
   }, 'Expected a relative path or absolute HTTP(S) URL');

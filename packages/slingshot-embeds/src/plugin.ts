@@ -97,6 +97,7 @@ export function createEmbedsPlugin(rawConfig?: unknown): SlingshotPlugin {
         try {
           body = await c.req.json();
         } catch {
+          // Malformed JSON — return 400
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
 

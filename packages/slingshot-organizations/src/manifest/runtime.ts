@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { z } from 'zod';
 import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   createMemoryOperationIdempotencyAdapter,
   makeIdempotencyKey,
 } from '@lastshotlabs/slingshot-core';
@@ -26,20 +27,13 @@ import type { ReconcileOrphanedOrgRecordsResult } from '../reconcile';
  * `slingshot-organizations` events. Keeps the same on-disk shape regardless
  * of which call site emits the event.
  */
+const runtimeLogger = createConsoleLogger({ base: { component: 'slingshot-organizations' } });
+
 function logError(event: string, context: Record<string, unknown>, error: unknown): void {
-  const errorPayload =
-    error instanceof Error
-      ? { name: error.name, message: error.message, stack: error.stack }
-      : error;
-  console.error(
-    `[slingshot-organizations] ${event} ${JSON.stringify({
-      level: 'error',
-      pkg: 'slingshot-organizations',
-      event,
-      ...context,
-      error: errorPayload,
-    })}`,
-  );
+  runtimeLogger.error(event, {
+    ...context,
+    err: error instanceof Error ? error.message : String(error),
+  });
 }
 
 type MemberRole = string;

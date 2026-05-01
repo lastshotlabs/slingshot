@@ -25,12 +25,13 @@ export const ThreadTag = defineEntity('ThreadTag', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    list: { auth: 'none' },
+    disable: ['list', 'listByTag'],
     create: {
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
+      middleware: ['publishedThreadGuard'],
       event: {
         key: 'community:thread.tagged',
         payload: ['threadId', 'tagId', 'containerId'],
@@ -57,9 +58,10 @@ export const ThreadTag = defineEntity('ThreadTag', {
       },
     },
     operations: {
-      listByThread: { auth: 'none' },
+      listByThread: { auth: 'none', middleware: ['publishedThreadGuard'] },
       listByTag: { auth: 'none' },
     },
+    middleware: { publishedThreadGuard: true },
   },
 });
 

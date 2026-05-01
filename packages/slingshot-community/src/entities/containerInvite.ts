@@ -31,7 +31,8 @@ export const ContainerInvite = defineEntity('ContainerInvite', {
   indexes: [index(['token'], { unique: true }), index(['containerId'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'createdBy', from: 'ctx:actor.id' },
+    disable: ['claimInviteSlot', 'releaseInviteSlot'],
+    dataScope: { field: 'createdBy', from: 'ctx:actor.id', applyTo: ['create', 'get', 'list'] },
     get: {},
     list: {},
     create: {
@@ -50,6 +51,16 @@ export const ContainerInvite = defineEntity('ContainerInvite', {
     },
     operations: {
       redeemInvite: { auth: 'userAuth' },
+      findByToken: { auth: 'none' },
+      listByContainer: {
+        auth: 'userAuth',
+        permission: {
+          requires: 'community:container.manage-members',
+          scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
+        },
+      },
+      claimInviteSlot: { auth: 'userAuth' },
+      releaseInviteSlot: { auth: 'userAuth' },
     },
   },
 });

@@ -26,6 +26,7 @@ export const persistMessage = async (
 ): Promise<StoredMessage | null> => {
   const ctx = getContext(app);
   const persistence = ctx.persistence;
+  if (!persistence?.wsMessages) return null;
   const config = persistence.getRoomConfig(endpoint, room);
   if (!config) return null;
 

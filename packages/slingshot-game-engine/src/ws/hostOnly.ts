@@ -34,7 +34,18 @@ export function buildWsHostOnlyGuard(
   deps: WsHostOnlyDeps,
 ): (sessionId: string, userId: string, ack: (data: unknown) => void) => Promise<boolean> {
   return async (sessionId, userId, ack) => {
-    const hostCheck = await deps.isHost(sessionId, userId);
+    let hostCheck: boolean;
+    try {
+      hostCheck = await deps.isHost(sessionId, userId);
+    } catch (err) {
+      ack({
+        type: 'game:error',
+        sessionId,
+        code: GameErrorCode.INTERNAL_ERROR,
+        message: 'Failed to verify host status.',
+      });
+      return false;
+    }
 
     if (!hostCheck) {
       ack({

@@ -100,3 +100,25 @@ export {
   PermissionsConfigError,
   PermissionsAdapterError,
 } from './errors';
+/**
+ * TTL-based evaluation cache for permission checks.
+ */
+export { createEvaluationCache } from './lib/evaluationCache';
+export type {
+  EvaluationCache,
+  EvaluationCacheEntry,
+  EvaluationCacheOptions,
+} from './lib/evaluationCache';
+/**
+ * Audit trail for permission changes.
+ */
+export { createMemoryAuditTrailStore, withAuditTrail } from './lib/auditTrail';
+export type {
+  AuditTrailEntry,
+  AuditTrailFilter,
+  AuditAction,
+  AuditResourceType,
+  AuditTrailStore,
+  MemoryAuditTrailStoreOptions,
+  WithAuditTrailOptions,
+} from './lib/auditTrail';

@@ -21,6 +21,7 @@ import type {
   TestableRepoFactories,
 } from '@lastshotlabs/slingshot-core';
 import type { ResolvedOperations } from '../types';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { createMemoryEntityAdapter } from './memoryAdapter';
 import { createMongoEntityAdapter } from './mongoAdapter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
@@ -190,10 +191,10 @@ function wrapWithSearchSync<
       try {
         await searchSync.indexDocument(entity);
       } catch (error) {
-        console.error(
-          `[search-sync] write-through indexDocument failed for '${config._storageName}':`,
-          error,
-        );
+        factoriesLogger.error('search-sync write-through indexDocument failed', {
+          storageName: config._storageName,
+          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+        });
       }
       return;
     }
@@ -212,10 +213,10 @@ function wrapWithSearchSync<
       try {
         await searchSync.indexDocument(entity);
       } catch (error) {
-        console.error(
-          `[search-sync] write-through indexDocument failed for '${config._storageName}':`,
-          error,
-        );
+        factoriesLogger.error('search-sync write-through indexDocument failed', {
+          storageName: config._storageName,
+          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+        });
       }
       return;
     }
@@ -233,10 +234,10 @@ function wrapWithSearchSync<
       try {
         await searchSync.deleteDocument(id);
       } catch (error) {
-        console.error(
-          `[search-sync] write-through deleteDocument failed for '${config._storageName}':`,
-          error,
-        );
+        factoriesLogger.error('search-sync write-through deleteDocument failed', {
+          storageName: config._storageName,
+          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+        });
       }
       return;
     }
@@ -379,6 +380,8 @@ function wrapWithSearchProviderDelegation<
   const result: AdapterT = { ...adapter, ...overrides };
   return result;
 }
+
+const factoriesLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
 
 /**
  * Create `TestableRepoFactories` for a resolved entity config without

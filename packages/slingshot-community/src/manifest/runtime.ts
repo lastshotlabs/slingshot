@@ -10,8 +10,12 @@ import {
 import { createAuditLogMiddleware } from '../middleware/auditLog';
 import { createAutoModMiddleware } from '../middleware/autoMod';
 import { createBanCheckMiddleware } from '../middleware/banCheck';
+import { createContentTargetGuardMiddleware } from '../middleware/contentTargetGuard';
+import { createMemberJoinPolicyGuardMiddleware } from '../middleware/memberJoinPolicyGuard';
+import { createPublishedThreadGuardMiddleware } from '../middleware/publishedThreadGuard';
 import { createReplyCountDecrementMiddleware } from '../middleware/replyCountDecrement';
 import { createReplyCountUpdateMiddleware } from '../middleware/replyCountUpdate';
+import { createSolutionReplyGuardMiddleware } from '../middleware/solutionReplyGuard';
 import { createThreadStateGuardMiddleware } from '../middleware/threadStateGuard';
 import {
   createListSortedMemoryHandler,
@@ -38,11 +42,13 @@ import type {
 type CommunityHandler = (...args: unknown[]) => Promise<unknown>;
 
 type ContainerAdapter = {
-  getById(id: string): Promise<{ id: string } | null>;
+  getById(id: string): Promise<{ id: string; joinPolicy?: string; deletedAt?: unknown } | null>;
 };
 
 type ThreadAdapter = {
-  getById(id: string): Promise<{ createdAt?: string | Date; containerId?: string } | null>;
+  getById(
+    id: string,
+  ): Promise<{ createdAt?: string | Date; containerId: string; status?: string } | null>;
   incrementReplyCount(id: string): Promise<unknown>;
   decrementReplyCount(id: string): Promise<unknown>;
   updateLastActivity(
@@ -54,7 +60,11 @@ type ThreadAdapter = {
 };
 
 type ReplyAdapter = {
-  getById(id: string): Promise<{ createdAt?: string | Date; threadId?: string } | null>;
+  getById(
+    id: string,
+  ): Promise<
+    { createdAt?: string | Date; threadId?: string; containerId: string; status?: string } | null
+  >;
   update(id: string, data: unknown): Promise<unknown>;
   updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
 };
@@ -81,6 +91,20 @@ type BanAdapter = {
 
 type AuditLogAdapter = {
   create(input: Record<string, unknown>): Promise<unknown>;
+};
+
+type AutoModRuleAdapter = {
+  list(input: { filter?: Record<string, unknown>; limit?: number }): Promise<{
+    items: Array<{
+      tenantId?: string | null;
+      containerId?: string | null;
+      enabled?: boolean;
+      matcher?: unknown;
+      decision?: 'flag' | 'reject' | 'shadow-ban';
+      priority?: number;
+      name?: string;
+    }>;
+  }>;
 };
 
 type InviteRecord = {
@@ -159,6 +183,11 @@ export function createCommunityManifestRuntime(args: {
   setBanCheckHandler: (handler: import('hono').MiddlewareHandler) => void;
   setAutoModHandler: (handler: import('hono').MiddlewareHandler) => void;
   setThreadStateGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
+  setPublishedThreadGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
+  setTargetVisibilityGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
+  setReportTargetGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
+  setMemberJoinPolicyGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
+  setSolutionReplyGuardHandler: (handler: import('hono').MiddlewareHandler) => void;
   setReplyCountUpdateHandler: (handler: import('hono').MiddlewareHandler) => void;
   setReplyCountDecrementHandler: (handler: import('hono').MiddlewareHandler) => void;
   setAuditLogHandler: (handler: import('hono').MiddlewareHandler) => void;
@@ -173,6 +202,11 @@ export function createCommunityManifestRuntime(args: {
     setBanCheckHandler,
     setAutoModHandler,
     setThreadStateGuardHandler,
+    setPublishedThreadGuardHandler,
+    setTargetVisibilityGuardHandler,
+    setReportTargetGuardHandler,
+    setMemberJoinPolicyGuardHandler,
+    setSolutionReplyGuardHandler,
     setReplyCountUpdateHandler,
     setReplyCountDecrementHandler,
     setAuditLogHandler,
@@ -188,6 +222,7 @@ export function createCommunityManifestRuntime(args: {
   let reportAdapterRef: ReportAdapter | undefined;
   let banAdapterRef: BanAdapter | undefined;
   let auditLogAdapterRef: AuditLogAdapter | undefined;
+  let autoModRuleAdapterRef: AutoModRuleAdapter | undefined;
   let inviteAdapterRef: ContainerInviteAdapter | undefined;
 
   hooks.register('community.captureAdapters', (ctx: EntityPluginAfterAdaptersContext) => {
@@ -199,6 +234,7 @@ export function createCommunityManifestRuntime(args: {
     reportAdapterRef = ctx.adapters.Report as unknown as ReportAdapter;
     banAdapterRef = ctx.adapters.Ban as unknown as BanAdapter;
     auditLogAdapterRef = ctx.adapters.AuditLogEntry as unknown as AuditLogAdapter | undefined;
+    autoModRuleAdapterRef = ctx.adapters.AutoModRule as unknown as AutoModRuleAdapter | undefined;
     inviteAdapterRef = ctx.adapters.ContainerInvite as unknown as ContainerInviteAdapter;
 
     onAdaptersCaptured({
@@ -216,12 +252,46 @@ export function createCommunityManifestRuntime(args: {
     setAutoModHandler(
       createAutoModMiddleware({
         autoModerationHook,
+        autoModRuleAdapter: autoModRuleAdapterRef,
         reportAdapter: reportAdapterRef as never,
       }),
     );
     setThreadStateGuardHandler(
       createThreadStateGuardMiddleware({
         threadAdapter: threadAdapterRef as never,
+      }),
+    );
+    setPublishedThreadGuardHandler(
+      createPublishedThreadGuardMiddleware({
+        threadAdapter: threadAdapterRef as never,
+      }),
+    );
+    setTargetVisibilityGuardHandler(
+      createContentTargetGuardMiddleware(
+        {
+          threadAdapter: threadAdapterRef as never,
+          replyAdapter: replyAdapterRef as never,
+        },
+        { requireContainerIdMatch: true },
+      ),
+    );
+    setReportTargetGuardHandler(
+      createContentTargetGuardMiddleware(
+        {
+          threadAdapter: threadAdapterRef as never,
+          replyAdapter: replyAdapterRef as never,
+        },
+        { allowUserTarget: true, attachContainerId: true },
+      ),
+    );
+    setMemberJoinPolicyGuardHandler(
+      createMemberJoinPolicyGuardMiddleware({
+        containerAdapter: containerAdapterRef,
+      }),
+    );
+    setSolutionReplyGuardHandler(
+      createSolutionReplyGuardMiddleware({
+        replyAdapter: replyAdapterRef as never,
       }),
     );
     setReplyCountUpdateHandler(

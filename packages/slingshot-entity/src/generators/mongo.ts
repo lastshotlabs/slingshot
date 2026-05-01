@@ -459,7 +459,7 @@ export function generateMongo(config: ResolvedEntityConfig): string {
 
   // clear
   lines.push('    async clear() {');
-  lines.push('      try { await getModel().deleteMany({}); } catch { /* best-effort */ }');
+  lines.push('      try { await getModel().deleteMany({}); } catch { /* Best-effort teardown — collection may already be dropped */ }');
   lines.push('    },');
 
   lines.push('  };');

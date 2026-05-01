@@ -115,7 +115,7 @@ describe('GET /admin/health', () => {
     expect(health.details.rateLimitStoreConfigured).toBe(false);
   });
 
-  test('returns unhealthy when audit log is not configured', async () => {
+  test('returns degraded when audit log is not configured', async () => {
     const plugin = createAdminPlugin({
       accessProvider: makeAccessProvider(),
       managedUserProvider,
@@ -123,11 +123,11 @@ describe('GET /admin/health', () => {
     });
 
     const health = plugin.getHealth();
-    expect(health.status).toBe('unhealthy');
+    expect(health.status).toBe('degraded');
     expect(health.details.auditLogConfigured).toBe(false);
   });
 
-  test('returns unhealthy even with rate limit store when no audit log', async () => {
+  test('returns degraded even with rate limit store when no audit log', async () => {
     const plugin = createAdminPlugin({
       accessProvider: makeAccessProvider(),
       managedUserProvider,
@@ -140,7 +140,7 @@ describe('GET /admin/health', () => {
     });
 
     const health = plugin.getHealth();
-    expect(health.status).toBe('unhealthy');
+    expect(health.status).toBe('degraded');
     expect(health.details.auditLogConfigured).toBe(false);
     expect(health.details.rateLimitStoreConfigured).toBe(true);
   });
@@ -188,7 +188,7 @@ describe('GET /admin/health', () => {
     // The getHealth() doesn't expose provider names directly, but it
     // exposes them through the health router which reads from plugin state.
     // Here we just verify the provider name is set correctly on the access provider.
-    expect(plugin.getHealth().status).toBe('unhealthy');
+    expect(plugin.getHealth().status).toBe('degraded');
   });
 
   test('circuit breaker state appears in health', async () => {

@@ -529,7 +529,7 @@ function printSummary(result: {
   readonly durationMs: number;
   readonly pages: ReadonlyArray<{ readonly path: string; readonly error?: Error }>;
 }): void {
-  console.log(
+  logger.info(
     `\n[slingshot-ssg] Done. ${result.succeeded} succeeded, ${result.failed} failed. ` +
       `(${result.durationMs}ms total)`,
   );
@@ -576,18 +576,18 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   });
 
   // Crawl routes first — early exit when nothing to render
-  console.log('[slingshot-ssg] Collecting SSG routes...');
+  logger.info('[slingshot-ssg] Collecting SSG routes...');
   const paths = await collectSsgRoutes(config);
 
   if (paths.length === 0) {
-    console.log(
+    logger.info(
       '[slingshot-ssg] No SSG routes found. ' +
         'Mark routes with `revalidate: false` or export `staticPaths()` / `generateStaticParams()` to enable SSG.',
     );
     return;
   }
 
-  console.log(`[slingshot-ssg] Found ${paths.length} route(s):`, paths);
+  logger.info(`[slingshot-ssg] Found ${paths.length} route(s): ${paths.join(', ')}`);
 
   // Load renderer only when there are routes to render
   const renderer = await loadRenderer(opts.rendererPath);
@@ -602,7 +602,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     } else if (typeof renderer.ssgConfigure === 'function') {
       const rscManifest = await loadRscManifest(absRscManifest);
       await renderer.ssgConfigure({ rscManifest });
-      console.log(`[slingshot-ssg] RSC manifest loaded from ${absRscManifest}.`);
+      logger.info(`[slingshot-ssg] RSC manifest loaded from ${absRscManifest}.`);
     } else {
       logger.warn(
         `[slingshot-ssg] --rsc-manifest was provided but the renderer does not implement ` +
@@ -626,7 +626,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
   const assetTagsHtml = await resolveAssetTagsHtml(config.assetsManifest, config.clientEntry);
 
-  console.log(
+  logger.info(
     `[slingshot-ssg] Rendering ${paths.length} page(s) with concurrency=${opts.concurrency}...`,
   );
   const result = await renderSsgPages(paths, renderer, config, assetTagsHtml);
@@ -643,7 +643,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   }
 
   // ── Watch mode ──────────────────────────────────────────────────────────────
-  console.log(
+  logger.info(
     `\n[slingshot-ssg] Watching ${config.serverRoutesDir} for changes...` +
       `\n  Press Ctrl+C to stop.`,
   );
@@ -656,10 +656,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     watchTimeout = setTimeout(async () => {
       watchTimeout = undefined;
       try {
-        console.log('\n[slingshot-ssg] File change detected, re-rendering...');
+        logger.info('\n[slingshot-ssg] File change detected, re-rendering...');
         const newPaths = await collectSsgRoutes(config);
         if (newPaths.length === 0) {
-          console.log('[slingshot-ssg] No SSG routes remain. Waiting for changes...');
+          logger.info('[slingshot-ssg] No SSG routes remain. Waiting for changes...');
           return;
         }
         const newAssetTags = await resolveAssetTagsHtml(config.assetsManifest, config.clientEntry);
@@ -677,7 +677,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   await new Promise<void>(resolve => {
     process.on('SIGINT', () => {
       watcher.close();
-      console.log('\n[slingshot-ssg] Watch terminated.');
+      logger.info('\n[slingshot-ssg] Watch terminated.');
       resolve();
     });
   });

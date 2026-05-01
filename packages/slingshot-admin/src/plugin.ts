@@ -164,6 +164,7 @@ export function createAdminPlugin(
       bus,
       evaluator: config.permissions.evaluator,
       auditLog: config.auditLog,
+      auditLogger: config.auditLogger,
       rateLimitStore: config.rateLimitStore,
       logger: config.logger,
     });
@@ -173,6 +174,7 @@ export function createAdminPlugin(
       evaluator: config.permissions.evaluator,
       adapter: config.permissions.adapter,
       registry: config.permissions.registry,
+      auditLogger: config.auditLogger,
     });
     app.route(`${mountPath}/permissions`, permissionsRouter);
 
@@ -180,30 +182,40 @@ export function createAdminPlugin(
       const mailRouter = createMailRouter({
         renderer: config.mailRenderer,
         evaluator: config.permissions.evaluator,
+        auditLogger: config.auditLogger,
       });
       app.route(mountPath, mailRouter);
     }
   }
 
   const auditLogConfigured = config.auditLog != null;
+  const auditLoggerConfigured = config.auditLogger != null;
   const rateLimitStoreConfigured = config.rateLimitStore != null;
   const mailRendererConfigured = config.mailRenderer != null;
   const resolvedMountPath = config.mountPath ?? '/admin';
 
   function getHealth(): AdminPluginHealth {
+    const cbHealth = circuitBreaker.getHealth();
     let status: AdminPluginHealth['status'] = 'healthy';
-    if (!auditLogConfigured) {
-      status = 'unhealthy';
+    if (!auditLogConfigured && !auditLoggerConfigured) {
+      status = 'degraded';
     } else if (!rateLimitStoreConfigured) {
+      status = 'degraded';
+    } else if (cbHealth.state === 'open') {
+      status = 'unhealthy';
+    } else if (cbHealth.state === 'half-open') {
       status = 'degraded';
     }
     return {
       status,
       details: {
         auditLogConfigured,
+        auditLoggerConfigured,
         rateLimitStoreConfigured,
         mailRendererConfigured,
         mountPath: resolvedMountPath,
+        accessProviderName: config.accessProvider.name ?? 'unknown',
+        circuitBreaker: cbHealth,
       },
     };
   }

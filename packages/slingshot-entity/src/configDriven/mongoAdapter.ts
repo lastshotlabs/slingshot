@@ -11,6 +11,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -127,6 +128,9 @@ function mongooseType(fieldType: FieldType, mg: MongooseModule): unknown {
  *
  * @see {@link EntityStorageFieldMap} for customising the Mongo PK field name.
  */
+
+const mongoAdapterLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
+
 export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   conn: Connection,
   mongoosePkg: MongooseModule,
@@ -486,7 +490,10 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         await getModel().deleteMany({});
       } catch (err) {
         // best-effort clear — log so connection or schema issues are visible
-        console.error(`[entity:${config._storageName}] clear() failed:`, err);
+        mongoAdapterLogger.error('clear() failed', {
+          storageName: config._storageName,
+          error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+        });
       }
     },
 

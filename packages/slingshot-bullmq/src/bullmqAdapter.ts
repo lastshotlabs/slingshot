@@ -151,6 +151,20 @@ export const bullmqAdapterOptionsSchema = z.object({
       'Maximum number of enqueue attempts before a buffered event is permanently dropped (default: 5)',
     ),
   /**
+   * Maximum time (ms) a buffered event waits for a matching durable
+   * subscription before being evicted. Prevents unbounded buffer growth
+   * when a durable subscription is never registered (default: 1 800 000 —
+   * 30 minutes).
+   */
+  maxBufferAgeMs: z
+    .number()
+    .int()
+    .min(1_000)
+    .optional()
+    .describe(
+      'Maximum time (ms) a buffered event waits for a matching durable subscription (default: 1 800 000)',
+    ),
+  /**
    * Optional path to a JSON-lines write-ahead log used to persist buffered
    * events across process restarts. When set, every entry appended to the
    * in-memory pending buffer is first written here. On adapter creation the
@@ -382,6 +396,8 @@ interface PendingEnqueue {
   payload: object;
   /** Number of enqueue attempts made so far (starts at 1 after the first failure). */
   attempts: number;
+  /** Timestamp (ms) when this entry was first added to the buffer. */
+  firstSeen: number;
 }
 
 /**
@@ -437,7 +453,8 @@ export type BullMQAdapterDropReason =
   | 'buffer-full'
   | 'max-attempts'
   | 'enqueue-timeout'
-  | 'permanent-error';
+  | 'permanent-error'
+  | 'no-durable-queue';
 
 /** Detailed drop event surfaced via the `onDropEvent` callback. */
 export interface BullMQAdapterDropEvent {
@@ -713,6 +730,7 @@ export function createBullMQAdapter(
   const drainBaseMs = opts.drainBaseMs ?? DEFAULT_DRAIN_BASE_MS;
   const drainMaxMs = opts.drainMaxMs ?? DEFAULT_DRAIN_MAX_MS;
   const maxEnqueueAttempts = opts.maxEnqueueAttempts ?? DEFAULT_MAX_ENQUEUE_ATTEMPTS;
+  const maxBufferAgeMs = opts.maxBufferAgeMs ?? 30 * 60 * 1000; // 30 min default
   const validationDlqQueueNameOpt = opts.validationDlqQueueName;
   const walPath = opts.walPath;
   const walCompactThreshold = opts.walCompactThreshold ?? DEFAULT_WAL_COMPACT_THRESHOLD;
@@ -859,16 +877,21 @@ export function createBullMQAdapter(
       });
     })();
     walReplayPromise.catch(err => {
-      logger.error('WAL replay failed', { err: errInfo(err) });
+      logger.error(
+        'WAL replay failed — events persisted to disk before a crash may have been lost',
+        { err: errInfo(err) },
+      );
     });
   }
 
-  function appendToBuffer(entry: Omit<PendingEnqueue, 'id'>): PendingEnqueue {
+  function appendToBuffer(entry: Omit<PendingEnqueue, 'id' | 'firstSeen'>): PendingEnqueue {
     const id = nextEntryId++;
-    const full: PendingEnqueue = { id, ...entry };
-    pendingBuffer.push(full);
-    metrics.gauge('bullmq.pending.size', pendingBuffer.length);
+    const full: PendingEnqueue = { id, ...entry, firstSeen: Date.now() };
     if (wal) {
+      // Write to WAL first, then buffer. This ordering guarantees that if the
+      // entry is in the in-memory buffer, it has already been persisted and will
+      // survive a crash. If the WAL write fails, the entry is not buffered and
+      // the error is logged.
       void wal
         .append({
           id,
@@ -876,9 +899,16 @@ export function createBullMQAdapter(
           event: full.event,
           payload: full.payload,
         })
+        .then(() => {
+          pendingBuffer.push(full);
+          metrics.gauge('bullmq.pending.size', pendingBuffer.length);
+        })
         .catch(err => {
-          logger.error('WAL append failed', { err: errInfo(err) });
+          logger.error('WAL append failed; event not buffered', { err: errInfo(err) });
         });
+    } else {
+      pendingBuffer.push(full);
+      metrics.gauge('bullmq.pending.size', pendingBuffer.length);
     }
     return full;
   }
@@ -946,7 +976,21 @@ export function createBullMQAdapter(
       const queue = item.queue ?? durableQueues.get(item.name);
       if (!queue) {
         // Replayed entries with no live queue yet — keep them buffered until
-        // the matching durable subscription is registered.
+        // the matching durable subscription is registered. Evict entries that
+        // stay unmatched past maxBufferAgeMs to prevent unbounded growth.
+        const age = Date.now() - item.firstSeen;
+        if (age > maxBufferAgeMs) {
+          bufferDroppedCount += 1;
+          logger.warn('dropping buffered event — no durable subscription registered', {
+            event: item.event,
+            queue: item.name,
+            ageMs: age,
+            maxBufferAgeMs,
+          });
+          notifyDrop('no-durable-queue', item.event);
+          consumeFromBuffer(item.id);
+          continue;
+        }
         retry.push(item);
         continue;
       }
@@ -1191,15 +1235,15 @@ export function createBullMQAdapter(
   function unregisterEnvelopeListener<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (envelope: EventEnvelope<K>) => void,
-  ): void {
+  ): boolean {
     const key = event as string;
     const dl = durableListeners.get(key);
     if (dl?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)) {
       throw new DurableSubscriptionOffError();
     }
-    envelopeListeners
-      .get(key)
-      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+    const set = envelopeListeners.get(key);
+    if (!set) return false;
+    return set.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   function buildHealthDetails(): BullMQAdapterHealth {
@@ -1403,11 +1447,11 @@ export function createBullMQAdapter(
     off<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
-    ): void {
+    ): boolean {
       const wrappers = payloadListenerWrappers.get(event as string);
       const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
       if (!wrapper) {
-        return;
+        return false;
       }
       const dl = durableListeners.get(event as string);
       if (dl?.has(wrapper as (envelope: EventEnvelope) => void | Promise<void>)) {
@@ -1418,13 +1462,14 @@ export function createBullMQAdapter(
         payloadListenerWrappers.delete(event as string);
       }
       unregisterEnvelopeListener(event, wrapper as (envelope: EventEnvelope<K>) => void);
+      return true;
     },
 
     offEnvelope<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (envelope: EventEnvelope<K>) => void,
-    ): void {
-      unregisterEnvelopeListener(event, listener);
+    ): boolean {
+      return unregisterEnvelopeListener(event, listener);
     },
 
     /**
@@ -1444,12 +1489,7 @@ export function createBullMQAdapter(
         drainTimer = null;
       }
       if (pendingBuffer.length > 0) {
-        // Keep the legacy console.warn so existing tests that match
-        // "discarding" against console output continue to work.
-        console.warn(
-          `[BullMQAdapter] shutdown: discarding ${pendingBuffer.length} buffered event(s) that could not be enqueued to Redis. These events will not be retried.`,
-        );
-        logger.warn('shutdown: discarding buffered events', {
+        logger.warn('shutdown: discarding buffered events that could not be enqueued to Redis. These events will not be retried.', {
           discarded: pendingBuffer.length,
         });
         pendingBuffer.length = 0;

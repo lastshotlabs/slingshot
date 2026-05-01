@@ -286,8 +286,12 @@ export function buildSsrMiddleware(
     // Only intercept GET and HEAD requests
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
 
-    // Skip WebSocket upgrade requests
-    if (c.req.header('upgrade')?.toLowerCase() === 'websocket') return next();
+    // Per RFC 6455, valid WebSocket upgrade requires both Upgrade + Connection headers
+    if (
+      c.req.header('upgrade')?.toLowerCase() === 'websocket' &&
+      c.req.header('connection')?.toLowerCase().includes('upgrade')
+    )
+      return next();
 
     const url = new URL(c.req.url);
     const pathname = url.pathname;

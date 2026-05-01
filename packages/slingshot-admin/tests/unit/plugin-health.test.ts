@@ -48,10 +48,10 @@ const rateLimitStore: AdminRateLimitStore = {
 };
 
 describe('createAdminPlugin getHealth()', () => {
-  test('returns unhealthy when no audit-log provider is configured', () => {
+  test('returns degraded when no audit-log provider is configured', () => {
     const plugin = createAdminPlugin({ accessProvider, managedUserProvider, permissions });
     const health = plugin.getHealth();
-    expect(health.status).toBe('unhealthy');
+    expect(health.status).toBe('degraded');
     expect(health.details.auditLogConfigured).toBe(false);
     expect(health.details.rateLimitStoreConfigured).toBe(false);
     expect(health.details.mailRendererConfigured).toBe(false);

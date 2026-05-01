@@ -381,14 +381,10 @@ export function defineHandler<TInput extends ZodTypeAny, TOutput extends ZodType
           await hook({ ...args, output });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (config.logger) {
-            config.logger.error('After hook failed', {
-              handler: config.name,
-              error: message,
-            });
-          } else {
-            console.error(`[handler:${config.name}] after hook failed:`, error);
-          }
+          config.logger?.error('After hook failed', {
+            handler: config.name,
+            error: message,
+          });
         }
       }
 

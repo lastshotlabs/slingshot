@@ -62,6 +62,10 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label?: s
 export function timeoutSignal(timeoutMs: number): AbortSignal {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new TimeoutError(timeoutMs)), timeoutMs);
+  // Clear the timer when the signal aborts early (e.g. the caller aborts the
+  // controller themselves, or the operation completes and the consumer aborts
+  // the signal). Without this the timer closure is retained until it fires.
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
   if (typeof (timer as unknown as { unref?: () => void }).unref === 'function') {
     (timer as unknown as { unref: () => void }).unref();
   }

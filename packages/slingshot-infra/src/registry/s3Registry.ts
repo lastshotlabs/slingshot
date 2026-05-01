@@ -174,6 +174,7 @@ export function createS3Registry(config: S3RegistryConfig): RegistryProvider {
       try {
         await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
       } catch {
+        // Bucket does not exist yet — create it
         await client.send(
           new CreateBucketCommand({
             Bucket: config.bucket,

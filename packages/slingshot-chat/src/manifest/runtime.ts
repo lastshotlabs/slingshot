@@ -474,6 +474,14 @@ export function createChatManifestRuntime(args: {
     if (!sourceMessage) {
       throw new HTTPException(404, { message: 'Source message not found' });
     }
+    if (sourceMessage.deletedAt || (sourceMessage.scheduledAt && !sourceMessage.scheduledDelivered)) {
+      throw new HTTPException(404, { message: 'Source message not found' });
+    }
+
+    const sourceMember = await memberAdapter.findMember({ roomId: sourceMessage.roomId, userId });
+    if (!sourceMember) {
+      throw new HTTPException(403, { message: 'Not a member of source room' });
+    }
 
     const targetMember = await memberAdapter.findMember({ roomId: targetRoomId, userId });
     if (!targetMember) {
@@ -481,6 +489,9 @@ export function createChatManifestRuntime(args: {
     }
 
     const targetRoom = await roomAdapter.getById(targetRoomId);
+    if (!targetRoom) {
+      throw new HTTPException(404, { message: 'Target room not found' });
+    }
     if (targetRoom?.archived) {
       throw new HTTPException(403, { message: 'Target room is archived' });
     }

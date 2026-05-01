@@ -15,11 +15,13 @@ export type {
   EventSyncManager,
   EventSyncManagerConfig,
   FlushDeadLetterEntry,
+  FileDlqStore,
+  FileDlqStoreConfig,
 } from './eventSync';
 /**
  * Create the event-sync manager used to index entity events and flush dead letters.
  */
-export { createEventSyncManager } from './eventSync';
+export { createEventSyncManager, createFileDlqStore } from './eventSync';
 
 // --- Provider factories ---
 /** First-party provider factories for external and hosted search backends. */
@@ -68,6 +70,20 @@ export { SEARCH_ROUTES } from './routes/index';
  * Route identifiers mounted by the search plugin.
  */
 export type { SearchRoute } from './routes/index';
+
+// --- Core error classes ---
+/**
+ * Search-specific error classes for config, transform, provider, filter, pagination, and validation failures.
+ */
+export {
+  SearchConfigError,
+  SearchFilterError,
+  SearchIndexNotFoundError,
+  SearchPaginationError,
+  SearchProviderError,
+  SearchTransformError,
+  SearchValidationError,
+} from './errors';
 
 // --- Rate limiting ---
 /**

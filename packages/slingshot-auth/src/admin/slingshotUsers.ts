@@ -189,6 +189,7 @@ function decodeAdminCursor(cursor: string): number {
     const parsed = JSON.parse(atob(cursor)) as { offset: number };
     return typeof parsed.offset === 'number' ? parsed.offset : 0;
   } catch {
+    // Corrupted or tampered cursor; fall back to offset 0
     return 0;
   }
 }

@@ -115,4 +115,10 @@ export interface PushSendResult {
 export interface PushProviderSendContext {
   /** Stable token derived from `(deliveryId, attempt)` to de-duplicate retries. */
   readonly idempotencyKey?: string;
+  /**
+   * Optional abort signal set by the router when a provider timeout fires.
+   * Providers should pass this to their underlying HTTP client so in-flight
+   * requests are cancelled rather than leaked when the caller times out.
+   */
+  readonly signal?: AbortSignal;
 }

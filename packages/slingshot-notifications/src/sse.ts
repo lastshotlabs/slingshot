@@ -33,6 +33,7 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
     let updatedHandler: ((payload: unknown) => void) | undefined;
     let abortListener: (() => void) | undefined;
     let abortSignal: AbortSignal | undefined;
+    let controllerCleanup: (() => void) | undefined;
 
     const cleanup = (): void => {
       if (cleanedUp) return;
@@ -60,6 +61,14 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
           // never throw from cleanup
         }
         abortListener = undefined;
+      }
+      if (controllerCleanup) {
+        try {
+          controllerCleanup();
+        } catch {
+          // never throw from cleanup
+        }
+        controllerCleanup = undefined;
       }
     };
 
@@ -124,9 +133,20 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
         // listeners without breaking standards-conformant runtimes.
         const nodeStyleController = controller as unknown as {
           on?: (event: string, fn: () => void) => void;
+          off?: (event: string, fn: () => void) => void;
+          removeListener?: (event: string, fn: () => void) => void;
         };
         nodeStyleController.on?.('error', closeAndCleanup);
         nodeStyleController.on?.('close', closeAndCleanup);
+        controllerCleanup = () => {
+          const nc = nodeStyleController;
+          // removeListener (Node.js EventEmitter) and off (Bun/EventEmitter) are
+          // mutually exclusive aliases. Try both; at least one will be undefined.
+          nc.removeListener?.('error', closeAndCleanup);
+          nc.removeListener?.('close', closeAndCleanup);
+          nc.off?.('error', closeAndCleanup);
+          nc.off?.('close', closeAndCleanup);
+        };
       },
       cancel() {
         // Ensure bus listeners are removed when the consumer cancels the

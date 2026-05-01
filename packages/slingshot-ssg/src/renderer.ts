@@ -172,7 +172,7 @@ async function renderSsgPageInternal(
 
       // Transient error — backoff and retry
       const delay = calculateBackoff(attempt, baseDelayMs, maxDelayMs);
-      console.log(
+      logger.info(
         `[slingshot-ssg] Retry ${attempt}/${maxAttempts - 1} for "${urlPath}" ` +
           `in ${delay}ms (${result.error.message})`,
       );
@@ -188,7 +188,7 @@ async function renderSsgPageInternal(
         }
         // Wait for cooldown then retry
         const delay = Math.min(err.retryAfterMs + 100, maxDelayMs);
-        console.log(
+        logger.info(
           `[slingshot-ssg] Circuit breaker open, waiting ${delay}ms ` +
             `before retry ${attempt + 1}/${maxAttempts} for "${urlPath}"`,
         );
@@ -253,14 +253,28 @@ async function renderSsgPageUnchecked(
 ): Promise<SsgPageResult> {
   const url = new URL(urlPath, 'http://localhost');
 
-  // Build a minimal stub — satisfies the SlingshotContext structural contract at
-  // runtime without importing slingshot-core (which is not a dependency of this
-  // package). Renderers that call bsCtx.db at build time will fail and the page
-  // will be recorded as failed rather than producing broken output.
-  // The cast boundary is acceptable per Rule 5: opaque peer-dep boundary.
-  const bsCtxStub = Object.freeze({
-    pluginState: new SsgPluginStateMap(),
-  }) as unknown as Parameters<SlingshotSsrRenderer['resolve']>[1];
+  // Minimal stub satisfying the SlingshotContext structural contract at runtime
+  // without importing slingshot-core. Wrapped in a Proxy so that any property
+  // access (e.g. bsCtx.db) throws a descriptive SSG-specific error instead of
+  // surfacing as "Cannot read properties of undefined".
+  const bsCtxStub = new Proxy(
+    Object.freeze({
+      pluginState: new SsgPluginStateMap(),
+    }),
+    {
+      get(target, prop) {
+        if (prop in target) {
+          return (target as Record<string | symbol, unknown>)[prop];
+        }
+        throw new Error(
+          `[slingshot-ssg] bsCtx.${String(prop)} is not available during static generation. ` +
+            `The SSG renderer provides a minimal build-time context stub — only pluginState is accessible. ` +
+            `Accessing bsCtx.db, bsCtx.bus, or other runtime services from a page loader or renderer at ` +
+            `build time is not supported.`,
+        );
+      },
+    },
+  ) as unknown as Parameters<SlingshotSsrRenderer['resolve']>[1];
 
   const shell: SsrShell = {
     headTags: '',
@@ -294,7 +308,7 @@ async function renderSsgPageUnchecked(
       response = await renderer.renderChain(chain, shell, bsCtxStub);
     } catch (err) {
       const error = toError(err);
-      logger.warn(`[slingshot-ssg] renderChain() failed for ${urlPath}:`, error.message);
+      logger.warn(`[slingshot-ssg] renderChain() failed for ${urlPath}`, { error: error.message });
       return makeFailedResult(urlPath, filePath, start, error);
     }
 
@@ -311,12 +325,12 @@ async function renderSsgPageUnchecked(
       writeFileAtomicSync(filePath, html);
     } catch (err) {
       const error = toError(err);
-      logger.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
+      logger.warn(`[slingshot-ssg] Failed to write ${filePath}`, { error: error.message });
       return makeFailedResult(urlPath, filePath, start, error);
     }
 
     const durationMs = Date.now() - start;
-    console.log(`[slingshot-ssg] ✓ ${urlPath}  →  ${filePath}  (${durationMs}ms)`);
+    logger.info(`[slingshot-ssg] ✓ ${urlPath}  →  ${filePath}  (${durationMs}ms)`);
     return { path: urlPath, filePath, durationMs };
   }
   // ── End chain pipeline ───────────────────────────────────────────────────────
@@ -329,7 +343,7 @@ async function renderSsgPageUnchecked(
     match = await renderer.resolve(url, bsCtxStub);
   } catch (err) {
     const error = toError(err);
-    logger.warn(`[slingshot-ssg] resolve() failed for ${urlPath}:`, error.message);
+    logger.warn(`[slingshot-ssg] resolve() failed for ${urlPath}`, { error: error.message });
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -344,7 +358,7 @@ async function renderSsgPageUnchecked(
     response = await renderer.render(match, shell, bsCtxStub);
   } catch (err) {
     const error = toError(err);
-    logger.warn(`[slingshot-ssg] render() failed for ${urlPath}:`, error.message);
+    logger.warn(`[slingshot-ssg] render() failed for ${urlPath}`, { error: error.message });
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
@@ -363,12 +377,12 @@ async function renderSsgPageUnchecked(
     writeFileAtomicSync(filePath, html);
   } catch (err) {
     const error = toError(err);
-    logger.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
+    logger.warn(`[slingshot-ssg] Failed to write ${filePath}`, { error: error.message });
     return makeFailedResult(urlPath, filePath, start, error);
   }
 
   const durationMs = Date.now() - start;
-  console.log(`[slingshot-ssg] ✓ ${urlPath}  →  ${filePath}  (${durationMs}ms)`);
+  logger.info(`[slingshot-ssg] ✓ ${urlPath}  →  ${filePath}  (${durationMs}ms)`);
   return { path: urlPath, filePath, durationMs };
 }
 

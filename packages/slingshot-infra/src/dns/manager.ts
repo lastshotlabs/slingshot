@@ -116,6 +116,7 @@ function createCloudflareManager(client: DnsClient, proxied?: boolean): DnsManag
         const answers = data.Answer ?? [];
         return answers.some(a => a.data === expectedValue);
       } catch {
+        // DNS-over-HTTPS lookup failed — treat as unverified
         return false;
       }
     },

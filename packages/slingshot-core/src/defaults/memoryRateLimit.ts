@@ -26,11 +26,11 @@ interface RateLimitEntry {
  * with more than one server process, replace this adapter with a Redis-backed implementation
  * via `ctx.registrar.setRateLimitAdapter(...)` in the auth plugin.
  *
- * **Map eviction strategy:** when the store reaches `DEFAULT_MAX_ENTRIES`, `evictOldest`
- * removes the entries with the smallest `resetAt` timestamps before inserting a new key.
- * This bounds memory use at the cost of occasionally evicting non-expired entries under
- * high cardinality attack conditions (many unique keys). Eviction runs once per new key
- * creation only — updates to existing keys never trigger eviction.
+ * **Map eviction strategy:** On every `trackAttempt`, expired entries (those whose `resetAt`
+ * has passed) are swept first so they do not consume capacity. If the store is still over
+ * `DEFAULT_MAX_ENTRIES` after sweeping, the oldest entries by insertion order are evicted.
+ * This bounds memory use while protecting valid entries from being evicted by stale or
+ * attacker-generated keys.
  *
  * **Production warning:** this adapter is registered as the framework default so the server
  * starts without requiring an auth plugin. Replace it in any deployment that expects
@@ -48,12 +48,23 @@ interface RateLimitEntry {
 export function createMemoryRateLimitAdapter(): RateLimitAdapter {
   const store = new Map<string, RateLimitEntry>();
 
+  function sweepExpired(): void {
+    const now = Date.now();
+    for (const [k, entry] of store) {
+      if (entry.resetAt <= now) store.delete(k);
+    }
+  }
+
   return {
     trackAttempt(key: string, opts: { windowMs: number; max: number }): Promise<boolean> {
       const now = Date.now();
       const existing = store.get(key);
 
       if (!existing || existing.resetAt <= now) {
+        // Sweep expired entries before evicting oldest — this reclaims capacity
+        // from stale windows and protects valid entries from being evicted under
+        // high-cardinality attack conditions.
+        sweepExpired();
         evictOldest(store, DEFAULT_MAX_ENTRIES);
         store.set(key, { count: 1, resetAt: now + opts.windowMs });
         return Promise.resolve(1 > opts.max);

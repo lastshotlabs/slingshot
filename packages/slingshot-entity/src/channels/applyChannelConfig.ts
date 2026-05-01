@@ -269,6 +269,7 @@ export function buildSubscribeGuard(
           declaration.permission.scope,
         );
       } catch {
+        // Permission check failure is treated as denied
         return false;
       }
       if (!allowed && declaration.permission.or) {
@@ -279,6 +280,7 @@ export function buildSubscribeGuard(
             declaration.permission.scope,
           );
         } catch {
+          // Fallback permission check failure is treated as denied
           return false;
         }
       }
@@ -292,10 +294,13 @@ export function buildSubscribeGuard(
         try {
           entity = await deps.getEntity(storageName, entityId);
         } catch {
+          // Entity lookup failure is treated as ownership check denied
           return false;
         }
         if (!entity) return false;
-        if (entity[declaration.permission.ownerField] !== actor.id) return false;
+        // Use loose equality so string "123" matches number 123 from DB rows
+        // eslint-disable-next-line eqeqeq
+        if (entity[declaration.permission.ownerField] != actor.id) return false;
       }
     }
 
@@ -310,6 +315,7 @@ export function buildSubscribeGuard(
         try {
           result = await handler(ws, context);
         } catch {
+          // Middleware that throws is treated as rejecting the subscription
           return false;
         }
         if (!result) return false;
@@ -526,7 +532,7 @@ export function buildEntityReceiveHandlers(
               wsState,
               endpoint,
               room,
-              { event: eventType, room, ...(payload as Record<string, unknown>) },
+              { ...(payload as Record<string, unknown>), event: eventType, room },
               exclude !== undefined ? { exclude } : undefined,
             );
           }

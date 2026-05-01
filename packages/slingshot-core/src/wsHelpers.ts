@@ -68,7 +68,7 @@ export interface WsPluginEndpoint {
    * Subscribe guard for this endpoint. When present, replaces any static
    * `onRoomSubscribe` in the endpoint config.
    */
-  onRoomSubscribe?: (ws: unknown, room: string) => Promise<boolean>;
+  onRoomSubscribe?: (ws: unknown, room: string) => boolean | Promise<boolean>;
   /**
    * Named incoming event handlers. Merged (plugin handlers take precedence)
    * with any static `incoming` in the endpoint config.

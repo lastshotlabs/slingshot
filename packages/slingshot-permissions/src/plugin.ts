@@ -57,6 +57,8 @@ export interface PermissionsHealth {
           readonly status: 'connected' | 'disconnected';
         }
       | undefined;
+    /** Unix timestamp (ms) of the last adapter health check. `undefined` if never checked. */
+    readonly adapterHealthLastChecked: number | undefined;
   };
 }
 
@@ -181,14 +183,35 @@ export function createPermissionsPlugin(
   let adapterNameRef: string | null = null;
   let adapterAvailable = false;
   // Adapter-level health detail — populated when the adapter exposes a
-  // healthCheck() method (e.g. the Postgres adapter).
+  // healthCheck() method (e.g. the Postgres adapter). Refreshed lazily
+  // on getHealth() when the cached value is older than 30s.
   let adapterHealth: PermissionsHealth['details']['adapter'] = undefined;
+  let adapterHealthRef: {
+    healthCheck: () => Promise<{ status: 'connected' | 'disconnected' }>;
+  } | null = null;
+  let lastAdapterHealthCheck = 0;
+  const ADAPTER_HEALTH_TTL_MS = 30_000;
 
   return {
     name: 'slingshot-permissions',
 
     getHealth(): PermissionsHealth {
       const evaluatorHealth = evaluatorRef?.getHealth() ?? null;
+
+      // Refresh adapter health if the cached value is stale.
+      if (
+        adapterHealthRef &&
+        Date.now() - lastAdapterHealthCheck > ADAPTER_HEALTH_TTL_MS
+      ) {
+        void adapterHealthRef.healthCheck().then(aHealth => {
+          adapterHealth = aHealth;
+          lastAdapterHealthCheck = Date.now();
+        }).catch(() => {
+          adapterHealth = { status: 'disconnected' as const };
+          lastAdapterHealthCheck = Date.now();
+        });
+      }
+
       let status: PermissionsHealth['status'] = 'healthy';
       if (!adapterAvailable) {
         status = 'unhealthy';
@@ -207,6 +230,7 @@ export function createPermissionsPlugin(
           adapterName: adapterNameRef,
           evaluator: evaluatorHealth,
           adapter: adapterHealth,
+          adapterHealthLastChecked: lastAdapterHealthCheck || undefined,
         },
       };
     },
@@ -257,13 +281,15 @@ export function createPermissionsPlugin(
       // Capture adapter-level health detail if the adapter exposes a health check.
       const adapterAny = adapter as unknown as Record<string, unknown>;
       if (typeof adapterAny.healthCheck === 'function') {
+        adapterHealthRef = adapterAny as {
+          healthCheck: () => Promise<{ status: 'connected' | 'disconnected' }>;
+        };
         try {
-          const aHealth = await (
-            adapterAny as { healthCheck: () => Promise<{ status: 'connected' | 'disconnected' }> }
-          ).healthCheck();
-          adapterHealth = aHealth;
+          adapterHealth = await adapterHealthRef.healthCheck();
+          lastAdapterHealthCheck = Date.now();
         } catch {
           adapterHealth = { status: 'disconnected' as const };
+          lastAdapterHealthCheck = Date.now();
         }
       }
 

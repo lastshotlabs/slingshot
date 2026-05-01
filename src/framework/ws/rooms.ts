@@ -134,7 +134,7 @@ export const publish = (
         // status -1 = socket closing. Socket cleanup will fire in the close handler.
         if (options?.volatile && status === 0) continue;
         if (options?.trackDelivery && msgId) {
-          state.lastEventIds.set(socketId, msgId);
+          state.lastEventIds.set(`${socketId}\0${room}`, msgId);
         }
       }
     }
@@ -195,64 +195,71 @@ export const handleRoomActions = async <T extends WithSocketId>(
   endpointConfig?: RecoverableEndpointConfig,
   app?: object,
 ): Promise<boolean> => {
+  let raw: string;
   try {
-    const raw = typeof message === 'string' ? message : Buffer.from(message).toString();
-    if (raw.length > MAX_ROOM_ACTION_SIZE) return false;
-    const data = parseRoomActionMessage(raw);
-    if (!data) return false;
-
-    // When the endpoint has recovery configured, presence publishes emitted
-    // from subscribe/unsubscribe must track per-socket last-delivered ids so
-    // recover can resume correctly after reconnect.
-    const trackDelivery = endpointConfig?.recovery ? true : undefined;
-
-    if (data.action === 'subscribe') {
-      if (!isValidRoomName(data.room)) return true;
-      if (onSubscribe) {
-        let allowed: boolean;
-        try {
-          allowed = await onSubscribe(ws, data.room);
-        } catch (error: unknown) {
-          console.error(`[ws] onRoomSubscribe guard error for room "${data.room}":`, error);
-          allowed = false;
-        }
-        if (!allowed) {
-          ws.send(JSON.stringify({ event: 'subscribe_denied', room: data.room }));
-          return true;
-        }
-      }
-      subscribe(state, ws, data.room, { trackDelivery });
-      ws.send(JSON.stringify({ event: 'subscribed', room: data.room }));
-      return true;
-    }
-
-    if (data.action === 'unsubscribe') {
-      if (!isValidRoomName(data.room)) return true;
-      unsubscribe(state, ws, data.room, { trackDelivery });
-      ws.send(JSON.stringify({ event: 'unsubscribed', room: data.room }));
-      return true;
-    }
-
-    if (endpointConfig?.recovery && app) {
-      // Cast justified: T extends WithSocketId, which is a subset of SocketData.
-      // handleRecover needs the full SocketData shape for ws.data.id/endpoint access.
-      // WsState uses unknown at the slingshot-core boundary.
-      await handleRecover(
-        state,
-        ws as unknown as ServerWebSocket<SocketData>,
-        {
-          sessionId: data.sessionId,
-          rooms: data.rooms,
-          lastEventId: data.lastEventId,
-        },
-        endpointConfig,
-        app,
-        subscribe,
-      );
-      return true;
-    }
+    raw = typeof message === 'string' ? message : Buffer.from(message).toString();
   } catch {
-    // not JSON
+    return false;
+  }
+  if (raw.length > MAX_ROOM_ACTION_SIZE) return false;
+
+  let data: RoomAction | null;
+  try {
+    data = parseRoomActionMessage(raw);
+  } catch {
+    return false;
+  }
+  if (!data) return false;
+
+  // When the endpoint has recovery configured, presence publishes emitted
+  // from subscribe/unsubscribe must track per-socket last-delivered ids so
+  // recover can resume correctly after reconnect.
+  const trackDelivery = endpointConfig?.recovery ? true : undefined;
+
+  if (data.action === 'subscribe') {
+    if (!isValidRoomName(data.room)) return true;
+    if (onSubscribe) {
+      let allowed: boolean;
+      try {
+        allowed = await onSubscribe(ws, data.room);
+      } catch (error: unknown) {
+        console.error(`[ws] onRoomSubscribe guard error for room "${data.room}":`, error);
+        allowed = false;
+      }
+      if (!allowed) {
+        ws.send(JSON.stringify({ event: 'subscribe_denied', room: data.room }));
+        return true;
+      }
+    }
+    subscribe(state, ws, data.room, { trackDelivery });
+    ws.send(JSON.stringify({ event: 'subscribed', room: data.room }));
+    return true;
+  }
+
+  if (data.action === 'unsubscribe') {
+    if (!isValidRoomName(data.room)) return true;
+    unsubscribe(state, ws, data.room, { trackDelivery });
+    ws.send(JSON.stringify({ event: 'unsubscribed', room: data.room }));
+    return true;
+  }
+
+  if (endpointConfig?.recovery && app) {
+    // Cast justified: T extends WithSocketId, which is a subset of SocketData.
+    // handleRecover needs the full SocketData shape for ws.data.id/endpoint access.
+    // WsState uses unknown at the slingshot-core boundary.
+    await handleRecover(
+      state,
+      ws as unknown as ServerWebSocket<SocketData>,
+      {
+        sessionId: data.sessionId,
+        rooms: data.rooms,
+        lastEventId: data.lastEventId,
+      },
+      endpointConfig,
+      app,
+      subscribe,
+    );
+    return true;
   }
   return false;
 };

@@ -1,24 +1,36 @@
 ---
-title: AI Draft
-description: AI-assisted starting point for @lastshotlabs/slingshot-runtime-bun
+title: slingshot-runtime-bun
+description: Bun runtime adapter for Slingshot — password, SQLite, fs, glob, HTTP server, WebSocket
 ---
 
-> AI-assisted draft. Use this page for fast orientation, then harden important details in the human guide.
+## Capabilities
 
-## Summary
+All implemented via Bun-native APIs (no external deps at runtime):
 
-@lastshotlabs/slingshot-runtime-bun is the runtime package in the Slingshot workspace.
+| Capability | API |
+|---|---|
+| Password | `Bun.password.hash()` / `.verify()` — bcrypt |
+| SQLite | `bun:sqlite` — CRUD, prepared statements, WAL mode |
+| Filesystem | `Bun.file()`, `Bun.write()` — streaming I/O |
+| Glob | `new Bun.Glob().scan()` |
+| Server | `Bun.serve()` — HTTP + WebSocket |
+| Process safety | SIGTERM/SIGINT handler with controlled fatal exit |
 
-Package documentation for this Slingshot workspace module.
+## Runtime Contract
 
-## Quick Map
+`bunRuntime(opts?)` returns `SlingshotRuntime`. The factory validates and freezes the returned
+object. All capabilities are backed by Bun-native implementations — no polyfills or fallbacks.
 
-- Package kind: Workspace package
-- Public exports: `.`
-- API reference: /api/runtime-bun/
+## Operational Notes
 
-## What To Clarify Next
+- WebSocket lifecycle callbacks are individually try-caught — no single handler crash takes down the server
+- `publish()` failures are caught and logged, never thrown
+- Process safety net is idempotent and detects test environments
+- Known Bun 1.3.11 bug: `stop(true)` never resolves after server-side `ws.close()` — handled via `BUN_STOP_GRACE_MS` race
+- `password.verify()` returns false for malformed hashes instead of throwing
 
-- Add one real setup example for this package.
-- Explain how it integrates with neighboring packages.
-- Record any runtime assumptions or config shapes that changed recently.
+## Key Files
+
+- `src/index.ts` — `bunRuntime()` factory, all capability implementations
+- `src/errors.ts` — `BunRuntimeError`, `BunServerError`, `BunWebSocketError`, `BunSqliteError`, `BunPasswordError`
+- `src/testing.ts` — `createTestServer()`, `resetProcessSafetyNetForTest()`

@@ -912,7 +912,14 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
 
         ws.on('message', rawData => {
           aliveSockets.add(ws);
-          void Promise.resolve(handler.message(rtWs, stringifyWsPayload(rawData))).catch(
+          let payload: string;
+          try {
+            payload = stringifyWsPayload(rawData);
+          } catch (err) {
+            logWebSocketHandlerError('message', err);
+            return;
+          }
+          void Promise.resolve(handler.message(rtWs, payload)).catch(
             (error: unknown) => {
               logWebSocketHandlerError('message', error);
             },
@@ -1114,6 +1121,11 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
               message: err instanceof Error ? err.message : String(err),
               stack: err instanceof Error ? err.stack : undefined,
             });
+            try {
+              pending.socket.destroy();
+            } catch {
+              // socket may already be torn down
+            }
             return false;
           }
           return true;

@@ -174,6 +174,7 @@ async function captureResponsePayload(
       encoding: 'base64',
     };
   } catch {
+    // Response body may be unreadable (e.g. stream already consumed) — skip capture
     return null;
   }
 }
@@ -539,6 +540,7 @@ export function applyRouteConfig(
         try {
           status = c.res.status;
         } catch {
+          // Hono may throw when accessing .status on an uninitialised response — bail safely
           return;
         }
         if (status < 200 || status >= 300) return;

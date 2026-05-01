@@ -159,11 +159,14 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     const userId = wsData.data.actor.id;
     if (!userId) return;
 
+    // Await disconnect handling so cleanup completes before the socket is fully released.
+    // Also iterate all runtimes — a user may be in multiple sessions.
+    const disconnectPromises: Promise<void>[] = [];
     for (const [, runtime] of activeRuntimes) {
       if (runtime.players.has(userId)) {
-        await handleDisconnect(runtime, userId);
-        break;
+        disconnectPromises.push(handleDisconnect(runtime, userId));
       }
     }
+    await Promise.allSettled(disconnectPromises);
   };
 }

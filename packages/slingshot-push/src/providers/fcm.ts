@@ -1,5 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import { TimeoutError, createConsoleLogger, withTimeout } from '@lastshotlabs/slingshot-core';
 import type { FirebaseServiceAccount } from '../types/config';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider } from './provider';
@@ -56,7 +56,10 @@ export class FcmTokenError extends Error {
 class FcmAccessTokenProvider {
   private cached: { token: string; expiresAt: number } | null = null;
 
-  constructor(private readonly serviceAccount: FirebaseServiceAccount) {}
+  constructor(
+    private readonly serviceAccount: FirebaseServiceAccount,
+    private readonly timeoutMs: number,
+  ) {}
 
   async getToken(): Promise<string> {
     const now = Date.now();
@@ -80,16 +83,20 @@ class FcmAccessTokenProvider {
     const signature = signer.sign(createPrivateKey(this.serviceAccount.private_key));
     const assertion = `${header}.${claims}.${base64UrlEncode(signature)}`;
 
-    const response = await fetch(
-      this.serviceAccount.token_uri ?? 'https://oauth2.googleapis.com/token',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion,
-        }),
-      },
+    const response = await withTimeout(
+      fetch(
+        this.serviceAccount.token_uri ?? 'https://oauth2.googleapis.com/token',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            assertion,
+          }),
+        },
+      ),
+      this.timeoutMs,
+      'fcm.token-fetch',
     );
     if (!response.ok) {
       const body = await response.text().catch(() => '');
@@ -144,15 +151,24 @@ class FcmAccessTokenProvider {
  * });
  * ```
  */
+/**
+ * Default timeout (ms) for FCM HTTP requests (token fetch and message send).
+ * A network hang should not block push delivery indefinitely.
+ */
+const DEFAULT_FCM_TIMEOUT_MS = 10_000;
+
 export function createFcmProvider(config: {
   serviceAccount: FirebaseServiceAccount;
   tokenFailureCircuitThreshold?: number;
+  /** Maximum milliseconds for FCM HTTP requests. Default: 10000. */
+  timeoutMs?: number;
 }): PushProvider {
-  const tokens = new FcmAccessTokenProvider(config.serviceAccount);
+  const tokens = new FcmAccessTokenProvider(config.serviceAccount, timeoutMs);
   const circuitThreshold = Math.max(
     1,
     config.tokenFailureCircuitThreshold ?? DEFAULT_FCM_TOKEN_FAILURE_CIRCUIT,
   );
+  const timeoutMs = Math.max(1, config.timeoutMs ?? DEFAULT_FCM_TIMEOUT_MS);
   let consecutiveTokenFailures = 0;
   let lastFailureAt: number | null = null;
 
@@ -250,14 +266,18 @@ export function createFcmProvider(config: {
           };
 
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
+        const response = await withTimeout(
+          fetch(url, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          }),
+          timeoutMs,
+          'fcm.message-send',
+        );
         const json: unknown = await response.json().catch(() => ({}));
         const providerMessageId =
           typeof json === 'object' &&

@@ -8,6 +8,7 @@ import type {
   PermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
 import type { AdminAccessProvider, ManagedUserProvider } from '@lastshotlabs/slingshot-core';
+import type { AdminAuditLogger } from '../lib/auditLogger';
 import type { AdminRateLimitStore } from '../lib/rateLimitStore';
 
 export interface AdminPermissionsConfig {
@@ -30,6 +31,22 @@ export interface AdminPluginConfig {
   auditLog?: AuditLogProvider;
   rateLimitStore?: AdminRateLimitStore;
   permissions: AdminPermissionsConfig;
+  /**
+   * Optional admin-specific audit logger for CRUD operations.
+   *
+   * When provided, each admin route handler records an `AdminAuditEvent` on
+   * every user list, user get, user delete, user suspend, permission grant/
+   * revoke, permission registry read, and mail preview operation.
+   *
+   * This is separate from the lower-level `AuditLogProvider` (`auditLog`)
+   * which records per-request audit entries for destructive verbs. The two
+   * can be used together: `auditLogger` provides a higher-level admin-focused
+   * view while `auditLog` captures detailed request-level entries.
+   *
+   * Built-in factory: `createMemoryAuditLogger()` and
+   * `createConsoleAuditLogger()` from `@lastshotlabs/slingshot-admin`.
+   */
+  auditLogger?: AdminAuditLogger;
   /** Structured logger for operational warnings and errors. Defaults to console. */
   logger?: Logger;
 }
@@ -102,6 +119,12 @@ const AuditLogProviderSchema = z
   .object({
     logEntry: z.function().output(z.promise(z.any())).optional(),
     getLogs: z.function().output(z.promise(z.any())).optional(),
+  })
+  .passthrough();
+
+const AdminAuditLoggerSchema = z
+  .object({
+    log: z.function().optional(),
   })
   .passthrough();
 
@@ -195,6 +218,11 @@ export const adminPluginConfigSchema = z.object({
    */
   rateLimitStore: AdminRateLimitStoreSchema.optional().describe(
     'Pluggable rate-limit store. Omit to use an in-process default (single-instance only).',
+  ),
+  /** Admin-specific audit logger for CRUD operations */
+  auditLogger: AdminAuditLoggerSchema.optional().describe(
+    'Admin audit logger for CRUD operations. In manifest mode, accepts "console" which is resolved ' +
+      'to a ConsoleAuditLogger before the plugin factory. Omit to skip admin audit logging.',
   ),
   /** Required permissions system */
   permissions: z

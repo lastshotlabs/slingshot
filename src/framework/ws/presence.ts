@@ -94,6 +94,30 @@ export const cleanupPresence = (
 };
 
 /**
+ * Remove presence entries for socket IDs no longer in the socket registry.
+ * Called periodically to clean up after unexpected disconnects.
+ */
+export const sweepStalePresence = (state: WsState): void => {
+  for (const [socketId, userId] of state.socketUsers) {
+    if (!state.socketRegistry.has(socketId)) {
+      state.socketUsers.delete(socketId);
+      // Remove socket from all room presence maps
+      for (const [, roomMap] of state.roomPresence) {
+        const sockets = roomMap.get(userId);
+        if (sockets) {
+          sockets.delete(socketId);
+          if (sockets.size === 0) roomMap.delete(userId);
+        }
+      }
+    }
+  }
+  // Clean up empty room presence entries
+  for (const [key, roomMap] of state.roomPresence) {
+    if (roomMap.size === 0) state.roomPresence.delete(key);
+  }
+};
+
+/**
  * Get the list of unique user IDs currently present in a room.
  *
  * @param state - Instance-scoped WebSocket state.

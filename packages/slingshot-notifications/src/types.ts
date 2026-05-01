@@ -89,7 +89,8 @@ export interface NotificationAdapter {
     limit: number;
     now: Date;
     signal?: AbortSignal;
-  }): Promise<NotificationRecord[]>;
+    cursor?: string;
+  }): Promise<{ records: NotificationRecord[]; nextCursor: string | null }>;
   markDispatched(params: { id: string; dispatchedAt: Date }): Promise<void>;
   /**
    * Optional: return the total count of dispatchable rows (scheduled and not

@@ -8,7 +8,8 @@
  *
  * The memory factory performs substring matching on `title` and `body` fields
  * and supports filtering by `containerId`, `tag` (via `tagIds` JSON array),
- * `authorId`, and `status`. Production backends (SQLite, Postgres, Mongo, Redis)
+ * and `authorId`. Public HTTP results are always restricted to published
+ * threads. Production backends (SQLite, Postgres, Mongo, Redis)
  * should delegate to the slingshot-search plugin when available, falling back to
  * native DB queries.
  *
@@ -47,6 +48,7 @@ function parseCursorOffset(cursor: string | undefined): number {
     const n = parseInt(decoded, 10);
     return isNaN(n) ? 0 : n;
   } catch {
+    // Malformed cursor; default to offset 0
     return 0;
   }
 }
@@ -64,6 +66,7 @@ function matchesTagFilter(record: Record<string, unknown>, tag: string): boolean
       const parsed: unknown = JSON.parse(raw);
       tags = Array.isArray(parsed) ? parsed : [];
     } catch {
+      // tagIds string is not valid JSON; no match
       return false;
     }
   } else if (Array.isArray(raw)) {
@@ -72,6 +75,10 @@ function matchesTagFilter(record: Record<string, unknown>, tag: string): boolean
     return false;
   }
   return tags.includes(tag);
+}
+
+function isPublishedRecord(record: Record<string, unknown>): boolean {
+  return record.status === undefined || record.status === 'published';
 }
 
 /**
@@ -97,11 +104,7 @@ export function createSearchInContainerMemoryHandler(
       r => r._softDeleted !== true && r._deleted !== true,
     );
 
-    let items = all.filter(r => r.containerId === params.containerId);
-
-    if (params.status) {
-      items = items.filter(r => r.status === params.status);
-    }
+    let items = all.filter(r => r.containerId === params.containerId && isPublishedRecord(r));
     if (params.authorId) {
       items = items.filter(r => r.authorId === params.authorId);
     }
@@ -165,14 +168,10 @@ export function createSearchInContainerPostgresHandler(
   const client = pool as PostgresQueryHandle;
 
   return async params => {
-    const conditions = ['container_id = $1'];
+    const conditions = ['container_id = $1', "status = 'published'"];
     const values: unknown[] = [params.containerId];
     let paramIdx = 2;
 
-    if (params.status) {
-      conditions.push(`status = $${paramIdx++}`);
-      values.push(params.status);
-    }
     if (params.authorId) {
       conditions.push(`author_id = $${paramIdx++}`);
       values.push(params.authorId);

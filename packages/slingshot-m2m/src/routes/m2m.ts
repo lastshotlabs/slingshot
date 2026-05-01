@@ -156,6 +156,7 @@ export function createM2MRouter(runtime: AuthRuntimeContext) {
         try {
           body = await c.req.json();
         } catch {
+          // Request body is not valid JSON
           return c.json(
             { error: 'invalid_request', error_description: 'Invalid request body' },
             400,

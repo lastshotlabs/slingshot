@@ -258,7 +258,7 @@ describe('createAdminPlugin: optional providers', () => {
     expect(plugin.getHealth().status).toBe('degraded');
   });
 
-  test('plugin reports unhealthy without auditLog even with rateLimitStore', () => {
+  test('plugin reports degraded without auditLog even with rateLimitStore', () => {
     const rateLimitStore: AdminRateLimitStore = {
       async hit() {
         return { count: 0, exceeded: false, resetAt: 0 };
@@ -270,7 +270,7 @@ describe('createAdminPlugin: optional providers', () => {
       permissions,
       rateLimitStore,
     });
-    expect(plugin.getHealth().status).toBe('unhealthy');
+    expect(plugin.getHealth().status).toBe('degraded');
   });
 
   test('mailRenderer defaults are reflected in health', () => {

@@ -7,6 +7,8 @@
  * implementation so all replicas share the same counter.
  */
 
+import { type Logger, noopLogger } from '@lastshotlabs/slingshot-core';
+
 /** Result returned by {@link AdminRateLimitStore.hit}. */
 export interface AdminRateLimitHitResult {
   /** Counter value AFTER this hit was recorded. */
@@ -126,6 +128,11 @@ export interface CreateRedisRateLimitStoreOptions {
    * Redis instance is shared between apps.
    */
   keyPrefix?: string;
+  /**
+   * Optional structured logger for operational warnings (e.g. when PEXPIRE
+   * fails and a key may leak). Defaults to a no-op logger.
+   */
+  logger?: Logger;
 }
 
 const DEFAULT_KEY_PREFIX = 'slingshot:admin:rl:';
@@ -154,6 +161,7 @@ export function createRedisRateLimitStore(
 ): AdminRateLimitStore {
   const { client } = opts;
   const prefix = opts.keyPrefix ?? DEFAULT_KEY_PREFIX;
+  const logger: Logger = opts.logger ?? noopLogger;
 
   return {
     async hit(key, { limit, windowMs }) {
@@ -168,7 +176,12 @@ export function createRedisRateLimitStore(
         // Transaction aborted — fall back to a single INCR so we still apply
         // back-pressure rather than silently allowing the request through.
         count = await client.incr(fullKey);
-        await client.pexpire(fullKey, windowMs).catch(() => {});
+        await client.pexpire(fullKey, windowMs).catch(() => {
+          logger.warn('[slingshot-admin] rate-limit PEXPIRE failed after transaction abort', {
+            event: 'rate_limit_pexpire_failed',
+            key: fullKey,
+          });
+        });
       } else {
         const parsed = extractIncrResult(results[0]);
         count = Number.isFinite(parsed) ? parsed : await client.incr(fullKey);

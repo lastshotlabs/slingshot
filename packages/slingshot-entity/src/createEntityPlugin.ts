@@ -35,6 +35,7 @@ import {
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  createConsoleLogger,
   createRouter,
   defineEvent,
   getContextOrNull,
@@ -766,6 +767,8 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
     );
   }
 
+  const entityLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
+
   // Resolve manifest into entries eagerly — manifest resolution is pure (no infra needed).
   // The buildAdapter closures inside each entry defer factory creation to setupRoutes time.
   const resolvedEntries: Array<EntityPluginEntry | ManifestResolvedEntry> = pluginConfig.manifest
@@ -779,10 +782,9 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
         (entry.extraRoutes?.length || entry.overrides !== undefined),
     )
   ) {
-    console.warn(
-      `[EntityPlugin:${pluginConfig.name}] plugin-entry extraRoutes/overrides are compatibility-only. ` +
-        `Prefer package-level entity(...) authoring under definePackage(...).`,
-    );
+    entityLogger.warn('plugin-entry extraRoutes/overrides are compatibility-only. Prefer package-level entity(...) authoring under definePackage(...).', {
+      entityPlugin: pluginConfig.name,
+    });
   }
 
   const unsubscribers: Array<() => void> = [];
@@ -1012,7 +1014,10 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                   );
                   for (const r of results) {
                     if (r.status === 'rejected') {
-                      console.error(`[cascade:${config._storageName}] delete failed:`, r.reason);
+                      entityLogger.error('cascade delete failed', {
+                      storageName: config._storageName,
+                      error: r.reason instanceof Error ? { name: r.reason.name, message: r.reason.message, stack: r.reason.stack } : r.reason,
+                    });
                     }
                   }
                 }
@@ -1029,7 +1034,10 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                   );
                   for (const r of results) {
                     if (r.status === 'rejected') {
-                      console.error(`[cascade:${config._storageName}] update failed:`, r.reason);
+                      entityLogger.error('cascade update failed', {
+                      storageName: config._storageName,
+                      error: r.reason instanceof Error ? { name: r.reason.name, message: r.reason.message, stack: r.reason.stack } : r.reason,
+                    });
                     }
                   }
                 }
@@ -1095,10 +1103,9 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           const eventKey = extractEventKey(rawEvent);
           const resourceType = entityDef.routes?.permissions?.resourceType;
           if (!eventKey || !resourceType) {
-            console.warn(
-              `[autoGrant:${entityName}] Skipping — requires routes.create.event.key ` +
-                `and routes.permissions.resourceType to be set.`,
-            );
+            entityLogger.warn('autoGrant — requires routes.create.event.key and routes.permissions.resourceType to be set', {
+              entityName,
+            });
             continue;
           }
           const resolvedEntry = resolvedEntries.find(e => e.config.name === entityName);

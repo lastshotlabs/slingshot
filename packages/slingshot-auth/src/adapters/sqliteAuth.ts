@@ -69,6 +69,7 @@ function parseProviderIds(raw: string | null | undefined): string[] {
       ? parsed.filter((value): value is string => typeof value === 'string')
       : [];
   } catch {
+    // Corrupt JSON in providerIds column; treat as empty list
     return [];
   }
 }
@@ -600,6 +601,7 @@ export function createSqliteAuthAdapter(
       try {
         return JSON.parse(row.passwordHistory) as string[];
       } catch {
+        // Corrupt JSON in passwordHistory column; treat as empty
         return [];
       }
     },
@@ -613,6 +615,7 @@ export function createSqliteAuthAdapter(
       try {
         history = JSON.parse(row.passwordHistory) as string[];
       } catch {
+        // Corrupt JSON in passwordHistory column; start fresh
         history = [];
       }
       history.push(hash);
@@ -866,6 +869,7 @@ export function createSqliteAuthAdapter(
         try {
           codes = JSON.parse(row.recoveryCodes || '[]') as string[];
         } catch {
+          // Corrupt JSON in recoveryCodes column; nothing to consume
           return;
         }
         const idx = codes.indexOf(code);
@@ -890,6 +894,7 @@ export function createSqliteAuthAdapter(
         try {
           codes = JSON.parse(row.recoveryCodes || '[]') as string[];
         } catch {
+          // Corrupt JSON in recoveryCodes column; verification fails
           return false;
         }
 

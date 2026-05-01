@@ -93,12 +93,12 @@ describe('createAdminPlugin teardown()', () => {
     });
 
     const before = plugin.getHealth();
-    expect(before.status).toBe('unhealthy');
+    expect(before.status).toBe('degraded');
 
     await plugin.teardown?.();
 
     const after = plugin.getHealth();
-    expect(after.status).toBe('unhealthy');
+    expect(after.status).toBe('degraded');
     expect(after.details.auditLogConfigured).toBe(before.details.auditLogConfigured);
     expect(after.details.mountPath).toBe(before.details.mountPath);
   });

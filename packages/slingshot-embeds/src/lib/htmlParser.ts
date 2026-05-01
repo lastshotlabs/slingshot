@@ -103,6 +103,7 @@ function resolveUrl(value: string | undefined, baseUrl: string): string | undefi
   try {
     return new URL(value, baseUrl).href;
   } catch {
+    // Invalid URL — return the original value as-is
     return value;
   }
 }

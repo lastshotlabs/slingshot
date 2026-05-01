@@ -151,7 +151,7 @@ describe('createIntervalDispatcher', () => {
     });
     const listPendingDispatch = mock(async () => {
       await tickBlocked;
-      return [];
+      return { records: [], nextCursor: null };
     });
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
@@ -256,7 +256,7 @@ describe('createIntervalDispatcher', () => {
       createdAt: new Date(),
     }));
 
-    const listPendingDispatch = mock(async () => oversizeRows);
+    const listPendingDispatch = mock(async () => ({ records: oversizeRows, nextCursor: null }));
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
@@ -414,7 +414,7 @@ describe('createIntervalDispatcher', () => {
     });
     const listPendingDispatch = mock(async () => {
       await tickBlocked;
-      return [];
+      return { records: [], nextCursor: null };
     });
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }

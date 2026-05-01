@@ -28,6 +28,55 @@ import { stringifyDocumentId, stringifySearchValue } from './stringify';
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:algolia' } });
 
 // ============================================================================
+// Transient error classification
+// ============================================================================
+
+/**
+ * Returns `true` when the error represents a transient condition from the
+ * Algolia provider that should be retried.
+ *
+ * Transient conditions include:
+ * - Network-level failures (timeout, connection refused, DNS failure)
+ * - HTTP 408 (Request Timeout) and 429 (Rate Limit Exceeded)
+ * - HTTP 5xx (server errors)
+ * - Service-unavailable messages
+ *
+ * Non-transient 4xx errors (bad request, authentication failure, not found,
+ * conflict) are returned as `false` because retrying them would be pointless.
+ */
+export function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message;
+  const lower = msg.toLowerCase();
+
+  // Network / transport errors
+  if (lower.includes('timeout') || lower.includes('timed out')) return true;
+  if (lower.includes('econnrefused') || lower.includes('connection refused')) return true;
+  if (lower.includes('econnreset') || lower.includes('socket hang up')) return true;
+  if (lower.includes('etimedout') || lower.includes('eai_again')) return true;
+  if (lower.includes('enotfound') || lower.includes('enxio')) return true;
+
+  // Retryable HTTP status codes
+  if (
+    lower.includes('408') ||
+    lower.includes('429') ||
+    lower.includes('503') ||
+    lower.includes('502') ||
+    lower.includes('504')
+  )
+    return true;
+
+  // Service-level messages
+  if (lower.includes('service unavailable') || lower.includes('too many requests')) return true;
+
+  // Algolia-specific transient codes carried in the error body
+  if (lower.includes('algolia') && (lower.includes('temporarily') || lower.includes('retry')))
+    return true;
+
+  return false;
+}
+
+// ============================================================================
 // Internal HTTP client
 // ============================================================================
 
@@ -96,17 +145,11 @@ function createHttpClient(config: HttpClientConfig) {
             `[slingshot-search:algolia] HTTP ${response.status} ${method} ${path}: ${errorBody}`,
           );
 
-          if (
-            response.status >= 400 &&
-            response.status < 500 &&
-            response.status !== 408 &&
-            response.status !== 429
-          ) {
-            throw error;
+          if (isTransientError(error)) {
+            lastError = error;
+            continue;
           }
-
-          lastError = error;
-          continue;
+          throw error;
         }
 
         if (response.status === 204) {
@@ -121,6 +164,10 @@ function createHttpClient(config: HttpClientConfig) {
             `[slingshot-search:algolia] Request timeout after ${timeoutMs}ms: ${method} ${path}`,
           );
         } else if (err instanceof Error && err.message.startsWith('[slingshot-search:algolia]')) {
+          if (isTransientError(err)) {
+            lastError = err;
+            continue;
+          }
           throw err;
         } else {
           lastError = err instanceof Error ? err : new Error(String(err));

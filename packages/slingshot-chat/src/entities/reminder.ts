@@ -29,15 +29,21 @@ export const Reminder = defineEntity('Reminder', {
   indexes: [index(['userId', 'triggered']), index(['triggerAt', 'triggered'])],
   routes: {
     defaults: { auth: 'userAuth' },
+    disable: ['claimDueReminders'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {
+      permission: {
+        requires: 'chat:room.read',
+        scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
+      },
       event: { key: 'chat:reminder.created', payload: ['id', 'userId', 'roomId', 'triggerAt'] },
     },
     delete: {},
     operations: {
       listPending: { auth: 'userAuth', method: 'post', path: 'list-pending' },
+      claimDueReminders: { auth: 'userAuth' },
     },
   },
 });

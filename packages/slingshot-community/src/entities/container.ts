@@ -50,6 +50,7 @@ export const Container = defineEntity('Container', {
   softDelete: { field: 'deletedAt', strategy: 'non-null' },
   routes: {
     defaults: { auth: 'userAuth' },
+    dataScope: { field: 'createdBy', from: 'ctx:actor.id', applyTo: ['create'] },
 
     get: { auth: 'none' },
     list: { auth: 'none' },

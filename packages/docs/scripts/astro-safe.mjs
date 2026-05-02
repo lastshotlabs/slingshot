@@ -1,7 +1,7 @@
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
-import Module, { registerHooks, syncBuiltinESMExports } from 'node:module';
+import Module, { syncBuiltinESMExports } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,6 +16,8 @@ const esbuildShimUrl = pathToFileURL(resolve(__dirname, 'esbuild-safe-shim.mjs')
 const esbuildShimPath = resolve(__dirname, 'esbuild-safe-shim.cjs');
 const starlightRoutePrefix = '@astrojs/starlight/routes/';
 const astroCommand = process.env.SLINGSHOT_DOCS_ASTRO_COMMAND ?? process.argv[2];
+const registerHooks =
+  typeof Module.registerHooks === 'function' ? Module.registerHooks.bind(Module) : undefined;
 
 if (astroCommand === 'dev') {
   Module._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
@@ -189,18 +191,20 @@ if (spawnBlocked) {
     return originalSpawn.call(this, command, args, options);
   };
 
-  registerHooks({
-    resolve(specifier, context, nextResolve) {
-      if (specifier === 'esbuild') {
-        return {
-          shortCircuit: true,
-          url: esbuildShimUrl,
-        };
-      }
+  if (registerHooks) {
+    registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier === 'esbuild') {
+          return {
+            shortCircuit: true,
+            url: esbuildShimUrl,
+          };
+        }
 
-      return nextResolve(specifier, context);
-    },
-  });
+        return nextResolve(specifier, context);
+      },
+    });
+  }
 
   Module._load = function patchedModuleLoad(request, parent, isMain) {
     const normalizedRequest = typeof request === 'string' ? request.replace(/\\/g, '/') : '';

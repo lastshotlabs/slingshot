@@ -34,48 +34,39 @@ bun add @lastshotlabs/slingshot \
 ## Setup
 
 <Tabs>
-  <TabItem label="Manifest (zero-code)">
-    ```json title="app.manifest.json"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "security": {
-        "signing": { "secret": "${secret:JWT_SECRET}" }
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": {
-              "roles": ["user", "admin"],
-              "defaultRole": "user",
-              "passwordReset": { "tokenExpiry": 3600 }
-            },
-            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
-          }
-        },
-        {
-          "plugin": "slingshot-organizations",
-          "config": {
-            "organizations": {
-              "defaultMemberRole": "member"
-            }
-          }
-        },
-        {
-          "plugin": "slingshot-permissions",
-          "config": {}
-        },
-        {
-          "plugin": "slingshot-search",
-          "config": {
-            "providers": {
-              "default": { "provider": "db-native" }
-            }
-          }
-        }
-      ]
-    }
+  <TabItem label="App Config">
+    ```typescript title="app.config.ts"
+    // @skip-typecheck
+    import { defineApp } from '@lastshotlabs/slingshot';
+    import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
+    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+
+    export default defineApp({
+      port: 3000,
+      security: { signing: { secret: process.env.JWT_SECRET! } },
+      plugins: [
+        createAuthPlugin({
+          auth: {
+            roles: ['user', 'admin'],
+            defaultRole: 'user',
+            passwordReset: { tokenExpiry: 3600 },
+          },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createOrganizationsPlugin({
+          organizations: { enabled: true, defaultMemberRole: 'member' },
+        }),
+        createPermissionsPlugin(),
+        createSearchPlugin({
+          providers: { default: { provider: 'db-native' } },
+          tenantResolver: c => getRequestTenantId(c) ?? undefined,
+          tenantField: 'organizationId',
+        }),
+      ],
+    });
     ```
 
     ```bash
@@ -84,16 +75,16 @@ bun add @lastshotlabs/slingshot \
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
+    ```typescript title="app.config.ts"
     // @skip-typecheck
-    import { createServer } from '@lastshotlabs/slingshot';
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
     import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
     import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       security: { signing: { secret: process.env.SECRET! } },
       plugins: [

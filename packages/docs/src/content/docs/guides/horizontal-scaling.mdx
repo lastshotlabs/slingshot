@@ -23,7 +23,7 @@ Switch auth sessions to Redis. Each instance reads and writes the same session s
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "db": {
@@ -68,7 +68,7 @@ Switch to a shared event bus so app events cross instances. The built-in manifes
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "eventBus": "bullmq",
       "secrets": { "provider": "env" }
@@ -76,11 +76,11 @@ Switch to a shared event bus so app events cross instances. The built-in manifes
     ```
   </TabItem>
   <TabItem label="Code">
-    ```typescript
-    import { createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts (excerpt)"
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
 
-    await createServer({
+    export default defineApp({
       eventBus: createBullMQAdapter({
         connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
         prefix: 'slingshot:events',
@@ -104,7 +104,7 @@ Bun's native `ws.publish()` is in-process only. WebSocket room fan-out uses `ws.
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "db": {
         "redis": "${env:REDIS_URL}"
@@ -125,10 +125,10 @@ Bun's native `ws.publish()` is in-process only. WebSocket room fan-out uses `ws.
     ```
   </TabItem>
   <TabItem label="Code">
-    ```typescript
-    import { createRedisTransport, createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts (excerpt)"
+    import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
 
-    await createServer({
+    export default defineApp({
       ws: {
         transport: createRedisTransport({
           connection: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
@@ -171,7 +171,7 @@ For ECS, the generated `sst.config.ts` sets up ALB with health check routing. Fo
 
 In-memory rate limiting doesn't scale. Switch the rate limiter to Redis:
 
-```json title="app.manifest.json"
+```json title="app.config.ts"
 {
   "security": {
     "rateLimit": {
@@ -202,7 +202,7 @@ Switch the cache adapter to Redis so all instances share the same cache:
 
 ## Full multi-instance config
 
-```json title="app.manifest.json"
+```json title="app.config.ts"
 {
   "manifestVersion": 1,
   "port": 3000,

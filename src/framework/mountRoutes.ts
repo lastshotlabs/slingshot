@@ -116,7 +116,7 @@ function registerSecuritySchemes(registry: OpenAPIHono<AppEnv>['openAPIRegistry'
  * Register the OpenAPI JSON spec endpoint and the Scalar docs UI on `app`.
  *
  * Called by `mountFlatRoutes` for apps with a `routesDir`, and directly by
- * `createApp` for manifest-driven apps that have no `routesDir` but still
+ * `createApp` for config-driven apps that have no `routesDir` but still
  * need `/openapi.json` and `/docs`.
  *
  * @param app - The `OpenAPIHono` app to mount the endpoints on.

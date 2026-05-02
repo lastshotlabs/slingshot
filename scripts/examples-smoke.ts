@@ -1,13 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   type CodeAppCheck,
   type ExampleCheckDefinition,
-  type ManifestCheck,
   type ModuleExportsCheck,
   exampleRegistry,
 } from '../examples/registry.ts';
-import { createApp, validateAppManifest } from '../src/index.ts';
+import { createApp } from '../src/index.ts';
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -17,6 +17,50 @@ export async function importModule(
 ): Promise<Record<string, unknown>> {
   const moduleUrl = pathToFileURL(resolve(root, entrypoint)).href;
   return (await import(moduleUrl)) as Record<string, unknown>;
+}
+
+// Server-only keys that `defineApp()` accepts but `createApp()` does not — strip
+// them before calling createApp so the smoke check doesn't trigger spurious
+// "unknown config key" warnings.
+const SERVER_ONLY_KEYS = new Set([
+  'port',
+  'hostname',
+  'unix',
+  'tls',
+  'workersDir',
+  'enableWorkers',
+  'sse',
+  'maxRequestBodySize',
+]);
+
+function stripServerOnlyKeys(config: unknown): Record<string, unknown> {
+  if (!config || typeof config !== 'object') return {};
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config as Record<string, unknown>)) {
+    if (!SERVER_ONLY_KEYS.has(key)) result[key] = value;
+  }
+  return result;
+}
+
+function loadConfigFromModule(mod: Record<string, unknown>): Record<string, unknown> | null {
+  const defaultExport = mod.default;
+  if (defaultExport && typeof defaultExport === 'object') {
+    return defaultExport as Record<string, unknown>;
+  }
+  return null;
+}
+
+function hasStaticExport(source: string, exportName: string): boolean {
+  if (exportName === 'default') {
+    return /\bexport\s+default\b/.test(source);
+  }
+
+  const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const declaration = new RegExp(
+    `\\bexport\\s+(?:async\\s+)?(?:const|let|var|function|class)\\s+${escaped}\\b`,
+  );
+  const namedList = new RegExp(`\\bexport\\s*\\{[^}]*\\b${escaped}\\b[^}]*\\}`);
+  return declaration.test(source) || namedList.test(source);
 }
 
 export async function smokeCodeExample(
@@ -29,52 +73,21 @@ export async function smokeCodeExample(
 ): Promise<void> {
   const importModuleFn = options.importModuleFn ?? importModule;
   const createAppFn = options.createAppFn ?? createApp;
-  const mod = (await importModuleFn(example.entrypoint, options.root)) as {
-    buildAppConfig?: () => unknown;
-  };
+  const mod = await importModuleFn(example.entrypoint, options.root);
+  const config = loadConfigFromModule(mod);
 
-  if (typeof mod.buildAppConfig !== 'function') {
-    throw new Error(`${example.entrypoint} must export buildAppConfig()`);
+  if (!config) {
+    throw new Error(`${example.entrypoint} must export a defineApp() default`);
   }
 
-  const config = mod.buildAppConfig();
-  const result = await createAppFn(config as Parameters<typeof createApp>[0]);
+  const appConfig = stripServerOnlyKeys(config);
+  const result = await createAppFn(appConfig as Parameters<typeof createApp>[0]);
 
   if (!result.app || !result.ctx) {
     throw new Error(`${example.name} did not return a Slingshot app and context`);
   }
 
   await result.ctx.destroy();
-}
-
-export async function smokeManifestExample(
-  example: ManifestCheck,
-  options: {
-    importModuleFn?: typeof importModule;
-    root?: string;
-    validateAppManifestFn?: typeof validateAppManifest;
-  } = {},
-): Promise<void> {
-  const root = options.root ?? repoRoot;
-  const validateAppManifestFn = options.validateAppManifestFn ?? validateAppManifest;
-  const manifestFile = Bun.file(resolve(root, example.manifestPath));
-  const raw = await manifestFile.json();
-  const result = validateAppManifestFn(raw);
-
-  if (!result.success) {
-    throw new Error(result.errors.join('\n'));
-  }
-
-  if (example.handlerModule && example.handlerExports?.length) {
-    const importModuleFn = options.importModuleFn ?? importModule;
-    const mod = await importModuleFn(example.handlerModule, root);
-
-    for (const exportName of example.handlerExports) {
-      if (!(exportName in mod)) {
-        throw new Error(`${example.handlerModule} is missing export "${exportName}"`);
-      }
-    }
-  }
 }
 
 export async function smokeModuleExportsExample(
@@ -85,24 +98,31 @@ export async function smokeModuleExportsExample(
   } = {},
 ): Promise<void> {
   const importModuleFn = options.importModuleFn ?? importModule;
-  const mod = await importModuleFn(example.entrypoint, options.root);
 
+  if (!example.requiredPlugins?.length) {
+    const root = options.root ?? repoRoot;
+    const source = readFileSync(resolve(root, example.entrypoint), 'utf8');
+    for (const exportName of example.exports) {
+      if (!hasStaticExport(source, exportName)) {
+        throw new Error(`${example.entrypoint} is missing export "${exportName}"`);
+      }
+    }
+    return;
+  }
+
+  const mod = await importModuleFn(example.entrypoint, options.root);
   for (const exportName of example.exports) {
     if (!(exportName in mod)) {
       throw new Error(`${example.entrypoint} is missing export "${exportName}"`);
     }
   }
 
-  if (!example.requiredPlugins?.length) {
-    return;
+  const config = loadConfigFromModule(mod) as { plugins?: Array<{ name?: string }> } | null;
+
+  if (!config) {
+    throw new Error(`${example.entrypoint} must export a defineApp() default to validate plugins`);
   }
 
-  const buildAppConfig = mod.buildAppConfig;
-  if (typeof buildAppConfig !== 'function') {
-    throw new Error(`${example.entrypoint} must export buildAppConfig() to validate plugins`);
-  }
-
-  const config = buildAppConfig() as { plugins?: Array<{ name?: string }> };
   const pluginNames = new Set((config.plugins ?? []).map(plugin => plugin.name).filter(Boolean));
 
   for (const requiredPlugin of example.requiredPlugins) {
@@ -119,16 +139,10 @@ export async function runCheck(
     createAppFn?: typeof createApp;
     importModuleFn?: typeof importModule;
     root?: string;
-    validateAppManifestFn?: typeof validateAppManifest;
   } = {},
 ): Promise<void> {
   if (check.kind === 'code-app') {
     await smokeCodeExample(check, options);
-    return;
-  }
-
-  if (check.kind === 'manifest') {
-    await smokeManifestExample(check, options);
     return;
   }
 
@@ -142,7 +156,6 @@ export async function runExamplesSmoke(
     createAppFn?: typeof createApp;
     importModuleFn?: typeof importModule;
     root?: string;
-    validateAppManifestFn?: typeof validateAppManifest;
     stdout?: Pick<NodeJS.WriteStream, 'write'>;
   } = {},
 ): Promise<void> {

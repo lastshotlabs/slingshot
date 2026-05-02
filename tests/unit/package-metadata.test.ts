@@ -61,6 +61,24 @@ function targetIsPackaged(target: string, files: string[]): boolean {
 }
 
 describe('package metadata', () => {
+  test('root package exports point at emitted source artifacts', () => {
+    const manifest = readJson(join(process.cwd(), 'package.json'));
+    const offenders: string[] = [];
+
+    for (const { path, target } of collectExportTargets(manifest.exports)) {
+      if (!target.startsWith('./dist/')) continue;
+      const sourceTarget = target
+        .slice('./dist/'.length)
+        .replace(/\.d\.ts$/, '.ts')
+        .replace(/\.js$/, '.ts');
+      if (!existsSync(join(process.cwd(), sourceTarget))) {
+        offenders.push(`${path} -> ${target} has no source file ${sourceTarget}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   test('publishable workspace packages do not expose raw source runtime targets', () => {
     const offenders: string[] = [];
 

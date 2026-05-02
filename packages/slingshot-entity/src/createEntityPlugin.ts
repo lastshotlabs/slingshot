@@ -340,6 +340,24 @@ type SetupRoutePlanEntry = {
   plannedRoutes: PlannedEntityRoute[];
 };
 
+const ENTITY_PLUGIN_TOOLING_METADATA = Symbol.for('slingshot.entity.plugin.toolingMetadata');
+
+export interface EntityPluginToolingMetadata {
+  manifest?: MultiEntityManifest;
+  entries: readonly EntityPluginEntry[];
+}
+
+export function getEntityPluginToolingMetadata(
+  plugin: unknown,
+): EntityPluginToolingMetadata | null {
+  if (!plugin || typeof plugin !== 'object') return null;
+  return (
+    ((plugin as Record<symbol, EntityPluginToolingMetadata | undefined>)[
+      ENTITY_PLUGIN_TOOLING_METADATA
+    ] as EntityPluginToolingMetadata | undefined) ?? null
+  );
+}
+
 /**
  * Resolve a `MultiEntityManifest` into `EntityPluginEntryManual[]`.
  *
@@ -782,9 +800,12 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
         (entry.extraRoutes?.length || entry.overrides !== undefined),
     )
   ) {
-    entityLogger.warn('plugin-entry extraRoutes/overrides are compatibility-only. Prefer package-level entity(...) authoring under definePackage(...).', {
-      entityPlugin: pluginConfig.name,
-    });
+    entityLogger.warn(
+      'plugin-entry extraRoutes/overrides are compatibility-only. Prefer package-level entity(...) authoring under definePackage(...).',
+      {
+        entityPlugin: pluginConfig.name,
+      },
+    );
   }
 
   const unsubscribers: Array<() => void> = [];
@@ -808,7 +829,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
 
   const dependencies = pluginConfig.dependencies;
 
-  return {
+  const plugin: EntityPlugin = {
     name: pluginConfig.name,
     dependencies,
 
@@ -1015,9 +1036,16 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                   for (const r of results) {
                     if (r.status === 'rejected') {
                       entityLogger.error('cascade delete failed', {
-                      storageName: config._storageName,
-                      error: r.reason instanceof Error ? { name: r.reason.name, message: r.reason.message, stack: r.reason.stack } : r.reason,
-                    });
+                        storageName: config._storageName,
+                        error:
+                          r.reason instanceof Error
+                            ? {
+                                name: r.reason.name,
+                                message: r.reason.message,
+                                stack: r.reason.stack,
+                              }
+                            : r.reason,
+                      });
                     }
                   }
                 }
@@ -1035,9 +1063,16 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                   for (const r of results) {
                     if (r.status === 'rejected') {
                       entityLogger.error('cascade update failed', {
-                      storageName: config._storageName,
-                      error: r.reason instanceof Error ? { name: r.reason.name, message: r.reason.message, stack: r.reason.stack } : r.reason,
-                    });
+                        storageName: config._storageName,
+                        error:
+                          r.reason instanceof Error
+                            ? {
+                                name: r.reason.name,
+                                message: r.reason.message,
+                                stack: r.reason.stack,
+                              }
+                            : r.reason,
+                      });
                     }
                   }
                 }
@@ -1103,9 +1138,12 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           const eventKey = extractEventKey(rawEvent);
           const resourceType = entityDef.routes?.permissions?.resourceType;
           if (!eventKey || !resourceType) {
-            entityLogger.warn('autoGrant — requires routes.create.event.key and routes.permissions.resourceType to be set', {
-              entityName,
-            });
+            entityLogger.warn(
+              'autoGrant — requires routes.create.event.key and routes.permissions.resourceType to be set',
+              {
+                entityName,
+              },
+            );
             continue;
           }
           const resolvedEntry = resolvedEntries.find(e => e.config.name === entityName);
@@ -1256,6 +1294,15 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
       return merged;
     },
   };
+
+  Object.defineProperty(plugin, ENTITY_PLUGIN_TOOLING_METADATA, {
+    value: {
+      ...(pluginConfig.manifest ? { manifest: pluginConfig.manifest } : {}),
+      entries: resolvedEntries,
+    } satisfies EntityPluginToolingMetadata,
+  });
+
+  return plugin;
 }
 
 // ---------------------------------------------------------------------------

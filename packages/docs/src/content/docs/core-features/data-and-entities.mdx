@@ -12,8 +12,8 @@ In Slingshot, you define the model once and the framework generates the rest.
 
 ## Your first entity
 
-```typescript
-import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
 const Task = defineEntity('Task', {
   namespace: 'app',
@@ -29,7 +29,7 @@ const appPackage = definePackage({
   entities: [entity({ config: Task })],
 });
 
-await createServer({ port: 3000, packages: [appPackage] });
+export default defineApp({ port: 3000, packages: [appPackage] });
 ```
 
 That gives you five working routes:

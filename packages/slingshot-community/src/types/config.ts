@@ -167,7 +167,7 @@ export interface ModerationTarget {
  *
  * @remarks
  * The `wsEndpoint` must be declared in the app's `WsConfig.endpoints` with
- * `presence: true`. In manifest mode only `wsEndpoint` is required — the plugin
+ * `presence: true`. In config-driven mode only `wsEndpoint` is required — the plugin
  * self-wires its subscribe guard and incoming handlers during `setupPost` using
  * `SlingshotContext.wsPublish` and `SlingshotContext.ws`.
  *
@@ -198,7 +198,7 @@ export interface CommunityWsConfig {
  * for tooling.
  *
  * @remarks
- * The schema is intentionally JSON-safe for manifest mode. Live runtime
+ * The schema is intentionally JSON-safe for config-driven mode. Live runtime
  * objects such as permissions adapters, admin gates, and callback hooks are
  * resolved from plugin/app state during setup rather than accepted here.
  *

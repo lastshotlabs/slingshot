@@ -1,0 +1,76 @@
+import { fileURLToPath } from 'node:url';
+import { edgeRuntime } from '../../packages/runtime-edge/src/index.ts';
+import { type KvNamespace, createKvIsrCache } from '../../packages/runtime-edge/src/kv-isr.ts';
+import { createAssetsPlugin } from '../../packages/slingshot-assets/src/index.ts';
+import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
+import { createCommunityPlugin } from '../../packages/slingshot-community/src/index.ts';
+import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
+import { createNotificationsPlugin } from '../../packages/slingshot-notifications/src/index.ts';
+import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
+import { createSearchPlugin } from '../../packages/slingshot-search/src/index.ts';
+import { createSsrPlugin } from '../../packages/slingshot-ssr/src/index.ts';
+import { defineApp } from '../../src/index.ts';
+import { renderer } from './src/renderer.ts';
+
+const serverRoutesDir = fileURLToPath(new URL('./server/routes/', import.meta.url));
+const assetsManifest = fileURLToPath(new URL('./client-manifest.json', import.meta.url));
+const staticDir = fileURLToPath(new URL('./dist/static/', import.meta.url));
+
+const inMemoryKv: KvNamespace = {
+  async get() {
+    return null;
+  },
+  async put() {},
+  async delete() {},
+  async list() {
+    return { keys: [] };
+  },
+};
+
+export default defineApp({
+  port: 3000,
+  runtime: edgeRuntime({
+    fileStore: async () => null,
+  }),
+  db: { mongo: false, redis: false },
+  security: {
+    signing: {
+      secret: process.env.JWT_SECRET ?? 'dev-secret-change-me-dev-secret-change-me',
+    },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createNotificationsPlugin({
+      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+    }),
+    createPermissionsPlugin(),
+    createCommunityPlugin({ containerCreation: 'admin' }),
+    createAssetsPlugin({
+      storage: { adapter: 'memory' },
+      presignedUrls: true,
+      image: { allowedOrigins: ['assets.example.com'] },
+    }),
+    createSearchPlugin({
+      providers: {
+        default: { provider: 'db-native' },
+      },
+    }),
+    createDeepLinksPlugin({
+      fallbackBaseUrl: 'https://content.example.com',
+      fallbackRedirects: {
+        '/open/*': '/articles/:id',
+      },
+    }),
+    createSsrPlugin({
+      renderer,
+      serverRoutesDir,
+      assetsManifest,
+      staticDir,
+      draftModeSecret: process.env.DRAFT_MODE_SECRET ?? 'draft-secret',
+      isr: { adapter: createKvIsrCache(inMemoryKv) },
+    }),
+  ],
+});

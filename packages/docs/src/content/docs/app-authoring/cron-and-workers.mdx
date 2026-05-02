@@ -1,0 +1,109 @@
+---
+title: Cron and Background Workers
+description: Run scheduled and queue-driven workers from the same app config
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Some work doesn't fit on the request path — nightly cleanup, periodic digest emails,
+queue consumers that drain a backlog. Slingshot mounts these workers alongside your
+HTTP routes via the `workersDir` config: every `.ts` file in that directory is loaded
+at startup and registered with the framework's queue infrastructure.
+
+## What you can do
+
+- Auto-load all worker files from a directory at startup
+- Schedule cron-driven workers with cron expressions or fixed intervals
+- Register queue consumers that process jobs as they arrive
+- Boot workers with the server and drain them on shutdown — same lifecycle
+- Disable worker discovery for tests or single-purpose deploys
+
+## Point app config at a workers directory
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'my-app', version: '1.0.0' },
+  workersDir: import.meta.dir + '/src/workers',
+  db: {
+    redis: process.env.REDIS_URL,
+  },
+});
+```
+
+`createServer()` discovers every `.ts` file under `workersDir` and imports its default
+export. Workers need Redis credentials — they're queue-backed via BullMQ — so make sure
+`db.redis` is configured.
+
+## A worker file
+
+A worker file's default export is a `SlingshotWorker` — a function that receives a
+`QueueFactory` and returns the registered worker names. Use the factory to create
+cron-driven or queue-driven workers; return their names so the framework can clean up
+stale schedulers from previous deploys:
+
+```typescript title="src/workers/digest.ts"
+// @skip-typecheck
+import type { SlingshotWorker } from '@lastshotlabs/slingshot/queue';
+
+const digestWorker: SlingshotWorker = async factory => {
+  const { registeredName } = factory.createCronWorker(
+    'digest-emails',
+    async job => {
+      // job.data is whatever you queued — for cron workers it's typically empty
+      await sendDailyDigests();
+    },
+    { cron: '0 9 * * *', timezone: 'UTC' },
+  );
+
+  return [registeredName];
+};
+
+export default digestWorker;
+
+declare function sendDailyDigests(): Promise<void>;
+```
+
+For queue consumers (jobs enqueued by request handlers), use `factory.createWorker`
+and return the queue name so it's tracked the same way. Multiple workers per file are
+fine — return all their names in the array.
+
+## Disable worker auto-load
+
+For tests, isolated CLI tasks, or HTTP-only deploys that scale separately from
+worker deploys, set `enableWorkers: false`:
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'api', version: '1.0.0' },
+  workersDir: './src/workers',
+  enableWorkers: process.env.ROLE !== 'api',
+});
+```
+
+A common pattern is one repo, two deploys: an `api` role that handles HTTP only and a
+`worker` role that runs the same image with `enableWorkers: true` and HTTP traffic
+disabled at the load balancer.
+
+<Aside type="tip">
+  The framework also tracks worker names across deploys. When a worker is removed from
+  `workersDir`, its scheduler is cleaned up on the next boot — no orphaned cron jobs
+  stuck in Redis.
+</Aside>
+
+## When you need full task orchestration
+
+`workersDir` is the right primitive for one-off scheduled jobs and simple queue
+consumers. For multi-step pipelines, retries with backoff, durable workflow state, and
+cross-process orchestration, reach for the orchestration plugin (BullMQ or Temporal
+adapter) instead — it gives you task and workflow definitions that compose with the
+event bus.
+
+## What's next
+
+- [Background Jobs](/slingshot/core-features/jobs-and-orchestration/) — full task and workflow orchestration
+- [Health Checks](/slingshot/app-authoring/health-checks/) — surface worker health on `/health`
+- [Production Readiness](/slingshot/guides/production-readiness/) — pre-deploy checklist

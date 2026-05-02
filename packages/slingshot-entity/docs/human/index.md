@@ -44,7 +44,7 @@ The goal is to make the declarative path easier than the hand-wired path.
 
 `createEntityPlugin()` and the routing helpers are the runtime proof that the same definitions can drive live packages, not just generated code. This is what lets packages like community express behavior through entity config, middleware references, registry-backed route events, composed extra routes, and generated executor overrides instead of bespoke route files.
 
-The default code-first path is now package-first: `definePackage(...)` owns composition and
+The default composition path is now package-first: `definePackage(...)` owns composition and
 `entity(...)` is the canonical home for entity-owned runtime behavior. `createEntityPlugin()` stays
 available as the lower-level compatibility and escape-hatch surface.
 

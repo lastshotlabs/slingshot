@@ -20,16 +20,16 @@ export default class MigrateDev extends Command {
       description: 'Migration name (used in the filename, e.g. `add_nickname`).',
       required: true,
     }),
-    manifest: Flags.string({
-      char: 'm',
-      description: 'Path to the app manifest. Defaults to ./app.manifest.json.',
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to the app config file. Defaults to ./app.config.ts.',
     }),
     backend: Flags.string({
-      description: 'Target backend. Auto-detected from manifest db config when omitted.',
+      description: 'Target backend. Auto-detected from app config db settings when omitted.',
       options: ['postgres', 'sqlite', 'mongo'],
     }),
     'db-url': Flags.string({
-      description: 'Override connection string. Falls back to DATABASE_URL or manifest.',
+      description: 'Override connection string. Falls back to DATABASE_URL or app config.',
     }),
     'snapshot-dir': Flags.string({
       description: 'Directory for entity snapshots.',
@@ -44,11 +44,11 @@ export default class MigrateDev extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(MigrateDev);
 
-    const manifest = loadManifest(flags.manifest);
+    const manifest = await loadManifest(flags.config);
     if (Object.keys(manifest.entities).length === 0) {
       this.error(
-        `No entities declared in ${manifest.manifestPath}. Add an "entities" section ` +
-          `to the manifest before running migrate dev.`,
+        `No entities declared in ${manifest.manifestPath}. Add an entity plugin via ` +
+          `createEntityPlugin({ entities: [...] }) or createEntityPlugin({ manifest: { entities: { ... } } }) before running migrate dev.`,
       );
     }
 

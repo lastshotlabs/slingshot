@@ -8,8 +8,6 @@ import { afterEach, expect, test } from 'bun:test';
 import type { PermissionsState, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { PERMISSIONS_STATE_KEY, getContext } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
-import { validateAppManifest } from '../../src/lib/manifest';
-import { manifestToAppConfig } from '../../src/lib/manifestToAppConfig';
 
 // ---------------------------------------------------------------------------
 // Shared config — avoids real DB connections
@@ -119,65 +117,3 @@ test('permissions state is frozen at bootstrap', async () => {
   expect(Object.isFrozen(state)).toBe(true);
 });
 
-// ---------------------------------------------------------------------------
-// Manifest schema tests
-// ---------------------------------------------------------------------------
-
-test('validateAppManifest accepts permissions field', () => {
-  const result = validateAppManifest({
-    manifestVersion: 1,
-    permissions: { adapter: 'sqlite' },
-  });
-  expect(result.success).toBe(true);
-  if (result.success) {
-    expect(result.manifest.permissions).toEqual({ adapter: 'sqlite' });
-  }
-});
-
-test('validateAppManifest accepts all supported adapter types', () => {
-  for (const adapter of ['sqlite', 'postgres', 'mongo', 'memory'] as const) {
-    const result = validateAppManifest({ manifestVersion: 1, permissions: { adapter } });
-    expect(result.success, `adapter: ${adapter}`).toBe(true);
-  }
-});
-
-test('validateAppManifest rejects unknown adapter type', () => {
-  const result = validateAppManifest({
-    manifestVersion: 1,
-    permissions: { adapter: 'dynamodb' },
-  });
-  expect(result.success).toBe(false);
-});
-
-test('validateAppManifest accepts manifest without permissions', () => {
-  const result = validateAppManifest({ manifestVersion: 1 });
-  expect(result.success).toBe(true);
-  if (result.success) {
-    expect(result.manifest.permissions).toBeUndefined();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// manifestToAppConfig round-trip
-// ---------------------------------------------------------------------------
-
-test('manifestToAppConfig copies permissions field to config', () => {
-  const result = validateAppManifest({
-    manifestVersion: 1,
-    permissions: { adapter: 'memory' },
-  });
-  expect(result.success).toBe(true);
-  if (!result.success) return;
-
-  const config = manifestToAppConfig(result.manifest);
-  expect((config as Record<string, unknown>).permissions).toEqual({ adapter: 'memory' });
-});
-
-test('manifestToAppConfig omits permissions when not in manifest', () => {
-  const result = validateAppManifest({ manifestVersion: 1 });
-  expect(result.success).toBe(true);
-  if (!result.success) return;
-
-  const config = manifestToAppConfig(result.manifest);
-  expect((config as Record<string, unknown>).permissions).toBeUndefined();
-});

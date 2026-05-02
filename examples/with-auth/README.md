@@ -6,19 +6,18 @@ Source-backed example for the `/examples/with-auth/` docs page.
 
 - `createServer()` with `createAuthPlugin()`
 - in-memory auth, sessions, and OAuth state
-- matching manifest and code-first setup
+- typed app config setup
 
 ## Files
 
-- `src/index.ts` - code-first app bootstrap
-- `app.manifest.json` - manifest-first equivalent
+- `app.config.ts` - typed app config
 
 ## Run
 
 From the repo root:
 
 ```bash
-bun examples/with-auth/src/index.ts
+slingshot start --config examples/with-auth/app.config.ts
 ```
 
 Set `JWT_SECRET` first.

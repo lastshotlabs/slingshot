@@ -20,7 +20,7 @@ shell that composes those entities into the live plugin.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/storeInfra.ts`, `packages/slingshot-entity/src/configDriven/index.ts`, and `packages/slingshot-permissions/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and app-level plugin composition
+- **Imported by**: app-level plugin composition
 
 ## Common Tasks
 

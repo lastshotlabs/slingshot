@@ -2,6 +2,8 @@
 export { createApp } from './app';
 export type { CreateAppResult, PermissionsConfig } from './app';
 export { createServer } from './server';
+export { defineApp } from './defineApp';
+export type { AppConfig } from './defineApp';
 export {
   ProductionReadinessError,
   assertProductionReadiness,
@@ -338,38 +340,3 @@ export type {
 export { entity } from '@lastshotlabs/slingshot-entity';
 export type { EntityModuleWiring, PackageEntityModule } from '@lastshotlabs/slingshot-entity';
 
-// Manifest-driven server bootstrap
-export { createServerFromManifest } from './lib/createServerFromManifest';
-export type { CreateServerFromManifestOptions } from './lib/createServerFromManifest';
-export { createManifestHandlerRegistry } from './lib/manifestHandlerRegistry';
-export type {
-  ManifestHandlerRegistry,
-  HandlerFactory,
-  PluginFactory,
-  EventBusFactory,
-  SecretProviderFactory,
-} from './lib/manifestHandlerRegistry';
-export { createMcpFoundation } from './lib/mcpFoundation';
-export type {
-  CreateMcpFoundationOptions,
-  McpFoundation,
-  McpGenerateConfigOptions,
-  McpGenerateConfigResult,
-  McpGenerateConfigSuccess,
-  McpManifestValidationResult,
-  McpPluginSummary,
-} from './lib/mcpFoundation';
-export { manifestToAppConfig } from './lib/manifestToAppConfig';
-export type { ManifestToConfigOptions } from './lib/manifestToAppConfig';
-export { manifestToSsgConfig } from './lib/manifestToSsgConfig';
-export type { ManifestSsgBuildConfig, ManifestSsgConfigResult } from './lib/manifestToSsgConfig';
-export { validateAppManifest } from './lib/manifest';
-export type {
-  AppManifest,
-  AppManifestSsgSection,
-  AppManifestSsrSection,
-  AppManifestValidationResult,
-  AppManifestValidationError,
-} from './lib/manifest';
-export { PLUGIN_SCHEMA_ENTRIES, loadPluginSchema, listPlugins } from './lib/pluginSchemaRegistry';
-export type { PluginSchemaEntry } from './lib/pluginSchemaRegistry';

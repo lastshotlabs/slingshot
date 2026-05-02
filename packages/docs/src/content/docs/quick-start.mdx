@@ -1,7 +1,10 @@
 ---
 title: Quick Start
-description: Build a working backend in 3 steps — a route, a data model, and auth
+description: Build a working backend in 3 steps — a route, a data model, and auth — using app.config.ts
 ---
+
+You're going to write one file: `app.config.ts`. That file declares your app. The CLI starts it.
+You'll add a route, an entity, and auth in three steps.
 
 ## Install
 
@@ -11,10 +14,10 @@ bun add @lastshotlabs/slingshot hono zod
 
 ## Step 1: A route that works
 
-Create `src/index.ts`:
+Create `app.config.ts` at the root of your project:
 
-```typescript title="src/index.ts"
-import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp, definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 const appPackage = definePackage({
   name: 'app',
@@ -33,16 +36,16 @@ const appPackage = definePackage({
   ],
 });
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [appPackage],
 });
 ```
 
-Run it:
+Boot it:
 
 ```bash
-bun run src/index.ts
+slingshot start
 ```
 
 Test it:
@@ -54,8 +57,11 @@ curl http://localhost:3000/health
 
 Your API docs are already live at `http://localhost:3000/docs`.
 
-**What just happened:** `createServer` started a Hono server. `definePackage` created a module
-with one route. The route is typed, shows up in OpenAPI docs, and can be tested with `curl`.
+**What just happened.** `slingshot start` discovered `app.config.ts`, imported its default
+export, and booted a Hono server. `defineApp` is a typed identity helper — it's literally
+`config => config`, but it gives you full autocomplete on the config object. `definePackage`
+created a feature module with one route. The route is typed, shows up in OpenAPI docs, and
+can be tested with `curl`.
 
 ## Step 2: Add a data model
 
@@ -74,18 +80,18 @@ export const Task = defineEntity('Task', {
 });
 ```
 
-Wire it into your package:
+Wire it into your config:
 
-```typescript title="src/index.ts"
-import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
-import { Task } from './entities/task';
+```typescript title="app.config.ts"
+import { defineApp, definePackage, entity } from '@lastshotlabs/slingshot';
+import { Task } from './src/entities/task';
 
 const appPackage = definePackage({
   name: 'app',
   entities: [entity({ config: Task })],
 });
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [appPackage],
 });
@@ -140,19 +146,19 @@ export const Task = defineEntity('Task', {
 });
 ```
 
-Then add the auth plugin to your server:
+Then add the auth plugin to your config:
 
-```typescript title="src/index.ts"
-import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp, definePackage, entity } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { Task } from './entities/task';
+import { Task } from './src/entities/task';
 
 const appPackage = definePackage({
   name: 'app',
   entities: [entity({ config: Task })],
 });
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: 'dev-secret-change-in-prod' } },
   plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],

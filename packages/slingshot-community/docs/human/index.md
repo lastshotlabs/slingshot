@@ -23,7 +23,7 @@ When `authBridge` is `"auto"`, the plugin registers middleware that reads `actor
 This eliminates the most common handler file pattern. Use `"none"` (default) to wire the
 bridge yourself.
 
-**Code-first equivalent:**
+**Example:**
 
 ```typescript
 createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' });
@@ -58,16 +58,16 @@ This package is not standalone. In practice, most apps need:
 }
 ```
 
-**Code-first:**
+**App config:**
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
 import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
 import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 
-await createServer({
+export default defineApp({
   plugins: [
     createAuthPlugin({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },

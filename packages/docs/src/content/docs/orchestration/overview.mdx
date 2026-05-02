@@ -40,9 +40,9 @@ Current provider support now includes `@lastshotlabs/slingshot-orchestration-tem
 Trigger.dev and the other cloud-provider adapters are still follow-up work, but Temporal support
 is implemented in this worktree.
 
-## Code-first today
+## Today
 
-The current implementation is code-first. Define tasks and workflows in TypeScript, then compose
+Define tasks and workflows in TypeScript, then compose
 them into a runtime or Slingshot plugin.
 
 ```typescript
@@ -100,7 +100,7 @@ const orchestrationPlugin = createOrchestrationPlugin({
 
 When the adapter is passed directly into `createOrchestrationRuntime()`, the built-in adapters are
 ready to use immediately. Memory and SQLite still manage their own lifecycle as before, and the
-BullMQ adapter now lazily starts itself on first use so direct code-first runtime composition is
+BullMQ adapter now lazily starts itself on first use so direct runtime composition is
 safe.
 
 ## Handlers and manifest status
@@ -108,13 +108,12 @@ safe.
 Manifest-driven orchestration is now supported.
 
 - You can still define tasks and workflows directly in TypeScript and pass them into the runtime.
-- In manifest mode, `createServerFromManifest()` loads `ResolvedTask` and `ResolvedWorkflow`
+- `createServer()` loads `ResolvedTask` and `ResolvedWorkflow`
   exports from the handlers file or handlers directory.
 - The built-in `slingshot-orchestration` plugin resolves task and workflow names from that registry
   before the plugin is instantiated.
 
-That means orchestration definitions stay in code, but the server and worker bootstrap path can
-remain manifest-first.
+That means orchestration definitions stay in code alongside the rest of the app config.
 
 ## Design boundary
 
@@ -136,7 +135,7 @@ possible without rewriting application code.
 
 ## Where to go next
 
-- [Code-First Guide](/slingshot/orchestration/code-first/)
+- [Orchestration Guide](/slingshot/orchestration/guide/)
 - [Tasks and Workflows](/slingshot/orchestration/tasks-and-workflows/)
 - [Adapters](/slingshot/orchestration/adapters/)
 - [HTTP API](/slingshot/orchestration/http-api/)

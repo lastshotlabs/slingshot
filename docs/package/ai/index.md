@@ -7,19 +7,20 @@ description: AI-assisted starting point for @lastshotlabs/slingshot
 
 ## Summary
 
-`@lastshotlabs/slingshot` is the framework entry point. It owns manifest-to-runtime translation,
-app assembly, plugin orchestration, server bootstrap, and the public convenience exports that most
-Slingshot applications import first.
+`@lastshotlabs/slingshot` is the framework entry point. It owns app assembly, plugin
+orchestration, server bootstrap, and the public convenience exports that most Slingshot
+applications import first. The canonical authoring path is `app.config.ts` exporting
+`defineApp({ ... })`.
 
 ## Quick Map
 
 - Package kind: Root package
 - Public exports: `.`, `./mongo`, `./queue`, `./redis`, `./testing`
 - API reference: /api/slingshot/
+- defineApp helper: `src/defineApp.ts`
 - App bootstrap: `src/app.ts`
 - Server bootstrap: `src/server.ts`
-- Manifest schema: `src/lib/appManifest.ts`
-- Manifest conversion: `src/lib/manifestToAppConfig.ts`
+- CLI entry: `src/cli/commands/start.ts`
 
 ## Capability Routing
 
@@ -39,8 +40,7 @@ Slingshot applications import first.
 
 ## Common Agent Tasks
 
-- For manifest work, read `src/lib/appManifest.ts`, `src/lib/manifestToAppConfig.ts`, and
-  `src/lib/createServerFromManifest.ts`.
+- For app config shape, read `src/defineApp.ts` and the typed config sections under `src/config/types/`.
 - For plugin lifecycle issues, read `src/app.ts` plus `packages/slingshot-core/src/plugin.ts`.
 - For runtime host behavior, read `src/server.ts` and the matching package under `packages/runtime-*`.
 - For docs drift, update JSDoc, impacted guides in `packages/docs/src/content/docs/`, and any mapped

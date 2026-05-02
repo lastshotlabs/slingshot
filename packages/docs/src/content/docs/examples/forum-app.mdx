@@ -17,7 +17,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -55,7 +55,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
     }
     ```
 
-    ```typescript title="slingshot.handlers.ts"
+    ```typescript title="app.config.ts"
     import { getActor } from '@lastshotlabs/slingshot-core';
     import type { Context, Next } from 'hono';
 
@@ -68,8 +68,8 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer, getActor } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts"
+    import { defineApp, getActor } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
     import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
@@ -82,7 +82,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
       await next();
     };
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       security: { signing: { secret: process.env.SECRET! } },
       middleware: [communityAuthBridge],

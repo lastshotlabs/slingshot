@@ -1,13 +1,15 @@
 /**
- * Manifest-first compliance test for slingshot-deep-links.
+ * JSON-config compliance test for slingshot-deep-links.
  *
  * Verifies that the plugin boots correctly from a plain JSON config object —
- * the kind produced by JSON.parse(manifestJson). No function references, no
- * class instances, no runtime objects that cannot cross a JSON boundary.
+ * the kind produced by JSON.parse on a serialized config. No function
+ * references, no class instances, no runtime objects that cannot cross a
+ * JSON boundary.
  *
- * This proves that `createDeepLinksPlugin` is manifest-first: passing a
+ * This proves that `createDeepLinksPlugin` is JSON-roundtrippable: passing a
  * JSON.parse/JSON.stringify-round-tripped config object produces an identical
- * result to passing the original typed config.
+ * result to passing the original typed config — useful for any deployment
+ * tool that loads config from a serialized blob.
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
@@ -17,11 +19,11 @@ import { createDeepLinksPlugin } from '../src/plugin';
 
 /**
  * Simulate how a manifest bootstrap would work: take a JSON-serializable
- * config blob (as you'd get from JSON.parse of an app.manifest.json), pass
+ * config blob (as you'd get from JSON.parse of an app config), pass
  * it to createDeepLinksPlugin, and wire up the plugin.
  */
-function bootFromManifestJson(manifestJson: string): Hono {
-  const parsed = JSON.parse(manifestJson) as DeepLinksConfigInput;
+function bootFromManifestJson(configJson: string): Hono {
+  const parsed = JSON.parse(configJson) as DeepLinksConfigInput;
 
   const app = new Hono();
   const bus = new InProcessAdapter();

@@ -155,12 +155,12 @@ assembly together. The app imports one factory instead of re-implementing route 
 
 ## Compose at the app layer
 
-```typescript title="src/index.ts"
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createBlogPlugin } from './plugin.js';
+import { createBlogPlugin } from './src/plugin.js';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
   plugins: [

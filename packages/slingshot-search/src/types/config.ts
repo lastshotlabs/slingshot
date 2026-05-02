@@ -270,7 +270,7 @@ export const searchPluginConfigSchema = z.object({
     .custom<SearchAdminGate>()
     .optional()
     .describe(
-      'Admin gate for search management routes. In manifest mode, accepts "superAdmin" or ' +
+      'Admin gate for search management routes. The string "superAdmin" or ' +
         '"authenticated" strings which are resolved to SearchAdminGate objects before the plugin ' +
         'factory. Omit to skip mounting admin routes.',
     ),

@@ -29,7 +29,7 @@ For a custom event stream, define your own SSE endpoint:
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -48,7 +48,7 @@ For a custom event stream, define your own SSE endpoint:
     }
     ```
 
-    ```typescript title="slingshot.handlers.ts"
+    ```typescript title="app.config.ts"
     export async function sseUpgrade(req: Request) {
       const token = req.headers.get('authorization')?.replace('Bearer ', '');
       if (!token) return new Response('Unauthorized', { status: 401 });
@@ -70,8 +70,10 @@ For a custom event stream, define your own SSE endpoint:
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    import { defineApp } from '@lastshotlabs/slingshot';
+
+    export default defineApp({
       sse: {
         endpoints: {
           '/__sse/activity': {
@@ -193,7 +195,7 @@ For bidirectional communication, Slingshot also supports WebSocket endpoints:
 }
 ```
 
-```typescript title="slingshot.handlers.ts"
+```typescript title="app.config.ts"
 export async function wsUpgrade(req: Request, server: Server) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return new Response('Unauthorized', { status: 401 });

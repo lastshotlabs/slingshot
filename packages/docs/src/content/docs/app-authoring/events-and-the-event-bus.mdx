@@ -128,14 +128,14 @@ framework rules exist so transports like SSE can filter sensitive events safely.
 
 The default in-process adapter is correct for a single process. At scale, supply a shared bus:
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-
-await createServer({
-  eventBus: mySharedEventBus,
-});
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
 
 declare const mySharedEventBus: import('@lastshotlabs/slingshot-core').SlingshotEventBus;
+
+export default defineApp({
+  eventBus: mySharedEventBus,
+});
 ```
 
 That decision affects cross-instance event delivery, webhook fan-out, and any package behavior that
@@ -162,5 +162,4 @@ The event bus is not a plugin-authoring side topic. It is the shared event trans
 ## Next
 
 - [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
-- [Alternate Paths: Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/)
 - [Internals: Event Bus](/slingshot/internals/event-bus/)

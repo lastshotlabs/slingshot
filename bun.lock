@@ -137,7 +137,7 @@
         "sharp": "^0.33",
         "typedoc": "^0.28",
         "typedoc-plugin-markdown": "^4.6",
-        "zod": "^3.25",
+        "zod": "^4.3",
       },
       "devDependencies": {
         "@astrojs/check": "^0.9.9",
@@ -665,18 +665,6 @@
         "pg",
       ],
     },
-    "packages/slingshot-runtime-lambda": {
-      "name": "@lastshotlabs/slingshot-runtime-lambda",
-      "version": "0.0.2",
-      "dependencies": {
-        "@lastshotlabs/slingshot": "file:../..",
-        "@lastshotlabs/slingshot-core": "workspace:*",
-        "@lastshotlabs/slingshot-runtime-node": "workspace:*",
-      },
-      "peerDependencies": {
-        "zod": ">=4.0 <5",
-      },
-    },
     "packages/slingshot-scim": {
       "name": "@lastshotlabs/slingshot-scim",
       "version": "0.0.2",
@@ -1150,8 +1138,6 @@
 
     "@jsonjoy.com/util": ["@jsonjoy.com/util@1.9.0", "", { "dependencies": { "@jsonjoy.com/buffers": "^1.0.0", "@jsonjoy.com/codegen": "^1.0.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-pLuQo+VPRnN8hfPqUTLTHk126wuYdXVxE6aDmjSeV4NCAgyxWbiOIeNJVtID3h1Vzpoi9m4jXezf73I6LgabgQ=="],
 
-    "@lastshotlabs/slingshot": ["project@root:", {}],
-
     "@lastshotlabs/slingshot-admin": ["@lastshotlabs/slingshot-admin@workspace:packages/slingshot-admin"],
 
     "@lastshotlabs/slingshot-assets": ["@lastshotlabs/slingshot-assets@workspace:packages/slingshot-assets"],
@@ -1219,8 +1205,6 @@
     "@lastshotlabs/slingshot-runtime-bun": ["@lastshotlabs/slingshot-runtime-bun@workspace:packages/runtime-bun"],
 
     "@lastshotlabs/slingshot-runtime-edge": ["@lastshotlabs/slingshot-runtime-edge@workspace:packages/runtime-edge"],
-
-    "@lastshotlabs/slingshot-runtime-lambda": ["@lastshotlabs/slingshot-runtime-lambda@workspace:packages/slingshot-runtime-lambda"],
 
     "@lastshotlabs/slingshot-runtime-node": ["@lastshotlabs/slingshot-runtime-node@workspace:packages/runtime-node"],
 
@@ -3399,8 +3383,6 @@
     "@lastshotlabs/slingshot-docs/sharp": ["sharp@0.33.5", "", { "dependencies": { "color": "^4.2.3", "detect-libc": "^2.0.3", "semver": "^7.6.3" }, "optionalDependencies": { "@img/sharp-darwin-arm64": "0.33.5", "@img/sharp-darwin-x64": "0.33.5", "@img/sharp-libvips-darwin-arm64": "1.0.4", "@img/sharp-libvips-darwin-x64": "1.0.4", "@img/sharp-libvips-linux-arm": "1.0.5", "@img/sharp-libvips-linux-arm64": "1.0.4", "@img/sharp-libvips-linux-s390x": "1.0.4", "@img/sharp-libvips-linux-x64": "1.0.4", "@img/sharp-libvips-linuxmusl-arm64": "1.0.4", "@img/sharp-libvips-linuxmusl-x64": "1.0.4", "@img/sharp-linux-arm": "0.33.5", "@img/sharp-linux-arm64": "0.33.5", "@img/sharp-linux-s390x": "0.33.5", "@img/sharp-linux-x64": "0.33.5", "@img/sharp-linuxmusl-arm64": "0.33.5", "@img/sharp-linuxmusl-x64": "0.33.5", "@img/sharp-wasm32": "0.33.5", "@img/sharp-win32-ia32": "0.33.5", "@img/sharp-win32-x64": "0.33.5" } }, "sha512-haPVm1EkS9pgvHrQ/F3Xy+hgcuMV0Wm9vfIBSiwZ05k+xgb0PkBQpGsAA/oWdDobNaZTH5ppvHtzCFbnSEwHVw=="],
 
     "@lastshotlabs/slingshot-docs/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
-
-    "@lastshotlabs/slingshot-docs/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "@lastshotlabs/slingshot-runtime-bun/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
 

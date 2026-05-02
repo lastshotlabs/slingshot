@@ -19,7 +19,7 @@ assembly, action handling, and cache-aware rendering helpers.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts` and `packages/slingshot-entity/src/index.ts`
-- **Imported by**: `packages/slingshot-ssg/src/index.ts`, `packages/runtime-edge/src/index.ts`, and manifest bootstrap via `../../src/lib/builtinPlugins.ts`
+- **Imported by**: `packages/slingshot-ssg/src/index.ts`, `packages/runtime-edge/src/index.ts`, and app `app.config.ts` files
 
 ## Common Tasks
 

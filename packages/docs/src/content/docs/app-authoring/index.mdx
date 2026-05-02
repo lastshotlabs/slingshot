@@ -1,6 +1,6 @@
 ---
 title: App Roots and Runtime
-description: How createServer works, what you can configure, and what the framework does for you
+description: How defineApp works, what you can configure, and what the framework does for you
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
@@ -9,18 +9,18 @@ Every Slingshot app starts at the app root. This is where you assemble your pack
 config, and start the server.
 
 If you have not built anything yet, start with the [Quick Start](/slingshot/quick-start/).
-Come back here when you want to understand what `createServer(...)` actually does.
+Come back here when you want to understand what `defineApp(...)` actually does.
 
 ## The app root
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { adminPackage } from './packages/admin';
-import { blogPackage } from './packages/blog';
+import { adminPackage } from './src/packages/admin';
+import { blogPackage } from './src/packages/blog';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: {
     signing: { secret: process.env.JWT_SECRET! },
@@ -45,11 +45,11 @@ This one file controls:
 - **How it is secured** — auth, CORS, rate limits
 - **What it supports** — events, WebSockets, SSE, jobs
 
-The app root stays small. Feature logic lives in packages.
+The app root stays small. Feature logic lives in packages. Boot it with `slingshot start`.
 
-## What createServer does
+## What the framework does on boot
 
-When you call `createServer(...)`, the framework:
+When `slingshot start` loads your `app.config.ts`, the framework:
 
 1. Validates your config
 2. Resolves secrets from the configured provider
@@ -61,12 +61,16 @@ When you call `createServer(...)`, the framework:
 
 You get all of this from one function call.
 
-## createApp vs createServer
+## defineApp, createApp, and createServer
 
-| Function         | Use when                                     |
-| ---------------- | -------------------------------------------- |
-| `createServer()` | Starting a production server                 |
-| `createApp()`    | Testing, custom hosting, or programmatic use |
+| Function         | Use when                                                |
+| ---------------- | ------------------------------------------------------- |
+| `defineApp()`    | Authoring `app.config.ts` — the canonical path          |
+| `createServer()` | Custom imperative entry points (rare)                   |
+| `createApp()`    | Testing, custom hosting, or programmatic use            |
+
+`defineApp()` is a typed identity helper for the config object. The CLI runner picks up the
+default export and calls `createServer()` for you.
 
 `createApp()` does everything except start the network server. Use it in tests:
 
@@ -102,7 +106,7 @@ See [App Config](/slingshot/app-authoring/app-config/) for the full reference.
   <LinkCard
     title="createServer and createApp"
     href="/slingshot/app-authoring/create-server-and-create-app/"
-    description="What the assembly step does, what the server adds, and when to use each."
+    description="What the assembly step does, what the server adds, and when to use the imperative APIs."
   />
   <LinkCard
     title="App Config"

@@ -1,0 +1,162 @@
+---
+title: DTO Mapping
+description: Shape entity records into API responses with typed transformers
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Your storage shape rarely matches your API shape — entity records carry `_id`, ObjectId
+refs, raw `Date` objects, and internal fields like `passwordHash` and
+`internalNotes` that have no business in a public response. `createDtoMapper` builds
+a typed mapper from a Zod schema that turns DB documents into clean DTOs without the
+manual field-by-field copying.
+
+## What you can do
+
+- Define a DTO shape with a Zod schema — type and runtime validation in one place
+- Auto-rename `_id` to `id` (with `toString()`)
+- Rename ObjectId reference fields from DB names to API names
+- Convert `Date` fields to ISO strings
+- Map subdocument arrays through their own mappers
+- Coerce nullable Zod fields from `undefined` to `null`
+
+## Map a User record to a UserDto
+
+```typescript title="src/users/dto.ts"
+// @skip-typecheck
+import { createDtoMapper } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+const userDtoSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  displayName: z.string().nullable(),
+  organizationId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type UserDto = z.infer<typeof userDtoSchema>;
+
+export const toUserDto = createDtoMapper(userDtoSchema, {
+  refs: { organization: 'organizationId' },
+  dates: ['createdAt', 'updatedAt'],
+});
+```
+
+Internal fields like `passwordHash` and `internalNotes` simply aren't in
+`userDtoSchema.shape`, so they never reach the response. The mapper iterates the
+schema's fields, not the input document — extra DB fields are silently dropped.
+
+## Use the mapper in a handler
+
+```typescript title="src/users/package.ts"
+// @skip-typecheck
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { toUserDto } from './dto';
+
+export const usersPackage = definePackage({
+  name: 'users',
+  domains: [
+    domain({
+      name: 'users',
+      basePath: '/users',
+      routes: [
+        route.get({
+          path: '/:id',
+          handler: async ({ params, ctx, respond }) => {
+            const user = await ctx.persistence.users.findById(params.id);
+            if (!user) return respond.notFound();
+            return respond.json(toUserDto(user));
+          },
+        }),
+        route.get({
+          path: '/',
+          handler: async ({ ctx, respond }) => {
+            const users = await ctx.persistence.users.list();
+            return respond.json({ items: users.map(toUserDto) });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Pass single records or arrays through the same mapper — it's a plain function, so
+`.map(toUserDto)` works without ceremony.
+
+## Subdocument arrays
+
+When a record has nested documents — comments on a post, line items on an order —
+declare a sub-mapper for the field:
+
+```typescript
+// @skip-typecheck
+import { createDtoMapper } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+const lineItemDtoSchema = z.object({
+  id: z.string(),
+  productId: z.string(),
+  quantity: z.number(),
+  total: z.number(),
+});
+
+const toLineItemDto = createDtoMapper(lineItemDtoSchema, {
+  refs: { product: 'productId' },
+});
+
+const orderDtoSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  items: z.array(lineItemDtoSchema),
+  placedAt: z.string(),
+});
+
+export const toOrderDto = createDtoMapper(orderDtoSchema, {
+  refs: { customer: 'customerId' },
+  dates: ['placedAt'],
+  subdocs: { items: toLineItemDto },
+});
+```
+
+Each line item flows through `toLineItemDto`, so refs and dates inside the
+subdocument get mapped consistently.
+
+<Aside type="tip">
+  Nullable Zod fields (`.nullable()`, `.optional()`, or `.default(...)` wrapping a
+  nullable type) get `undefined → null` coercion automatically. Other fields pass
+  through unchanged.
+</Aside>
+
+## Related: `zodToMongoose`
+
+`createDtoMapper` is the *DB-to-API* primitive. Its symmetric counterpart is
+`zodToMongoose`, which generates a Mongoose schema *from* a Zod schema — letting you
+keep one source of truth for the shape and project it into both directions:
+
+```typescript
+// @skip-typecheck
+import { zodToMongoose } from '@lastshotlabs/slingshot';
+import { Schema, model } from 'mongoose';
+import { z } from 'zod';
+
+const userZodSchema = z.object({
+  email: z.string().email(),
+  passwordHash: z.string(),
+  organizationId: z.string(),
+});
+
+const UserSchema = new Schema(zodToMongoose(userZodSchema));
+export const User = model('User', UserSchema);
+```
+
+One Zod definition, a Mongoose schema for storage, and a `createDtoMapper` for
+responses — three concerns, one source.
+
+## What's next
+
+- [Pagination](/slingshot/app-authoring/pagination/) — combine DTOs with cursor-based pagination
+- [Validation](/slingshot/app-authoring/validation/) — request validation with the same Zod schemas
+- [Data and Entities](/slingshot/core-features/data-and-entities/) — the broader entity story

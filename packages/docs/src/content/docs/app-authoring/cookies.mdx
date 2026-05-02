@@ -1,0 +1,142 @@
+---
+title: Cookies
+description: Set, read, and sign cookies — including framework-issued auth and CSRF cookies
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Cookies persist state across requests — the obvious case being session auth, but also
+CSRF tokens, feature flags, and partner integrations. Slingshot ships signed-cookie
+helpers and a small set of framework cookie names you'll see in any auth-enabled app.
+
+## What you can do
+
+- Set and read cookies in any handler via Hono's cookie helpers
+- Sign cookie values for tamper detection (HMAC-SHA256, no encryption)
+- Read framework-issued cookies by their canonical names
+- Opt into framework CSRF cookie handling via `security.csrf.enabled`
+
+## Setting and reading cookies
+
+Slingshot uses Hono's request context, so reach for `setCookie` / `getCookie` from
+`hono/cookie`:
+
+```typescript title="src/preferences/package.ts"
+// @skip-typecheck
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { getCookie, setCookie } from 'hono/cookie';
+
+export const preferencesPackage = definePackage({
+  name: 'preferences',
+  domains: [
+    domain({
+      name: 'theme',
+      basePath: '/theme',
+      routes: [
+        route.post({
+          path: '/',
+          handler: ({ c, respond }) => {
+            setCookie(c, 'theme', 'dark', {
+              httpOnly: true,
+              secure: true,
+              sameSite: 'Lax',
+              maxAge: 60 * 60 * 24 * 365,
+            });
+            return respond.json({ ok: true });
+          },
+        }),
+        route.get({
+          path: '/',
+          handler: ({ c, respond }) => respond.json({ theme: getCookie(c, 'theme') ?? 'light' }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Always set `httpOnly` for cookies the client doesn't need to read. `secure: true`
+restricts the cookie to HTTPS — required for `SameSite=None` cross-site flows.
+
+## Signed cookies
+
+When a cookie value carries security meaning — a remember-me token, a session ID, a
+feature flag a user shouldn't flip themselves — sign it. `signCookieValue` wraps the
+value with an HMAC signature; `verifyCookieValue` returns the original value or `null`
+on tamper.
+
+```typescript
+// @skip-typecheck
+import { signCookieValue, verifyCookieValue } from '@lastshotlabs/slingshot';
+import { getCookie, setCookie } from 'hono/cookie';
+
+const secret = process.env.COOKIE_SECRET!;
+
+setCookie(c, 'pref-set', signCookieValue('experiment-b', secret), {
+  httpOnly: true,
+  secure: true,
+});
+
+const raw = getCookie(c, 'pref-set');
+const value = raw ? verifyCookieValue(raw, secret) : null;
+// value === 'experiment-b' if untampered, or null if signature is invalid
+```
+
+Signed cookies are *not* encrypted — anyone with the cookie can read the original
+value. Use them when you need integrity, not confidentiality.
+
+## Framework cookie and header names
+
+The auth plugin sets a fixed set of cookies. The names are exported as constants so you
+can reference them in middleware, tests, and clients without typos:
+
+| Constant                 | Value           | Purpose                                  |
+| ------------------------ | --------------- | ---------------------------------------- |
+| `COOKIE_TOKEN`           | `token`         | Session access token (HttpOnly)          |
+| `COOKIE_REFRESH_TOKEN`   | `refresh_token` | Long-lived refresh token (HttpOnly)      |
+| `COOKIE_CSRF_TOKEN`      | `csrf_token`    | CSRF synchronizer token (readable by JS) |
+| `HEADER_USER_TOKEN`      | `x-user-token`  | Header alternative to the access cookie  |
+| `HEADER_REFRESH_TOKEN`   | `x-refresh-token` | Header alternative to refresh cookie    |
+| `HEADER_CSRF_TOKEN`      | `x-csrf-token`  | CSRF token submitted by the client       |
+
+```typescript
+// @skip-typecheck
+import { COOKIE_TOKEN, HEADER_CSRF_TOKEN } from '@lastshotlabs/slingshot';
+import { getCookie } from 'hono/cookie';
+
+const session = getCookie(c, COOKIE_TOKEN);
+const csrf = c.req.header(HEADER_CSRF_TOKEN);
+```
+
+## Opt into CSRF cookie handling
+
+Cookie-authenticated routes are vulnerable to CSRF unless you check a synchronizer
+token. Enable it once in app config — the framework sets `csrf_token`, validates
+`x-csrf-token` on state-changing requests, and exempts OAuth callbacks automatically:
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'my-app', version: '1.0.0' },
+  security: {
+    csrf: {
+      enabled: true,
+      checkOrigin: true,
+      exemptPaths: ['/webhooks/*'],
+    },
+  },
+});
+```
+
+<Aside type="tip">
+  CSRF only matters for cookie auth. Bearer-token and M2M requests bypass the check —
+  they're inherently CSRF-safe because attackers can't make a browser forge an
+  `Authorization` header.
+</Aside>
+
+## What's next
+
+- [Encryption and Hashing](/slingshot/app-authoring/encryption-and-hashing/) — the primitives behind `signCookieValue`
+- [Authentication](/slingshot/core-features/auth/) — how the framework cookies get set
+- [Security Hardening](/slingshot/guides/security/) — the full security checklist

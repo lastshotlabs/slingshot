@@ -25,8 +25,10 @@ The app root just composes packages. It does not implement features.
 
 **Without packages** — everything is tangled:
 
-```typescript
-await createServer({
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
   port: 3000,
   // 200 lines of routes, middleware, entities mixed together
 });
@@ -34,14 +36,14 @@ await createServer({
 
 **With packages** — each feature is self-contained:
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
-import { adminPackage } from './packages/admin';
-import { authPackage } from './packages/auth';
-import { blogPackage } from './packages/blog';
+import { defineApp } from '@lastshotlabs/slingshot';
+import { adminPackage } from './src/packages/admin';
+import { authPackage } from './src/packages/auth';
+import { blogPackage } from './src/packages/blog';
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [blogPackage, authPackage, adminPackage],
 });

@@ -824,7 +824,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
   });
 });
 
-describe('createPushPlugin — manifest-first boot', () => {
+describe('createPushPlugin — JSON-config boot', () => {
   test('boots from plain JSON-serializable config object', async () => {
     JSON.parse(
       JSON.stringify({

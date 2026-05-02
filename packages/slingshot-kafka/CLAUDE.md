@@ -21,7 +21,7 @@ mappings with transforms, validation, DLQ routing, deduplication, and buffered r
 ## Connections
 
 - **Imports from**: `@lastshotlabs/slingshot-core` (`SlingshotEventBus`, `EventEnvelope`, `EventSerializer`, `Logger`, `MetricsEmitter`, `HealthReport`, `HealthState`, `JSON_SERIALIZER`, `withTimeout`, `TimeoutError`, `sanitizeHeaderValue`, `sanitizeLogValue`, `createRawEventEnvelope`, `isEventEnvelope`, `validateEventPayload`, `validatePluginConfig`, `createConsoleLogger`, `createNoopMetricsEmitter`), `kafkajs`, `zod`
-- **Imported by**: manifest bootstrap via `../../src/lib/createServerFromManifest.ts` and direct application use
+- **Imported by**: app `app.config.ts` files and direct application use via `createKafkaAdapter` / `createKafkaConnectors`
 
 ## Common Tasks
 

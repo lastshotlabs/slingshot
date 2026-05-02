@@ -1,0 +1,102 @@
+---
+title: Response Caching
+description: Cache full HTTP responses by route key with configurable TTL and invalidation
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`cacheResponse()` is the middleware you reach for when a route is expensive, the result is
+shared across many clients, and you want to skip recomputation between requests. It sits in
+front of your handler, returns a stored response on a hit, and stores 2xx responses on a miss.
+
+## How it works
+
+On every request the middleware computes a cache key — a static string or a function of the
+context — namespaces it by app and tenant, and looks it up in the configured cache backend.
+A hit returns immediately with `x-cache: HIT` and the original status, headers, and body. A
+miss runs your handler and stores the response if the status is 2xx; non-2xx responses are
+never cached. The default backend is whatever is set in `ctx.config.resolvedStores.cache`,
+typically Redis when you have it configured and falling back to in-memory.
+
+Tenant scoping is automatic: when `c.get('tenantId')` is set, the key is prefixed with the
+tenant ID so two tenants can never read each other's cached responses. Sensitive headers
+(`set-cookie`, `authorization`, CSRF tokens, `www-authenticate`) are stripped before storage to
+prevent session fixation.
+
+## Caching a list endpoint
+
+```typescript title="src/catalog/package.ts"
+import { cacheResponse, definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const catalogPackage = definePackage({
+  name: 'catalog',
+  middleware: {
+    cacheList: cacheResponse({ key: 'products:list', ttl: 60 }),
+    cacheItem: cacheResponse({ key: c => `product:${c.req.param('id')}`, ttl: 300 }),
+  },
+  domains: [
+    domain({
+      name: 'products',
+      basePath: '/products',
+      routes: [
+        route.get({ path: '/', middleware: ['cacheList'], handler: async ({ respond }) => respond.json([]) }),
+        route.get({ path: '/:id', middleware: ['cacheItem'], handler: async ({ respond }) => respond.json({}) }),
+      ],
+    }),
+  ],
+});
+```
+
+`ttl` is seconds. Omit it for indefinite caching — useful when paired with explicit
+invalidation. `store` overrides the backend per route if you need to pin a route to memory or
+Redis specifically.
+
+## Invalidating after a write
+
+When the underlying data changes you bust the cache by exact key or glob pattern. Pass the app
+reference so the helper can find the right adapter:
+
+```typescript title="src/catalog/package.ts"
+import { bustCache, bustCachePattern, definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+export const writePackage = definePackage({
+  name: 'catalog-writes',
+  domains: [
+    domain({
+      name: 'products',
+      basePath: '/products',
+      routes: [
+        route.put({
+          path: '/:id',
+          request: { body: z.object({ name: z.string() }) },
+          handler: async ({ c, input, respond }) => {
+            await updateProduct(c.req.param('id'), input.body);
+            await bustCache(`product:${c.req.param('id')}`, c.get('app'));
+            await bustCachePattern('products:list*', c.get('app'));
+            return respond.json({ ok: true });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function updateProduct(id: string, body: { name: string }): Promise<void>;
+```
+
+`bustCache` removes one entry. `bustCachePattern` removes everything matching a glob — useful
+when a write invalidates several derived list views.
+
+<Aside type="caution">
+  Do not cache authenticated responses by a static key — every user would see the same body.
+  Either include the actor ID in the key (`c => 'orders:' + getActorId(c)`) or skip caching for
+  authenticated routes entirely. CDN caching is usually a better fit for public, cacheable
+  responses.
+</Aside>
+
+## What's next
+
+- [Idempotent Requests](/slingshot/app-authoring/idempotency/) — for write-side replay, not read-side caching
+- [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/) — Redis adapter setup
+- [Multi-Tenancy](/slingshot/guides/multi-tenancy/) — how tenant scoping flows through the cache key

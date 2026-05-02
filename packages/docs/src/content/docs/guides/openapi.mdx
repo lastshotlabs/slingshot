@@ -167,10 +167,10 @@ For a default entity mount, Slingshot generates `POST`, `GET` list, `GET :id`, `
 
 When you enable versioning, Slingshot mounts a separate spec and docs UI per API version.
 
-```typescript title="src/index.ts"
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-void createServer({
+export default defineApp({
   meta: {
     name: 'Slingshot Example API',
     version: '1.0.0',
@@ -198,10 +198,10 @@ GET /docs           -> version selector page
 
 The generated OpenAPI document reads its `info.title` and `info.version` from `meta.name` and `meta.version`.
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-void createServer({
+export default defineApp({
   meta: {
     name: 'My API',
     version: '2026-04-12',

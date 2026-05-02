@@ -17,7 +17,7 @@ Every JWT issued by `slingshot-auth` signs with this secret. All sessions depend
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "security": {
         "signing": { "secret": "${secret:SIGNING_SECRET}" }
@@ -29,8 +29,8 @@ Every JWT issued by `slingshot-auth` signs with this secret. All sessions depend
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
       security: {
         signing: { secret: process.env.SIGNING_SECRET! },
       },
@@ -127,8 +127,8 @@ Rotating the signing secret invalidates all active sessions — unless you use `
     ```
   </TabItem>
   <TabItem label="Code">
-    ```typescript
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
       security: {
         signing: {
           secret: [process.env.SIGNING_SECRET_V2!, process.env.SIGNING_SECRET_V1!],
@@ -176,8 +176,8 @@ createAuthPlugin({
 
 Bind sessions to the client's network fingerprint so that a stolen JWT cannot be replayed from a different device or location.
 
-```typescript
-await createServer({
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
   security: {
     signing: {
       secret: process.env.SIGNING_SECRET!,
@@ -206,7 +206,7 @@ The fingerprint is stored on the first authenticated request and checked on ever
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json (production)"
+    ```json title="app.config.ts (production)"
     {
       "security": {
         "cors": ["https://app.example.com", "https://www.example.com"]
@@ -214,7 +214,7 @@ The fingerprint is stored on the first authenticated request and checked on ever
     }
     ```
 
-    ```json title="app.manifest.json (development)"
+    ```json title="app.config.ts (development)"
     {
       "security": {
         "cors": ["http://localhost:5173"]
@@ -224,8 +224,8 @@ The fingerprint is stored on the first authenticated request and checked on ever
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
       security: {
         cors: ['https://app.example.com'],
       },

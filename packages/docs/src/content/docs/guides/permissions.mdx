@@ -14,9 +14,9 @@ Install and register the permissions plugin alongside auth:
 bun add @lastshotlabs/slingshot-permissions
 ```
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 import {
@@ -24,7 +24,7 @@ import {
   createPermissionsPlugin,
 } from '@lastshotlabs/slingshot-permissions';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
   plugins: [

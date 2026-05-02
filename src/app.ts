@@ -689,7 +689,7 @@ async function mountAppRoutes<T extends object>(
       await mountRoutes(app, routesDir, config.versioning, appName, openApiVersion, runtime.glob);
     });
   } else {
-    // No routesDir (manifest-driven or plugin-only apps) — still register
+    // No routesDir (config-driven or plugin-only apps) — still register
     // the OpenAPI spec and Scalar docs so /openapi.json and /docs are reachable.
     mountOpenApiDocs(app, appName, openApiVersion);
   }

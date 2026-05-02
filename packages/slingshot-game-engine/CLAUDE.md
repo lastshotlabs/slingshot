@@ -97,7 +97,7 @@ slingshot plugin. Factory pattern with closure-owned state, no singletons.
 
 | File                               | What                                                                    |
 | ---------------------------------- | ----------------------------------------------------------------------- |
-| src/manifest/gameEngineManifest.ts | Multi-entity manifest declaration for manifest-mode bootstrap           |
+| src/manifest/gameEngineManifest.ts | Multi-entity manifest declaration for config-driven bootstrap           |
 | src/manifest/runtime.ts            | Manifest-mode runtime wiring (handler/hook registries, adapter capture) |
 
 ### Policy

@@ -1,0 +1,195 @@
+---
+title: Exception Handling
+description: How thrown errors become HTTP responses — HttpError, validation errors, and the global onError hook
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Slingshot has one rule for handlers: throw the error you want to surface. The framework
+maps it to a structured HTTP response. You don't return error objects, you don't write
+try/catch around every database call.
+
+## The model
+
+Three things can come out of a handler:
+
+1. A successful response (`respond.json(...)`, `c.json(...)`, etc.)
+2. A thrown `HttpError` — the framework knows the status code and shape
+3. A thrown unknown error — logged, returned as `500 Internal Server Error`
+
+Validation errors are a special case the framework throws on your behalf when input
+parsing fails — they map to `400` with structured `issues`.
+
+## HttpError
+
+The canonical way to surface a typed HTTP failure:
+
+```typescript
+// @skip-typecheck
+import { HttpError, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+route.get({
+  path: '/posts/:id',
+  request: { params: z.object({ id: z.string().uuid() }) },
+  handler: async ({ params, respond }) => {
+    const post = await fetchPost(params.id);
+    if (!post) {
+      throw new HttpError(404, 'Post not found', 'POST_NOT_FOUND');
+    }
+    return respond.json(post);
+  },
+});
+```
+
+`HttpError` becomes:
+
+```http
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "error": "Post not found",
+  "code": "POST_NOT_FOUND",
+  "requestId": "req_abc123"
+}
+```
+
+The `code` is optional — set it for stable machine-readable identifiers your clients
+match against.
+
+## Common patterns
+
+```typescript
+// @skip-typecheck
+throw new HttpError(401, 'Sign in to continue');
+throw new HttpError(403, 'You do not own this resource');
+throw new HttpError(404, 'Resource not found');
+throw new HttpError(409, 'Username already taken', 'USERNAME_TAKEN');
+throw new HttpError(422, 'Cannot publish without content');
+throw new HttpError(429, 'Too many requests, slow down');
+```
+
+For domain-specific errors, subclass `HttpError`:
+
+```typescript title="src/blog/errors.ts"
+import { HttpError } from '@lastshotlabs/slingshot';
+
+export class PostNotPublishedError extends HttpError {
+  constructor(postId: string) {
+    super(409, `Post ${postId} is not published`, 'POST_NOT_PUBLISHED');
+  }
+}
+```
+
+Throwing `new PostNotPublishedError(id)` produces a typed `409` with the canonical message.
+
+## ValidationError
+
+`ValidationError` is the framework's subclass of `HttpError` for input validation. You
+rarely throw it directly — Zod validation throws it for you when a request body, query,
+or params fails to parse. It maps to `400` with the structured `issues` payload described
+in [Validation](/slingshot/app-authoring/validation/).
+
+If you ever need to throw it manually (e.g., cross-field validation that Zod can't
+express):
+
+```typescript
+// @skip-typecheck
+import { ValidationError, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+route.post({
+  path: '/bookings',
+  request: { body: z.object({ start: z.string(), end: z.string() }) },
+  handler: async ({ body, respond }) => {
+    if (new Date(body.end) <= new Date(body.start)) {
+      throw new ValidationError([
+        {
+          path: ['body', 'end'],
+          code: 'custom',
+          message: 'end must be after start',
+        },
+      ]);
+    }
+    return respond.json({ ok: true });
+  },
+});
+```
+
+## Unhandled errors
+
+Anything that isn't an `HttpError` is treated as a programming bug. The framework:
+
+1. Logs the full stack via the structured logger
+2. Returns `500 Internal Server Error` with the request ID
+3. Does not leak the error message — clients see only `"Internal Server Error"`
+
+This is deliberate. Database driver errors, runtime exceptions, and unexpected nulls
+should not become user-facing messages. Surface them through the logger and observability,
+not through the wire.
+
+## Customizing the error response
+
+The default 500 body is `{ error: "Internal Server Error", requestId: "req_..." }`.
+Override the format via a Hono `onError` handler from a plugin:
+
+```typescript title="src/plugins/error-formatter.ts"
+// @skip-typecheck
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
+
+export const errorFormatterPlugin: SlingshotPlugin = {
+  name: 'error-formatter',
+  setupMiddleware({ app }) {
+    app.onError((err, c) => {
+      // The framework already handles HttpError and ValidationError before this fires —
+      // this hook only sees genuinely unhandled exceptions.
+      const requestId = c.get('requestId');
+      console.error('[unhandled]', err);
+      return c.json(
+        {
+          ok: false,
+          requestId,
+          error: { type: 'internal', message: 'Something went wrong.' },
+        },
+        500,
+      );
+    });
+  },
+};
+```
+
+`HttpError` and `ValidationError` are caught by the framework's own `onError` chain and
+formatted with the appropriate status — your plugin only sees genuine 500s.
+
+## Testing exceptions
+
+Use `app.request()` from `createApp()` and assert on status + body:
+
+```typescript title="tests/posts.test.ts"
+// @skip-typecheck
+import { describe, expect, test } from 'bun:test';
+import { createApp } from '@lastshotlabs/slingshot';
+import { blogPackage } from '../src/blog/package';
+
+describe('GET /posts/:id', () => {
+  test('returns 404 when post does not exist', async () => {
+    const { app, ctx } = await createApp({ packages: [blogPackage] });
+
+    const res = await app.request('/posts/00000000-0000-0000-0000-000000000000');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: 'Post not found',
+      code: 'POST_NOT_FOUND',
+    });
+
+    await ctx.destroy();
+  });
+});
+```
+
+## What's next
+
+- [Validation](/slingshot/app-authoring/validation/) — input parsing and `400` responses
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — the route DSL
+- [Testing](/slingshot/guides/testing/) — full test setup with `createApp`

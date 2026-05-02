@@ -19,7 +19,7 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -42,7 +42,7 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
     }
     ```
 
-    ```typescript title="slingshot.handlers.ts"
+    ```typescript title="app.config.ts"
     export async function resolveTenant(tenantId: string) {
       // Subdomain: app1.example.com → 'app1'
       if (!tenantId || tenantId === 'www') return null;
@@ -52,12 +52,12 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts"
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       security: {
         signing: {

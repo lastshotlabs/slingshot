@@ -7,7 +7,7 @@ export const ASSETS_PLUGIN_STATE_KEY = CORE_ASSETS_PLUGIN_STATE_KEY;
 /**
  * Manifest-compatible storage adapter reference.
  *
- * Use this shape in manifest mode to resolve a built-in storage adapter
+ * Use this shape in config-driven mode to resolve a built-in storage adapter
  * without passing a runtime object instance.
  */
 export interface StorageAdapterRef {
@@ -156,7 +156,7 @@ export interface AssetsPluginConfig {
    *
    * The callback receives the asset record plus a small actor projection
    * (id/kind/tenantId). The plugin does not read `actor.roles` directly
-   * because manifest-mode handlers only see flattened param fields. Apps
+   * because config-driven handlers only see flattened param fields. Apps
    * needing fine-grained role checks resolve their permission service inside
    * the callback.
    */

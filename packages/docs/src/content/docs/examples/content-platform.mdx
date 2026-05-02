@@ -40,8 +40,8 @@ bun add @lastshotlabs/slingshot \
 
 <Tabs>
   <TabItem label="Server">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts"
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
@@ -56,7 +56,7 @@ bun add @lastshotlabs/slingshot \
     declare const renderer: SlingshotSsrRenderer;
     declare const ISR_CACHE: KvNamespace;
 
-    await createServer({
+    export default defineApp({
       runtime: edgeRuntime({
         fileStore: async (_path: string) => null,
       }),

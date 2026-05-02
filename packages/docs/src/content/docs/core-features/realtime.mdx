@@ -29,7 +29,7 @@ automatically.
 
 ```typescript
 // @skip-typecheck
-import { createServer, defineEvent } from '@lastshotlabs/slingshot';
+import { defineEvent } from '@lastshotlabs/slingshot';
 
 // Mark events as client-safe so they reach browsers
 events.register(
@@ -64,8 +64,13 @@ including auth, scoping, and filtering.
 WebSockets are for features where clients send messages back. Chat, collaborative editing,
 live cursors, multiplayer — anything that needs low-latency two-way communication.
 
-```typescript
-await createServer({
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+
+declare function verifyToken(token: string): string | null;
+
+export default defineApp({
   port: 3000,
   ws: {
     endpoints: {

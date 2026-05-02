@@ -1,0 +1,76 @@
+---
+title: API Versioning
+description: Mount multiple API versions side-by-side with their own routes and OpenAPI specs
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When you ship a breaking API change you do not want to ship a new app. Slingshot's versioning
+support lets you mount `v1` and `v2` (and `v3`...) side-by-side off a single Hono instance,
+each with its own route tree, OpenAPI spec, and Scalar docs UI.
+
+## How it works
+
+Set `versioning` on `defineApp()` and the framework looks for one subdirectory per version under
+your `routesDir`. Each version is mounted at its own URL prefix (`/v1`, `/v2`), and each gets
+its own `/{version}/openapi.json` and `/{version}/docs` page. The bare `/openapi.json` and
+`/docs` redirect to the version you mark as default — by convention, the latest one.
+
+A `shared/` directory at the same level as your version dirs is mounted under every version.
+Use it for cross-cutting routes (`/health`, auth callbacks) that have no breaking surface.
+
+## Configure it
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'my-api', version: '2.0.0' },
+  routesDir: import.meta.dir + '/routes',
+  versioning: {
+    versions: ['v1', 'v2'],
+    defaultVersion: 'v2',
+    sharedDir: 'shared',
+  },
+});
+```
+
+With this layout:
+
+```
+routes/
+  v1/users.ts        → GET /v1/users
+  v2/users.ts        → GET /v2/users
+  shared/health.ts   → GET /v1/health and /v2/health
+```
+
+`versions` accepts any identifier — `v1`, `v2024-01`, `beta` — and they are mounted in array
+order. Visit `/docs` for a version-picker page that lists every mounted version.
+
+## Sharing schemas across versions
+
+Each version gets its own OpenAPI spec, but Zod schemas are global. When the same schema is
+used in two versions it is included in both specs. To keep specs lean, the framework strips
+schemas that are not referenced by the current version's routes before serving its
+`/openapi.json`.
+
+If you need a schema to evolve between versions, define them as separate types
+(`UserV1`, `UserV2`). If they happen to be identical today, you can re-export from a shared
+module — there is no penalty for sharing.
+
+## Deprecating a version
+
+Drop the version from the `versions` array and the framework stops mounting it. Clients hitting
+`/v1/...` get a 404. For a softer ramp-down, leave it in the array and add a deprecation
+middleware that sets a `Sunset` header on every `v1` response so consumers see the warning.
+
+<Aside type="tip">
+  `versioning` can also be passed as a bare `string[]` — `versioning: ['v1', 'v2']` — when you
+  are happy with the defaults (`sharedDir: 'shared'`, `defaultVersion` is the last entry).
+</Aside>
+
+## What's next
+
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — how route discovery works
+- [OpenAPI](/slingshot/guides/openapi/) — generated spec details
+- [App Config](/slingshot/app-authoring/app-config/) — full config surface

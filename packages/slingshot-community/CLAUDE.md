@@ -18,7 +18,7 @@ entity-driven operations layered on the Slingshot runtime.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`, `packages/slingshot-entity/src/index.ts`, and `packages/slingshot-notifications/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and app-level plugin composition
+- **Imported by**: app-level plugin composition
 
 ## Common Tasks
 

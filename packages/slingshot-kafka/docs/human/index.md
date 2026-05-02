@@ -35,7 +35,7 @@ These modes are live-verified in Docker against Redpanda listeners, including ne
 
 - Kafka serialization, topic naming, durable-consumer wiring, retries, and DLQ handoff belong here.
 - Event schema validation contracts come from `@lastshotlabs/slingshot-core`.
-- Manifest assembly, secrets resolution, and framework startup belong in `@lastshotlabs/slingshot`.
+- App config assembly, secrets resolution, and framework startup belong in `@lastshotlabs/slingshot`.
 - Broker lifecycle, ACL policy, topic retention, partition count strategy, and cluster sizing belong to the broker provider or platform team.
 
 ## Production Guidance
@@ -45,16 +45,14 @@ These modes are live-verified in Docker against Redpanda listeners, including ne
 - Prefer provisioned topics over `autoCreateTopics` / `autoCreateTopic` in production.
 - If you must auto-create topics, do not leave replication factor at `1` outside disposable environments. The runtime warns on that path.
 - If using SASL, pair it with TLS unless the broker is on a fully trusted isolated network segment and that exception is deliberate.
-- For mTLS, provide PEM strings through programmatic config or manifest `ssl` objects. The built-in secret bundle only supports the coarse `KAFKA_SSL=true` switch, not PEM material injection.
+- For mTLS, provide PEM strings through `ssl` objects on `createKafkaAdapter` / `createKafkaConnectors`. The built-in secret bundle only supports the coarse `KAFKA_SSL=true` switch, not PEM material injection.
 
-## Manifest And Secrets Behavior
+## Config And Secrets Behavior
 
-- `eventBus: 'kafka'` or `eventBus: { type: 'kafka', config }` resolves the built-in Kafka adapter through the framework.
-- `eventBus.config.brokers` is accepted and can be used without `KAFKA_BROKERS`.
-- `kafkaConnectors.brokers` is accepted directly in the manifest. If omitted, the framework falls back to `KAFKA_BROKERS`.
-- Secret-driven TLS bootstrap currently supports:
-  - `KAFKA_SSL=true`
-- Advanced TLS and mTLS bootstrap currently require manifest or programmatic config:
+- Pass `eventBus: createKafkaAdapter({ ... })` directly in `app.config.ts` to use the Kafka adapter as the framework's event bus.
+- Pass `kafkaConnectors: createKafkaConnectors({ ... })` to mount inbound/outbound topic bridges.
+- Secret-driven TLS bootstrap currently supports `KAFKA_SSL=true`.
+- Advanced TLS and mTLS require explicit `ssl` config:
   - `ssl.ca`
   - `ssl.cert`
   - `ssl.key`
@@ -113,13 +111,12 @@ This package assumes the provider owns:
 
 - SASL authentication and authorization are different. A principal can authenticate successfully and still fail topic or group operations without ACLs.
 - `ssl: true` depends on the process trust store. For private CAs, prefer `ssl: { ca }`.
-- Manifest secret resolution does not currently ingest PEM blobs for Kafka TLS. Use manifest or programmatic `ssl` objects for advanced TLS and mTLS.
+- The framework secret bundle does not currently ingest PEM blobs for Kafka TLS. Use explicit `ssl` objects on `createKafkaAdapter` / `createKafkaConnectors` for advanced TLS and mTLS.
 - This workspace applies a temporary local KafkaJS patch during install to avoid `TimeoutNegativeWarning` under Bun. Remove that patch when upstream KafkaJS ships the fix we are pinned waiting for.
 
 ## Key Files
 
 - `packages/slingshot-kafka/src/kafkaAdapter.ts`
 - `packages/slingshot-kafka/src/kafkaConnectors.ts`
-- `src/lib/createServerFromManifest.ts`
-- `tests/docker/kafka-sasl.test.ts`
+- `packages/slingshot-kafka/tests/integration/`
 - `tests/docker/kafka-tls.test.ts`

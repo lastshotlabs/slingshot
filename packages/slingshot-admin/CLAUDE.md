@@ -17,7 +17,7 @@ Slingshot. It has no storage adapter of its own; another package supplies the ba
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/plugin.ts` and related core contracts
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts`; no workspace package imports it directly
+- **Imported by**: app `app.config.ts` files; no workspace package imports it directly
 
 ## Common Tasks
 

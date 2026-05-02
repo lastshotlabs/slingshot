@@ -16,17 +16,17 @@ describe('extractJSDoc', () => {
   test('stops at non-remarks tags and keeps remarks text', () => {
     const content = `
       /**
-       * Validate a raw manifest.
+       * Validate a raw config.
        *
        * @remarks
        * Returns structured errors instead of throwing.
-       * @param input - Raw manifest input.
+       * @param input - Raw config input.
        */
-      export function validateAppManifest(input: unknown) {}
+      export function validateConfig(input: unknown) {}
     `;
 
-    expect(extractJSDoc(content, 'validateAppManifest')).toBe(
-      'Validate a raw manifest.\n\nRemarks: Returns structured errors instead of throwing.',
+    expect(extractJSDoc(content, 'validateConfig')).toBe(
+      'Validate a raw config.\n\nRemarks: Returns structured errors instead of throwing.',
     );
   });
 

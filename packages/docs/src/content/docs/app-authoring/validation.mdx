@@ -1,0 +1,279 @@
+---
+title: Validation
+description: Validate, coerce, transform, and refine request inputs at the route boundary — with handler types inferred from the same definition
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Validation lives at the route boundary. You declare what an input looks like, the framework
+parses requests against that declaration, and your handler receives a typed value. The same
+declaration also drives OpenAPI, so the docs at `/docs` reflect every constraint.
+
+Inputs are validated through schemas attached to `request.body`, `request.params`, and
+`request.query`. Schemas can validate, coerce, transform, and refine — all of which are
+applied before your handler ever runs. (The schema layer uses Zod under the hood; you import
+it as `z` from `'zod'`.)
+
+## What you can do
+
+| Capability         | Example                                                  |
+| ------------------ | -------------------------------------------------------- |
+| Validate shape     | `z.object({ title: z.string() })`                        |
+| Constrain values   | `z.string().min(1).max(200)`                             |
+| Coerce types       | `z.coerce.number().int()`                                |
+| Transform values   | `z.string().email().toLowerCase().trim()`                |
+| Refine with rules  | `z.string().refine(s => s.startsWith('act_'))`           |
+| Cross-field rules  | `.superRefine((data, ctx) => { /* ... */ })`             |
+| Optional fields    | `z.string().optional()` / `.nullable()` / `.default(0)`  |
+| Discriminated unions | `z.discriminatedUnion('kind', [...])`                  |
+
+Everything happens before the handler. If validation fails, the request is rejected with a
+structured `400`; if validation passes, the handler argument is fully typed.
+
+## A complete route
+
+```typescript title="src/blog/posts.ts"
+// @skip-typecheck
+import { domain, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+declare function createPost(input: { title: string; body: string }): Promise<{ id: string; title: string }>;
+declare function fetchPost(id: string, opts: { includeAuthor?: boolean }): Promise<unknown>;
+
+export const postsDomain = domain({
+  name: 'posts',
+  basePath: '/posts',
+  routes: [
+    route.post({
+      path: '/',
+      summary: 'Create a post',
+      request: {
+        body: z.object({
+          title: z.string().min(1).max(200),
+          body: z.string().max(50_000),
+          tags: z.array(z.string()).max(10).optional(),
+        }),
+      },
+      responses: {
+        201: { description: 'Created', schema: z.object({ id: z.string(), title: z.string() }) },
+      },
+      handler: async ({ body, respond }) => {
+        // body is fully typed: { title: string; body: string; tags?: string[] }
+        const post = await createPost(body);
+        return respond.json({ id: post.id, title: post.title }, 201);
+      },
+    }),
+
+    route.get({
+      path: '/:id',
+      summary: 'Get a post',
+      request: {
+        params: z.object({ id: z.string().uuid() }),
+        query: z.object({ includeAuthor: z.coerce.boolean().optional() }),
+      },
+      responses: {
+        200: { description: 'Found', schema: z.object({ id: z.string(), title: z.string() }) },
+      },
+      handler: async ({ params, query, respond }) => {
+        // params: { id: string } — already validated as UUID
+        // query:  { includeAuthor?: boolean } — coerced from string
+        const post = await fetchPost(params.id, { includeAuthor: query.includeAuthor });
+        if (!post) return respond.json({ error: 'Not found' }, 404);
+        return respond.json(post, 200);
+      },
+    }),
+  ],
+});
+```
+
+`request.body`, `request.params`, and `request.query` are independently optional. Only
+declare what you use. Handler arguments are inferred — no `.parse()` calls in your code.
+
+## Coercion and transformation
+
+Coercion converts incoming string-shaped data into the type you want before validation
+runs. Useful for query strings (always strings on the wire) and form fields:
+
+```typescript
+request: {
+  query: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+    active: z.coerce.boolean().optional(),
+  }),
+},
+```
+
+Transformation reshapes valid input. The handler sees the transformed value:
+
+```typescript
+request: {
+  body: z.object({
+    email: z.string().email().toLowerCase().trim(),
+    slug: z.string().transform(s => s.toLowerCase().replace(/\s+/g, '-')),
+  }),
+},
+```
+
+Inside the handler, `body.email` is already lowercased and trimmed; `body.slug` is already
+slugified. You don't reapply these transforms anywhere — they happen in the parsing step.
+
+## Custom and cross-field rules
+
+For constraints the type system can't express:
+
+```typescript
+request: {
+  body: z.object({
+    start: z.string().datetime(),
+    end: z.string().datetime(),
+  }).superRefine((data, ctx) => {
+    if (new Date(data.end) <= new Date(data.start)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['end'],
+        message: 'end must be after start',
+      });
+    }
+  }),
+},
+```
+
+`superRefine` runs after individual fields validate; failures attach to whichever path you
+specify and surface in the standard error response.
+
+## Reusable schemas
+
+Pull schemas out for reuse:
+
+```typescript title="src/blog/schemas.ts"
+import { z } from 'zod';
+
+export const PostId = z.object({ id: z.string().uuid() });
+
+export const PostBody = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().max(50_000),
+});
+
+export const Post = PostBody.extend({ id: z.string().uuid() });
+```
+
+```typescript title="src/blog/posts.ts"
+// @skip-typecheck
+import { route } from '@lastshotlabs/slingshot';
+import { Post, PostBody, PostId } from './schemas';
+
+route.patch({
+  path: '/:id',
+  request: {
+    params: PostId,
+    body: PostBody.partial(),     // PATCH allows partial
+  },
+  responses: { 200: { description: 'Updated', schema: Post } },
+  handler: async ({ params, body, respond }) => { /* ... */ },
+});
+```
+
+## Entity-generated schemas
+
+When you declare an entity with `defineEntity`, the framework generates schemas for every
+generated route automatically:
+
+```typescript title="src/entities/post.ts"
+import { defineEntity, field } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    published: field.boolean({ default: false }),
+  },
+});
+```
+
+You get the right schema per route automatically:
+
+- `POST` body: every required field, no `id`, no auto-defaults
+- `PATCH` body: every field optional
+- Response: the full `Post` shape
+
+End-to-end types for free — the entity definition flows into route schemas, which flow into
+handler argument types. See
+[Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/).
+
+## How errors become responses
+
+When validation fails the handler is never called. The framework returns `400`:
+
+```json
+{
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["body", "title"],
+      "code": "too_small",
+      "message": "String must contain at least 1 character(s)"
+    }
+  ]
+}
+```
+
+You don't write defensive code at the top of every handler. The handler argument is the
+already-parsed value.
+
+## Custom error formatting
+
+Override the default formatter via `validation.errorFormat` in your app config:
+
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  validation: {
+    errorFormat: (issues, requestId) => ({
+      ok: false,
+      requestId,
+      errors: issues.map(i => ({ field: i.path.join('.'), message: i.message })),
+    }),
+  },
+});
+```
+
+Return whatever shape your API contract uses — JSON:API, Problem Details RFC 9457, your
+house format. The formatter receives the issues array and the request ID.
+
+## OpenAPI integration
+
+Every schema is converted to an OpenAPI 3.1 schema and merged into the spec served at
+`/openapi.json`. The Scalar UI at `/docs` reflects every route, every constraint, every
+default. No annotations, no duplicate definitions.
+
+For schemas you reuse across many routes — large response shapes, common error envelopes —
+register them once and they appear as `$ref` entries in the spec instead of being inlined
+everywhere:
+
+```typescript title="src/schemas/registry.ts"
+import { registerSchema } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+export const Pagination = registerSchema(
+  'Pagination',
+  z.object({
+    items: z.array(z.unknown()),
+    nextCursor: z.string().nullable(),
+  }),
+);
+```
+
+`Pagination` is now both a usable schema and a named OpenAPI type. The spec stays compact
+even with hundreds of routes.
+
+## What's next
+
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — the route DSL surface
+- [OpenAPI](/slingshot/guides/openapi/) — customize the generated spec
+- [Exception Handling](/slingshot/app-authoring/exception-handling/) — non-validation errors

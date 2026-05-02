@@ -15,8 +15,8 @@ Every request logs as a single JSON line to stdout.
 
 <Tabs>
   <TabItem label="Code">
-    ```typescript
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
       port: 3000,
       logging: {
         level: 'info',      // 'debug' | 'info' | 'warn' | 'error' | 'silent'
@@ -28,7 +28,7 @@ Every request logs as a single JSON line to stdout.
     ```
   </TabItem>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "logging": {
         "level": "info",
@@ -94,8 +94,8 @@ Enable the `/metrics` endpoint with one config key:
 
 <Tabs>
   <TabItem label="Code">
-    ```typescript
-    await createServer({
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
       metrics: {
         enabled: true,
         path: '/metrics',   // default
@@ -106,7 +106,7 @@ Enable the `/metrics` endpoint with one config key:
     ```
   </TabItem>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "metrics": {
         "enabled": true,
@@ -287,7 +287,7 @@ async function shipToSiem(entry: Record<string, unknown>) {
 }
 ```
 
-Register this plugin in `createServer` before other plugins — it has no setup dependencies.
+Register this plugin in your `app.config.ts` before other plugins — it has no setup dependencies.
 
 <Aside type="tip">
   Security event payloads always include `userId`, `ip`, and `timestamp`. The exact shape varies per
@@ -325,7 +325,7 @@ app.onError((err: Error, c: Context) => {
 });
 ```
 
-`createServer` returns the `app` instance. Register `onError` after startup to wrap Slingshot's own error handling.
+`createApp` returns the `app` instance. Register `onError` after startup to wrap Slingshot's own error handling.
 
 ### Structured error logs
 
@@ -351,20 +351,18 @@ app.onError((err, c) => {
 
 ## Distributed tracing
 
-Slingshot propagates `requestId` through the request context. For span-level distributed tracing, integrate OpenTelemetry:
+Slingshot propagates `requestId` through the request context. For span-level distributed tracing, integrate OpenTelemetry. Start your tracer provider in a custom entry script before invoking the framework — for example, register the SDK and then dynamically import `app.config.ts`:
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-
+```typescript title="src/start.ts"
 declare const tracing: {
   start(): Promise<void> | void;
 };
 
 await tracing.start();
-await createServer({ port: 3000 /* ... */ });
+await import('../app.config');
 ```
 
-OpenTelemetry is the common choice here: start your tracer provider before `createServer()`, then add the HTTP and database instrumentations that match your runtime and drivers.
+OpenTelemetry is the common choice here: start your tracer provider before the framework boots, then add the HTTP and database instrumentations that match your runtime and drivers.
 
 For Bun, use `@opentelemetry/sdk-node` with Bun's compatibility layer. Full Bun-native OTEL support is pending upstream — check the [OpenTelemetry Bun issue](https://github.com/open-telemetry/opentelemetry-js/issues/4815) for current status.
 

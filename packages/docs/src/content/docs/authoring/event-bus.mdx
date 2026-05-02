@@ -221,7 +221,7 @@ These come from the core event map - no augmentation needed:
 
 The default `InProcessAdapter` delivers events only within the current process. For multi-instance deployments, switch to a shared event bus so events cross instances:
 
-```json title="app.manifest.json"
+```json title="app.config.ts"
 {
   "eventBus": "bullmq",
   "secrets": { "provider": "env" }

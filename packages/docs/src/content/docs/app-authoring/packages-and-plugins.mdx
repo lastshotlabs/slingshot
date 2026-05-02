@@ -11,13 +11,13 @@ Slingshot has two composition mechanisms: **packages** (the normal path) and **p
 A package is a self-contained feature module. It owns entities, routes, middleware, and
 cross-package contracts:
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { blogPackage } from './packages/blog';
 import { commentPackage } from './packages/comments';
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [blogPackage, commentPackage],
 });
@@ -63,7 +63,7 @@ const metricsPlugin: SlingshotPlugin = {
   },
 };
 
-await createServer({
+export default defineApp({
   port: 3000,
   plugins: [metricsPlugin],
   packages: [blogPackage],
@@ -86,8 +86,8 @@ Custom infrastructure work is where raw plugins make sense.
 
 ## How they relate
 
-Packages compile to plugins under the hood. When you call `createServer({ packages: [...] })`,
-the framework:
+Packages compile to plugins under the hood. When the framework boots your `app.config.ts`,
+it:
 
 1. Validates package dependencies
 2. Sorts packages in dependency order
@@ -101,9 +101,11 @@ share the same lifecycle but present different authoring surfaces.
 
 You can use both in the same app:
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
   port: 3000,
   plugins: [
     metricsPlugin,                // infrastructure: raw plugin

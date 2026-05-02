@@ -53,8 +53,8 @@ The default validation formatter produces this shape:
 
 Validation response customization lives under `validation.formatError`, not a top-level `validationErrorFormatter` option.
 
-```typescript title="src/index.ts"
-import { type ValidationErrorFormatter, createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { type ValidationErrorFormatter, defineApp } from '@lastshotlabs/slingshot';
 
 const formatError: ValidationErrorFormatter = (issues, requestId) => ({
   type: 'validation_error',
@@ -65,7 +65,7 @@ const formatError: ValidationErrorFormatter = (issues, requestId) => ({
   })),
 });
 
-void createServer({
+export default defineApp({
   validation: {
     formatError,
   },

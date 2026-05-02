@@ -24,11 +24,11 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
 
 <Tabs>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts"
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       security: {
         signing: { secret: process.env.JWT_SECRET! },
@@ -44,7 +44,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
 
   </TabItem>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -189,7 +189,7 @@ Each adapter is independent. Mix and match:
 
 <Tabs>
   <TabItem label="SQLite">
-    ```json title="app.manifest.json (db section)"
+    ```json title="app.config.ts (db section)"
     {
       "db": { "sqlite": "${importMetaDir}/data/app.db" },
       "plugins": [{
@@ -210,7 +210,7 @@ Each adapter is independent. Mix and match:
     bun add @lastshotlabs/slingshot-postgres
     ```
 
-    ```json title="app.manifest.json (db section)"
+    ```json title="app.config.ts (db section)"
     {
       "db": { "postgres": "${env:DATABASE_URL}" },
       "plugins": [{
@@ -229,7 +229,7 @@ Each adapter is independent. Mix and match:
     bun add ioredis
     ```
 
-    ```json title="app.manifest.json (db section)"
+    ```json title="app.config.ts (db section)"
     {
       "db": { "sqlite": "${importMetaDir}/data/app.db", "redis": "${env:REDIS_URL}" },
       "plugins": [{

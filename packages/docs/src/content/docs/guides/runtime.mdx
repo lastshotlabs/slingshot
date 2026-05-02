@@ -22,25 +22,20 @@ The `SlingshotRuntime` interface abstracts the runtime-specific capabilities Sli
 
 Everything else - routing, plugins, database adapters, event bus, auth, actor identity - is runtime-agnostic.
 
-For AWS Lambda, Slingshot uses a functions runtime instead of `createServer()` host listening. See
-[Lambda](/slingshot/guides/lambda/) for the trigger-wrapper path.
-
 ## Bun runtime
 
 ```bash
 bun add @lastshotlabs/slingshot-runtime-bun
 ```
 
-No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in.
+No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in. The Bun runtime is auto-detected, so you typically don't need to pass it.
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-await createServer({
-  runtime: bunRuntime(),
+export default defineApp({
   port: 3000,
-  // ...
+  // runtime omitted — Bun is the default
 });
 ```
 
@@ -53,11 +48,11 @@ bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 
 <Aside>`ws` adds WebSocket support on Node. `fast-glob` handles route discovery.</Aside>
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
-await createServer({
+export default defineApp({
   runtime: nodeRuntime(),
   port: 3000,
   // ...
@@ -90,27 +85,6 @@ The edge runtime intentionally omits several host features:
 If you need bundled file reads, pass `fileStore`. If you need ISR in a multi-instance worker
 deployment, pair `slingshot-ssr` with `createKvIsrCache()` from `@lastshotlabs/slingshot-runtime-edge/kv`.
 
-## AWS Lambda runtime
-
-```bash
-bun add @lastshotlabs/slingshot-runtime-lambda
-```
-
-Use `@lastshotlabs/slingshot-runtime-lambda` when the host is AWS Lambda and the entrypoint is a
-trigger wrapper rather than a listening HTTP server.
-
-```typescript
-import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
-
-const lambda = createLambdaRuntime({
-  manifest: './app.manifest.json',
-});
-```
-
-This runtime supports API Gateway, Function URLs, ALB, SQS, MSK, Kinesis, DynamoDB Streams, S3,
-SNS, EventBridge, and Schedule triggers. The underlying handler contract stays the same. Only the
-transport adapter changes.
-
 ## Choosing a runtime
 
 **Use Bun when:**
@@ -132,23 +106,19 @@ transport adapter changes.
 - You can live without SQLite and local filesystem writes
 - You want SSR or route handling in a worker-friendly runtime envelope
 
-## The manifest path (`slingshot start`)
+## CLI runtime selection (`slingshot start`)
 
-`slingshot start` assumes the Bun runtime by default. For Node, specify the runtime in your manifest
-or pass `--runtime node`:
+`slingshot start` discovers `app.config.ts` and uses the runtime declared in `defineApp(...)`.
+Pass a non-Bun runtime explicitly when needed:
 
-```bash
-slingshot start --runtime node
-```
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
-Or in the manifest:
-
-```json title="app.manifest.json"
-{
-  "manifestVersion": 1,
-  "runtime": "node",
-  "port": 3000
-}
+export default defineApp({
+  runtime: nodeRuntime(),
+  port: 3000,
+});
 ```
 
 Worker-host deployments usually construct the app in the worker entry module rather than calling
@@ -187,7 +157,7 @@ exposure and scope stay owned by the registry, while the runtime package only ow
 Root `ws` is typed as the same `WsConfig` shape on both APIs. `createApp()` only carries that
 bootstrap config far enough for plugin wiring and context setup, while `createServer()` additionally
 owns transport startup, upgrade handling, and host-specific websocket wiring.
-That split lets tests and manifest bootstrap exercise plugin WebSocket registration without opening
+That split lets tests exercise plugin WebSocket registration without opening
 a listener, while Bun and Node still consume the exact same endpoint draft when the server boots.
 
 ## Switching runtimes

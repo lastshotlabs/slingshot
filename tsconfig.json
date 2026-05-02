@@ -87,9 +87,6 @@
       ],
       "@lastshotlabs/slingshot-ssr": ["./packages/slingshot-ssr/src/index.ts"],
       "@lastshotlabs/slingshot-ssg": ["./packages/slingshot-ssg/src/index.ts"],
-      "@lastshotlabs/slingshot-runtime-lambda": [
-        "./packages/slingshot-runtime-lambda/src/index.ts"
-      ],
       "@lastshotlabs/slingshot-runtime-node": ["./packages/runtime-node/src/index.ts"],
       "@lastshotlabs/slingshot-runtime-bun": ["./packages/runtime-bun/src/index.ts"],
       "@config/*": ["./src/config/*"],

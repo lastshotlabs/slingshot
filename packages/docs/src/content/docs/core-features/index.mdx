@@ -65,7 +65,7 @@ Or jump straight to a complete example: [Examples](/slingshot/examples/).
 
 The core framework is the stable foundation:
 
-- `createServer()`, `createApp()` — app assembly
+- `defineApp()` (with `createServer()`/`createApp()` as the imperative APIs) — app assembly
 - `definePackage(...)`, `domain(...)`, `route.*(...)` — package-first authoring
 - `defineEntity(...)`, `defineOperations(...)` — entity system
 - Events, WebSockets, SSE — built-in realtime
@@ -83,6 +83,6 @@ before betting a product surface on one of the non-stable package buckets.
 Once you have a feature working and want to understand how the pieces fit together:
 
 1. [Authoring Model](/slingshot/authoring-model/) — the canonical app → package → entity progression
-2. [App Roots and Runtime](/slingshot/app-authoring/) — `createServer`, config, context, middleware
+2. [App Roots and Runtime](/slingshot/app-authoring/) — `defineApp`, config, context, middleware
 3. [Package-First Authoring](/slingshot/package-first/) — organizing code into composable packages
 4. [Entity System](/slingshot/entity-system/) — the full entity authoring and customization story

@@ -19,11 +19,11 @@ package gives you registration, login, JWT sessions, and route protection out of
 bun add @lastshotlabs/slingshot-auth
 ```
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: {
     signing: { secret: process.env.JWT_SECRET! },
@@ -221,8 +221,13 @@ export function createMyAuthPlugin(): SlingshotPlugin {
 
 Then use it like `slingshot-auth`:
 
-```typescript
-await createServer({
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createMyAuthPlugin } from './src/auth/myAuthPlugin';
+import { appPackage } from './src/app/package';
+
+export default defineApp({
   port: 3000,
   plugins: [createMyAuthPlugin()],
   packages: [appPackage],

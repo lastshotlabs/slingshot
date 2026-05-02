@@ -132,7 +132,7 @@ export interface FunctionsRuntimeConfig {
    * If `onShutdown` does not resolve within this window the shutdown proceeds
    * regardless. Defaults to `1500` ms.
    *
-   * Only honoured by the Lambda runtime (`@lastshotlabs/slingshot-runtime-lambda`).
+   * Only honoured by trigger-wrapper runtimes (e.g. serverless function hosts).
    */
   shutdownTimeoutMs?: number;
   /**
@@ -147,7 +147,7 @@ export interface FunctionsRuntimeConfig {
    * When omitted the runtime imposes no timeout — the underlying platform
    * timeout still applies.
    *
-   * Only honoured by the Lambda runtime (`@lastshotlabs/slingshot-runtime-lambda`).
+   * Only honoured by trigger-wrapper runtimes (e.g. serverless function hosts).
    */
   handlerTimeoutMs?: number;
 }

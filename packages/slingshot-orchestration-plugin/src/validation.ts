@@ -5,7 +5,7 @@ const manifestHandlerRefSchema = z
     handler: z
       .string()
       .min(1)
-      .describe('Export name of the handler function in slingshot.handlers.ts.'),
+      .describe('Named handler reference resolved by an external registry.'),
     params: z
       .record(z.string(), z.unknown())
       .optional()

@@ -18,7 +18,7 @@ asset links, and runtime redirect behavior from a single config model.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and app-level plugin composition
+- **Imported by**: app-level plugin composition
 
 ## Common Tasks
 

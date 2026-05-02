@@ -55,36 +55,19 @@ Each plugin's lifecycle calls produce individual spans with attributes:
 
 ## Enabling Tracing
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json
-    {
-      "observability": {
-        "tracing": {
-          "enabled": true,
-          "serviceName": "my-app"
-        }
-      }
-    }
-    ```
-  </TabItem>
-  <TabItem label="Programmatic">
-    ```ts
-    import { createServer } from '@lastshotlabs/slingshot';
+```ts title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-    await createServer({
-      observability: {
-        tracing: {
-          enabled: true,
-          serviceName: 'my-app',
-        },
-      },
-      // ...
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+export default defineApp({
+  observability: {
+    tracing: {
+      enabled: true,
+      serviceName: 'my-app',
+    },
+  },
+  // ...
+});
+```
 
 When `enabled` is `false` or omitted, no tracer is created and there is zero runtime overhead. The `@opentelemetry/api` package returns no-op implementations when no SDK is registered.
 
@@ -120,12 +103,15 @@ sdk.start();
 Then import it before your server:
 
 ```javascript
-// index.ts
-// Must be first
-import { createServerFromManifest } from '@lastshotlabs/slingshot';
+// app.config.ts is loaded by `slingshot start`. Import the tracing
+// SDK first so it's installed before any application code runs.
 import './tracing';
+import { defineApp } from '@lastshotlabs/slingshot';
 
-await createServerFromManifest('./app.manifest.json');
+export default defineApp({
+  observability: { tracing: { enabled: true } },
+  // ...
+});
 ```
 
 The Slingshot framework spans will appear alongside any auto-instrumented spans (HTTP client, database queries, etc.) in your OTel backend.

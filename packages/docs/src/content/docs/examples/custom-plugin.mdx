@@ -6,7 +6,7 @@ description: Add new routes, middleware, and event handling to a Slingshot app u
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
 Plugins extend Slingshot with your own routes, state, and event behavior. They are now the
-advanced/escape-hatch authoring surface. For standard code-first packages, prefer
+advanced/escape-hatch authoring surface. For standard packages, prefer
 `definePackage(...)`, `entity(...)`, `domain(...)`, and typed capabilities first. Use a raw plugin
 when you need framework-lifecycle control, external integration bootstrapping, or behavior that
 does not fit the package/domain/entity shell. The example below builds a product catalog plugin
@@ -245,64 +245,26 @@ export function createCatalogPlugin(): SlingshotPlugin {
 
 ## Step 4: Wire it into the app
 
-<Tabs>
-  <TabItem label="Manifest">
-    The manifest can't reference local plugin factories — use `createManifestHandlerRegistry()` to register it:
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createCatalogPlugin } from './plugins/catalog';
 
-    ```typescript title="src/index.ts"
-    import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
-    import { createCatalogPlugin } from './plugins/catalog';
-
-    const registry = createManifestHandlerRegistry();
-    registry.registerPlugin('catalog', createCatalogPlugin);
-
-    await createServerFromManifest('./app.manifest.json', registry);
-    ```
-
-    ```json title="app.manifest.json"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "security": {
-        "signing": { "secret": "${secret:JWT_SECRET}" }
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" },
-            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
-          }
-        },
-        { "plugin": "catalog" }
-      ]
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createCatalogPlugin } from './plugins/catalog';
-
-    await createServer({
-      port: 3000,
-      security: {
-        signing: { secret: process.env.JWT_SECRET! },
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user'], defaultRole: 'user' },
-          db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
-        }),
-        createCatalogPlugin(),
-      ],
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+export default defineApp({
+  port: 3000,
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+    }),
+    createCatalogPlugin(),
+  ],
+});
+```
 
 ## The routes you get
 
@@ -321,7 +283,7 @@ curl -X POST http://localhost:3000/catalog/products \
 
 `entity:products.created` is already registered as a client-safe event. Add an SSE endpoint and browser clients receive it automatically:
 
-```json title="app.manifest.json (add to existing)"
+```json title="app.config.ts (add to existing)"
 {
   "sse": {
     "endpoints": {

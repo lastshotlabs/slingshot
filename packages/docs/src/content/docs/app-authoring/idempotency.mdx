@@ -1,0 +1,77 @@
+---
+title: Idempotent Requests
+description: Cache and replay responses for retried writes using the Idempotency-Key header
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`idempotent()` is the middleware you reach for when a client may retry the same write more than
+once and you need to guarantee the side effect happens at most once. Payment intents, async task
+creation, partner webhooks — anything where a duplicate POST would be expensive or wrong.
+
+## How it works
+
+The middleware reads the `Idempotency-Key` request header. On the first request it runs the
+handler, captures status and body, and stores the result keyed by the actor ID and the key. On a
+repeat request with the same key, the handler is skipped and the original response is replayed
+byte-for-byte. If a second request reuses the key with a *different* body or path, the framework
+replies with `409 idempotency_key_conflict` instead of replaying.
+
+Storage lives in `ctx.persistence.idempotency` — the same `IdempotencyAdapter` resolved from
+your `db` config. Memory by default, Redis or Postgres in production.
+
+## Mounting it
+
+```typescript title="src/billing/package.ts"
+import { definePackage, domain, idempotent, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  middleware: {
+    idempotent: idempotent({ ttl: 24 * 60 * 60 }),
+  },
+  domains: [
+    domain({
+      name: 'payments',
+      basePath: '/payments',
+      routes: [
+        route.post({
+          path: '/charge',
+          middleware: ['idempotent'],
+          request: { body: z.object({ amount: z.number(), currency: z.string() }) },
+          handler: async ({ input, respond }) => {
+            const charge = await processCharge(input.body);
+            return respond.json({ id: charge.id, status: 'captured' });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function processCharge(input: { amount: number; currency: string }): Promise<{ id: string }>;
+```
+
+The TTL is in seconds (default `86400`). Tune it to your retry policy: long enough that the
+client has stopped retrying, short enough that you are not paying for replay storage forever.
+
+## Scoping and key derivation
+
+Keys are automatically scoped per actor — `userId:rawKey` — so two users using the same
+`Idempotency-Key` value never collide. Anonymous requests fall back to an `anon:` prefix.
+
+When `security.signing.idempotencyKeys` is enabled in your app config, the raw key is HMAC'd
+before storage. That blocks key enumeration attacks against shared storage but means rotating
+the signing secret invalidates outstanding keys.
+
+<Aside type="tip">
+  Idempotency cuts off at the first successful response. If the handler throws, nothing is
+  cached — the next retry runs the handler fresh.
+</Aside>
+
+## What's next
+
+- [Request IDs](/slingshot/app-authoring/request-ids/) — correlate retried calls in logs
+- [Webhook Auth](/slingshot/app-authoring/request-signing/) — pair with HMAC signing for partner integrations
+- [Response Caching](/slingshot/app-authoring/caching/) — for read-side caching, not write-side replay

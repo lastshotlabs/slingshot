@@ -417,13 +417,11 @@ describe('coverage tooling', () => {
     const normalizedCoverage = coverageFiles.map((file: string) => file.replace(/\\/g, '/'));
     const normalizedIsolated = isolated.map((file: string) => file.replace(/\\/g, '/'));
 
-    expect(fileRequiresIsolatedProcess('tests/unit/manifestBuiltinConfig.test.ts')).toBe(true);
     expect(fileRequiresIsolatedProcess('tests/unit/auditLogProviders.test.ts')).toBe(true);
     expect(fileRequiresIsolatedProcess('tests/unit/webhookAuth.test.ts')).toBe(false);
     expect(normalizedCoverage).toContain('tests/isolated/queue.test.ts');
     expect(normalizedCoverage).toContain('tests/isolated/zodToMongoose.test.ts');
     expect(normalizedIsolated).toContain('tests/unit/auditLogProviders.test.ts');
-    expect(normalizedIsolated).toContain('tests/unit/manifestBuiltinConfig.test.ts');
     expect(normalizedBulk).toContain('tests/unit/webhookAuth.test.ts');
     expect(normalizedBulk).toContain('tests/unit/wsDispatch.test.ts');
   });

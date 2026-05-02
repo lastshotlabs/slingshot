@@ -23,11 +23,10 @@ SecretRepository with JWT_SECRET.
 
 **Fix:**
 
-```ts
-// slingshot.server.ts
-import { createServer } from '@lastshotlabs/slingshot';
+```ts title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-export default createServer({
+export default defineApp({
   security: {
     signing: {
       secret: process.env.JWT_SECRET!, // min 32 chars
@@ -100,8 +99,8 @@ or establish a Redis connection (connectRedis()) before calling plugin.setupMidd
 
 **Fix (framework path):** Add `REDIS_URL` to your environment:
 
-```ts
-createServer({
+```ts title="app.config.ts (excerpt)"
+export default defineApp({
   db: { redis: process.env.REDIS_URL },
 });
 ```
@@ -150,8 +149,8 @@ export const myPlugin: SlingshotPlugin = {
     ```
   </TabItem>
   <TabItem label="Config">
-    ```ts
-    createServer({ port: 3001 });
+    ```ts title="app.config.ts (excerpt)"
+    export default defineApp({ port: 3001 });
     ```
   </TabItem>
   <TabItem label="Manifest">
@@ -323,10 +322,10 @@ router.get('/posts', async c => c.json({ posts: [] }));
 export default router;
 ```
 
-**Wrong `routesDir`:** The framework only scans files in `routesDir`. Check your server config:
+**Wrong `routesDir`:** The framework only scans files in `routesDir`. Check your `app.config.ts`:
 
-```ts
-createServer({
+```ts title="app.config.ts (excerpt)"
+export default defineApp({
   routesDir: import.meta.dir + '/routes', // must contain your routes file
 });
 ```
@@ -380,8 +379,8 @@ SQLite adapters create tables lazily on first use. A missing table means either 
 
 **Fix — check database path:**
 
-```ts
-createServer({
+```ts title="app.config.ts (excerpt)"
+export default defineApp({
   db: {
     sqlite: {
       path: './data/app.db', // must be writable; directory must exist
@@ -438,8 +437,8 @@ Expected behavior. The memory adapter holds all state in JavaScript Maps. Proces
 
 Use a persistent adapter for any environment where state must survive restarts:
 
-```ts
-createServer({
+```ts title="app.config.ts (excerpt)"
+export default defineApp({
   db: {
     sqlite: { path: './data/app.db' }, // persists across restarts
     // or
@@ -681,8 +680,8 @@ The in-memory adapter is running in production. Every session, OAuth state entry
 
 **Fix:**
 
-```ts
-createServer({
+```ts title="app.config.ts (excerpt)"
+export default defineApp({
   db: {
     redis: process.env.REDIS_URL, // sessions, cache, rate limits
     postgres: process.env.DATABASE_URL, // entities, auth users

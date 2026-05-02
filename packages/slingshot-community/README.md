@@ -58,16 +58,16 @@ This package is not standalone. In practice, most apps need:
 }
 ```
 
-**Code-first:**
+**App config:**
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
 import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
 import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 
-await createServer({
+export default defineApp({
   plugins: [
     createAuthPlugin({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },

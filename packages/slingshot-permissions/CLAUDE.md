@@ -18,7 +18,7 @@ used directly as a library or mounted through the permissions plugin.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`
-- **Imported by**: `packages/slingshot-assets/src/index.ts`, `packages/slingshot-chat/src/index.ts`, `packages/slingshot-interactions/src/index.ts`, and manifest bootstrap via `../../src/lib/builtinPlugins.ts`
+- **Imported by**: `packages/slingshot-assets/src/index.ts`, `packages/slingshot-chat/src/index.ts`, `packages/slingshot-interactions/src/index.ts`, and app `app.config.ts` files
 
 ## Common Tasks
 

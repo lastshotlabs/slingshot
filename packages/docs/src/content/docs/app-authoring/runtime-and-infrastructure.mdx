@@ -7,11 +7,13 @@ Slingshot treats infrastructure as part of app assembly, not as scattered packag
 
 ## A representative production root
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp, type AppConfig } from '@lastshotlabs/slingshot';
 
-await createServer({
+declare const myRuntime: AppConfig['runtime'];
+
+export default defineApp({
   db: {
     postgres: process.env.POSTGRES_URL,
     redis: process.env.REDIS_URL,
@@ -35,8 +37,6 @@ await createServer({
   secrets: { provider: 'env' },
   runtime: myRuntime,
 });
-
-declare const myRuntime: import('@lastshotlabs/slingshot').CreateAppConfig['runtime'];
 ```
 
 ## What belongs here
@@ -85,6 +85,6 @@ One of the main docs goals here is to make the app root communicate production r
 
 You have now seen the full app authoring surface. From here:
 
-- [Package-First Authoring](/slingshot/package-first/) — the canonical code-first composition surface
+- [Package-First Authoring](/slingshot/package-first/) — the canonical composition surface
 - [Entity System](/slingshot/entity-system/) — data-shaped domains with generated routes and operations
 - [Examples](/slingshot/examples/) — complete apps that combine what you have learned

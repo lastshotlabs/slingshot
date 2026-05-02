@@ -161,7 +161,7 @@ function buildInteractionsPeer(
  * self-registers its `onRoomSubscribe` guard and `incoming` handlers onto
  * `SlingshotContext.wsEndpoints[wsEndpoint]` during `setupPost`. No caller-side
  * wiring of `buildSubscribeGuard` or `buildReceiveIncoming` is needed. In
- * manifest mode only `wsEndpoint` is required — WS publish/runtime access is
+ * config-driven mode only `wsEndpoint` is required — WS publish/runtime access is
  * resolved lazily from `SlingshotContext`.
  *
  * @example
@@ -646,7 +646,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       // config. This runs after all adapters are resolved and innerPlugin is fully
       // initialised, so buildSubscribeGuard and buildReceiveIncoming are available.
       //
-      // In manifest mode: ctx.wsEndpoints is populated by the framework before
+      // In config-driven mode: ctx.wsEndpoints is populated by the framework before
       // plugins run, so mutations here are visible when connections arrive.
       // In code mode: callers may instead use buildSubscribeGuard/buildReceiveIncoming
       // directly when constructing the WS endpoint config.

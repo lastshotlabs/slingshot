@@ -159,22 +159,6 @@ await createServer({
 });
 ```
 
-### Lambda handler
-
-```typescript title="src/lambda.ts"
-// @skip-typecheck
-import { createApp } from '@lastshotlabs/slingshot';
-import { blogPackage } from './packages/blog';
-
-const { app } = await createApp({
-  packages: [blogPackage],
-});
-
-export default app;
-```
-
-See [Lambda Guide](/slingshot/guides/lambda/) for the full setup.
-
 ## Next
 
 - [App Config](/slingshot/app-authoring/app-config/) — all the config options

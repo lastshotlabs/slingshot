@@ -18,9 +18,7 @@ into the orchestration plugin. This is the production-shaped variant of
 
 ## Files
 
-- `src/index.ts` - code-first app bootstrap with the BullMQ adapter
-- `app.manifest.json` - manifest-first equivalent. The orchestration plugin's
-  manifest config supports `adapter.type: "bullmq"` directly.
+- `app.config.ts` - typed app config with the BullMQ adapter
 
 ## Prerequisites
 
@@ -52,7 +50,7 @@ From the repo root:
 ```bash
 JWT_SECRET=dev-secret-change-me-dev-secret-change-me \
 REDIS_HOST=127.0.0.1 \
-bun examples/orchestration-bullmq/src/index.ts
+slingshot start --config examples/orchestration-bullmq/app.config.ts
 ```
 
 Start a workflow run:

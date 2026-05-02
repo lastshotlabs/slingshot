@@ -106,8 +106,8 @@ const adapter = createTemporalOrchestrationAdapter({
 ```
 
 Temporal worker processes are separate from the HTTP server. For real deployments, pair the adapter
-with `createTemporalOrchestrationWorker()` or the `slingshot orchestration worker` CLI command so
-workflow code and activity handlers can poll the configured task queues.
+with `createTemporalOrchestrationWorker()` so workflow code and activity handlers can poll the
+configured task queues.
 
 ## Capability matrix
 

@@ -1,9 +1,10 @@
 /**
- * Manifest-bootability test for slingshot-assets.
+ * JSON-bootability test for slingshot-assets.
  *
  * Verifies that the plugin can be instantiated from a JSON-serializable
  * config object — no function references, no class instances — so
- * manifest-mode bootstrap succeeds.
+ * config-driven bootstrap succeeds for any tooling that loads plugin
+ * configs from a serialized blob.
  */
 import { describe, expect, test } from 'bun:test';
 import { createAssetsPlugin } from '../../src/plugin';

@@ -1,0 +1,107 @@
+---
+title: WebSocket Recovery
+description: Replay missed messages after a disconnect using session-buffered history
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Mobile networks drop connections. Users refresh tabs. Phones go to sleep. Without recovery,
+every reconnect starts from a blank slate and any message that landed during the gap is lost.
+Slingshot's recovery feature gives clients a session ID at disconnect time and replays
+missed messages on reconnect.
+
+## How it works
+
+Set `recovery: { windowMs }` on an endpoint and the framework writes a session record to
+its in-memory `sessionRegistry` every time a socket closes. The record holds the rooms the
+socket was subscribed to and per-room cursors pointing at the last delivered message. The
+`windowMs` value is how long the session is recoverable; after that, garbage collection
+prunes it.
+
+On reconnect, the client sends a `recover` action with `{ sessionId, rooms, lastEventId }`.
+The framework validates the session, ensures the requested rooms match what was saved,
+re-subscribes the new socket to each room, and replays every message that landed after the
+last known cursor — using the endpoint's `persistence` store as the source of truth.
+
+## Enable it
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  ws: {
+    endpoints: {
+      '/ws/chat': {
+        persistence: { store: 'redis' },
+        recovery: { windowMs: 5 * 60 * 1000 },
+        incoming: {
+          join: {
+            handler: (ws, payload, ctx) => {
+              const room = (payload as { room: string }).room;
+              ctx.subscribe(room);
+            },
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+`recovery` requires `persistence` — the framework throws at startup if you set `recovery`
+without a `persistence` store, because there would be nothing to replay from. Persistence
+adapters available: `memory`, `sqlite`, `redis`, `mongo`.
+
+## Client flow
+
+The client receives a `sessionId` on `open`, remembers the last event ID per room, and on
+reconnect sends a single `recover` message:
+
+```typescript title="src/client/recover.ts"
+// @skip-typecheck
+ws.send(JSON.stringify({
+  action: 'recover',
+  data: {
+    sessionId: lastSessionId,
+    rooms: ['room:42', 'room:99'],
+    lastEventId: lastReceivedEventId,
+  },
+}));
+
+ws.addEventListener('message', e => {
+  const msg = JSON.parse(e.data);
+  if (msg.event === 'recovered') {
+    console.log('replayed', msg.replayed, 'messages');
+  } else if (msg.event === 'recover_failed') {
+    console.warn('recovery failed:', msg.reason); // 'session_expired' | 'rooms_changed' | 'history_unavailable'
+  }
+});
+```
+
+Three failure modes you should handle:
+
+- `session_expired` — gap exceeded `windowMs`. Resubscribe from scratch and pull a fresh
+  snapshot.
+- `rooms_changed` — the client requested a different room set than was saved. This is almost
+  always a client bug; double-check your reconnect logic.
+- `history_unavailable` / `persistence_unavailable` — the persistence backend errored. Treat
+  it as a hard failure and resync.
+
+## Tuning the window
+
+A short `windowMs` (30s) saves memory but punishes legitimate reconnects on flaky networks.
+A long one (10 min) is more forgiving but holds session metadata longer. Five minutes is a
+reasonable default for most real-time apps.
+
+<Aside type="caution">
+  Sessions are kept on the instance that handled the original socket. In multi-instance
+  deployments the reconnecting client may land on a different node and find its session
+  missing — the framework reports `session_expired` in that case. Sticky load balancing or a
+  shared session store (a future enhancement) is required for cross-node recovery.
+</Aside>
+
+## What's next
+
+- [WebSocket Presence](/slingshot/app-authoring/websocket-presence/) — who is connected right now
+- [WebSocket Transports](/slingshot/app-authoring/websocket-transports/) — cross-instance message fanout
+- [WebSockets Guide](/slingshot/guides/websockets/) — full WebSocket walkthrough

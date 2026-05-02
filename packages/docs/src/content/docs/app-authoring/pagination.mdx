@@ -1,0 +1,142 @@
+---
+title: Pagination
+description: Offset and cursor pagination helpers with Zod schemas and signed cursors
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Slingshot ships first-class pagination helpers in two flavors: offset-based for small,
+stable lists where users want to jump to a page number, and cursor-based for large, churning
+lists where you need consistent results across writes. Both styles return Zod schemas you
+compose into your route definitions, so the OpenAPI spec stays accurate.
+
+## How it works
+
+The helpers split into three pieces per strategy: a query-param schema (`offsetParams()`,
+`cursorParams()`) you put in your request schema, a parser
+(`parseOffsetParams()`, `parseCursorParams()`) you call inside the handler to clamp values,
+and a response wrapper (`paginatedResponse()`, `cursorResponse()`) that registers the
+response shape with the OpenAPI registry under a name of your choice.
+
+Cursors are opaque strings. When `security.signing.cursors` is enabled the helpers
+HMAC-sign cursors before returning them and verify on the way back in — clients cannot
+fabricate or tamper with them.
+
+## Offset pagination
+
+Best for stable lists with a known size where users browse by page:
+
+```typescript title="src/catalog/package.ts"
+import {
+  definePackage,
+  domain,
+  offsetParams,
+  paginatedResponse,
+  parseOffsetParams,
+  route,
+} from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+const Product = z.object({ id: z.string(), name: z.string() });
+
+export const catalogPackage = definePackage({
+  name: 'catalog',
+  domains: [
+    domain({
+      name: 'products',
+      basePath: '/products',
+      routes: [
+        route.get({
+          path: '/',
+          request: { query: offsetParams() },
+          responses: {
+            200: { description: 'Page of products', schema: paginatedResponse(Product, 'ProductPage') },
+          },
+          handler: async ({ input, respond }) => {
+            const { limit, offset } = parseOffsetParams(input.query);
+            const items = await listProducts({ skip: offset, take: limit });
+            return respond.json({ items, total: items.length, limit, offset });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function listProducts(opts: { skip: number; take: number }): Promise<{ id: string; name: string }[]>;
+```
+
+## Cursor pagination
+
+Best for large lists, infinite scroll, or anywhere new rows are appended frequently:
+
+```typescript title="src/feed/package.ts"
+import {
+  cursorParams,
+  cursorResponse,
+  definePackage,
+  domain,
+  parseCursorParams,
+  route,
+} from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+const Post = z.object({ id: z.string(), title: z.string(), createdAt: z.string() });
+
+export const feedPackage = definePackage({
+  name: 'feed',
+  domains: [
+    domain({
+      name: 'posts',
+      basePath: '/posts',
+      routes: [
+        route.get({
+          path: '/',
+          request: { query: cursorParams({ limit: 25, maxLimit: 100 }) },
+          responses: {
+            200: { description: 'Page of posts', schema: cursorResponse(Post, 'PostPage') },
+          },
+          handler: async ({ input, respond }) => {
+            const { limit, cursor } = parseCursorParams(input.query);
+            const page = await loadPosts({ limit, cursor });
+            return respond.json({
+              items: page.items,
+              nextCursor: page.nextCursor,
+              hasMore: page.hasMore,
+            });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function loadPosts(opts: { limit: number; cursor?: string }): Promise<{
+  items: { id: string; title: string; createdAt: string }[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}>;
+```
+
+The cursor opaque to clients — encode whatever the adapter needs (a row ID, a timestamp, a
+composite key). The `encodeCursor` and `decodeCursor` helpers from `@lastshotlabs/slingshot-entity`
+handle the base64url plumbing if you are encoding by hand.
+
+## Signed cursors
+
+Set `security.signing.cursors: true` and `security.signing.secret` and cursors are HMAC'd on
+the way out and verified on the way in. `parseCursorParams` returns `invalidCursor: true` when
+verification fails — handle it as a 400, not as "first page", so a tampered cursor never
+silently restarts the iteration.
+
+<Aside type="tip">
+  Pick cursor pagination by default for any list larger than a few hundred items. Offset
+  pagination drifts on writes — if a row is inserted while a user is on page 3, page 4 will
+  duplicate the last item or skip one.
+</Aside>
+
+## What's next
+
+- [defineEntity](/slingshot/entity-system/define-entity/) — generated routes already use cursor pagination
+- [OpenAPI](/slingshot/guides/openapi/) — how `cursorResponse` registers in the spec
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — full route schema surface

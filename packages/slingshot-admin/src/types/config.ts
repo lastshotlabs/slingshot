@@ -191,13 +191,11 @@ export const adminPluginConfigSchema = z.object({
     ),
   /** Provider for admin access verification */
   accessProvider: AdminAccessProviderSchema.describe(
-    'Admin access verification provider. In manifest mode, accepts "slingshot-auth" which is ' +
-      'resolved to an AdminAccessProvider before the plugin factory.',
+    'Admin access verification provider — pass an `AdminAccessProvider` object directly.',
   ),
   /** Provider for managed user operations */
   managedUserProvider: ManagedUserProviderSchema.describe(
-    'Managed user provider. In manifest mode, accepts "slingshot-auth" which is resolved ' +
-      'to a ManagedUserProvider before the plugin factory.',
+    'Managed user provider — pass a `ManagedUserProvider` object directly.',
   ),
   /** Mail template renderer for admin emails */
   mailRenderer: MailRendererSchema.optional().describe(
@@ -205,8 +203,7 @@ export const adminPluginConfigSchema = z.object({
   ),
   /** Audit log provider for tracking admin actions */
   auditLog: AuditLogProviderSchema.optional().describe(
-    'Audit-log provider. In manifest mode, accepts "memory" which is resolved to an ' +
-      'in-memory AuditLogProvider before the plugin factory. Omit to skip audit logging.',
+    'Audit-log provider — pass an `AuditLogProvider` object directly. Omit to skip audit logging.',
   ),
   /**
    * Optional pluggable store backing the destructive-mutation rate limiter.
@@ -221,8 +218,8 @@ export const adminPluginConfigSchema = z.object({
   ),
   /** Admin-specific audit logger for CRUD operations */
   auditLogger: AdminAuditLoggerSchema.optional().describe(
-    'Admin audit logger for CRUD operations. In manifest mode, accepts "console" which is resolved ' +
-      'to a ConsoleAuditLogger before the plugin factory. Omit to skip admin audit logging.',
+    'Admin audit logger for CRUD operations — pass an `AdminAuditLogger` object directly. ' +
+      'Omit to skip admin audit logging.',
   ),
   /** Required permissions system */
   permissions: z
@@ -238,7 +235,7 @@ export const adminPluginConfigSchema = z.object({
       ),
     })
     .describe(
-      'Permissions services. In manifest mode, accepts "slingshot-permissions" which is resolved ' +
-        'to evaluator/registry/adapter from the permissions plugin state before the plugin factory.',
+      'Permissions services — pass `evaluator`, `registry`, and `adapter` directly, or rely on ' +
+        '`slingshot-permissions` to publish them via plugin state for runtime resolution.',
     ),
 });

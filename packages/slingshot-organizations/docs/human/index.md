@@ -15,30 +15,26 @@ The organization and group entities themselves follow the shared package-first/e
 
 ## Minimum Setup
 
-The plugin is configured through the app manifest under the `organizations` key:
+Pass the config to `createOrganizationsPlugin()` from `app.config.ts`:
 
-```json
-{
-  "organizations": {
-    "mountPath": "/orgs",
-    "auth": {
-      "requireAuth": true,
-      "requireVerifiedEmail": true
-    },
-    "invite": {
-      "rateLimit": { "maxPerWindow": 20, "windowMs": 3600000 }
-    }
-  }
-}
-```
-
-For code-first setups, pass the config to `createOrganizationsPlugin()`:
-
-```ts
+```ts title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
 
-const plugin = createOrganizationsPlugin({
-  mountPath: '/orgs',
+export default defineApp({
+  plugins: [
+    createOrganizationsPlugin({
+      mountPath: '/orgs',
+      organizations: {
+        enabled: true,
+        inviteRateLimit: {
+          create: { limit: 20, windowMs: 3_600_000 },
+          lookup: { limit: 60, windowMs: 60_000 },
+        },
+        // defaults are sensible; opt into stricter rules as needed
+      },
+    }),
+  ],
 });
 ```
 
@@ -49,7 +45,7 @@ The plugin depends on `slingshot-auth` being registered first.
 - Owns organization and group entity definitions, membership records, and invitation flows.
 - Owns the org service published to plugin state, accessible via `getOrganizationsOrgServiceOrNull`.
 - Depends on `slingshot-auth` for user auth middleware, route auth, and actor identity resolution.
-- Depends on `slingshot-entity` for entity-backed CRUD routes and manifest-driven runtime.
+- Depends on `slingshot-entity` for entity-backed CRUD routes and config-driven runtime.
 - Does not own auth session management, user identity, or the permissions grant system.
 
 ## Operational Notes
@@ -58,7 +54,7 @@ The plugin depends on `slingshot-auth` being registered first.
 - Group-management mutations should fail closed for suspended or newly-unverified accounts. Apply the account-state check in the route handler before mutating groups or memberships.
 - Group management configuration must also fail closed. Reject `managementRoutes.middleware: []` at startup instead of mounting unprotected routes.
 - Generic organization list/get surfaces are administrative by default. Member-facing reads should come from explicitly scoped routes such as `/orgs/mine`, not from broad authenticated CRUD access.
-- **Rate limiting:** invite-sending and membership mutation endpoints apply the framework's rate-limit middleware. Configure per-endpoint limits under the `rateLimit` key in the manifest. The default is 100 requests per minute per user for invite endpoints.
+- **Rate limiting:** invite-sending and membership mutation endpoints apply the framework's rate-limit middleware. Configure per-endpoint limits via the `rateLimit` field on the plugin config. The default is 100 requests per minute per user for invite endpoints.
 - **Reconciliation:** the plugin does not automatically reconcile org/group membership when a user account is suspended or deleted. Downstream consumers should subscribe to `auth:user.suspended` and `auth:user.deleted` events and call the organization service to remove affected memberships.
 
 ## Gotchas

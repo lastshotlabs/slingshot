@@ -21,10 +21,10 @@ hero:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-## Start with code
+## Hello, world
 
-```typescript title="src/index.ts"
-import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
 const Task = defineEntity('Task', {
   namespace: 'app',
@@ -35,10 +35,14 @@ const Task = defineEntity('Task', {
   },
 });
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
 });
+```
+
+```bash
+slingshot start
 ```
 
 Five routes, request validation, OpenAPI docs, and swappable storage — from one definition.
@@ -105,5 +109,4 @@ Five routes, request validation, OpenAPI docs, and swappable storage — from on
 ## More
 
 - [Introduction](/slingshot/getting-started/) — what Slingshot is and why it exists
-- [Alternate Paths](/slingshot/alternate-paths/) — manifest authoring and other approaches
 - [Packages](/slingshot/packages/) — built-in packages for auth, community, chat, search, and more

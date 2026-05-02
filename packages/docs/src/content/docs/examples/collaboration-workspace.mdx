@@ -41,7 +41,7 @@ bun add @lastshotlabs/slingshot \
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -148,8 +148,8 @@ bun add @lastshotlabs/slingshot \
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
+    ```typescript title="app.config.ts"
+    import { defineApp } from '@lastshotlabs/slingshot';
     import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
@@ -163,7 +163,7 @@ bun add @lastshotlabs/slingshot \
     import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
     import { createPollsPlugin } from '@lastshotlabs/slingshot-polls';
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       security: { signing: { secret: process.env.JWT_SECRET! } },
       plugins: [

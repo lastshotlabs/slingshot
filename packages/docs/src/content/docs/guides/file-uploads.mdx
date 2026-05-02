@@ -19,7 +19,7 @@ bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -43,7 +43,7 @@ bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
     }
     ```
 
-    ```typescript title="slingshot.handlers.ts"
+    ```typescript title="app.config.ts"
     export function generateUploadKey(
       file: { name: string; type: string },
       ctx: { userId?: string }
@@ -65,17 +65,16 @@ bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    await createServer({
+    ```typescript title="app.config.ts"
+    import { defineApp, s3Storage } from '@lastshotlabs/slingshot';
+
+    export default defineApp({
       port: 3000,
       upload: {
-        storage: {
-          adapter: 's3',
-          config: {
-            bucket: process.env.UPLOAD_BUCKET!,
-            region: process.env.AWS_REGION!,
-          },
-        },
+        storage: s3Storage({
+          bucket: process.env.UPLOAD_BUCKET!,
+          region: process.env.AWS_REGION!,
+        }),
         maxFileSize: 10 * 1024 * 1024, // 10 MB
 
         generateKey: (file, ctx) => {

@@ -11,7 +11,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 - Version: `0.0.2`
 - Kind: Root package
 - Role: app assembly package
-- Description: Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
+- Description: Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.
 - Workspace path: `.`
 - Entry point: `src/index.ts`
 
@@ -24,7 +24,6 @@ bun add @lastshotlabs/slingshot
 ## Export Paths
 
 - `.`
-- `./manifest`
 - `./mongo`
 - `./queue`
 - `./redis`

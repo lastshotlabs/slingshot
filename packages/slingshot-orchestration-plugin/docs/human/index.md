@@ -81,7 +81,7 @@ That separation is intentional. The portable runtime stays reusable outside Slin
 This package registers orchestration definitions and request hooks. It does not provide a service
 registry for arbitrary business services.
 
-- Pass `tasks` and `workflows` directly to `createOrchestrationPlugin()` in code-first apps.
+- Pass `tasks` and `workflows` directly to `createOrchestrationPlugin()` in apps.
 - In manifest apps, export those definitions from your handlers module and reference them by name in the orchestration plugin config.
 - Use `resolveRequestContext()` and `authorizeRun()` to wire request-scoped identity and access rules without coupling the router to actor-resolution internals.
 - Keep domain services such as quoting engines, carrier APIs, pricing rules, and ordering clients in your normal application composition. Inject or import them inside task handlers.

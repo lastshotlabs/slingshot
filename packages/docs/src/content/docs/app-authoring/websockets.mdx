@@ -13,12 +13,12 @@ collaboration endpoint.
 
 ## A copyable endpoint
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { blogPackage } from './blog/package';
 
-await createServer({
+export default defineApp({
   packages: [blogPackage],
   ws: {
     endpoints: {
@@ -96,8 +96,12 @@ instead of failing later at runtime.
 Single-instance room publish works without extra setup. Multi-instance delivery requires a shared
 WebSocket transport:
 
-```typescript
-await createServer({
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+declare const myWsTransport: import('@lastshotlabs/slingshot').WsConfig['transport'];
+
+export default defineApp({
   ws: {
     transport: myWsTransport,
     endpoints: {
@@ -105,8 +109,6 @@ await createServer({
     },
   },
 });
-
-declare const myWsTransport: import('@lastshotlabs/slingshot').WsConfig['transport'];
 ```
 
 This is separate from the event bus. The event bus handles app events. The WebSocket transport
@@ -123,7 +125,7 @@ handles cross-instance room fan-out.
 
 Packages can bootstrap endpoint hooks through the root `ws` config. `createApp()` exposes the
 bootstrap endpoint map on context so packages can attach `incoming` handlers or subscribe guards
-before `createServer()` starts the live transport.
+before the runtime starts the live transport.
 
 That is how package-owned realtime behavior can remain package-owned instead of leaking into the app
 root.

@@ -7,7 +7,7 @@ This is the canonical starter app used throughout the docs.
 
 It is intentionally small, but it already uses the real core surfaces:
 
-- `createServer(...)`
+- `defineApp(...)`
 - `packages: [...]`
 - `definePackage(...)`
 - `defineEntity(...)`
@@ -17,8 +17,8 @@ It is intentionally small, but it already uses the real core surfaces:
 ## File layout
 
 ```text
+app.config.ts
 src/
-  index.ts
   blog/
     post.ts
     post-operations.ts
@@ -129,13 +129,13 @@ export const blogPackage = definePackage({
 });
 ```
 
-## `src/index.ts`
+## `app.config.ts`
 
-```typescript title="src/index.ts"
-import { createServer } from '@lastshotlabs/slingshot';
-import { blogPackage } from './blog/package';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { blogPackage } from './src/blog/package';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: {
     signing: { secret: process.env.JWT_SECRET ?? 'dev-secret' },

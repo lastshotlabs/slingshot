@@ -3,13 +3,6 @@ export interface CodeAppCheck {
   entrypoint: string;
 }
 
-export interface ManifestCheck {
-  kind: 'manifest';
-  manifestPath: string;
-  handlerModule?: string;
-  handlerExports?: string[];
-}
-
 export interface ModuleExportsCheck {
   kind: 'module-exports';
   entrypoint: string;
@@ -17,7 +10,7 @@ export interface ModuleExportsCheck {
   requiredPlugins?: string[];
 }
 
-export type ExampleCheckDefinition = CodeAppCheck | ManifestCheck | ModuleExportsCheck;
+export type ExampleCheckDefinition = CodeAppCheck | ModuleExportsCheck;
 
 export interface ExampleDefinition {
   name: string;
@@ -31,16 +24,13 @@ export const exampleRegistry: ExampleDefinition[] = [
     name: 'with-auth',
     directory: 'examples/with-auth',
     docsPath: 'packages/docs/src/content/docs/examples/with-auth.mdx',
-    checks: [
-      { kind: 'code-app', entrypoint: 'examples/with-auth/src/index.ts' },
-      { kind: 'manifest', manifestPath: 'examples/with-auth/app.manifest.json' },
-    ],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/with-auth/app.config.ts' }],
   },
   {
     name: 'config-driven-domain',
     directory: 'examples/config-driven-domain',
     docsPath: 'packages/docs/src/content/docs/examples/config-driven-domain.mdx',
-    checks: [{ kind: 'code-app', entrypoint: 'examples/config-driven-domain/src/index.ts' }],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/config-driven-domain/app.config.ts' }],
   },
   {
     name: 'collaboration-workspace',
@@ -49,8 +39,8 @@ export const exampleRegistry: ExampleDefinition[] = [
     checks: [
       {
         kind: 'module-exports',
-        entrypoint: 'examples/collaboration-workspace/src/index.ts',
-        exports: ['buildAppConfig'],
+        entrypoint: 'examples/collaboration-workspace/app.config.ts',
+        exports: ['default'],
         requiredPlugins: [
           'slingshot-auth',
           'slingshot-notifications',
@@ -66,29 +56,25 @@ export const exampleRegistry: ExampleDefinition[] = [
           'slingshot-interactions',
         ],
       },
-      {
-        kind: 'manifest',
-        manifestPath: 'examples/collaboration-workspace/app.manifest.json',
-      },
     ],
   },
   {
     name: 'content-platform',
     directory: 'examples/content-platform',
     docsPath: 'packages/docs/src/content/docs/examples/content-platform.mdx',
-    checks: [{ kind: 'code-app', entrypoint: 'examples/content-platform/src/index.ts' }],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/content-platform/app.config.ts' }],
   },
   {
     name: 'game-engine',
     directory: 'examples/game-engine',
     docsPath: 'packages/docs/src/content/docs/examples/game-engine.mdx',
-    checks: [{ kind: 'code-app', entrypoint: 'examples/game-engine/src/index.ts' }],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/game-engine/app.config.ts' }],
   },
   {
     name: 'orchestration',
     directory: 'examples/orchestration',
     docsPath: 'packages/docs/src/content/docs/examples/orchestration.mdx',
-    checks: [{ kind: 'code-app', entrypoint: 'examples/orchestration/src/index.ts' }],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/orchestration/app.config.ts' }],
   },
   {
     name: 'orchestration-bullmq',
@@ -97,14 +83,8 @@ export const exampleRegistry: ExampleDefinition[] = [
     checks: [
       {
         kind: 'module-exports',
-        entrypoint: 'examples/orchestration-bullmq/src/index.ts',
-        exports: ['buildAppConfig', 'requireOpsKey', 'resolveOpsRequestContext'],
-      },
-      {
-        kind: 'manifest',
-        manifestPath: 'examples/orchestration-bullmq/app.manifest.json',
-        handlerModule: 'examples/orchestration-bullmq/src/index.ts',
-        handlerExports: ['requireOpsKey', 'resolveOpsRequestContext'],
+        entrypoint: 'examples/orchestration-bullmq/app.config.ts',
+        exports: ['default', 'requireOpsKey', 'resolveOpsRequestContext'],
       },
     ],
   },
@@ -112,18 +92,12 @@ export const exampleRegistry: ExampleDefinition[] = [
     name: 'organizations',
     directory: 'examples/organizations',
     docsPath: 'packages/docs/src/content/docs/examples/organizations.mdx',
-    checks: [
-      { kind: 'code-app', entrypoint: 'examples/organizations/src/index.ts' },
-      { kind: 'manifest', manifestPath: 'examples/organizations/app.manifest.json' },
-    ],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/organizations/app.config.ts' }],
   },
   {
     name: 'webhooks',
     directory: 'examples/webhooks',
     docsPath: 'packages/docs/src/content/docs/examples/webhooks.mdx',
-    checks: [
-      { kind: 'code-app', entrypoint: 'examples/webhooks/src/index.ts' },
-      { kind: 'manifest', manifestPath: 'examples/webhooks/app.manifest.json' },
-    ],
+    checks: [{ kind: 'code-app', entrypoint: 'examples/webhooks/app.config.ts' }],
   },
 ];

@@ -10,7 +10,7 @@ Every Slingshot app follows the same structure. Understanding it makes everythin
 ## The three layers
 
 ```
-createServer()                    ← app root: assembly, config, security
+defineApp()                       ← app root: assembly, config, security
   └── definePackage()             ← packages: feature boundaries
         ├── entity()              ← entities: generated CRUD + operations
         ├── domain() + route.*()  ← routes: custom endpoints
@@ -30,10 +30,10 @@ for domain actions like `publish` or `archive`.
 
 ## A real example
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
 import {
-  createServer,
+  defineApp,
   defineEntity,
   definePackage,
   domain,
@@ -77,7 +77,7 @@ const blogPackage = definePackage({
 });
 
 // App root: assembly
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [blogPackage],
 });
@@ -104,7 +104,7 @@ its code.
   <LinkCard
     title="App Roots and Runtime"
     href="/slingshot/app-authoring/"
-    description="createServer, createApp, config, context, middleware, and the assembly step."
+    description="defineApp, createApp, config, context, middleware, and the assembly step."
   />
   <LinkCard
     title="Package-First Authoring"

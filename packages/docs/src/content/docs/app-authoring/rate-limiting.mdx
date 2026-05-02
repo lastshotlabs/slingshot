@@ -1,0 +1,179 @@
+---
+title: Rate Limiting
+description: Throttle requests with configurable windows, scopes, and storage backends
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Rate limiting protects your app from abusive clients, runaway scripts, and brute-force
+attacks. Slingshot ships a tiered rate limiter that runs at the framework level and an
+extension point for per-route or per-feature limits.
+
+## How it works
+
+The framework runs a global rate limiter as middleware before your routes. Each request
+is keyed by client IP (or a custom function) and counted against a sliding window. When
+the bucket is full, the request is rejected with `429 Too Many Requests` and a
+`Retry-After` header.
+
+Defaults: **100 requests per 60 seconds per IP**, in-memory store.
+
+## Configure globally
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  security: {
+    rateLimit: {
+      windowMs: 60_000,         // 1 minute window
+      max: 100,                 // 100 requests per window
+      store: 'memory',          // 'memory' | 'redis'
+      fingerprintLimit: false,  // see Bot Protection
+    },
+  },
+});
+```
+
+For multi-instance deployments, use the Redis store so all replicas share the same
+counter:
+
+```typescript
+security: {
+  rateLimit: { store: 'redis', windowMs: 60_000, max: 100 },
+},
+db: { redis: process.env.REDIS_URL },
+```
+
+## Disable rate limiting
+
+```typescript
+security: {
+  rateLimit: false, // explicitly disable — useful for tests or trusted internal endpoints
+},
+```
+
+<Aside type="caution">
+  Disabling rate limiting in production is rarely correct. Prefer raising `max` or
+  whitelisting specific IPs instead.
+</Aside>
+
+## Per-route rate limiting
+
+Apply `rateLimit()` middleware to a single route or domain when the global limit is too
+broad:
+
+```typescript title="src/billing/package.ts"
+import { definePackage, domain, rateLimit, route } from '@lastshotlabs/slingshot';
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  middleware: {
+    strictLimit: rateLimit({ windowMs: 60_000, max: 10 }),
+  },
+  domains: [
+    domain({
+      name: 'webhooks',
+      basePath: '/webhooks',
+      routes: [
+        route.post({
+          path: '/stripe',
+          middleware: ['strictLimit'],
+          handler: async ({ respond }) => respond.json({ received: true }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+## Fingerprint-aware limits
+
+By default, requests are keyed by client IP. For routes that need protection beyond IP
+(e.g., auth endpoints where one IP can mask many bots), enable fingerprint hashing:
+
+```typescript
+// @skip-typecheck
+import { rateLimit } from '@lastshotlabs/slingshot';
+
+const authLimit = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  fingerprintLimit: true, // hash request fingerprint into the bucket key
+});
+```
+
+Fingerprint hashing combines client IP, user-agent, and other request headers into a
+single bucket key so a single client juggling user agents still hits the same bucket.
+
+## Response headers
+
+The middleware sets standard headers on every response:
+
+| Header                   | Meaning                                 |
+| ------------------------ | --------------------------------------- |
+| `X-RateLimit-Limit`      | Max requests in the current window      |
+| `X-RateLimit-Remaining`  | Requests left before the limiter fires  |
+| `X-RateLimit-Reset`      | Unix timestamp when the window resets   |
+| `Retry-After`            | Seconds to wait (only on `429`)         |
+
+Clients that handle these headers gracefully can self-throttle before the limiter rejects.
+
+## Trust proxy
+
+If your app sits behind a load balancer or CDN, configure `trustProxy` so the limiter
+keys on the real client IP rather than the proxy's address:
+
+```typescript
+security: {
+  trustProxy: 1,                     // trust 1 proxy hop — Cloudflare, ALB, etc.
+  rateLimit: { windowMs: 60_000, max: 100 },
+},
+```
+
+`trustProxy` accepts a number (hops to trust), `false` (no trust — use socket IP), or a
+predicate for custom logic.
+
+## When the limiter fires
+
+The default response when the bucket is empty:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 32
+Content-Type: application/json
+
+{
+  "error": "Too many requests",
+  "retryAfter": 32
+}
+```
+
+Override the body via the request error formatter (see
+[Exception Handling](/slingshot/app-authoring/exception-handling/)).
+
+## Bot protection (related)
+
+Bot protection is a separate but related feature. It runs before the rate limiter and
+maintains a CIDR blocklist plus fingerprint-based heuristics:
+
+```typescript
+security: {
+  botProtection: {
+    enabled: true,
+    blocklistCidrs: ['10.0.0.0/8', '203.0.113.0/24'],
+    fingerprintWindow: 300_000,
+    fingerprintMax: 50,
+  },
+  rateLimit: { windowMs: 60_000, max: 100 },
+},
+```
+
+Blocklisted IPs and high-fingerprint matches are rejected with `403 Forbidden` before
+ever reaching the rate limiter — saving counter slots for legitimate traffic.
+
+## What's next
+
+- [Exception Handling](/slingshot/app-authoring/exception-handling/) — customize the `429` response
+- [Multi-Tenancy](/slingshot/guides/multi-tenancy/) — tenant-scoped rate limiting
+- [Security Hardening](/slingshot/guides/security/) — full security checklist

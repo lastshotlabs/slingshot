@@ -19,7 +19,7 @@ sync hooks for keeping entity-backed indexes current.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and direct application use
+- **Imported by**: direct application use
 
 ## Common Tasks
 

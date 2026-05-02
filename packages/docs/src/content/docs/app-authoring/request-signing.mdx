@@ -1,0 +1,133 @@
+---
+title: Request Signing & Webhook Auth
+description: Verify HMAC-signed inbound requests from partners, M2M clients, and SaaS webhooks
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Two related middleware ship with Slingshot for authenticating inbound requests with HMAC.
+`requireSignedRequest()` enforces a canonical Slingshot signing scheme over the entire request,
+useful for M2M traffic and partner integrations you control. `webhookAuth()` is the flexible
+counterpart for vendor-specific schemes — Stripe, GitHub, Twilio — that all sign their bodies
+slightly differently.
+
+## How it works
+
+`requireSignedRequest()` builds a canonical string of `METHOD\nPATH\nQUERY\nTIMESTAMP\nBODY`,
+verifies the HMAC against your signing secret, and rejects requests whose timestamp is outside
+a tolerance window (default 5 minutes) to prevent replay. It activates only when
+`security.signing.requestSigning` is configured; otherwise it is a pass-through.
+
+`webhookAuth()` is configured per-route. You point it at the signature header, the timestamp
+header, the algorithm, and an optional prefix to strip — vendor-specific knobs. It HMACs the
+raw request body and uses timing-safe comparison.
+
+## Verifying a partner request
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  security: {
+    signing: {
+      secret: process.env.PARTNER_HMAC_SECRET!,
+      requestSigning: { tolerance: 5 * 60 * 1000 },
+    },
+  },
+});
+```
+
+Then mount the middleware on routes that should reject unsigned traffic:
+
+```typescript title="src/partners/package.ts"
+import { definePackage, domain, requireSignedRequest, route } from '@lastshotlabs/slingshot';
+import { z } from 'zod';
+
+export const partnersPackage = definePackage({
+  name: 'partners',
+  middleware: { signed: requireSignedRequest() },
+  domains: [
+    domain({
+      name: 'sync',
+      basePath: '/partners',
+      routes: [
+        route.post({
+          path: '/orders',
+          middleware: ['signed'],
+          request: { body: z.object({ orderId: z.string() }) },
+          handler: async ({ input, respond }) => respond.json({ ok: true, ...input.body }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Clients sign the canonical string with the same secret and send `X-Signature` plus
+`X-Timestamp`. Header names are configurable, but the defaults match `HEADER_SIGNATURE` and
+`HEADER_TIMESTAMP`.
+
+## Vendor webhooks
+
+Each vendor signs a little differently. Configure `webhookAuth()` to match:
+
+```typescript title="src/webhooks/package.ts"
+import { definePackage, domain, route, webhookAuth } from '@lastshotlabs/slingshot';
+
+export const webhooksPackage = definePackage({
+  name: 'webhooks',
+  middleware: {
+    githubWebhook: webhookAuth({
+      secret: process.env.GITHUB_WEBHOOK_SECRET!,
+      header: 'x-hub-signature-256',
+      prefix: 'sha256=',
+      algorithm: 'sha256',
+      timestamp: { header: 'x-github-delivery', tolerance: 5 * 60 * 1000 },
+    }),
+  },
+  domains: [
+    domain({
+      name: 'github',
+      basePath: '/webhooks/github',
+      routes: [
+        route.post({
+          path: '/',
+          middleware: ['githubWebhook'],
+          handler: async ({ respond }) => respond.json({ received: true }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+`secret` can be a function `(c) => string | Promise<string>` for per-tenant secret lookup.
+
+<Aside type="caution">
+  The middleware reads the body via `c.req.text()`. Hono caches the body, so downstream handlers
+  can still call `c.req.json()` — but a custom middleware that consumes the raw stream would
+  starve the verifier.
+</Aside>
+
+## Cryptographic primitives
+
+If you need to sign or verify outside of middleware — e.g. to call a partner — use the
+exported helpers:
+
+```typescript
+import { hmacSign, hmacVerify } from '@lastshotlabs/slingshot';
+
+const payload = { invoiceId: 'inv_123', amount: 9900 };
+const body = JSON.stringify(payload);
+const sig = hmacSign(body, process.env.PARTNER_HMAC_SECRET!);
+const ok = hmacVerify(body, sig, process.env.PARTNER_HMAC_SECRET!);
+```
+
+`hmacVerify` accepts a `string[]` of secrets so you can rotate keys: put the new secret first,
+keep the old one until in-flight signatures expire, then drop it.
+
+## What's next
+
+- [Request IDs](/slingshot/app-authoring/request-ids/) — pair signed requests with traceable IDs
+- [Webhooks Guide](/slingshot/guides/webhooks/) — outbound webhook delivery and signing
+- [Security Hardening](/slingshot/guides/security/) — full security checklist

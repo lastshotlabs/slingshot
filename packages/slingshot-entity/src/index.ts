@@ -204,13 +204,14 @@ export {
 
 // Plugin factory
 /** Build the entity plugin that mounts config-driven CRUD and operation routes. */
-export { createEntityPlugin } from './createEntityPlugin';
+export { createEntityPlugin, getEntityPluginToolingMetadata } from './createEntityPlugin';
 /** Plugin config and runtime context types for `createEntityPlugin()`. */
 export type {
   EntityPlugin,
   EntityPluginConfig,
   EntityPluginEntry,
   EntityPluginContext,
+  EntityPluginToolingMetadata,
 } from './createEntityPlugin';
 /** Cross-plugin entity adapter publication and lookup helpers. */
 export {

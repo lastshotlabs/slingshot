@@ -12,8 +12,8 @@ Define a data model — you get CRUD routes, validation, OpenAPI docs, and stora
 Write custom routes where you need them. Organize everything into typed packages that compose
 cleanly as your app grows.
 
-```typescript
-import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
 const Task = defineEntity('Task', {
   namespace: 'app',
@@ -24,13 +24,14 @@ const Task = defineEntity('Task', {
   },
 });
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
 });
 ```
 
 That is a working API with five routes, request validation, and OpenAPI docs. No boilerplate.
+You declare it in `app.config.ts`. You run `slingshot start`. The framework does the rest.
 
 ## What you get
 
@@ -46,15 +47,16 @@ That is a working API with five routes, request validation, and OpenAPI docs. No
 ## How it is organized
 
 ```
-App root (createServer)
+app.config.ts (defineApp)
   └── Packages (definePackage)
         ├── Entities (defineEntity) → generated CRUD, operations, storage
         ├── Domain routes (route.*) → custom endpoints
         └── Capabilities → typed cross-package contracts
 ```
 
-1. **App root** — `createServer()` assembles your app. Config covers security, databases,
-   runtime, and secrets.
+1. **App config** — `app.config.ts` exports `defineApp({...})` as default. The CLI
+   discovers the file and boots the server. Config covers security, databases, runtime,
+   and secrets.
 2. **Packages** — each feature area is a package with its own routes, middleware, and entities.
 3. **Entities** — define a model, get generated routes, operations, and storage that works
    across backends.

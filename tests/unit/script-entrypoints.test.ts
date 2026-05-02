@@ -86,20 +86,13 @@ describe('script entrypoints', () => {
         directory: 'examples/alpha',
         docsPath: 'docs/alpha.md',
         checks: [
-          { kind: 'code-app', name: 'alpha', entrypoint: 'examples/alpha/index.ts' },
+          { kind: 'code-app', name: 'alpha', entrypoint: 'examples/alpha/app.config.ts' },
           {
             kind: 'module-exports',
             name: 'alpha-exports',
             entrypoint: 'examples/alpha/module.ts',
-            exports: ['buildAppConfig'],
+            exports: ['default'],
             requiredPlugins: ['auth'],
-          },
-          {
-            kind: 'manifest',
-            name: 'alpha-manifest',
-            manifestPath: 'manifest.json',
-            handlerModule: 'examples/alpha/handlers.ts',
-            handlerExports: ['handle'],
           },
         ],
       },
@@ -117,19 +110,9 @@ describe('script entrypoints', () => {
       {
         root: tempDir,
         stdout: { write: (message: string | Uint8Array) => writes.push(String(message)) },
-        importModuleFn: async (entrypoint: string) => {
-          if (entrypoint.endsWith('index.ts')) {
-            return {
-              buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
-            };
-          }
-          if (entrypoint.endsWith('module.ts')) {
-            return {
-              buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
-            };
-          }
-          return { handle() {} };
-        },
+        importModuleFn: async () => ({
+          default: { plugins: [{ name: 'auth' }] },
+        }),
         createAppFn: async () =>
           ({
             app: {},
@@ -139,12 +122,11 @@ describe('script entrypoints', () => {
               },
             },
           }) as never,
-        validateAppManifestFn: () => ({ success: true, errors: [] }) as never,
       },
     );
 
     expect(writes.join('\n')).toContain('examples:smoke alpha:code-app');
-    expect(writes.filter(line => line === 'ok')).toHaveLength(3);
+    expect(writes.filter(line => line === 'ok')).toHaveLength(2);
     expect(destroyed).toEqual(['destroyed']);
   });
 

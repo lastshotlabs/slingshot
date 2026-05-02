@@ -11,15 +11,14 @@ Source-backed example for `slingshot-webhooks` outbound delivery.
 
 ## Files
 
-- `src/index.ts` - code-first app bootstrap with the toy `orders` plugin
-- `app.manifest.json` - manifest-first equivalent (the orders plugin lives in code only)
+- `app.config.ts` - typed app config with the toy `orders` plugin
 
 ## Run
 
 From the repo root:
 
 ```bash
-JWT_SECRET=dev-secret-change-me-dev-secret-change-me bun examples/webhooks/src/index.ts
+JWT_SECRET=dev-secret-change-me-dev-secret-change-me slingshot start --config examples/webhooks/app.config.ts
 ```
 
 ## Walkthrough

@@ -132,9 +132,6 @@
       "path": "./packages/runtime-node/tsconfig.typecheck.json"
     },
     {
-      "path": "./packages/slingshot-runtime-lambda/tsconfig.typecheck.json"
-    },
-    {
       "path": "./packages/slingshot-game-engine/tsconfig.typecheck.json"
     }
   ]

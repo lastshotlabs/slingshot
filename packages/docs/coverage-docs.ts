@@ -46,7 +46,6 @@ const PRODUCTION_PATH_PACKAGE_SLUGS = [
   'slingshot-runtime-bun',
   'slingshot-runtime-node',
   'slingshot-runtime-edge',
-  'slingshot-runtime-lambda',
   'slingshot-ssr',
   'slingshot-ssg',
   'slingshot-postgres',

@@ -205,15 +205,15 @@ const adminPackage = definePackage({
 
 The app root reads like a table of contents:
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { adminPackage } from './packages/admin';
-import { blogPackage } from './packages/blog';
-import { commentPackage } from './packages/comments';
+import { adminPackage } from './src/packages/admin';
+import { blogPackage } from './src/packages/blog';
+import { commentPackage } from './src/packages/comments';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
   db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },

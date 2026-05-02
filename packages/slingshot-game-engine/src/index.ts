@@ -62,7 +62,7 @@ export type { GameErrorCodeValue } from './errors';
 
 // ── Validation Schemas ──────────────────────────────────────────
 
-/** Zod schema for plugin config — used by pluginSchemaRegistry for introspection. */
+/** Zod schema for plugin config — used for runtime validation. */
 export { GameEnginePluginConfigSchema } from './validation/config';
 
 // ── Plugin State Key ────────────────────────────────────────────

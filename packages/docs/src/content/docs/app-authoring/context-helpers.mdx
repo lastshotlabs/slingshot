@@ -1,0 +1,119 @@
+---
+title: Context and Actor Helpers
+description: Read the resolved actor, request context, and tenant from inside any handler — the functional alternative to NestJS-style parameter decorators
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Inside a handler you sometimes need to know who is making the request or reach into
+framework state — the event bus, persistence handles, the resolved config. Slingshot
+exposes that through small functional helpers, not decorators. They take a Hono request
+context (`c`) or an app instance and return what you need.
+
+## What you can do
+
+| Helper                     | Returns                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `getActor(c)`              | The resolved `Actor` — never `null` (anonymous actor for unauthed requests)  |
+| `getActorId(c)`            | The actor's user ID, or `null` for anonymous                                 |
+| `getActorTenantId(c)`      | The actor's home tenant, or `null` when tenantless                           |
+| `getRequestTenantId(c)`    | The tenant scope of *this request* (header, subdomain, resolver)             |
+| `getContext(app)`          | The full `SlingshotContext` — throws if not attached                         |
+| `getContextOrNull(app)`    | The full `SlingshotContext`, or `null` when not yet attached                 |
+| `attachContext(app, ctx)`  | Attach a context to a bare Hono app (test utility — internal use otherwise)  |
+
+## Read the actor inside a handler
+
+```typescript title="src/dashboard/package.ts"
+// @skip-typecheck
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { getActor, getActorId, getRequestTenantId } from '@lastshotlabs/slingshot';
+
+export const dashboardPackage = definePackage({
+  name: 'dashboard',
+  domains: [
+    domain({
+      name: 'me',
+      basePath: '/me',
+      routes: [
+        route.get({
+          path: '/',
+          handler: ({ c, respond }) => {
+            const actor = getActor(c);
+            return respond.json({
+              userId: getActorId(c),
+              kind: actor.kind,
+              roles: actor.roles ?? [],
+              tenant: getRequestTenantId(c),
+            });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+`getActor(c)` always returns an `Actor` — for unauthenticated traffic it returns the
+anonymous actor with `id: null` and `kind: 'anonymous'`. There is no null check to
+forget.
+
+## Actor tenant vs request tenant
+
+`getActorTenantId(c)` is the tenant the actor *belongs to*. `getRequestTenantId(c)` is
+the tenant the request is *scoped to* — set by tenant-resolution middleware from a
+header, subdomain, or path segment. They almost always match, but they can differ for
+cross-tenant operations (a platform admin acting in another tenant's scope).
+
+```typescript
+// @skip-typecheck
+import { getActorTenantId, getRequestTenantId } from '@lastshotlabs/slingshot';
+
+const home = getActorTenantId(c);    // where the actor lives
+const scope = getRequestTenantId(c); // where the request is operating
+if (home !== scope) {
+  // cross-tenant — verify elevated permissions
+}
+```
+
+## Reach the SlingshotContext from a handler
+
+For app-scoped state — the event bus, persistence, plugin handles — use `getContext(app)`
+on a Hono app. From inside a handler, the app is `c.env` or, more conveniently, accessed
+through the helper directly:
+
+```typescript
+// @skip-typecheck
+import { getContext } from '@lastshotlabs/slingshot';
+
+route.post({
+  path: '/posts',
+  handler: async ({ c, input, respond }) => {
+    const ctx = getContext(c.env);
+    await ctx.events.publish('post.created', { id: '...', title: input.body.title });
+    return respond.json({ ok: true }, 201);
+  },
+});
+```
+
+Use `getContextOrNull(app)` when context availability is genuinely optional — for
+example, in standalone plugin setup that may run before `createApp()` finishes
+assembly.
+
+## Test utility: attachContext
+
+`attachContext(app, ctx)` is the low-level wire-up that `createApp()` calls once per
+instance. You only need it directly when stitching together a custom test harness from a
+bare Hono app — almost no application code calls this.
+
+<Aside type="caution">
+  Calling `attachContext` more than once on the same app with a different context throws.
+  The framework holds context references via WeakMap and overwriting causes hard-to-debug
+  bugs across plugin DI tables.
+</Aside>
+
+## What's next
+
+- [Context and Request Model](/slingshot/app-authoring/context-and-request-model/) — the deeper architecture
+- [Middleware](/slingshot/app-authoring/middleware/) — where request-scoped state intersects middleware
+- [SlingshotContext reference](/slingshot/authoring/context/) — full context API for plugin authors

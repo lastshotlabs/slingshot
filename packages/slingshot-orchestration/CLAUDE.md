@@ -22,14 +22,14 @@ development; production adapters live in sibling packages (BullMQ, Temporal).
 | src/adapters/memory.ts       | `createMemoryAdapter()` for tests and local development                  |
 | src/adapters/sqlite.ts       | `createSqliteAdapter()` for durable single-node execution                |
 | src/provider/index.ts        | Provider registry surface used by Temporal worker code generation        |
-| src/provider/registry.ts     | `createOrchestrationProviderRegistry()` task/workflow manifest builder   |
+| src/provider/registry.ts     | `createOrchestrationProviderRegistry()` task/workflow registry builder   |
 | src/validation.ts            | Shared Zod validation helpers                                            |
 | docs/human/index.md          | Package guide synced into the docs site                                  |
 
 ## Connections
 
 - **Imports from**: `zod` (schema validation only; no framework dependencies)
-- **Imported by**: `packages/slingshot-orchestration-bullmq`, `packages/slingshot-orchestration-temporal`, `packages/slingshot-orchestration-plugin`, manifest bootstrap via `../../src/lib/builtinPlugins.ts`, and `../../src/lib/createServerFromManifest.ts`
+- **Imported by**: `packages/slingshot-orchestration-bullmq`, `packages/slingshot-orchestration-temporal`, `packages/slingshot-orchestration-plugin`, and direct application use
 
 ## Common Tasks
 

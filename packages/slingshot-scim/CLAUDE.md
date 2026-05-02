@@ -17,7 +17,7 @@ guards, and SCIM-specific model mapping helpers.
 ## Connections
 
 - **Imports from**: `packages/slingshot-auth/src/index.ts` and `packages/slingshot-core/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and direct application use
+- **Imported by**: direct application use
 
 ## Common Tasks
 

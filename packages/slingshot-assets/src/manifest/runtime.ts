@@ -227,7 +227,7 @@ export function createAssetsManifestRuntime(args: {
         logger,
         // Resolve events lazily — at hook time the host plugin may have a
         // captured publisher that wasn't yet available when the runtime was
-        // built (manifest-mode setup ordering).
+        // built (config-driven setup ordering).
         events: args.events ?? getEvents?.(),
         orphanRegistry,
         ...(config.onOrphanedKey ? { onOrphanedKey: config.onOrphanedKey } : {}),

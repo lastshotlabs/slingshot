@@ -220,7 +220,7 @@ Custom resolvers return `undefined` for unrecognized sentinels to signal a fall-
 
 ## Manifest helper field mapping
 
-When using `autoGrant` or `activityLog` in manifest mode, payload field names are resolved from entity metadata instead of hardcoded first-party names.
+When using `autoGrant` or `activityLog`, payload field names are resolved from entity metadata instead of hardcoded first-party names.
 
 Resolution priority (highest to lowest):
 
@@ -228,7 +228,7 @@ Resolution priority (highest to lowest):
 2. Resolved entity fields (PK field, tenant field from `tenant.field`)
 3. Hardcoded defaults (`'id'`/`'orgId'` for autoGrant, `'id'`/`'orgId'` for activityLog)
 
-```json title="app.manifest.json"
+```json title="app.config.ts"
 {
   "entities": {
     "Project": {

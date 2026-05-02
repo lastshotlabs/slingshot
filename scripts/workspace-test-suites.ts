@@ -115,7 +115,6 @@ export const productionReadinessPackageNames = new Set([
   'slingshot-permissions',
   'slingshot-postgres',
   'slingshot-push',
-  'slingshot-runtime-lambda',
   'slingshot-search',
   'slingshot-ssg',
   'slingshot-ssr',

@@ -37,39 +37,31 @@ afterEach(() => {
 });
 
 describe('root cli scaffold/generation surface', () => {
-  test('starts the server from a manifest and supports dry-run mode', async () => {
+  test('starts the server from app.config.ts and supports dry-run mode', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'slingshot-start-'));
-    const manifestPath = join(tmp, 'app.manifest.json');
-    const handlersPath = join(tmp, 'slingshot.handlers.ts');
-    writeFileSync(manifestPath, '{}\n', 'utf8');
-    writeFileSync(handlersPath, 'export {};\n', 'utf8');
+    const configPath = join(tmp, 'app.config.ts');
+    writeFileSync(configPath, 'export default { meta: { name: "test", version: "1.0.0" } };\n');
 
     const created: unknown[] = [];
-    mock.module('@lib/createServerFromManifest', () => ({
-      createServerFromManifest: async (
-        manifest: string,
-        _unused: unknown,
-        options: Record<string, unknown>,
-      ) => {
-        created.push({ manifest, options });
+    mock.module('../../src/server', () => ({
+      createServer: async (config: unknown) => {
+        created.push(config);
         return { port: 4321 };
       },
     }));
 
     const Start = (await import('../../src/cli/commands/start')).default;
-    const command = new Start(
-      ['--manifest', manifestPath, '--handlers', handlersPath],
-      makeOclifConfig() as never,
-    );
+    const command = new Start(['--config', configPath], makeOclifConfig() as never);
     const logs = captureLogs(command);
     await command.run();
     expect(logs.join('\n')).toContain('Server running at http://localhost:4321');
-    expect((created[0] as any).options.handlersPath).toContain('slingshot.handlers.ts');
+    expect(created).toHaveLength(1);
 
-    const dryRun = new Start(['--manifest', manifestPath, '--dry-run'], makeOclifConfig() as never);
+    const dryRun = new Start(['--config', configPath, '--dry-run'], makeOclifConfig() as never);
     const dryLogs = captureLogs(dryRun);
     await dryRun.run();
-    expect(dryLogs.join('\n')).toContain('Dry run complete');
+    expect(dryLogs.join('\n')).toContain('Dry run');
+    expect(dryLogs.join('\n')).toContain(configPath);
 
     rmSync(tmp, { recursive: true, force: true });
   });

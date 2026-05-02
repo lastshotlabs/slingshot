@@ -40,7 +40,6 @@ const productionPathPackages = new Set([
   'slingshot-runtime-bun',
   'slingshot-runtime-node',
   'slingshot-runtime-edge',
-  'slingshot-runtime-lambda',
   'slingshot-ssr',
   'slingshot-ssg',
   'slingshot-postgres',

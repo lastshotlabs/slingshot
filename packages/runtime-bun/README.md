@@ -4,7 +4,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-bun
 ---
 
 `@lastshotlabs/slingshot-runtime-bun` is the Bun-native runtime implementation for Slingshot.
-Pass the return value of `bunRuntime()` to `createServer()` as the `runtime` option.
+Pass the return value of `bunRuntime()` to `defineApp({ runtime })` in your `app.config.ts`.
 
 ## What It Provides
 
@@ -16,15 +16,18 @@ Pass the return value of `bunRuntime()` to `createServer()` as the `runtime` opt
 
 ## Minimum Setup
 
-```ts
-import { createServer } from '@lastshotlabs/slingshot';
+```ts title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 
-const server = await createServer({
+export default defineApp({
   runtime: bunRuntime(),
   port: 3000,
 });
 ```
+
+In practice, Bun is auto-detected — you only pass `bunRuntime()` explicitly if you need
+to customize behavior or override the auto-detection.
 
 ## Operational Notes
 

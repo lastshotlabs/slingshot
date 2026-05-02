@@ -208,8 +208,10 @@ uses: ['db', 'cache'];
 
 Reference them in your app config:
 
-```typescript
-createServer({
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
   db: {
     postgres: process.env.DATABASE_URL,
     redis: process.env.REDIS_URL,
@@ -421,7 +423,7 @@ The `ec2-nginx` preset generates `Dockerfile`, `docker-compose.yml`, and a `Cadd
 
 ## The runtime-to-infra bridge
 
-Slingshot can detect which resources your app uses from your `createServer()` config and compare against `slingshot.infra.ts`:
+Slingshot can detect which resources your app uses from your `app.config.ts` and compare against `slingshot.infra.ts`:
 
 ```bash
 slingshot infra check

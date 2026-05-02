@@ -20,9 +20,9 @@ entity registry, and keeps indexes in sync through post-setup event subscription
 - The plugin publishes runtime access through `pluginState` after initialization. Cross-package
   consumers should use that runtime surface instead of reaching into search internals.
 
-## Manifest Strategies
+## Built-in Strategies
 
-The search plugin supports built-in strategy strings in manifest mode:
+The search plugin supports built-in strategy strings for common cases:
 
 - **`tenantResolution: "framework"`** — reads tenant ID from the Hono context variable
   `tenantId` (set by framework tenancy middleware). Equivalent to
@@ -34,8 +34,8 @@ The search plugin supports built-in strategy strings in manifest mode:
 - **`adminGate: "authenticated"`** — allows access to admin routes for any authenticated
   user (checks the request actor is not anonymous).
 
-These strategies are resolved before the plugin factory runs, so the plugin itself never
-sees the string values.
+These strategy strings are resolved by the plugin at setup time. Pass functions directly when
+you need fully custom resolution.
 
 ## Operational Notes
 

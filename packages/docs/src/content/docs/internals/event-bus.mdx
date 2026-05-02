@@ -94,28 +94,19 @@ expect(notificationStore.notifications).toHaveLength(1);
 
 ## Extending to multi-instance
 
-When events need to cross process boundaries, replace `InProcessAdapter` with a shared implementation:
+When events need to cross process boundaries, replace `InProcessAdapter` with a shared implementation by passing your own bus to `defineApp`:
 
-```typescript
-import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
 
-declare function createRedisBus(config: {
-  url: string;
-}): import('@lastshotlabs/slingshot-core').SlingshotEventBus;
-
-const registry = createManifestHandlerRegistry();
-registry.registerEventBus('redis', () => createRedisBus({ url: process.env.REDIS_URL! }));
-
-await createServerFromManifest('./app.manifest.json', registry);
-```
-
-BullMQ is also available as a built-in manifest option:
-
-```json
-{
-  "eventBus": "bullmq",
-  "secrets": { "provider": "env" }
-}
+export default defineApp({
+  eventBus: createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST!, port: 6379 },
+    prefix: 'myapp:events',
+  }),
+  // ...
+});
 ```
 
 The bus interface stays identical. Only the implementation changes.

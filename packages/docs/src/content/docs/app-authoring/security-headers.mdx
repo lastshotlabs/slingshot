@@ -1,0 +1,109 @@
+---
+title: Security Headers
+description: Set Content-Security-Policy, Permissions-Policy, and other browser-trust headers from app config
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Browsers honour security headers as a tamper-evident contract — they restrict what
+scripts can run, what features pages can use, and how mixed-content requests are
+handled. Slingshot's `security.headers` config is a tight surface for the headers most
+apps actually need to set, with sensible defaults baked in.
+
+## What you can do
+
+- Set `Content-Security-Policy` from app config
+- Set `Permissions-Policy` from app config
+- Inherit a baseline of safe defaults (`X-Frame-Options`, `X-Content-Type-Options`,
+  `Strict-Transport-Security`, `Referrer-Policy`, and others) automatically
+- Override or extend headers per route via handlers or plugin middleware
+
+## Configure CSP and Permissions-Policy
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'my-app', version: '1.0.0' },
+  security: {
+    headers: {
+      contentSecurityPolicy:
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.stripe.com",
+      permissionsPolicy:
+        'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    },
+  },
+});
+```
+
+The framework appends both headers to every response, after Hono's `secureHeaders`
+middleware runs. Anything you set this way overrides the corresponding default.
+
+## Defaults the framework sets
+
+Slingshot mounts Hono's `secureHeaders` middleware globally, which sets the following
+on every response unless you override them:
+
+| Header                       | Default value                                       |
+| ---------------------------- | --------------------------------------------------- |
+| `Strict-Transport-Security`  | `max-age=15552000; includeSubDomains`               |
+| `X-Frame-Options`            | `SAMEORIGIN`                                        |
+| `X-Content-Type-Options`     | `nosniff`                                           |
+| `Referrer-Policy`            | `no-referrer`                                       |
+| `Cross-Origin-Resource-Policy` | `same-origin`                                     |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                       |
+| `Origin-Agent-Cluster`       | `?1`                                                |
+| `X-DNS-Prefetch-Control`     | `off`                                               |
+| `X-Permitted-Cross-Domain-Policies` | `none`                                       |
+| `X-XSS-Protection`           | `0` (disabled — modern guidance is to opt out)      |
+
+These ship in both development and production. `Strict-Transport-Security` only takes
+effect when the response is served over HTTPS, so it's harmless in local dev.
+
+## Per-route headers
+
+For headers that vary per route — a relaxed CSP on a docs page, a custom
+`Cache-Control` on an API endpoint — set them inside the handler. The header set there
+applies on top of the global defaults:
+
+```typescript title="src/embeds/package.ts"
+// @skip-typecheck
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const embedsPackage = definePackage({
+  name: 'embeds',
+  domains: [
+    domain({
+      name: 'oembed',
+      basePath: '/oembed',
+      routes: [
+        route.get({
+          path: '/widget',
+          handler: ({ c, respond }) => {
+            c.header('X-Frame-Options', 'ALLOW-FROM https://partner.example');
+            c.header('Content-Security-Policy', "frame-ancestors https://partner.example");
+            return respond.html('<div>...</div>');
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+For headers that should apply to a whole package or domain, install a plugin
+middleware instead — it runs before route middleware and lets you set headers without
+repeating the call in every handler.
+
+<Aside type="caution">
+  CSP is unforgiving. A typo in a directive often falls through to `default-src`,
+  which silently breaks scripts, images, or fetches. Test CSP changes in
+  Report-Only mode (`Content-Security-Policy-Report-Only`) before flipping them to
+  enforce.
+</Aside>
+
+## What's next
+
+- [Cookies](/slingshot/app-authoring/cookies/) — pair CSP with `SameSite` and `secure` cookies
+- [Security Hardening](/slingshot/guides/security/) — the full security checklist
+- [Middleware](/slingshot/app-authoring/middleware/) — for per-route header customization

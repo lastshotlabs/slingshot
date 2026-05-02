@@ -11,16 +11,14 @@ Source-backed example for the `/examples/collaboration-workspace/` docs page.
 
 ## Files
 
-- `src/index.ts` - code-first composition
-- `app.manifest.json` - manifest-first equivalent
-- `slingshot.handlers.ts` - auth-to-community bridge
+- `app.config.ts` - typed app config and plugin composition
 
 ## Run
 
 From the repo root:
 
 ```bash
-bun examples/collaboration-workspace/src/index.ts
+slingshot start --config examples/collaboration-workspace/app.config.ts
 ```
 
 Set `JWT_SECRET` and `TENOR_API_KEY` first.

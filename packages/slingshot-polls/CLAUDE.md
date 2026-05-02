@@ -18,7 +18,7 @@ using policy handlers and stable source-type keys instead of importing consumer 
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts` and `packages/slingshot-entity/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and direct application use
+- **Imported by**: direct application use
 
 ## Common Tasks
 

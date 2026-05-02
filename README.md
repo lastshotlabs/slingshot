@@ -1,10 +1,10 @@
 # Slingshot
 
-Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
+Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.
 
 ## What it is
 
-Slingshot is a backend framework built on Hono with runtime adapters for Bun and Node. Declare plugins, databases, and security in a JSON manifest — run `slingshot start`. Zero code for built-in plugins; export functions from `slingshot.handlers.ts` for custom logic.
+Slingshot is a backend framework built on Hono with runtime adapters for Bun and Node. Declare plugins, databases, and security in a typed `app.config.ts`, then run `slingshot start`.
 
 ## Quickstart
 
@@ -12,36 +12,31 @@ Slingshot is a backend framework built on Hono with runtime adapters for Bun and
 bun add @lastshotlabs/slingshot
 ```
 
-### Manifest (zero-code)
+### App Config
 
-Create `app.manifest.json`:
+Create `app.config.ts`:
 
-```json
-{
-  "manifestVersion": 1,
-  "port": 3000,
-  "security": {
-    "signing": { "secret": "${secret:JWT_SECRET}" }
-  },
-  "plugins": [
-    {
-      "plugin": "slingshot-auth",
-      "config": {
-        "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-        "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
-      }
-    }
-  ]
-}
+```typescript
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+export default defineApp({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+  ],
+});
 ```
 
 ```bash
 slingshot start
 ```
 
-For custom behavior (middleware, event handlers, tenant resolvers), export named functions from `slingshot.handlers.ts`. The manifest references them by name.
-
-### Code
+### Lower-Level API
 
 ```typescript
 import { createServer } from '@lastshotlabs/slingshot';
@@ -61,7 +56,7 @@ await createServer({
 });
 ```
 
-Both paths produce identical runtime behavior.
+`defineApp()` and `createServer()` use the same runtime config shape; `defineApp()` is the CLI-friendly authoring path.
 
 ## Features
 
@@ -77,8 +72,8 @@ Both paths produce identical runtime behavior.
 
 See [`examples/`](examples/) for complete working apps:
 
-- **collaboration-workspace** — 12-plugin community workspace (manifest + code modes)
-- **with-auth** — Minimal auth setup (manifest mode)
+- **collaboration-workspace** — 12-plugin community workspace
+- **with-auth** — Minimal auth setup
 - **config-driven-domain** — Entity definitions with operations (code mode)
 - **content-platform** — Content management with assets (code mode)
 - **game-engine** — Multiplayer game runtime (code mode)

@@ -16,7 +16,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
 
 <Tabs>
   <TabItem label="Manifest">
-    ```json title="app.manifest.json"
+    ```json title="app.config.ts"
     {
       "manifestVersion": 1,
       "port": 3000,
@@ -38,7 +38,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
     }
     ```
 
-    ```typescript title="slingshot.handlers.ts"
+    ```typescript title="app.config.ts"
     import type { ServerWebSocket } from 'bun';
 
     declare function verifyToken(token: string): string | null;
@@ -70,10 +70,13 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
 
   </TabItem>
   <TabItem label="Code">
-    ```typescript title="src/index.ts"
+    ```typescript title="app.config.ts"
+    // @skip-typecheck
+    import { defineApp } from '@lastshotlabs/slingshot';
+
     declare function verifyToken(token: string): string | null;
 
-    await createServer({
+    export default defineApp({
       port: 3000,
       ws: {
         endpoints: {
@@ -177,7 +180,7 @@ export async function wsUpgrade(req: Request) {
 
 Use the `onRoomSubscribe` hook to check permissions before a client joins a room:
 
-```typescript title="app.manifest.json (ws section)"
+```typescript title="app.config.ts (ws section)"
 {
   "ws": {
     "endpoints": {
@@ -191,7 +194,7 @@ Use the `onRoomSubscribe` hook to check permissions before a client joins a room
 }
 ```
 
-```typescript title="slingshot.handlers.ts"
+```typescript title="app.config.ts"
 declare function checkPermission(
   userId: string,
   action: string,
@@ -366,7 +369,7 @@ const plugin = createEntityPlugin({
   getWsState: () => getContext(app).ws,
 });
 
-await createServer({
+export default defineApp({
   plugins: [plugin],
   ws: {
     endpoints: {
@@ -401,9 +404,9 @@ async setupPost({ app }) {
 ```
 
 Self-wiring plugins should still declare their endpoint in the root `ws.endpoints` config.
-When `createApp({ ws })` or `createServer({ ws })` receives that config, Slingshot seeds
+When the framework receives that config from your `app.config.ts`, Slingshot seeds
 `ctx.wsEndpoints` before `setupPost` runs. Plugins can then attach `incoming`,
-`onRoomSubscribe`, or other endpoint hooks during bootstrap, and `createServer()` later boots
+`onRoomSubscribe`, or other endpoint hooks during bootstrap, and the runtime later boots
 from that same endpoint map.
 
 ## See also

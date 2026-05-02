@@ -5,6 +5,11 @@ description: Lookups, transitions, field updates, search, aggregates, and more
 
 CRUD routes are a starting point. Operations are how your entity becomes a real domain model.
 
+You write operations in TypeScript using `defineOperations()` and the typed `op.*()`
+builders. They are real functions — not config strings, not JSON. You get autocomplete on
+every option, type inference into the generated routes, and the same compile-time
+guarantees as the rest of your code.
+
 ## Your blog needs more than CRUD
 
 You have a `Post` entity with five generated routes. Now you need:
@@ -17,7 +22,7 @@ You have a `Post` entity with five generated routes. Now you need:
 Each of these is an operation — a named, typed behavior that generates its own route
 and adapter method.
 
-## Define operations alongside the entity
+## Define operations in code
 
 ```typescript title="src/entities/post-operations.ts"
 // @skip-typecheck

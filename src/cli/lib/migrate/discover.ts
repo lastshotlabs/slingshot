@@ -1,13 +1,16 @@
 /**
- * Manifest discovery and DB connection resolution for `slingshot migrate`.
+ * Config discovery and DB connection resolution for `slingshot migrate`.
  *
- * Loads `app.manifest.json`, extracts the entity definitions and infrastructure
- * DB config, resolves entity definitions to `ResolvedEntityConfig`, and picks
- * the target backend + connection string for the migrate run.
+ * Loads `app.config.ts`, walks the plugins array to find `createEntityPlugin`
+ * instances, extracts their entity definitions, and resolves the DB backend
+ * + connection string for the migrate run.
  */
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { manifestEntitiesToConfigs } from '@lastshotlabs/slingshot-entity';
+import {
+  getEntityPluginToolingMetadata,
+  manifestEntitiesToConfigs,
+} from '@lastshotlabs/slingshot-entity';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
 export type Backend = 'postgres' | 'sqlite' | 'mongo';
@@ -20,17 +23,29 @@ export interface ResolvedManifest {
     sqlite?: string;
     /**
      * Mongo connection comes from the `MONGO_URL` / `MONGODB_URI` env var or
-     * `--db-url`, never from the manifest. This boolean only records whether
-     * Mongo is enabled in the manifest's auto-connect setting.
+     * `--db-url`, never from the config. This boolean only records whether
+     * Mongo is enabled in the config's auto-connect setting.
      */
     mongoEnabled?: boolean;
   };
 }
 
-const DEFAULT_MANIFEST_PATHS = ['app.manifest.json', 'slingshot.manifest.json'];
+const DEFAULT_CONFIG_PATHS = ['app.config.ts', 'app.config.js'];
 
-export function loadManifest(manifestPath?: string): ResolvedManifest {
-  const candidates = manifestPath ? [manifestPath] : DEFAULT_MANIFEST_PATHS;
+function addManifestEntities(
+  target: Record<string, ResolvedEntityConfig>,
+  entitiesRaw: Record<string, unknown>,
+): void {
+  const { entities: resolved } = manifestEntitiesToConfigs(
+    entitiesRaw as Parameters<typeof manifestEntitiesToConfigs>[0],
+  );
+  for (const [name, { config: resolvedConfig }] of Object.entries(resolved)) {
+    target[name] = resolvedConfig;
+  }
+}
+
+export async function loadManifest(configPath?: string): Promise<ResolvedManifest> {
+  const candidates = configPath ? [configPath] : DEFAULT_CONFIG_PATHS;
   let resolvedPath: string | null = null;
   for (const candidate of candidates) {
     const abs = resolve(candidate);
@@ -41,38 +56,49 @@ export function loadManifest(manifestPath?: string): ResolvedManifest {
   }
   if (!resolvedPath) {
     throw new Error(
-      `Manifest not found. Tried: ${candidates.map(p => resolve(p)).join(', ')}. ` +
-        `Pass --manifest <path> to point at a specific file.`,
+      `App config not found. Tried: ${candidates.map(p => resolve(p)).join(', ')}. ` +
+        `Pass --config <path> to point at a specific file.`,
     );
   }
 
-  let raw: Record<string, unknown>;
+  let mod: { default?: unknown };
   try {
-    raw = JSON.parse(readFileSync(resolvedPath, 'utf-8')) as Record<string, unknown>;
+    mod = (await import(resolvedPath)) as { default?: unknown };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse manifest at ${resolvedPath}: ${msg}`);
+    throw new Error(`Failed to load app config at ${resolvedPath}: ${msg}`);
   }
 
-  const entitiesRaw = (raw.entities ?? {}) as Record<string, unknown>;
-  const entities: Record<string, ResolvedEntityConfig> = {};
-  if (Object.keys(entitiesRaw).length > 0) {
-    const { entities: resolved } = manifestEntitiesToConfigs(
-      entitiesRaw as Parameters<typeof manifestEntitiesToConfigs>[0],
+  if (!mod.default || typeof mod.default !== 'object') {
+    throw new Error(
+      `${resolvedPath} must export a default value from defineApp(...). ` +
+        `Example: export default defineApp({ ... });`,
     );
-    for (const [name, { config }] of Object.entries(resolved)) {
-      entities[name] = config;
+  }
+
+  const config = mod.default as { plugins?: unknown[]; db?: Record<string, unknown> };
+
+  const entities: Record<string, ResolvedEntityConfig> = {};
+  for (const plugin of config.plugins ?? []) {
+    const metadata = getEntityPluginToolingMetadata(plugin);
+    if (!metadata) continue;
+
+    if (metadata.manifest) {
+      addManifestEntities(entities, metadata.manifest.entities as Record<string, unknown>);
+      continue;
+    }
+
+    for (const entry of metadata.entries) {
+      entities[entry.config.name] = entry.config;
     }
   }
 
-  const infra = (raw.infrastructure ?? {}) as Record<string, unknown>;
-  const dbSection = (infra.db ?? {}) as Record<string, unknown>;
+  const dbSection = (config.db ?? {}) as Record<string, unknown>;
   const mongoSetting = dbSection.mongo;
   const db = {
     postgres: typeof dbSection.postgres === 'string' ? dbSection.postgres : undefined,
     sqlite: typeof dbSection.sqlite === 'string' ? dbSection.sqlite : undefined,
-    mongoEnabled:
-      mongoSetting === 'single' || mongoSetting === 'separate' || mongoSetting === true,
+    mongoEnabled: mongoSetting === 'single' || mongoSetting === 'separate' || mongoSetting === true,
   };
 
   return { manifestPath: resolvedPath, entities, db };
@@ -81,9 +107,7 @@ export function loadManifest(manifestPath?: string): ResolvedManifest {
 export function pickBackend(manifest: ResolvedManifest, override?: string): Backend {
   if (override === 'postgres' || override === 'sqlite' || override === 'mongo') return override;
   if (override) {
-    throw new Error(
-      `Unsupported backend '${override}'. Supported: postgres, sqlite, mongo.`,
-    );
+    throw new Error(`Unsupported backend '${override}'. Supported: postgres, sqlite, mongo.`);
   }
   const configured: Backend[] = [];
   if (manifest.db.postgres) configured.push('postgres');
@@ -91,8 +115,8 @@ export function pickBackend(manifest: ResolvedManifest, override?: string): Back
   if (manifest.db.sqlite) configured.push('sqlite');
   if (configured.length === 0) {
     throw new Error(
-      'No DB backend configured. Set infrastructure.db.postgres, .sqlite, or .mongo ' +
-        'in your manifest, or pass --backend postgres|sqlite|mongo.',
+      'No DB backend configured. Set db.postgres, db.sqlite, or db.mongo in your ' +
+        'app.config.ts, or pass --backend postgres|sqlite|mongo.',
     );
   }
   if (configured.length > 1) {
@@ -105,7 +129,7 @@ export function pickBackend(manifest: ResolvedManifest, override?: string): Back
 }
 
 /**
- * Resolve a manifest value that may be a literal connection string or a
+ * Resolve a config value that may be a literal connection string or a
  * `${env:NAME}` / `${secret:NAME}` reference. References are looked up in
  * `process.env`. Returns `null` if a reference points at an unset env var.
  */
@@ -127,11 +151,11 @@ export function resolveConnectionString(
   if (backend === 'postgres') {
     const fromEnv = process.env.DATABASE_URL;
     if (fromEnv) return fromEnv;
-    const fromManifest = expandReference(manifest.db.postgres);
-    if (fromManifest) return fromManifest;
+    const fromConfig = expandReference(manifest.db.postgres);
+    if (fromConfig) return fromConfig;
     throw new Error(
       'No Postgres connection string. Set DATABASE_URL env var, set ' +
-        'infrastructure.db.postgres in the manifest, or pass --db-url.',
+        'db.postgres in app.config.ts, or pass --db-url.',
     );
   }
 
@@ -146,9 +170,7 @@ export function resolveConnectionString(
   // sqlite
   const fromEnv = process.env.DATABASE_URL;
   if (fromEnv) return fromEnv;
-  const fromManifest = expandReference(manifest.db.sqlite);
-  if (fromManifest) return fromManifest;
-  throw new Error(
-    'No SQLite path. Set infrastructure.db.sqlite in the manifest or pass --db-url.',
-  );
+  const fromConfig = expandReference(manifest.db.sqlite);
+  if (fromConfig) return fromConfig;
+  throw new Error('No SQLite path. Set db.sqlite in app.config.ts or pass --db-url.');
 }

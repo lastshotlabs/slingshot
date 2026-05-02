@@ -1,0 +1,112 @@
+---
+title: First Steps
+description: The shape of a Slingshot app — one config file, one CLI command, every feature composed in
+---
+
+In this set of pages you will build a small but real backend: routes, validation, a data
+model, auth, and tests. Everything you need is in `app.config.ts`. The CLI starts it.
+
+## Project structure
+
+A Slingshot app is conventional but small. There is one required file:
+
+```
+my-app/
+├── app.config.ts        ← required — declares your app
+├── package.json
+└── src/                 ← your code (anywhere you like)
+    ├── packages/
+    ├── entities/
+    └── routes/
+```
+
+`app.config.ts` exports `defineApp({...})` as default. It is the source of truth for what
+your app is: which packages it loads, which database it talks to, what middleware runs,
+which port it binds.
+
+## The minimal app
+
+```typescript title="app.config.ts"
+import { defineApp, definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  port: 3000,
+  packages: [
+    definePackage({
+      name: 'app',
+      domains: [
+        domain({
+          name: 'health',
+          basePath: '/health',
+          routes: [
+            route.get({
+              path: '/',
+              summary: 'Health check',
+              handler: ({ respond }) => respond.json({ ok: true }),
+            }),
+          ],
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+This is a complete app. It has one route, a typed handler, validation, and an OpenAPI spec.
+
+## Run it
+
+```bash
+slingshot start
+```
+
+The framework discovers `app.config.ts`, imports its default export, and starts an HTTP
+server. Three URLs are immediately available:
+
+| URL                                  | What                  |
+| ------------------------------------ | --------------------- |
+| `http://localhost:3000/health`       | Your route            |
+| `http://localhost:3000/openapi.json` | OpenAPI spec          |
+| `http://localhost:3000/docs`         | Interactive API docs  |
+
+## What `defineApp` actually is
+
+`defineApp` is a typed identity function — a single line of code:
+
+```ts
+export const defineApp = <T extends object>(config: AppConfig<T>): AppConfig<T> => config;
+```
+
+It exists so your config object gets full autocomplete and type inference without you
+having to annotate it. The CLI loads the file, takes the default export, and hands it to
+the runtime.
+
+That means:
+
+- You can read your config back with `import config from './app.config'` — it's just an object
+- You can compose it programmatically — split it across files, derive parts conditionally
+- You can test it without booting anything — just import it
+
+## What runs at boot
+
+When `slingshot start` boots your config, the framework:
+
+1. Validates the config object
+2. Resolves secrets from the configured provider
+3. Connects databases and infrastructure
+4. Runs every plugin's `setupMiddleware` in dependency order
+5. Mounts package routes, generated entity routes, and `routesDir` files
+6. Registers OpenAPI specs and `/docs`
+7. Starts the HTTP server, plus WebSocket and SSE endpoints if configured
+8. Wires graceful shutdown for `SIGTERM` / `SIGINT`
+
+You get all of this without writing any of it.
+
+## What's next
+
+Now build something real:
+
+- [App Config](/slingshot/app-authoring/app-config/) — every section of `defineApp`, what it does, when to set it
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — typed routes, schemas, and the request model
+- [Entities](/slingshot/entity-system/define-entity/) — declare a data model, get CRUD for free
+- [Packages](/slingshot/package-first/define-package/) — group features into typed modules

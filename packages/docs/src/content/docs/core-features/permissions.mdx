@@ -41,9 +41,9 @@ org's_ data," add the permissions plugin:
 bun add @lastshotlabs/slingshot-permissions
 ```
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 import {
@@ -51,7 +51,7 @@ import {
   createPermissionsPlugin,
 } from '@lastshotlabs/slingshot-permissions';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
   plugins: [

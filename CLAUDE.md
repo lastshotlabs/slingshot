@@ -1,6 +1,6 @@
 # Slingshot
 
-Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, manifest-first.
+Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, TypeScript-first.
 
 - **Core** - `@lastshotlabs/slingshot-core`: app context, event bus, persistence resolution, plugin lifecycle
 - **Entity** - `@lastshotlabs/slingshot-entity`: config-driven entity CRUD, code generation, search, transitions
@@ -11,20 +11,32 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
-- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration-plugin`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-runtime-lambda`, `slingshot-postgres`
+- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration-plugin`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
 - **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
-## Manifest-First
+## Canonical Authoring Path
 
-All built-in plugins are fully configurable via `app.manifest.json` — no TypeScript entry point needed.
+Apps declare their config in a typed `app.config.ts` at the project root using
+`defineApp({ ... })`. The CLI (`slingshot start`) discovers this file, dynamically
+imports its default export, and hands it to `createServer()`.
 
-Custom behavior (middleware, event handlers, tenant resolvers, lifecycle hooks) is expressed
-in `slingshot.handlers.ts`. The manifest references these functions by name. The framework
-auto-loads the handlers file and registers its exports before boot.
+```ts
+// app.config.ts
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 
-The programmatic `createServer()` API is a full-power alternative for apps that need dynamic
-composition. Both paths produce identical runtime behavior.
+export default defineApp({
+  meta: { name: 'my-app', version: '1.0.0' },
+  routesDir: import.meta.dir + '/routes',
+  plugins: [createAuthPlugin({ ... })],
+});
+```
+
+`createApp()` and `createServer()` remain the lower-level imperative API for tests,
+tooling, and apps that need dynamic composition. `defineApp()` is a typed identity
+helper over `CreateServerConfig` that gives users autocomplete without manually
+annotating the config.
 
 ## Package Hierarchy
 
@@ -49,18 +61,18 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 
 ## Key Files
 
-| Area               | File                                                  | What                                                                     |
-| ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------ |
-| App bootstrap      | `src/app.ts`                                          | `createApp()` flow, framework middleware, plugin lifecycle orchestration |
-| Server bootstrap   | `src/server.ts`                                       | `createServer()` wrapper around runtime and app assembly                 |
-| Plugin contract    | `packages/slingshot-core/src/plugin.ts`               | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                 |
-| Context state      | `packages/slingshot-core/src/context/index.ts`        | `SlingshotContext`, `getContext()`, instance-scoped state                |
-| Entity types       | `packages/slingshot-core/src/entityConfig.ts`         | Shared field and entity config types                                     |
-| Event bus          | `packages/slingshot-core/src/eventBus.ts`             | Bus interface, in-process adapter, client-safe event rules               |
-| Entity plugin      | `packages/slingshot-entity/src/createEntityPlugin.ts` | Root entity plugin factory for manifest and code-first use               |
-| Code generation    | `packages/slingshot-entity/src/generate.ts`           | Pure entity code generation entry point                                  |
-| Manifest schema    | `src/lib/manifest/index.ts`                           | App manifest Zod schema and validation                                   |
-| Manifest bootstrap | `src/lib/createServerFromManifest.ts`                 | End-to-end manifest startup path                                         |
+| Area              | File                                                  | What                                                                     |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| App bootstrap     | `src/app.ts`                                          | `createApp()` flow, framework middleware, plugin lifecycle orchestration |
+| Server bootstrap  | `src/server.ts`                                       | `createServer()` wrapper around runtime and app assembly                 |
+| Plugin contract   | `packages/slingshot-core/src/plugin.ts`               | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                 |
+| Context state     | `packages/slingshot-core/src/context/index.ts`        | `SlingshotContext`, `getContext()`, instance-scoped state                |
+| Entity types      | `packages/slingshot-core/src/entityConfig.ts`         | Shared field and entity config types                                     |
+| Event bus         | `packages/slingshot-core/src/eventBus.ts`             | Bus interface, in-process adapter, client-safe event rules               |
+| Entity plugin     | `packages/slingshot-entity/src/createEntityPlugin.ts` | Root entity plugin factory                                               |
+| Code generation   | `packages/slingshot-entity/src/generate.ts`           | Pure entity code generation entry point                                  |
+| App config helper | `src/defineApp.ts`                                    | `defineApp()` typed identity helper for `app.config.ts`                  |
+| CLI entry         | `src/cli/commands/start.ts`                           | `slingshot start` — discovers `app.config.ts` and boots                  |
 
 ## Bootstrap Flow
 

@@ -7,19 +7,18 @@ Source-backed example for `slingshot-organizations` on top of `slingshot-auth`.
 - `createOrganizationsPlugin()` wired with `createAuthPlugin()` (orgs depends on auth)
 - custom membership roles via `knownRoles` and `defaultMemberRole`
 - reserved-slug enforcement and the typed `SlugConflictError` (HTTP 409)
-- matching manifest and code-first setup
+- typed app config setup
 
 ## Files
 
-- `src/index.ts` - code-first app bootstrap
-- `app.manifest.json` - manifest-first equivalent
+- `app.config.ts` - typed app config
 
 ## Run
 
 From the repo root:
 
 ```bash
-JWT_SECRET=dev-secret-change-me-dev-secret-change-me bun examples/organizations/src/index.ts
+JWT_SECRET=dev-secret-change-me-dev-secret-change-me slingshot start --config examples/organizations/app.config.ts
 ```
 
 ## Mounted routes

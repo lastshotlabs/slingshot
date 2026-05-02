@@ -1,0 +1,82 @@
+---
+title: Request IDs
+description: Server-generated request IDs that flow through logs, audit entries, and traces
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every request that reaches Slingshot gets a unique server-generated UUID. It shows up on the
+Hono context, in your structured logs, in audit entries, and on the `X-Request-Id` response
+header so a client can quote it back when they file a support ticket.
+
+## How it works
+
+The `requestId` middleware is mounted at the front of the framework chain — you do not register
+it yourself. On every request it generates a fresh UUID v4, calls `c.set('requestId', id)`, runs
+the rest of the chain, and writes the ID to the `X-Request-Id` response header.
+
+Client-supplied `X-Request-Id` headers are intentionally ignored. Trusting client values would
+let an attacker spoof audit log entries and reuse idempotency keys, so the framework always
+generates server-side. If you need to trace a request across a client and server hop, use OTel
+trace context propagation instead.
+
+## Reading the ID in a handler
+
+```typescript title="src/billing/package.ts"
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  domains: [
+    domain({
+      name: 'invoices',
+      basePath: '/invoices',
+      routes: [
+        route.get({
+          path: '/:id',
+          handler: async ({ c, respond }) => {
+            const requestId = c.get('requestId');
+            console.log('lookup invoice', { requestId, id: c.req.param('id') });
+            return respond.json({ requestId });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+The ID is also automatically included in every `RequestLogEntry` emitted by `requestLogger`,
+every `AuditLogEntry` written by the `auditLog` middleware, and every error response shaped by
+the default exception formatter.
+
+## Correlating across systems
+
+Pair the request ID with OTel traces by reading both off the context:
+
+```typescript
+// @skip-typecheck
+import { createChildSpan } from '@lastshotlabs/slingshot';
+
+const span = createChildSpan(c, 'billing.charge');
+span?.setAttribute('request.id', c.get('requestId'));
+try {
+  // ...do work...
+} finally {
+  span?.end();
+}
+```
+
+Most APM tools index the span attribute, so a single ID gives you the request log line, the
+audit row, and the full trace.
+
+<Aside type="tip">
+  The header constant is exported as `HEADER_REQUEST_ID` if you need to read it elsewhere — for
+  example, when forwarding requests to a downstream service that should log under the same ID.
+</Aside>
+
+## What's next
+
+- [Structured Logging](/slingshot/app-authoring/logging/) — the request log shape that includes the ID
+- [Audit Logging](/slingshot/app-authoring/audit-logging/) — every entry carries the request ID
+- [Distributed Tracing](/slingshot/app-authoring/distributed-tracing/) — correlate the ID with OTel spans

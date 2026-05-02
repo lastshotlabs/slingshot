@@ -15,16 +15,16 @@ export default class MigrateApply extends Command {
   ];
 
   static override flags = {
-    manifest: Flags.string({
-      char: 'm',
-      description: 'Path to the app manifest. Defaults to ./app.manifest.json.',
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to the app config file. Defaults to ./app.config.ts.',
     }),
     backend: Flags.string({
-      description: 'Target backend. Auto-detected from manifest db config when omitted.',
+      description: 'Target backend. Auto-detected from app config db settings when omitted.',
       options: ['postgres', 'sqlite', 'mongo'],
     }),
     'db-url': Flags.string({
-      description: 'Override connection string (or sqlite path). Falls back to DATABASE_URL or manifest.',
+      description: 'Override connection string (or sqlite path). Falls back to DATABASE_URL or app config.',
     }),
     'migrations-dir': Flags.string({
       description: 'Directory containing migration files.',
@@ -35,7 +35,7 @@ export default class MigrateApply extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(MigrateApply);
 
-    const manifest = loadManifest(flags.manifest);
+    const manifest = await loadManifest(flags.config);
     const backend = pickBackend(manifest, flags.backend);
     const connectionString = resolveConnectionString(manifest, backend, flags['db-url']);
     const migrationsDir = resolve(flags['migrations-dir']);

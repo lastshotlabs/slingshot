@@ -16,7 +16,7 @@ integration for the underlying image assets.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts` and `packages/slingshot-entity/src/index.ts`
-- **Imported by**: manifest bootstrap via `../../src/lib/builtinPlugins.ts` and app-level plugin composition
+- **Imported by**: app-level plugin composition
 
 ## Common Tasks
 

@@ -25,48 +25,43 @@ depends on providers for all of that and should remain a thin route-and-guard as
   guard across admin, permissions, and mail routes so sub-routers cannot drift into inconsistent
   auth behavior.
 
-## Manifest Auto-Wiring
+## Wiring providers
 
-In manifest mode, the admin plugin supports string strategies that wire providers automatically
-from other plugins:
+The admin plugin is a thin wrapper that coordinates provider objects you supply. Build the
+providers in `app.config.ts` and pass them to `createAdminPlugin()`:
 
-- **`accessProvider: "slingshot-auth"`** — verifies admin access by reading `actor.id` and
-  `roles` from the framework auth context. Only users with the `super-admin` role are
-  granted admin access. Adds `slingshot-auth` as a plugin dependency.
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createAdminPlugin } from '@lastshotlabs/slingshot-admin';
+import {
+  createSlingshotAuthAccessProvider,
+  createSlingshotAuthManagedUserProvider,
+  createMemoryAuditLog,
+} from '@lastshotlabs/slingshot-admin/providers';
 
-- **`managedUserProvider: "slingshot-auth"`** — delegates user CRUD operations (list, get,
-  delete, suspend) to the auth adapter. Maps `UserRecord` to `ManagedUserRecord` at the
-  boundary. Adds `slingshot-auth` as a plugin dependency.
-
-- **`permissions: "slingshot-permissions"`** — reads evaluator, registry, and adapter from the
-  permissions plugin state. All permission operations are forwarded to the real
-  implementations after binding. Adds `slingshot-permissions` as a plugin dependency.
-
-- **`auditLog: "memory"`** — uses an in-memory audit log for development. Entries are lost
-  on process restart.
-
-These strategies are resolved during manifest config processing. The admin plugin receives
-fully-constructed provider objects — it never sees the string values.
-
-**Example manifest:**
-
-```json
-{
-  "plugins": [
-    { "plugin": "slingshot-auth", "config": { ... } },
-    { "plugin": "slingshot-permissions" },
-    {
-      "plugin": "slingshot-admin",
-      "config": {
-        "accessProvider": "slingshot-auth",
-        "managedUserProvider": "slingshot-auth",
-        "permissions": "slingshot-permissions",
-        "auditLog": "memory"
-      }
-    }
-  ]
-}
+export default defineApp({
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'super-admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createPermissionsPlugin(),
+    createAdminPlugin({
+      accessProvider: createSlingshotAuthAccessProvider(),
+      managedUserProvider: createSlingshotAuthManagedUserProvider(),
+      auditLog: createMemoryAuditLog(),
+      // permissions can be omitted — the plugin will read it from
+      // slingshot-permissions plugin state at runtime.
+    }),
+  ],
+});
 ```
+
+`accessProvider` only grants admin access to users with the `super-admin` role. `auditLog`
+is an in-memory development implementation — entries are lost on process restart.
 
 ## Operational Notes
 

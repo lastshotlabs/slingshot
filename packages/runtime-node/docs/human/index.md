@@ -4,7 +4,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-node
 ---
 
 `@lastshotlabs/slingshot-runtime-node` is the Node.js runtime implementation for Slingshot.
-Pass the return value of `nodeRuntime()` to `createServer()` as the `runtime` option.
+Pass the return value of `nodeRuntime()` to `defineApp({ runtime })` in your `app.config.ts`.
 
 ## What It Provides
 
@@ -16,11 +16,11 @@ Pass the return value of `nodeRuntime()` to `createServer()` as the `runtime` op
 
 ## Minimum Setup
 
-```ts
-import { createServer } from '@lastshotlabs/slingshot';
+```ts title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
-const server = await createServer({
+export default defineApp({
   runtime: nodeRuntime(),
   port: 3000,
 });

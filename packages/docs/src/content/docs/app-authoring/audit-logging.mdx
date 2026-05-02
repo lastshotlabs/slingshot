@@ -1,0 +1,107 @@
+---
+title: Audit Logging
+description: Durable who-did-what-when records for compliance and forensics
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Audit logs are the durable record of every meaningful action against your system — who acted,
+what they did, against what resource, and when. Slingshot ships a pluggable `AuditLogProvider`
+plus middleware that writes one entry per HTTP request, with hooks to add semantic context
+like resource type and ID.
+
+## How it works
+
+`createAuditLogProvider()` builds a provider backed by Memory, SQLite, MongoDB, or Postgres.
+The `auditLog` middleware wraps your handlers, builds an `AuditLogEntry` after the response
+resolves, and writes it asynchronously — the write is fire-and-forget, so a slow audit store
+never delays a response. Failed writes log to `console.error` rather than blocking traffic.
+
+Each entry captures `requestId`, `userId`, `sessionId`, `requestTenantId`, `method`, `path`,
+`status`, `ip`, `userAgent`, `createdAt`, plus an `id` UUID and any custom fields you set in
+the `onEntry` hook.
+
+## Mounting the middleware
+
+```typescript title="app.config.ts"
+import { auditLog, defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  middleware: [
+    auditLog({
+      store: 'postgres',
+      ttlDays: 365,
+      exclude: {
+        methods: ['GET', 'HEAD', 'OPTIONS'],
+        paths: ['/health', /^\/docs/, '/openapi.json'],
+      },
+      onEntry: (entry, c) => ({
+        ...entry,
+        action: 'api.request',
+        resource: c.req.path.split('/')[1] ?? null,
+      }),
+    }),
+  ],
+});
+```
+
+`store` picks the storage backend; SQLite and Postgres support a `ttlDays` retention window.
+The `exclude` block keeps your audit log focused on writes — log everything by default and
+filter aggressively rather than sprinkling `auditLog` calls per route.
+
+## Adding semantic context
+
+The default entry is HTTP-level. The `onEntry` hook is where you elevate it to domain-level:
+
+```typescript
+// @skip-typecheck
+import { auditLog } from '@lastshotlabs/slingshot';
+
+const middleware = auditLog({
+  store: 'postgres',
+  onEntry: (entry, c) => {
+    if (c.req.path.startsWith('/invoices') && c.req.method === 'POST') {
+      return {
+        ...entry,
+        action: 'invoice.create',
+        resource: 'invoice',
+        resourceId: c.get('createdInvoiceId'),
+        meta: { amount: c.get('chargeAmount') as number },
+      };
+    }
+    return entry;
+  },
+});
+```
+
+Set values on the Hono context inside your handler (`c.set('createdInvoiceId', ...)`) and read
+them in `onEntry` to enrich the audit row. If `onEntry` throws, the original entry is written
+unchanged — bugs in enrichment never lose audit data.
+
+## Querying the log
+
+The provider exposes a cursor-paginated query API:
+
+```typescript
+// @skip-typecheck
+import type { AuditLogProvider } from '@lastshotlabs/slingshot';
+
+async function listUserActions(provider: AuditLogProvider, userId: string) {
+  const page = await provider.query({ userId, limit: 50 });
+  return page;
+}
+```
+
+`query()` accepts `userId`, `requestTenantId`, `after`, `before`, `limit`, and an opaque
+`cursor` string. Use it to power admin UIs, compliance reports, or "recent activity" panels.
+
+<Aside type="caution">
+  Memory and SQLite providers are fine for development but lose data on restart and do not
+  scale across instances. Production deployments should use Postgres or MongoDB.
+</Aside>
+
+## What's next
+
+- [Request IDs](/slingshot/app-authoring/request-ids/) — every audit entry carries the request ID
+- [Structured Logging](/slingshot/app-authoring/logging/) — operational logs vs durable audit logs
+- [Multi-Tenancy](/slingshot/guides/multi-tenancy/) — `requestTenantId` makes per-tenant audit views easy

@@ -1,0 +1,106 @@
+---
+title: Encryption and Hashing
+description: Hash passwords, sign payloads, and compare values in constant time
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Authentication, integrity checks, and secure comparisons all need cryptographic
+primitives. Slingshot exposes a small, audited set: argon2id password hashing through
+the runtime, HMAC-SHA256 signing for arbitrary payloads, SHA-256 hashing, and
+timing-safe equality.
+
+## What you can do
+
+| Primitive                  | Use it for                                                |
+| -------------------------- | --------------------------------------------------------- |
+| `runtime.password.hash`    | Hashing user passwords (argon2id by default in Bun)       |
+| `runtime.password.verify`  | Verifying a plaintext password against a stored hash      |
+| `hmacSign`                 | Signing webhook payloads, cookies, cursors                |
+| `hmacVerify`               | Verifying inbound HMAC signatures                         |
+| `sha256`                   | Non-keyed hashing — fingerprints, dedup keys              |
+| `timingSafeEqual`          | Comparing secrets without leaking timing                  |
+
+## Password hashing
+
+Password hashing happens through the runtime so it stays portable across Bun, Node,
+and edge hosts. The auth plugin uses these methods internally for credential
+authentication — you only call them yourself when you're rolling custom credential
+handling:
+
+```typescript
+// @skip-typecheck
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
+
+const runtime = bunRuntime();
+
+const hash = await runtime.password.hash('correct horse battery staple');
+const ok = await runtime.password.verify('correct horse battery staple', hash);
+// ok === true
+```
+
+The Bun runtime uses `Bun.password.hash` (argon2id by default with sane parameters).
+The Node runtime uses argon2 via the same interface. Stored hashes are
+self-describing — they include the algorithm and parameters, so a future parameter
+upgrade verifies old hashes correctly.
+
+## HMAC signing
+
+For signing arbitrary payloads — webhook bodies, cursor tokens, presigned URLs, or
+anything you'll later verify — use `hmacSign` and `hmacVerify`:
+
+```typescript
+// @skip-typecheck
+import { hmacSign, hmacVerify } from '@lastshotlabs/slingshot';
+
+const secret = process.env.WEBHOOK_SECRET!;
+const payload = JSON.stringify({ event: 'order.shipped', orderId: 'ord_123' });
+
+const sig = hmacSign(payload, secret);
+// Send `payload` and `sig` to the recipient.
+
+const valid = hmacVerify(payload, sig, secret);
+// valid === true
+```
+
+Both functions accept `secret: string | string[]`. Pass an array when you're rotating
+keys — the active key is at index 0, and rotated keys live after. New signatures use
+the active key; verification accepts any key in the list. This makes key rotation a
+two-step deploy: add the new key at index 0, wait for outstanding signatures to age out,
+then drop the old key.
+
+## SHA-256 and timing-safe compare
+
+For non-keyed hashes (fingerprints, deduplication keys, content hashes):
+
+```typescript
+// @skip-typecheck
+import { sha256 } from '@lastshotlabs/slingshot';
+
+const fingerprint = sha256(`${userAgent}|${ipAddress}|${acceptLanguage}`);
+```
+
+When comparing any value that came from the network — signatures, tokens, secrets —
+use `timingSafeEqual`, never `===`:
+
+```typescript
+// @skip-typecheck
+import { timingSafeEqual } from '@lastshotlabs/slingshot';
+
+if (timingSafeEqual(providedToken, expectedToken)) {
+  // safe to proceed
+}
+```
+
+<Aside type="caution">
+  Never compare secrets with `===`. `===` short-circuits at the first byte mismatch and
+  leaks the matching prefix length to a remote attacker who can measure response times
+  precisely. `timingSafeEqual` runs in constant time regardless of where the values
+  diverge.
+</Aside>
+
+## What's next
+
+- [Cookies](/slingshot/app-authoring/cookies/) — `signCookieValue` is built on `hmacSign`
+- [Request Signing & Webhook Auth](/slingshot/app-authoring/request-signing/) — HMAC verification for inbound webhooks
+- [Authentication](/slingshot/core-features/auth/) — credential auth that uses the runtime password helpers

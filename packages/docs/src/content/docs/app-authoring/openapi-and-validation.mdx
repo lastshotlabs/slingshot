@@ -43,8 +43,10 @@ That metadata drives both runtime validation and generated docs.
 
 Use `modelSchemas` when you want shared schema sources preloaded before route discovery.
 
-```typescript
-await createServer({
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
   modelSchemas: new URL('./schemas', import.meta.url).pathname,
 });
 ```

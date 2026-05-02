@@ -1,286 +1,280 @@
 ---
 title: App Config
-description: Every config option for createServer and createApp — security, databases, events, realtime, and more
+description: Every section of defineApp — what it controls, when to set it, and what defaults you get
 ---
 
-The app root config controls everything your app needs to run. Here is the full surface.
+import { Aside } from '@astrojs/starlight/components';
 
-## A production-ready app root
+`defineApp({...})` is the single declarative surface for a Slingshot app. This page walks
+the config object section by section so you know every knob that exists, what its default
+is, and when you'd touch it.
 
-```typescript title="src/index.ts"
+## Anatomy
+
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer } from '@lastshotlabs/slingshot';
-import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-import { adminPackage } from './packages/admin';
-import { blogPackage } from './packages/blog';
+import { defineApp } from '@lastshotlabs/slingshot';
 
-await createServer({
-  // --- Server ---
-  port: Number(process.env.PORT ?? 3000),
+export default defineApp({
+  // app identity + server binding
+  meta: { name: 'my-app', version: '1.0.0' },
+  port: 3000,
 
-  // --- App metadata ---
-  meta: { name: 'My App', version: '1.0.0' },
+  // composition
+  packages: [],   // feature modules
+  plugins: [],    // cross-cutting integrations
+  routesDir: './src/routes',
 
-  // --- Security ---
+  // infrastructure
+  db: {},         // postgres / sqlite / mongo / redis
+  secrets: {},    // env / file / ssm / custom
+  eventBus: undefined, // in-process by default
+
+  // request shape
+  security: {},   // signing, cors, csrf, rate limit
+  middleware: [], // extra Hono middleware
+  validation: {}, // error formatting
+  upload: {},     // file uploads
+  versioning: ['v1', 'v2'],
+
+  // realtime
+  ws: { endpoints: {} },
+  sse: { endpoints: {} },
+
+  // ops
+  jobs: {},          // orchestration / job queues
+  logging: {},       // structured logs
+  metrics: {},       // prometheus
+  observability: {}, // tracing
+
+  // multi-tenancy
+  tenancy: {}, // tenant resolution
+
+  // runtime selection (bun / node / edge)
+  runtime: undefined,
+});
+```
+
+Every field is optional. An empty `defineApp({})` is valid. The framework supplies sensible
+defaults and only complains about the fields you actually need.
+
+## Identity
+
+```typescript
+defineApp({
+  meta: { name: 'my-app', version: '1.0.0' },
+});
+```
+
+`meta.name` and `meta.version` flow into OpenAPI's `info` block, OpenTelemetry service
+attributes, and structured log entries. Set them in production. They default to
+`"Bun Core API"` and `"1.0.0"` if omitted.
+
+## Server binding
+
+```typescript
+defineApp({
+  port: 3000,
+  hostname: '0.0.0.0',     // optional; '0.0.0.0' is the default
+  unix: '/var/run/app.sock', // mutually exclusive with port/hostname/tls
+  tls: { /* Bun TLS options */ },
+  maxRequestBodySize: 50 * 1024 * 1024,
+});
+```
+
+The `PORT` env var overrides `port` — the standard Twelve-Factor pattern. `unix` is for
+sidecar / proxy deployments where binding a port is undesirable.
+
+## Composition
+
+The composition surface is three layers, and you almost always use packages:
+
+```typescript
+defineApp({
+  packages: [blogPackage, analyticsPackage], // typed feature modules
+  plugins: [createAuthPlugin({...})],         // cross-cutting concerns
+  routesDir: './src/routes',                  // file-system routing
+});
+```
+
+`packages` is the canonical surface — see [Packages](/slingshot/package-first/define-package/).
+`plugins` is for integrations like auth, organizations, webhooks, search. `routesDir` is for
+top-level routes that don't belong to any package, or for quick experiments.
+
+The boot order is: plugins → packages → `routesDir`. Plugin middleware runs before package
+middleware, package routes mount before discovered routes.
+
+## Database
+
+```typescript
+defineApp({
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+    mongo: false,
+    sqlite: false,
+  },
+});
+```
+
+Each connection is opt-in. The framework only opens connections you reference. `redis: true`
+or `redis: '<url>'` enables Redis (used by sessions, rate limits, BullMQ when configured).
+`mongo: 'single'` opens one connection used for both auth state and app data; `'separate'`
+opens two distinct ones.
+
+For SQLite, pass a file path or `':memory:'`. The framework handles WAL mode and connection
+pooling per the runtime adapter.
+
+## Security
+
+```typescript
+defineApp({
   security: {
     signing: { secret: process.env.JWT_SECRET! },
-    cors: { origin: ['https://myapp.com', 'https://admin.myapp.com'] },
+    cors: { origin: ['https://myapp.com'], credentials: true },
     csrf: { enabled: true },
     rateLimit: { windowMs: 60_000, max: 100 },
-    helmet: { enabled: true },
+    trustProxy: 1,
+    captcha: { provider: 'turnstile', siteKey: '...', secretKey: '...' },
+    headers: {
+      contentSecurityPolicy: "default-src 'self'",
+    },
+    botProtection: { enabled: true, blocklistCidrs: [/* ... */] },
   },
+});
+```
 
-  // --- Database ---
-  db: {
-    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
-    cache: { adapter: 'redis', url: process.env.REDIS_URL! },
-  },
+`signing.secret` is the JWT signing key — required when auth is in play. The `secrets`
+provider can populate it automatically from `JWT_SECRET`, in which case you can omit the
+inline value.
 
-  // --- Plugins ---
+Defaults are deliberately strict: CORS denies all origins, CSRF disabled (apps that don't
+use cookies don't need it), rate limit at 100 req/60s, headers locked down. Loosen what
+you need.
+
+## Plugins
+
+```typescript
+// @skip-typecheck
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+
+defineApp({
   plugins: [
-    createAuthPlugin({
-      auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
-    }),
-    createPermissionsPlugin(),
+    createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } }),
+    createPermissionsPlugin({ adapter: 'postgres' }),
   ],
+});
+```
 
-  // --- Packages ---
-  packages: [blogPackage, adminPackage],
+Plugins are typed objects with `name` + lifecycle hooks. The framework topo-sorts them by
+declared `dependencies` and runs `setupMiddleware`, `setupRoutes`, and `setupPost` in that
+order. See [Plugin Interface](/slingshot/authoring/plugin-interface/).
 
-  // --- Events ---
-  eventBus: 'bullmq', // or 'memory' (default), 'redis'
+## Event bus
 
-  // --- WebSockets ---
+```typescript
+// @skip-typecheck
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+
+defineApp({
+  eventBus: createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST!, port: 6379 },
+    prefix: 'myapp:events',
+  }),
+});
+```
+
+Default is in-process. Pass a `SlingshotEventBus` instance — `createBullMQAdapter`,
+`createKafkaAdapter`, or your own — for cross-instance event delivery.
+
+## Secrets
+
+```typescript
+defineApp({
+  secrets: {
+    provider: 'env',
+    prefix: 'APP_',
+  },
+});
+```
+
+Providers: `'env'` (process.env, optional prefix filter), `'file'` (.env file),
+`'ssm'` (AWS SSM Parameter Store). Pass a `SecretRepository` instance for custom backends
+like Vault. The provider resolves at boot, before any plugin runs. Missing secrets fail
+loud.
+
+## Realtime
+
+```typescript
+defineApp({
   ws: {
     endpoints: {
       '/ws': {
-        onConnect: async ws => {
-          console.log('Connected:', ws.data.actor.id);
-        },
-        onMessage: async (ws, message) => {
-          /* handle message */
-        },
-        onClose: async ws => {
-          console.log('Disconnected');
-        },
+        auth: { mode: 'required' },
+        rateLimit: { messagesPerSecond: 10 },
+        recovery: { windowMs: 120_000 },
       },
     },
   },
-
-  // --- SSE ---
   sse: {
     endpoints: {
-      '/events': { heartbeatMs: 30_000 },
-    },
-  },
-
-  // --- Jobs ---
-  jobs: { enabled: true },
-
-  // --- Operations ---
-  logging: { enabled: true },
-  metrics: { enabled: true },
-  observability: { serviceName: 'my-app' },
-
-  // --- Secrets ---
-  secrets: { provider: 'env' },
-});
-```
-
-## Config reference
-
-### Server
-
-| Key    | Type     | Default | What it does     |
-| ------ | -------- | ------- | ---------------- |
-| `port` | `number` | `3000`  | HTTP server port |
-
-### App metadata
-
-| Key            | What it does                                       |
-| -------------- | -------------------------------------------------- |
-| `meta`         | App name and version for OpenAPI docs              |
-| `routesDir`    | Directory for auto-discovered route files          |
-| `modelSchemas` | Directory for shared Zod schemas preloaded at boot |
-| `versioning`   | API versioning config for versioned route trees    |
-
-### Security
-
-```typescript
-// @skip-typecheck
-security: {
-  signing: {
-    secret: 'min-32-char-secret',
-    previousSecrets: ['old-secret'],    // for zero-downtime rotation
-  },
-  cors: {
-    origin: ['https://myapp.com'],      // allowed origins
-    credentials: true,
-  },
-  csrf: { enabled: true },
-  rateLimit: {
-    windowMs: 60_000,                   // 1 minute window
-    max: 100,                           // max requests per window
-  },
-  helmet: { enabled: true },           // security headers
-}
-```
-
-### Database
-
-```typescript
-// @skip-typecheck
-// Single database
-db: {
-  default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
-}
-
-// Multiple named databases
-db: {
-  default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
-  cache: { adapter: 'redis', url: process.env.REDIS_URL! },
-  analytics: { adapter: 'mongo', url: process.env.MONGO_URL! },
-}
-
-// SQLite for development
-db: {
-  default: { adapter: 'sqlite', url: './data/app.db' },
-}
-```
-
-Supported adapters: `postgres`, `sqlite`, `mongo`, `redis`. Entities use the `default`
-connection unless they specify a named connection with `adapter: 'cache'`.
-
-### Composition
-
-| Key           | What it does                                            |
-| ------------- | ------------------------------------------------------- |
-| `packages`    | Feature packages to load (the main composition surface) |
-| `plugins`     | Raw plugins for auth, permissions, and infrastructure   |
-| `permissions` | Shared permissions bootstrap config                     |
-
-### Events
-
-| Key               | What it does                                                 |
-| ----------------- | ------------------------------------------------------------ |
-| `eventBus`        | Event transport: `'memory'` (default), `'bullmq'`, `'redis'` |
-| `kafkaConnectors` | Kafka bridge config for external event streaming             |
-
-### Realtime
-
-```typescript
-// @skip-typecheck
-// WebSocket endpoints
-ws: {
-  endpoints: {
-    '/ws': {
-      onConnect: async (ws) => { },
-      onMessage: async (ws, message) => { },
-      onClose: async (ws) => { },
-    },
-  },
-}
-
-// SSE endpoints
-sse: {
-  endpoints: {
-    '/events': { heartbeatMs: 30_000 },
-  },
-}
-```
-
-### Infrastructure
-
-| Key       | What it does                                     |
-| --------- | ------------------------------------------------ |
-| `upload`  | File upload config (provider, directory, limits) |
-| `jobs`    | Background job orchestration config              |
-| `runtime` | Runtime abstraction (Bun, Node, edge, Lambda)    |
-| `secrets` | Secret provider: `'env'`, `'ssm'`, `'file'`      |
-
-### Operations
-
-| Key             | What it does                          |
-| --------------- | ------------------------------------- |
-| `logging`       | Structured logging config             |
-| `metrics`       | Metrics endpoint (`/metrics`)         |
-| `observability` | OpenTelemetry tracing config          |
-| `tenancy`       | Tenant resolver for multi-tenant apps |
-| `middleware`    | Global middleware array               |
-| `validation`    | Request/response validation behavior  |
-
-## Config by use case
-
-### Minimal dev server
-
-```typescript
-// @skip-typecheck
-await createServer({
-  port: 3000,
-  packages: [appPackage],
-});
-```
-
-### API with auth
-
-```typescript
-// @skip-typecheck
-await createServer({
-  port: 3000,
-  security: { signing: { secret: 'dev-secret-change-in-prod' } },
-  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
-  packages: [appPackage],
-});
-```
-
-### Multi-tenant SaaS
-
-```typescript
-// @skip-typecheck
-await createServer({
-  port: 3000,
-  security: { signing: { secret: process.env.JWT_SECRET! } },
-  db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
-  tenancy: {
-    resolver: 'header',
-    headerName: 'x-tenant-id',
-  },
-  plugins: [
-    createAuthPlugin({ auth: { roles: ['user', 'admin'], defaultRole: 'user' } }),
-    createPermissionsPlugin(),
-  ],
-  packages: [appPackage],
-});
-```
-
-### Realtime app with WebSockets
-
-```typescript
-// @skip-typecheck
-await createServer({
-  port: 3000,
-  security: { signing: { secret: process.env.JWT_SECRET! } },
-  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
-  ws: {
-    endpoints: {
-      '/ws': {
-        onConnect: async ws => {
-          console.log('User connected:', ws.data.actor.id);
-        },
-        onMessage: async (ws, message) => {
-          // Echo back
-          ws.send(JSON.stringify({ echo: message }));
-        },
+      '/__sse/notifications': {
+        events: ['notification:new'],
       },
     },
   },
-  packages: [chatPackage],
 });
 ```
 
-## Next
+WebSocket and SSE are first-class. See [WebSockets](/slingshot/app-authoring/websockets/)
+and [Server-Sent Events](/slingshot/app-authoring/server-sent-events/).
 
-- [Middleware](/slingshot/app-authoring/middleware/) — global and package middleware
-- [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/) — databases, secrets, uploads
-- [Security Guide](/slingshot/guides/security/) — CORS, CSRF, rate limits, and headers in depth
+## Multi-tenancy
+
+```typescript
+defineApp({
+  tenancy: {
+    resolveTenant: c => c.req.header('x-tenant-id') ?? null,
+    exemptPaths: ['/health', '/auth/*'],
+  },
+});
+```
+
+When set, every request runs through tenant resolution before routes. Tenant ID lands on
+the request context (`getRequestTenantId(c)`) and on actor scope. Exempt paths skip
+resolution.
+
+## Runtime
+
+```typescript
+// @skip-typecheck
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
+
+defineApp({
+  runtime: nodeRuntime(),
+});
+```
+
+Bun is auto-detected — omit `runtime` on Bun. Pass `nodeRuntime()` when running on Node
+or `edgeRuntime()` for Cloudflare Workers / Deno Deploy.
+
+## Versioning
+
+```typescript
+defineApp({
+  versioning: ['v1', 'v2'],
+  routesDir: './src/routes',
+});
+```
+
+When set, routes are discovered from `routes/v1/` and `routes/v2/`. Each version gets its
+own OpenAPI spec at `/{version}/openapi.json` and Scalar docs at `/{version}/docs`. The
+root `/docs` becomes a version selector.
+
+## What's next
+
+- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — write a route
+- [Packages](/slingshot/package-first/define-package/) — organize features
+- [Plugins](/slingshot/app-authoring/packages-and-plugins/) — add cross-cutting concerns
+- [Entities](/slingshot/entity-system/define-entity/) — declare a data model

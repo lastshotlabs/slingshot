@@ -1,0 +1,112 @@
+---
+title: Distributed Tracing
+description: OpenTelemetry tracing for bootstrap phases, requests, plugins, and custom spans
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Distributed tracing tells you where time goes — across plugins, across services, across the
+boundary between your app and a database. Slingshot speaks OpenTelemetry natively and
+auto-instruments bootstrap phases, plugin lifecycle calls, and every HTTP request.
+
+## How it works
+
+Slingshot depends only on `@opentelemetry/api`. Until you install an SDK and exporter no spans
+are recorded — the OTel API is a no-op by default, so there is zero overhead. Install
+`@opentelemetry/sdk-node` (or your runtime's equivalent), configure an exporter (OTLP, Jaeger,
+Zipkin), and set `observability.tracing.enabled: true`. The framework then creates a tracer
+named `@lastshotlabs/slingshot` and starts emitting spans.
+
+Spans are nested. A request span wraps each route handler; plugin lifecycle methods get their
+own children; bootstrap phases (`slingshot.bootstrap.secrets`,
+`slingshot.bootstrap.infrastructure`) appear at startup so cold-start latency is debuggable.
+The current request's span is available on the Hono context as `c.get('otelSpan')`.
+
+## Enable tracing
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  meta: { name: 'billing-api', version: '1.4.0' },
+  observability: {
+    tracing: {
+      enabled: true,
+      // serviceName defaults to meta.name when omitted
+      serviceName: 'billing-api',
+    },
+  },
+});
+```
+
+Configure the OTel SDK separately, before calling `createServer()`:
+
+```typescript title="src/tracing.ts"
+// @skip-typecheck
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT }),
+});
+sdk.start();
+```
+
+Import `./tracing` at the top of your entrypoint so the SDK initializes before any other
+module loads. Most exporters require this ordering.
+
+## Custom spans inside a handler
+
+Use `createChildSpan()` to record domain-level work inside a request span:
+
+```typescript title="src/billing/package.ts"
+// @skip-typecheck
+import { createChildSpan, definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  domains: [
+    domain({
+      name: 'charges',
+      basePath: '/charges',
+      routes: [
+        route.post({
+          path: '/',
+          handler: async ({ c, respond }) => {
+            const span = createChildSpan(c, 'billing.charge');
+            try {
+              span?.setAttribute('billing.amount', 1000);
+              const result = await processCharge();
+              return respond.json(result);
+            } finally {
+              span?.end();
+            }
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function processCharge(): Promise<{ id: string }>;
+```
+
+`createChildSpan` returns `undefined` when tracing is not active — guard with `?.` so the same
+code runs in dev and prod without conditionals.
+
+## Correlating with logs and audits
+
+Every `RequestLogEntry` and `AuditLogEntry` includes the active `traceId` and `spanId`. When
+your APM tool indexes those attributes, a single trace ID jumps from a request log line to the
+full waterfall — including plugin calls, database queries, and any custom spans you recorded.
+
+<Aside type="tip">
+  Tracing is opt-in for a reason: in dev it adds noise without much benefit. Turn it on in
+  staging and prod, leave it off locally unless you are debugging a specific latency issue.
+</Aside>
+
+## What's next
+
+- [Structured Logging](/slingshot/app-authoring/logging/) — `traceId`/`spanId` already in every entry
+- [Metrics & Prometheus](/slingshot/app-authoring/metrics/) — aggregate vs per-request observability
+- [Observability Guide](/slingshot/guides/observability/) — full observability stack

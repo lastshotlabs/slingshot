@@ -1,0 +1,133 @@
+---
+title: Metrics & Prometheus
+description: Prometheus-compatible /metrics endpoint with custom counters, histograms, and gauges
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When you need to know how your app is behaving in aggregate — request rates, latencies,
+queue depth, business KPIs — metrics is the right tool. Slingshot exposes a Prometheus-
+compatible `/metrics` endpoint and an in-process registry you can write counters,
+histograms, and gauge callbacks against.
+
+## How it works
+
+Set `metrics.enabled: true` in your app config and the framework mounts `GET /metrics` on a
+text exposition format (`text/plain; version=0.0.4`) that any Prometheus scraper understands.
+The endpoint is opt-in because exposing it in production without auth leaks operational data —
+you must either set `metrics.auth: 'userAuth'`, supply your own middleware chain, or
+acknowledge the risk with `metrics.unsafePublic: true`.
+
+The framework's HTTP middleware automatically records `http_requests_total` (counter) and
+`http_request_duration_seconds` (histogram) labelled by method, normalized path, status, and
+tenant. The path normalizer collapses `/users/abc-123` to `/users/:id` so cardinality stays
+bounded.
+
+## Enable the endpoint
+
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  metrics: {
+    enabled: true,
+    auth: 'userAuth',
+    queues: ['email', 'webhooks'],
+    excludePaths: ['/internal', '/health'],
+  },
+});
+```
+
+When `queues` is set, the framework registers a `bullmq_queue_depth` gauge that scrapes
+waiting/active/delayed/failed counts on every Prometheus poll. Postgres pool stats,
+query counts, and migration mode are auto-registered when Postgres is configured.
+
+## Custom counters and histograms
+
+Reach into the registry from a handler when you want to track app-specific behavior:
+
+```typescript title="src/billing/package.ts"
+// @skip-typecheck
+import {
+  definePackage,
+  domain,
+  getContext,
+  incrementCounter,
+  observeHistogram,
+  route,
+} from '@lastshotlabs/slingshot';
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  domains: [
+    domain({
+      name: 'charges',
+      basePath: '/charges',
+      routes: [
+        route.post({
+          path: '/',
+          handler: async ({ c, respond }) => {
+            const { metricsState } = getContext(c.get('app'));
+            const start = performance.now();
+            const charge = await processCharge();
+            incrementCounter(metricsState, 'charges_total', { currency: charge.currency });
+            observeHistogram(
+              metricsState,
+              'charge_amount_dollars',
+              { currency: charge.currency },
+              charge.amount / 100,
+            );
+            observeHistogram(
+              metricsState,
+              'charge_duration_seconds',
+              { currency: charge.currency },
+              (performance.now() - start) / 1000,
+            );
+            return respond.json(charge);
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+declare function processCharge(): Promise<{ amount: number; currency: string }>;
+```
+
+Keep label cardinality low — every unique label combination is a separate time series, and
+unbounded labels (raw user IDs, free-text fields) will explode your scraper's memory.
+
+## Gauge callbacks
+
+Gauges are scraped on demand. Register a callback that returns the current value:
+
+```typescript
+// @skip-typecheck
+import { getContext, registerGaugeCallback } from '@lastshotlabs/slingshot';
+
+const ctx = getContext(app);
+registerGaugeCallback(ctx.metricsState, 'active_websocket_connections', async () => [
+  { labels: { endpoint: '/ws' }, value: countWsConnections('/ws') },
+]);
+
+declare function countWsConnections(endpoint: string): number;
+declare const app: object;
+```
+
+## Non-Prometheus backends
+
+For shops on Datadog StatsD, OTel metrics, or a custom sink, set `metrics.emitter` to a
+`MetricsEmitter` implementation. Plugins call this thin counter/timing/gauge interface from
+hot paths; when omitted the framework attaches a no-op so nothing crashes.
+
+<Aside type="caution">
+  Setting `auth: 'none'` in production throws unless you also set `unsafePublic: true`.
+  Network-level ACLs or a private metrics port are usually the right answer; a public
+  `/metrics` endpoint is a reconnaissance gift.
+</Aside>
+
+## What's next
+
+- [Distributed Tracing](/slingshot/app-authoring/distributed-tracing/) — per-request span detail
+- [Health Checks](/slingshot/app-authoring/health-checks/) — readiness vs metrics
+- [Background Jobs](/slingshot/core-features/jobs-and-orchestration/) — auto-instrumented BullMQ queue depth

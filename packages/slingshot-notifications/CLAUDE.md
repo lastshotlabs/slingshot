@@ -21,7 +21,7 @@ the runtime shell that wires storage, dispatch, and delivery.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts` and `packages/slingshot-entity/src/index.ts`
-- **Imported by**: `packages/slingshot-chat/src/index.ts`, `packages/slingshot-community/src/index.ts`, `packages/slingshot-push/src/index.ts`, and manifest bootstrap via `../../src/lib/builtinPlugins.ts`
+- **Imported by**: `packages/slingshot-chat/src/index.ts`, `packages/slingshot-community/src/index.ts`, `packages/slingshot-push/src/index.ts`, and app `app.config.ts` files
 
 ## Common Tasks
 

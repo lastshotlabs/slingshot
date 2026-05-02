@@ -1,11 +1,9 @@
 /**
- * Manifest declaration for the game engine plugin.
+ * Multi-entity manifest declaration for the game engine plugin.
  *
- * Declares entity configs, operations, and hooks for manifest-mode
- * bootstrap. Used when the game engine is configured via
- * `app.manifest.json` rather than programmatic API.
- *
- * See spec §3.3 for the manifest-first requirement.
+ * Declares entity configs, operations, and hooks consumed by
+ * `createEntityPlugin({ manifest })` so the entity plugin can resolve all
+ * game-engine entities from a single declarative bundle.
  */
 import type { MultiEntityManifest } from '@lastshotlabs/slingshot-entity';
 import { entityConfigToManifestEntry } from '@lastshotlabs/slingshot-entity';

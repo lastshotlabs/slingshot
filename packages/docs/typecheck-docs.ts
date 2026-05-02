@@ -84,7 +84,7 @@ export function extractTypescriptBlocks(filePath: string, content?: string): Cod
         blockIndex,
         virtualPath: extractVirtualPath(lines[blockStartLine - 1] ?? ''),
       };
-      if (shouldTypecheckBlock(code) || block.virtualPath) {
+      if ((shouldTypecheckBlock(code) || block.virtualPath) && !code.includes('@skip-typecheck')) {
         blocks.push({
           ...block,
         });

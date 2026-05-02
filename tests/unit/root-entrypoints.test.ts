@@ -6,15 +6,14 @@ describe('root entrypoints', () => {
     mock.restore();
   });
 
-  test('root package entrypoint re-exports core server and manifest helpers', async () => {
+  test('root package entrypoint re-exports core server and defineApp', async () => {
     const root = await import('../../src/index.ts');
     const server = await import('../../src/server.ts');
-    const manifest = await import('../../src/lib/createServerFromManifest.ts');
+    const defineAppMod = await import('../../src/defineApp.ts');
 
     expect(root.createServer).toBe(server.createServer);
-    expect(root.createServerFromManifest).toBe(manifest.createServerFromManifest);
+    expect(root.defineApp).toBe(defineAppMod.defineApp);
     expect(typeof root.createApp).toBe('function');
-    expect(typeof root.createMcpFoundation).toBe('function');
     expect(typeof root.auditProductionReadiness).toBe('function');
     expect(typeof root.assertProductionReadiness).toBe('function');
   });
@@ -77,20 +76,4 @@ describe('root entrypoints', () => {
     expect(typeof cliUtils.resolvePlatformConfig).toBe('function');
   });
 
-  test('orchestration worker command exposes Temporal manifest worker wiring', async () => {
-    const WorkerCommand = (await import('../../src/cli/commands/orchestration/worker.ts')).default;
-    const temporalWorkerFactory =
-      await import('../../src/lib/createTemporalOrchestrationWorkerFromManifest.ts');
-
-    expect(typeof temporalWorkerFactory.createTemporalOrchestrationWorkerFromManifest).toBe(
-      'function',
-    );
-    expect(WorkerCommand.description).toContain('Temporal-backed Slingshot orchestration worker');
-    expect(Object.keys(WorkerCommand.flags).sort()).toEqual([
-      'build-id',
-      'dry-run',
-      'handlers',
-      'manifest',
-    ]);
-  });
 });

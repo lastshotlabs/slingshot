@@ -647,15 +647,15 @@ export const blackjack = defineGame({
 
 Register all game types with a single plugin instance:
 
-```typescript title="src/index.ts"
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createGameEnginePlugin } from '@lastshotlabs/slingshot-game-engine';
-import { blackjack } from './blackjack.js';
-import { drawing } from './drawing.js';
-import { trivia } from './trivia.js';
+import { blackjack } from './src/blackjack.js';
+import { drawing } from './src/drawing.js';
+import { trivia } from './src/trivia.js';
 
-await createServer({
+export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
   plugins: [

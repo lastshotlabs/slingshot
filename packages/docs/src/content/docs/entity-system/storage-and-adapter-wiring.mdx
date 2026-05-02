@@ -11,12 +11,12 @@ entity code stays the same.
 
 When you do not configure a database, entities use in-memory storage:
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
-import { Task } from './entities/task';
+import { defineApp, definePackage, entity } from '@lastshotlabs/slingshot';
+import { Task } from './src/entities/task';
 
-await createServer({
+export default defineApp({
   port: 3000,
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
 });
@@ -28,9 +28,9 @@ Data lives in memory and resets on restart. This is perfect for development and 
 
 One config change:
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+export default defineApp({
   port: 3000,
   db: { default: { adapter: 'sqlite', url: './data/app.db' } },
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
@@ -41,9 +41,9 @@ The entity definition and all your routes stay exactly the same. Data now persis
 
 ## Switch to Postgres
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+export default defineApp({
   port: 3000,
   db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
@@ -54,9 +54,9 @@ Same entity code. Same routes. Different backend.
 
 ## Switch to MongoDB
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+export default defineApp({
   port: 3000,
   db: { default: { adapter: 'mongo', url: process.env.MONGO_URL! } },
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
@@ -67,9 +67,9 @@ await createServer({
 
 Best for cache-shaped entities like sessions, rate limits, or ephemeral state:
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+export default defineApp({
   port: 3000,
   db: { default: { adapter: 'redis', url: process.env.REDIS_URL! } },
   packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
@@ -80,9 +80,9 @@ await createServer({
 
 Different entities can use different backends:
 
-```typescript title="src/index.ts"
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+export default defineApp({
   port: 3000,
   db: {
     default: { adapter: 'postgres', url: process.env.DATABASE_URL! },

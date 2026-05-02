@@ -12,10 +12,10 @@ still add global middleware at the root.
 
 Use the root `middleware` array for cross-cutting behavior that should run across the app.
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-await createServer({
+export default defineApp({
   middleware: [
     async (c, next) => {
       console.log('Request received at:', Date.now());

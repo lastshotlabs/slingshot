@@ -22,7 +22,7 @@ export type PushFormatterFn = (
   defaults?: Partial<PushMessage>,
 ) => PushMessage;
 
-/** Declarative formatter template that works in manifest mode. */
+/** Declarative formatter template. */
 export interface PushFormatterTemplate {
   /** Notification title template. */
   readonly titleTemplate: string;

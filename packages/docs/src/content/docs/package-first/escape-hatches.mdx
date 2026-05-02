@@ -144,9 +144,11 @@ const metricsPlugin: SlingshotPlugin = {
 
 Register it in the app root:
 
-```typescript
+```typescript title="app.config.ts"
 // @skip-typecheck
-await createServer({
+import { defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
   port: 3000,
   plugins: [metricsPlugin],
   packages: [blogPackage],

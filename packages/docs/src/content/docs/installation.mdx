@@ -11,7 +11,7 @@ Every Slingshot app starts here:
 bun add @lastshotlabs/slingshot hono zod
 ```
 
-Installs `createServer()`, `createApp()`, the manifest bootstrap, route discovery, OpenAPI helpers, and the entity/operations authoring tools.
+Installs `defineApp()`, `createServer()`, `createApp()`, the CLI, route discovery, OpenAPI helpers, and the entity/operations authoring tools.
 
 ## Feature packages
 
@@ -49,15 +49,15 @@ bun add @lastshotlabs/slingshot-runtime-node
 bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 ```
 
-```typescript
+```typescript title="app.config.ts"
 // Node.js only — pass the runtime explicitly
-import { createServer } from '@lastshotlabs/slingshot';
+import { defineApp } from '@lastshotlabs/slingshot';
 import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
-await createServer({ runtime: nodeRuntime(), port: 3000 });
+export default defineApp({ runtime: nodeRuntime(), port: 3000 });
 ```
 
-On Bun, `createServer` without a `runtime` argument uses `@lastshotlabs/slingshot-runtime-bun` automatically.
+On Bun, omit `runtime` entirely — `@lastshotlabs/slingshot-runtime-bun` is auto-detected.
 
 ## Database drivers
 
@@ -134,7 +134,7 @@ bun add nodemailer
 `@lastshotlabs/slingshot` ships the `slingshot` CLI. After installing:
 
 ```bash
-# Start with a manifest
+# Start the server — discovers app.config.ts in the current directory
 slingshot start
 
 # Run database migrations (Prisma-style flow)
@@ -144,7 +144,7 @@ slingshot migrate status                 # show applied vs pending
 slingshot migrate dev --name init        # generate + apply, the inner-loop shortcut
 
 # Generate entity source files (types, adapters) without applying SQL
-slingshot generate --manifest ./app.manifest.json --outdir ./src/generated
+slingshot generate --config ./app.config.ts --outdir ./src/generated
 ```
 
 ## Prerequisites
@@ -152,4 +152,4 @@ slingshot generate --manifest ./app.manifest.json --outdir ./src/generated
 - **Bun** v1.2 or later — recommended. Use Bun as your package manager and runtime.
 - **Node.js** 20+ — only if using the Node.js runtime adapter (`@lastshotlabs/slingshot-runtime-node`).
 
-All examples in these docs use Bun. The only difference on Node.js is passing `runtime: nodeRuntime()` to `createServer`.
+All examples in these docs use Bun. The only difference on Node.js is passing `runtime: nodeRuntime()` to `defineApp`.

@@ -1,0 +1,113 @@
+---
+title: WebSocket Transports
+description: Cross-instance message fanout via Redis pub/sub or a custom backend
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A WebSocket transport is what lets a message published on instance A reach a client connected
+to instance B. Without one, every Slingshot replica is an island — `publish('room', payload)`
+only reaches sockets on the same node. Configure a transport once and broadcasts fan out
+across your whole fleet.
+
+## How it works
+
+The framework's `publish()` always writes to Bun's native `server.publish()` first — that is
+the in-process delivery path for sockets connected to the same instance. It then calls
+`transport.publish(endpoint, room, message, origin)` to push the message off-instance. On the
+receiving side, the transport's `connect()` callback hands inbound messages back to the
+framework which delivers them to local sockets. Self-echo is filtered using the `origin`
+ID — the publishing instance never receives its own message back.
+
+The default transport is `InMemoryTransport`: a no-op that does nothing off-instance. Single-
+instance deployments can stop here. Once you have more than one replica you need a real
+transport — or messages published on one node will never reach clients on another.
+
+## Redis pub/sub
+
+`createRedisTransport()` is the production default. It uses two ioredis clients (one for
+publish, one for subscribe — required by the Redis pub/sub protocol) and a single
+`PSUBSCRIBE` against a shared channel prefix so joining new rooms never requires a fresh
+subscribe call.
+
+```typescript title="app.config.ts"
+import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  ws: {
+    transport: createRedisTransport({
+      connection: process.env.REDIS_URL!,
+      channelPrefix: 'ws:room:',
+    }),
+    endpoints: {
+      '/ws/chat': {
+        // ...
+      },
+    },
+  },
+});
+```
+
+`connection` accepts an ioredis options object or a Redis URL. `channelPrefix` defaults to
+`ws:room:` — change it only if you are running multiple unrelated apps on the same Redis
+cluster.
+
+## Implementing a custom transport
+
+Any backend with a pub/sub or fanout primitive works. Implement the `WsTransportAdapter`
+interface and pass an instance to `ws.transport`:
+
+```typescript title="src/lib/natsTransport.ts"
+// @skip-typecheck
+import type { WsTransportAdapter } from '@lastshotlabs/slingshot';
+import { connect, type NatsConnection } from 'nats';
+
+export function createNatsTransport(url: string): WsTransportAdapter {
+  let nc: NatsConnection | null = null;
+  return {
+    async connect(onMessage) {
+      nc = await connect({ servers: url });
+      const sub = nc.subscribe('ws.>');
+      (async () => {
+        for await (const m of sub) {
+          const [, endpoint, room] = m.subject.split('.', 3);
+          const { msg, origin } = m.json() as { msg: string; origin: string };
+          onMessage(endpoint, room, msg, origin);
+        }
+      })().catch(console.error);
+    },
+    async publish(endpoint, room, message, origin) {
+      nc?.publish(`ws.${endpoint}.${room}`, JSON.stringify({ msg: message, origin }));
+    },
+    async disconnect() {
+      await nc?.drain();
+      nc = null;
+    },
+  };
+}
+```
+
+The contract is small: three async methods and one rule (drop messages whose `origin` matches
+your instance ID — the framework already does this on your behalf when it delivers).
+
+## When you need a transport
+
+- Running more than one Slingshot replica behind a load balancer.
+- Mixing WebSocket and SSE on different process pools.
+- Doing canary or blue/green deploys where two versions briefly serve traffic together.
+
+A single replica with sticky-session load balancing can technically skip the transport, but
+sticky sessions break recovery and presence in subtle ways — pay the Redis cost up front and
+sleep better.
+
+<Aside type="tip">
+  `disconnect()` is called on graceful shutdown. ioredis-style clients should use
+  `disconnect()` over `quit()` because subscribe-mode clients hang on `quit()` waiting for
+  unrelated commands.
+</Aside>
+
+## What's next
+
+- [WebSocket Presence](/slingshot/app-authoring/websocket-presence/) — what cross-instance broadcast unlocks
+- [WebSocket Recovery](/slingshot/app-authoring/websocket-recovery/) — replay across reconnects
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — full multi-instance deployment guide

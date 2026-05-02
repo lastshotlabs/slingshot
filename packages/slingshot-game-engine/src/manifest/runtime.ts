@@ -1,11 +1,11 @@
 /**
  * Manifest-aware runtime wiring for the game engine.
  *
- * Creates the runtime registries and hooks for manifest-mode bootstrap.
+ * Creates the runtime registries and hooks for config-driven bootstrap.
  * Captures adapters after resolution and wires them into the game
  * engine's closure-owned state.
  *
- * See spec §3.3 for the manifest-first requirement.
+ * Used by `createEntityPlugin({ manifestRuntime })` for runtime wiring.
  */
 import type {
   EntityManifestRuntime,
@@ -19,7 +19,7 @@ import type { GameDefinition } from '../types/models';
 
 /** Arguments for creating the game engine manifest runtime. */
 export interface GameEngineManifestRuntimeArgs {
-  /** Game definitions to register in manifest mode. */
+  /** Game definitions to register in config-driven mode. */
   games?: GameDefinition[];
 
   /**
@@ -30,7 +30,7 @@ export interface GameEngineManifestRuntimeArgs {
 }
 
 /**
- * Create the manifest-mode runtime for the game engine.
+ * Create the config-driven runtime for the game engine.
  *
  * @returns An `EntityManifestRuntime` with custom handler and hook registries.
  */

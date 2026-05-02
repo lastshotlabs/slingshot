@@ -24,15 +24,12 @@ declare module '@lastshotlabs/slingshot-core' {
 }
 ```
 
-Publish through the app context — accessible via `getContext(app)` after `createServer`:
+Publish through the app context — accessible via `getContext(app)` from any handler or plugin lifecycle hook:
 
 ```typescript
 // @skip-typecheck
-import { createServer, getContext } from '@lastshotlabs/slingshot';
+import { getContext } from '@lastshotlabs/slingshot';
 
-const { app } = await createServer({
-  /* ... */
-});
 const ctx = getContext(app);
 
 ctx.events.publish(
@@ -140,8 +137,8 @@ These fire automatically — no setup needed:
 The default bus delivers events in-process. For multi-instance deployments, swap to a
 shared transport:
 
-```typescript
-await createServer({
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
   eventBus: 'bullmq', // events cross instance boundaries
   // ...
 });

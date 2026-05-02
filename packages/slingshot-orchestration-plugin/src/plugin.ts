@@ -16,6 +16,20 @@ const DEFAULT_START_MAX_ATTEMPTS = 1;
 const DEFAULT_START_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_CAP_MS = 30_000;
 
+/**
+ * Cached health snapshot returned by `createOrchestrationPlugin().getHealth()`.
+ *
+ * The plugin reports `degraded` until a provided adapter has started. Apps that
+ * pass a prebuilt runtime are considered adapter-available immediately because
+ * lifecycle ownership stays outside this plugin.
+ */
+export interface OrchestrationPluginHealth {
+  /** Coarse plugin state suitable for admin health summaries. */
+  readonly status: 'healthy' | 'degraded';
+  /** `true` once the plugin-owned adapter has successfully started. */
+  readonly adapterAvailable: boolean;
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -60,7 +74,7 @@ async function startAdapterWithRetry(
  */
 export function createOrchestrationPlugin(
   options: ConfigurableOrchestrationPluginOptions,
-): SlingshotPlugin {
+): SlingshotPlugin & { getHealth(): OrchestrationPluginHealth } {
   const workflows = options.workflows ?? [];
   const routes = options.routes ?? true;
   const routePrefix = options.routePrefix ?? '/orchestration';
@@ -136,7 +150,7 @@ export function createOrchestrationPlugin(
         }
       }
     },
-    health() {
+    getHealth(): OrchestrationPluginHealth {
       const status: 'healthy' | 'degraded' = adapterStarted ? 'healthy' : 'degraded';
       return { status, adapterAvailable: adapterStarted };
     },

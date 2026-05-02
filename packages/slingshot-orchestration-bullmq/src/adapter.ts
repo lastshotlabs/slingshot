@@ -56,13 +56,26 @@ import {
 
 // Re-exports for the public API surface (preserved from original adapter.ts).
 export { classifyOrchestrationError, type ErrorClassification } from './errorClassification';
+/**
+ * Error thrown when callers reuse a BullMQ orchestration adapter after shutdown.
+ */
 export { OrchestrationAdapterDisposedError };
-export type {
-  BullMQOrchestrationAdapterMetrics,
-  BullMQOrchestrationMetricsCapability,
-  BullMQOrchestrationResetCapability,
-  BullMQOrchestrationHealthCapability,
-};
+/**
+ * Cumulative operational counters exposed by the BullMQ orchestration adapter.
+ */
+export type { BullMQOrchestrationAdapterMetrics };
+/**
+ * Adapter capability that returns BullMQ orchestration metrics snapshots.
+ */
+export type { BullMQOrchestrationMetricsCapability };
+/**
+ * Adapter capability for resetting lazy-start state after failed initialization.
+ */
+export type { BullMQOrchestrationResetCapability };
+/**
+ * Adapter capability that probes BullMQ orchestration health and Redis connectivity.
+ */
+export type { BullMQOrchestrationHealthCapability };
 
 const DEFAULT_REMOVE_ON_COMPLETE_AGE_SECONDS = 3_600;
 const DEFAULT_REMOVE_ON_COMPLETE_COUNT = 1_000;

@@ -14,6 +14,9 @@ export class PermissionsError extends Error {
   }
 }
 
+/**
+ * Thrown when permissions plugin configuration is invalid or unsupported.
+ */
 export class PermissionsConfigError extends PermissionsError {
   constructor(message: string) {
     super('PERMISSIONS_CONFIG_ERROR', message);
@@ -21,6 +24,9 @@ export class PermissionsConfigError extends PermissionsError {
   }
 }
 
+/**
+ * Thrown when a permissions adapter cannot be resolved or fails an adapter operation.
+ */
 export class PermissionsAdapterError extends PermissionsError {
   readonly adapter: string;
 

@@ -5,6 +5,10 @@ import './events';
  */
 export { createOrchestrationPlugin } from './plugin';
 /**
+ * Health snapshot returned by the orchestration plugin instance.
+ */
+export type { OrchestrationPluginHealth } from './plugin';
+/**
  * Runtime lookup helpers and the plugin-state key used by Slingshot integrations.
  */
 export { getOrchestration, getOrchestrationOrNull, ORCHESTRATION_PLUGIN_KEY } from './context';

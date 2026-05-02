@@ -25,7 +25,7 @@ packages, no tight coupling.
 
 Augment the framework event map once to get typed `publish` and `on` calls everywhere:
 
-```typescript title="src/blog/events.ts"
+```typescript title="src/blog/event-types.ts"
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
     'blog:post.published': {
@@ -34,9 +34,11 @@ declare module '@lastshotlabs/slingshot-core' {
       title: string;
       slug: string;
     };
-    'user.created': { userId: string; email: string };
+    'blog:post.updated': { id: string; title: string };
   }
 }
+
+export {};
 ```
 
 Once augmented, every `publish` and `on` call for these keys is type-checked end to end.
@@ -48,6 +50,7 @@ to browsers (SSE), webhook subscribers, or external connectors, register a runti
 definition with `defineEvent(...)`:
 
 ```typescript title="src/blog/events.ts"
+import './event-types';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { defineEvent } from '@lastshotlabs/slingshot-core';
 
@@ -134,7 +137,12 @@ This is the canonical path for non-route-driven events:
 import { getContext } from '@lastshotlabs/slingshot';
 
 const ctx = getContext(app);
-ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' });
+ctx.events.publish('blog:post.published', {
+  postId: 'post_123',
+  authorId: 'usr_123',
+  title: 'Hello Slingshot',
+  slug: 'hello-slingshot',
+});
 ```
 
 `ctx.events.publish` produces the framework event envelope, applies the registered event
@@ -148,6 +156,9 @@ Subscribe in `setupPost` so all publishers are wired before any subscriber start
 ```typescript title="src/packages/notifications.ts"
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
+declare function sendNewPostNotification(authorId: string, title: string): Promise<void>;
+declare function sendWelcomeEmail(email: string): Promise<void>;
+
 export const notificationsPlugin: SlingshotPlugin = {
   name: 'notifications',
   setupPost({ bus }) {
@@ -155,8 +166,10 @@ export const notificationsPlugin: SlingshotPlugin = {
       await sendNewPostNotification(payload.authorId, payload.title);
     });
 
-    bus.on('user.created', async ({ email }) => {
-      await sendWelcomeEmail(email);
+    bus.on('auth:user.created', async ({ email }) => {
+      if (email) {
+        await sendWelcomeEmail(email);
+      }
     });
   },
 };

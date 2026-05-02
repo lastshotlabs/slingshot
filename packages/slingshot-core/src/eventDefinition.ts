@@ -23,6 +23,10 @@ const EXTERNAL_EXPOSURES = new Set<EventExposure>([
   'connector',
 ]);
 
+type EventSubscriberAuthorizer<K extends EventKey> = NonNullable<
+  EventDefinition<K>['authorizeSubscriber']
+>;
+
 function hasExternalExposure(exposure: readonly EventExposure[]): boolean {
   return exposure.some(value => EXTERNAL_EXPOSURES.has(value));
 }
@@ -109,7 +113,7 @@ export function matchSubscriberToScope(
 
 export function createDefaultSubscriberAuthorizer<K extends EventKey>(
   definition: Pick<EventDefinition<K>, 'exposure'>,
-): EventDefinition<K>['authorizeSubscriber'] {
+): EventSubscriberAuthorizer<K> {
   return (principal, envelope) => {
     if (!hasExternalExposure(definition.exposure)) {
       return false;

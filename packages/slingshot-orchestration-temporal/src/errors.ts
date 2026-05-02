@@ -78,6 +78,9 @@ export function mapTemporalFailure(prefix: string, error: unknown): Orchestratio
   return wrapTemporalError(prefix, error);
 }
 
+/**
+ * Wrap an unknown Temporal failure in a portable {@link OrchestrationError}.
+ */
 export function wrapTemporalError(message: string, error: unknown): OrchestrationError {
   return new OrchestrationError(
     'ADAPTER_ERROR',

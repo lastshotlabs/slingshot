@@ -104,6 +104,9 @@ export {
  * TTL-based evaluation cache for permission checks.
  */
 export { createEvaluationCache } from './lib/evaluationCache';
+/**
+ * Evaluation cache contracts and configuration options.
+ */
 export type {
   EvaluationCache,
   EvaluationCacheEntry,
@@ -113,6 +116,9 @@ export type {
  * Audit trail for permission changes.
  */
 export { createMemoryAuditTrailStore, withAuditTrail } from './lib/auditTrail';
+/**
+ * Audit trail entry, filter, action, store, and wrapper option contracts.
+ */
 export type {
   AuditTrailEntry,
   AuditTrailFilter,

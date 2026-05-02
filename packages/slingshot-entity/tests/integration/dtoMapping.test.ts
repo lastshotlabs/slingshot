@@ -328,6 +328,110 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     expect(records.get('1')?.role).toBe('admin');
   });
 
+  it('named-op route honours routes.operations[opName].dto variant', async () => {
+    records.clear();
+    idCounter = 0;
+    const config = asResolvedConfig({
+      name: 'User',
+      fields: {
+        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
+        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+        role: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+      },
+      _pkField: 'id',
+      _storageName: 'users',
+      dto: {
+        default: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, shape: 'default' }),
+        admin: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, role: r.role, shape: 'admin' }),
+      },
+      routes: {
+        operations: {
+          adminGet: { dto: 'admin' },
+        },
+      },
+    });
+    await records.set('1', { id: '1', email: 'a@b.com', role: 'admin' });
+    const adapter = {
+      ...createMemoryAdapter(),
+      adminGet: (params: Record<string, unknown>) =>
+        Promise.resolve(records.get(params.id as string) ?? null),
+    };
+    const operations = {
+      adminGet: { kind: 'lookup' as const, returns: 'one' as const, fields: { id: 'param:id' } },
+    };
+    const router = buildBareEntityRoutes(config, operations, adapter);
+
+    const res = await router.fetch(new Request('http://localhost/users/admin-get/1'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // The 'admin' variant ran — `role` is present and shape='admin'.
+    expect(body.shape).toBe('admin');
+    expect(body.role).toBe('admin');
+  });
+
+  it('routes.<op>.transform runs after dto projection on CRUD direct paths', async () => {
+    records.clear();
+    idCounter = 0;
+    const config = asResolvedConfig({
+      name: 'User',
+      fields: {
+        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
+        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+      },
+      _pkField: 'id',
+      _storageName: 'users',
+      dto: {
+        default: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, mapped: true }),
+      },
+      routes: {
+        list: {
+          // Wrap the list response in an envelope; transform sees the projected dto.
+          transform: (value: unknown) => {
+            const v = value as { items: Record<string, unknown>[] };
+            return { count: v.items.length, items: v.items };
+          },
+        },
+        get: {
+          transform: (value: unknown) => ({ wrapped: true, payload: value }),
+        },
+      },
+    });
+    await adapter_create_helper(config, [
+      { email: 'a@b.com' },
+      { email: 'c@d.com' },
+    ]);
+
+    async function adapter_create_helper(_cfg: typeof config, seeds: Record<string, unknown>[]) {
+      // helper: noop; we'll use a fresh adapter below
+      return seeds;
+    }
+
+    const adapter = createMemoryAdapter();
+    await adapter.create({ email: 'a@b.com' });
+    await adapter.create({ email: 'c@d.com' });
+    const router = buildBareEntityRoutes(config, undefined, adapter);
+
+    // List wrap
+    const listRes = await router.fetch(new Request('http://localhost/users'));
+    const listBody = (await listRes.json()) as {
+      count: number;
+      items: { mapped: boolean; email: string }[];
+    };
+    expect(listBody.count).toBe(2);
+    // Transform saw the post-projection items (mapped: true present).
+    expect(listBody.items[0]?.mapped).toBe(true);
+
+    // Get envelope
+    const getRes = await router.fetch(new Request('http://localhost/users/1'));
+    const getBody = (await getRes.json()) as {
+      wrapped: boolean;
+      payload: { mapped: boolean; email: string };
+    };
+    expect(getBody.wrapped).toBe(true);
+    expect(getBody.payload.mapped).toBe(true);
+    expect(getBody.payload.email).toBe('a@b.com');
+  });
+
   it('strips gated fields from default-variant update', async () => {
     records.clear();
     idCounter = 0;

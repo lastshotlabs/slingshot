@@ -62,6 +62,7 @@
  */
 import { z } from 'zod';
 import { dbSchema, redisObjectSchema } from './sections/db';
+import { healthSchema } from './sections/health';
 import { jobsSchema } from './sections/jobs';
 import { loggingSchema } from './sections/logging';
 import { appSectionSchema } from './sections/meta';
@@ -140,12 +141,15 @@ export const appConfigSchema = z
     tenancy: tenancySchema.loose().optional(),
     logging: loggingSchema.loose().optional(),
     metrics: metricsSchema.loose().optional(),
+    health: healthSchema.loose().optional(),
     validation: validationSchema.loose().optional(),
     upload: uploadSchema.loose().optional(),
     ws: wsSchema.loose().optional(),
     versioning: z.union([versioningObjectSchema.loose(), z.array(z.string())]).optional(),
     plugins: z.array(z.unknown()).optional(),
     packages: z.array(z.unknown()).optional(),
+    requestScopes: z.array(z.unknown()).optional(),
+    configs: z.array(z.unknown()).optional(),
     eventBus: z.unknown().optional(),
     kafkaConnectors: z.unknown().optional(),
     secrets: z.unknown().optional(),
@@ -255,6 +259,7 @@ const SCHEMA_MAP: Record<string, z.ZodType> = {
   tenancy: tenancySchema,
   logging: loggingSchema,
   metrics: metricsSchema,
+  health: healthSchema,
   validation: validationSchema,
   upload: uploadSchema,
   'upload.presignedUrls': uploadPresignedSchema,

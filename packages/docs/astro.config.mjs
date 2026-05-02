@@ -73,6 +73,7 @@ export default defineConfig({
         {
           label: 'Composing an App',
           items: [
+            { label: 'Overview', slug: 'composing-an-app' },
             { label: 'App Config', slug: 'app-authoring/app-config' },
             { label: 'Packages', slug: 'package-first/define-package' },
             { label: 'Domains and Routes', slug: 'package-first/domain-and-route' },
@@ -84,6 +85,7 @@ export default defineConfig({
         {
           label: 'Authoring Routes',
           items: [
+            { label: 'Overview', slug: 'authoring-routes' },
             { label: 'Routes and Handlers', slug: 'app-authoring/routes-and-handlers' },
             { label: 'Validation', slug: 'app-authoring/validation' },
             { label: 'DTO Mapping', slug: 'app-authoring/dto-mapping' },
@@ -130,7 +132,7 @@ export default defineConfig({
             { label: 'Encryption and Hashing', slug: 'app-authoring/encryption-and-hashing' },
             { label: 'Security Headers', slug: 'app-authoring/security-headers' },
             { label: 'Request Signing & Webhook Auth', slug: 'app-authoring/request-signing' },
-            { label: 'Permissions Guide', slug: 'guides/permissions' },
+            { label: 'Permissions: Setup and Patterns', slug: 'guides/permissions' },
             { label: 'Multi-Tenancy', slug: 'guides/multi-tenancy' },
             { label: 'Security Hardening', slug: 'guides/security' },
           ],
@@ -177,7 +179,6 @@ export default defineConfig({
             { label: 'Horizontal Scaling', slug: 'guides/horizontal-scaling' },
             { label: 'File Uploads', slug: 'guides/file-uploads' },
             { label: 'Webhooks', slug: 'guides/webhooks' },
-            { label: 'Webhook Governance', slug: 'guides/webhook-governance' },
             { label: 'Transactional Mail', slug: 'guides/mail' },
             { label: 'Admin Surface', slug: 'guides/admin' },
             { label: 'Content Model', slug: 'guides/content-model' },

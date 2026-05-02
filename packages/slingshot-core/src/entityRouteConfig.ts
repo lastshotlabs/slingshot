@@ -666,6 +666,32 @@ export interface RouteOperationConfig<
    * ```
    */
   input?: TInputVariant;
+
+  /**
+   * Per-operation response transform — runs on the response body just before
+   * serialization, after entity-level DTO projection (private-field stripping
+   * plus the selected `dto` variant mapper).
+   *
+   * For entity-generated routes this is the canonical hook for "wrap this
+   * response in an envelope" or "shape this one operation differently." It
+   * mirrors `responses[status].transform` on package-domain routes — same
+   * semantics, declared at the op-config level so it works uniformly across
+   * CRUD and named-op routes regardless of which internal codepath registers
+   * the route.
+   *
+   * Pass a `createDtoMapper(...)` result here for typed shape mapping.
+   *
+   * @example
+   * ```ts
+   * routes: {
+   *   list: { transform: items => ({ count: (items as unknown[]).length, items }) },
+   *   operations: {
+   *     publicProfile: { dto: 'public', transform: profile => ({ profile }) },
+   *   },
+   * }
+   * ```
+   */
+  transform?: (value: unknown) => unknown;
 }
 
 /**

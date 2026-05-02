@@ -15,6 +15,7 @@ import type { MetricsState } from '@framework/metrics/registry';
 import { otelRequestMiddleware } from '@framework/middleware/otelRequest';
 import { rateLimit } from '@framework/middleware/rateLimit';
 import { requestId } from '@framework/middleware/requestId';
+import { createRequestScopesMiddleware } from '@framework/middleware/requestScopes';
 import { requestLogger } from '@framework/middleware/requestLogger';
 import { getTracer, isTracingEnabled } from '@framework/otel/tracer';
 import type { OpenAPIHono } from '@hono/zod-openapi';
@@ -44,6 +45,12 @@ export interface MountMiddlewareConfig {
   /** Tracing configuration for OTel request spans. */
   tracing?: TracingConfig;
   middleware?: MiddlewareHandler<AppEnv>[];
+  /**
+   * User-defined request scopes from `defineApp({ requestScopes: [...] })`.
+   * The middleware is mounted right after `requestId` so scopes are available
+   * for the entire handler lifecycle.
+   */
+  requestScopes?: readonly import('@lastshotlabs/slingshot-core').RequestScope[];
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +90,13 @@ export async function mountFrameworkMiddleware(
   const isProd = config.isProd;
 
   app.use(requestId);
+
+  // Request scopes — mounted after requestId so the request-id is observable
+  // from inside scope factories, but before anything that might want a
+  // request-scoped resource (logging, tracing, handlers).
+  if (config.requestScopes && config.requestScopes.length > 0) {
+    app.use(createRequestScopesMiddleware(config.requestScopes));
+  }
 
   // OTel request tracing (after requestId, before everything else)
   if (isTracingEnabled(config.tracing)) {

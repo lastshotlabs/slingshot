@@ -116,4 +116,11 @@ export interface SlingshotFrameworkConfig {
    * previous pattern of casting `registrar` to `StoreInfra`.
    */
   storeInfra: StoreInfra;
+  /**
+   * App-level health configuration — user-defined readiness probes registered
+   * via `defineApp({ health: { indicators: [...] } })`. The `/health/ready`
+   * route runs every indicator on every request and aggregates the results
+   * into the response payload.
+   */
+  health?: import('../observability/health').HealthAppConfig;
 }

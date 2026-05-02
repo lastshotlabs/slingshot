@@ -1,6 +1,8 @@
 import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { z } from 'zod';
 import {
+  type HealthIndicator,
+  type HealthIndicatorResult,
   type PostgresMigrationMode,
   createRoute,
   createRouter,
@@ -32,13 +34,57 @@ const postgresReadinessSchema = z.object({
     .optional(),
 });
 
+const indicatorReportSchema = z.object({
+  status: z.enum(['healthy', 'degraded', 'unhealthy']),
+  severity: z.enum(['critical', 'warning']),
+  latencyMs: z.number(),
+  message: z.string().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
 const readinessSchema = z.object({
   status: z.enum(['ok', 'degraded']),
   timestamp: z.string(),
   checks: z.object({
     postgres: postgresReadinessSchema.optional(),
   }),
+  indicators: z.record(z.string(), indicatorReportSchema).optional(),
 });
+
+const INDICATOR_TIMEOUT_MS = 5000;
+
+async function runIndicator(
+  indicator: HealthIndicator,
+  ctx: import('@lastshotlabs/slingshot-core').SlingshotContext,
+): Promise<z.infer<typeof indicatorReportSchema>> {
+  const severity = indicator.severity ?? 'critical';
+  const start = Date.now();
+  try {
+    const result = await Promise.race<HealthIndicatorResult>([
+      indicator.check({ ctx }),
+      new Promise<HealthIndicatorResult>((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error(`Health indicator '${indicator.name}' timed out`)),
+          INDICATOR_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return {
+      status: result.status,
+      severity,
+      latencyMs: Date.now() - start,
+      message: result.message,
+      details: result.details,
+    };
+  } catch (err) {
+    return {
+      status: 'unhealthy',
+      severity,
+      latencyMs: Date.now() - start,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 function buildPostgresReadiness(
   health: {
@@ -148,11 +194,42 @@ router.openapi(
       }
     }
 
+    // Run user-defined readiness indicators in parallel.
+    const indicatorList = ctx.config.health?.indicators ?? [];
+    const indicators: Record<string, z.infer<typeof indicatorReportSchema>> = {};
+    let indicatorFailureSeverity: 'critical' | 'warning' | null = null;
+    if (indicatorList.length > 0) {
+      const reports = await Promise.all(indicatorList.map(ind => runIndicator(ind, ctx)));
+      for (let i = 0; i < indicatorList.length; i += 1) {
+        const ind = indicatorList[i];
+        const report = reports[i];
+        if (!ind || !report) continue;
+        indicators[ind.name] = report;
+        if (report.status === 'unhealthy' || report.status === 'degraded') {
+          // Critical wins over warning when both are present.
+          if (report.severity === 'critical') {
+            indicatorFailureSeverity = 'critical';
+          } else if (indicatorFailureSeverity !== 'critical') {
+            indicatorFailureSeverity = 'warning';
+          }
+        }
+      }
+    }
+
+    const postgresFailing = checks.postgres && !checks.postgres.ok;
+    const isCriticalDown = postgresFailing || indicatorFailureSeverity === 'critical';
+    const isDegraded = !isCriticalDown && indicatorFailureSeverity === 'warning';
     const status: z.infer<typeof readinessSchema>['status'] =
-      checks.postgres && !checks.postgres.ok ? 'degraded' : 'ok';
+      isCriticalDown || isDegraded ? 'degraded' : 'ok';
+    const httpStatus = isCriticalDown ? 503 : 200;
     return c.json(
-      { status, timestamp: new Date().toISOString(), checks },
-      status === 'ok' ? 200 : 503,
+      {
+        status,
+        timestamp: new Date().toISOString(),
+        checks,
+        ...(Object.keys(indicators).length > 0 ? { indicators } : {}),
+      },
+      httpStatus,
     );
   },
 );

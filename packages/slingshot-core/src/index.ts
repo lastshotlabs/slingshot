@@ -750,7 +750,30 @@ export type { Logger, LogLevel, LogFields } from './observability/logger';
 
 // --- observability: health checks ---
 /** Per-component health-check contract used by framework-level aggregators. */
-export type { HealthCheck, HealthReport, HealthState } from './observability/health';
+export type {
+  HealthAppConfig,
+  HealthCheck,
+  HealthIndicator,
+  HealthIndicatorContext,
+  HealthIndicatorResult,
+  HealthIndicatorSeverity,
+  HealthReport,
+  HealthState,
+} from './observability/health';
+export { defineHealthIndicator } from './observability/health';
+
+// --- request-scoped state ---
+export type { RequestScope, RequestScopeContext, RequestScopeStore } from './requestScope';
+export {
+  defineRequestScope,
+  getRequestScoped,
+  getRequestScopeStore,
+  setRequestScopeStore,
+} from './requestScope';
+
+// --- typed env-validated config ---
+export type { ConfigDefinition, ConfigSource } from './config';
+export { defineConfig, loadConfigs } from './config';
 
 // Emit a one-time pre-1.0 stability warning for the entire framework.
 // Deduplicated per-package per-stability-level across all Slingshot packages.

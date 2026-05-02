@@ -1196,6 +1196,15 @@ export function buildBareEntityRoutes<
     });
     const opPath = `/${segment}/${route.path}`;
     if (routeDisabled(disabled, opName, route.method, opPath)) continue;
+    // Per-named-op DTO variant — `routes.operations[opName].dto` selects which
+    // entity dto mapper runs on this op's response.
+    const opDtoVariant = config.routes?.operations?.[opName]?.dto;
+    // Per-named-op response transform — runs after the dto projection.
+    const opTransform = config.routes?.operations?.[opName]?.transform;
+    const projectAndTransform = (result: unknown): unknown => {
+      const projected = applyEntityProjection(result, config, opDtoVariant);
+      return opTransform ? opTransform(projected) : projected;
+    };
     const routeParams =
       opConfig.kind === 'lookup' || opConfig.kind === 'exists'
         ? [...new Set(opPath.match(/:([A-Za-z]\w*)/g)?.map(param => param.slice(1)) ?? [])]
@@ -1288,12 +1297,12 @@ export function buildBareEntityRoutes<
       c.set('__opResult' as never, result as never);
       if (opConfig.kind === 'lookup' && opConfig.returns === 'one') {
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
-        return c.json(applyEntityProjection(result, config), 200);
+        return c.json(projectAndTransform(result), 200);
       }
       if (opConfig.kind === 'exists') {
         return result ? c.body(null, 200) : c.body(null, 404);
       }
-      return c.json(applyEntityProjection(result, config), 200);
+      return c.json(projectAndTransform(result), 200);
     });
   }
 
@@ -1347,7 +1356,9 @@ export function buildBareEntityRoutes<
         const result = await adapter.create(bodyRecord);
         c.set('__opName' as never, 'create' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(applyEntityProjection(result, config, config.routes?.create?.dto), 201);
+        const projected = applyEntityProjection(result, config, config.routes?.create?.dto);
+        const transform = config.routes?.create?.transform;
+        return c.json(transform ? transform(projected) : projected, 201);
       },
     );
   }
@@ -1414,7 +1425,9 @@ export function buildBareEntityRoutes<
         const result = await adapter.list(listOpts);
         c.set('__opName' as never, 'list' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(applyEntityProjection(result, config, config.routes?.list?.dto), 200);
+        const projected = applyEntityProjection(result, config, config.routes?.list?.dto);
+        const transform = config.routes?.list?.transform;
+        return c.json(transform ? transform(projected) : projected, 200);
       },
     );
   }
@@ -1469,7 +1482,9 @@ export function buildBareEntityRoutes<
 
         c.set('__opName' as never, 'get' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(applyEntityProjection(result, config, config.routes?.get?.dto), 200);
+        const projected = applyEntityProjection(result, config, config.routes?.get?.dto);
+        const transform = config.routes?.get?.transform;
+        return c.json(transform ? transform(projected) : projected, 200);
       },
     );
   }
@@ -1549,7 +1564,9 @@ export function buildBareEntityRoutes<
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
         c.set('__opName' as never, 'update' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(applyEntityProjection(result, config, config.routes?.update?.dto), 200);
+        const projected = applyEntityProjection(result, config, config.routes?.update?.dto);
+        const transform = config.routes?.update?.transform;
+        return c.json(transform ? transform(projected) : projected, 200);
       },
     );
   }

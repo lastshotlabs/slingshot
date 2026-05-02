@@ -1,0 +1,73 @@
+---
+title: Composing an App
+description: The mental model — how an app, packages, entities, routes, capabilities, and events fit together
+---
+
+A Slingshot app is composed from a small set of pieces. Read the rest of this section once
+in order and you'll know how the framework fits together.
+
+## The pieces
+
+| Piece | What it is | Declared with |
+| --- | --- | --- |
+| **App** | The root. Lists the packages and plugins it composes. | `defineApp(...)` |
+| **Package** | A self-contained feature module. Owns its entities, routes, middleware. | `definePackage(...)` |
+| **Entity** | A typed data model. Generates CRUD routes, DTOs, OpenAPI. | `defineEntity(...)` |
+| **Domain + Route** | A typed custom route inside a package, for things that don't map to CRUD. | `domain(...)`, `route.*()` |
+| **Capability** | A typed cross-package service contract. | `defineCapability(...)` |
+| **entityRef** | A typed reference to another package's entity adapter. | `entityRef(...)` |
+| **Event** | A typed message published by one piece, subscribed by another. | `defineEvent(...)` + the event bus |
+| **Escape hatch** | A raw plugin or executor override when the package model doesn't fit. | `SlingshotPlugin`, `defineEntityExecutor` |
+
+## How they fit together
+
+```
+defineApp({ packages, plugins })
+  ├── package "blog"
+  │     ├── entity Post              (defineEntity)        → /posts CRUD
+  │     ├── domain "extras"          (domain + route.*)    → /extras/preview
+  │     └── capability provider      (mailer)
+  │
+  ├── package "notifications"
+  │     ├── requires capability      (mailer)              ← from blog
+  │     ├── entityRef to Post        (cross-package read)
+  │     └── subscribes               'blog:post.published' ← via event bus
+  │
+  └── plugin "metrics"               (raw lifecycle hook, escape hatch)
+```
+
+The app reads like a table of contents. Each package owns its slice. Cross-package wiring
+happens through capabilities (services), entityRef (data access), and events (decoupled side
+effects) — never through direct imports between packages.
+
+## Reading order
+
+The pages in this section build on each other. If this is your first time, read them in
+order:
+
+1. **[App Config](/slingshot/app-authoring/app-config/)** — what `defineApp(...)` accepts and
+   how the runtime discovers `app.config.ts`.
+2. **[Packages](/slingshot/package-first/define-package/)** — declare a feature module with
+   its own entities, routes, middleware, and dependencies.
+3. **[Domains and Routes](/slingshot/package-first/domain-and-route/)** — typed custom routes
+   inside a package, for endpoints that don't map to entity CRUD.
+4. **[Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)** —
+   how packages talk to each other without importing each other's internals.
+5. **[Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)** — the
+   shared transport for cross-package side effects, SSE, and webhook delivery.
+6. **[Escape Hatches](/slingshot/package-first/escape-hatches/)** — when you need to drop
+   below the package surface.
+
+## Where the rest of the docs go
+
+This section answers "how do I compose an app." Two adjacent sections answer the natural
+follow-up questions:
+
+- **[Authoring Routes](/slingshot/app-authoring/authoring-routes/)** — every concern that
+  applies to a single route: validation, DTO mapping, auth/permissions, idempotency,
+  OpenAPI, exception handling.
+- **[Working with Data](/slingshot/core-features/data-and-entities/)** — the entity system
+  in depth: `defineEntity`, operations, storage adapters, generated routes.
+
+The rest of the sidebar (Security, Realtime, Operations, Production) is feature-specific
+deep dives — reach for them as needed.

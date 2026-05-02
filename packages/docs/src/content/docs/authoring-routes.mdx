@@ -1,0 +1,96 @@
+---
+title: Authoring Routes
+description: Every concern that applies to a single route — handlers, validation, DTOs, policy, OpenAPI, idempotency
+---
+
+A route in Slingshot is the unit of HTTP. Whether it's auto-generated from an entity or
+declared in a `domain(...)`, it goes through the same set of concerns: input validation,
+authorization, response shaping, error handling, observability. This section is the
+canonical home for each one.
+
+## What lives on a route
+
+| Concern | Where it's set | Page |
+| --- | --- | --- |
+| Path, method, handler | `route.get/post/...({ path, handler })` | [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) |
+| Request validation | `request: { body, params, query }` (Zod) | [Validation](/slingshot/app-authoring/validation/) |
+| Response shape | `responses[status]: { schema, transform, dto }` + entity `dto` | [DTO Mapping](/slingshot/app-authoring/dto-mapping/) |
+| Auth, permission, rate limit, idempotency, events | `routes.<op>` for entities, `route.*` for domain routes | [Route Policy](/slingshot/entity-system/route-policy/) |
+| Per-route logic before/after the handler | `middleware: [...]` | [Middleware](/slingshot/app-authoring/middleware/) |
+| Error responses | thrown `HttpError` or `respond.notFound()` etc. | [Exception Handling](/slingshot/app-authoring/exception-handling/) |
+| Authenticated identity | `actor` on the handler context | [Context and Actors](/slingshot/app-authoring/context-and-request-model/) |
+| Helper utilities for context | `getActor`, `getRequestTenantId`, etc. | [Context and Actor Helpers](/slingshot/app-authoring/context-helpers/) |
+| Cursor-based listing | `pagination` config + `respond.json({ items, cursor })` | [Pagination](/slingshot/app-authoring/pagination/) |
+| Retry-safe writes | `idempotency: true` on the route | [Idempotent Requests](/slingshot/app-authoring/idempotency/) |
+| Server-generated request ID | automatic — surfaced via `c.get('requestId')` | [Request IDs](/slingshot/app-authoring/request-ids/) |
+| Versioned API surface | `versioning: { ... }` in app config | [API Versioning](/slingshot/app-authoring/api-versioning/) |
+| Generated docs | automatic from `request` + `responses` schemas | [OpenAPI](/slingshot/guides/openapi/) |
+
+## The two route flavors
+
+Both flavors share every concern listed above. The difference is *what generates them*:
+
+**Entity routes** — auto-generated from `defineEntity({ ..., routes: { ... } })`. CRUD is
+free (`POST /users`, `GET /users/:id`, etc.). Named operations come from
+`defineOperations({ publishPost: op.transition(...) })` and become additional routes
+under the entity's path. Concerns are declared per-op:
+
+```typescript
+defineEntity('Post', {
+  fields: { /* ... */ },
+  routes: {
+    list:   { auth: 'none' },                    // public list
+    create: { permission: { requires: 'post:write' }, dto: 'default' },
+    operations: {
+      publish: { permission: { requires: 'post:moderate' } },
+    },
+  },
+});
+```
+
+**Domain routes** — declared explicitly inside `definePackage({ domains: [...] })` for
+endpoints that don't map to entity CRUD. Concerns are declared per-route:
+
+```typescript
+route.post({
+  path: '/preview',
+  auth: 'userAuth',
+  rateLimit: { windowMs: 60_000, max: 30 },
+  request: { body: PreviewBody },
+  responses: { 200: { description: 'Rendered', schema: PreviewResult } },
+  handler: async ({ body, respond }) => respond.json(await render(body.markdown)),
+});
+```
+
+For most concerns the surface is identical — `auth`, `permission`, `rateLimit`,
+`idempotency`, `event`, `middleware` work the same way on either side. Validation is
+declared on the route in the domain case and auto-derived from `defineEntity` fields on
+the entity case (with `inputVariants` to gate per-route).
+
+## Reading order
+
+The pages in this section are independent — read whichever ones cover the concern you're
+working with. New to Slingshot? Read in this order:
+
+1. **[Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/)** — the basic
+   shape of a route and what the handler receives.
+2. **[Validation](/slingshot/app-authoring/validation/)** — Zod schemas at the request
+   boundary.
+3. **[DTO Mapping](/slingshot/app-authoring/dto-mapping/)** — controlling response shape
+   and gating input fields per variant.
+4. **[Route Policy](/slingshot/entity-system/route-policy/)** — auth, permissions, rate
+   limits, idempotency, events on entity routes.
+5. **[Middleware](/slingshot/app-authoring/middleware/)** — per-route or per-package
+   middleware chains.
+6. **[Exception Handling](/slingshot/app-authoring/exception-handling/)** — typed errors
+   and the framework's error envelope.
+
+The remaining pages (Pagination, Idempotency, Request IDs, API Versioning, OpenAPI) are
+focused topics — open them when you need them.
+
+## Adjacent sections
+
+- **[Composing an App](/slingshot/composing-an-app/)** — how packages, entities, and
+  events fit together at the app level.
+- **[Working with Data](/slingshot/core-features/data-and-entities/)** — the entity
+  system in depth, when the route should be auto-generated.

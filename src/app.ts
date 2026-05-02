@@ -174,6 +174,89 @@ export interface CreateAppConfig<T extends object = object> {
   metrics?: MetricsConfig;
   /** Observability configuration: distributed tracing via OpenTelemetry. */
   observability?: ObservabilityConfig;
+  /**
+   * Typed, env-validated config namespaces. Each entry was produced by
+   * `defineConfig({ namespace, schema })`; the framework loads them all at
+   * boot, fails fast on validation errors, and makes them readable via
+   * `myConfig.get()` from anywhere in the app.
+   *
+   * @example
+   * ```ts
+   * import { defineApp, defineConfig } from '@lastshotlabs/slingshot';
+   * import { z } from 'zod';
+   *
+   * const dbConfig = defineConfig({
+   *   namespace: 'database',
+   *   schema: z.object({
+   *     host: z.string(),
+   *     port: z.coerce.number().default(5432),
+   *   }),
+   * });
+   *
+   * export default defineApp({
+   *   configs: [dbConfig],
+   *   // ...
+   * });
+   *
+   * // Anywhere in the app, after boot:
+   * const { host, port } = dbConfig.get();
+   * ```
+   */
+  configs?: readonly import('@lastshotlabs/slingshot-core').ConfigDefinition<unknown>[];
+
+  /**
+   * Request-scoped resources — declared once, lazily initialized on first
+   * access during a request, automatically cleaned up after the response.
+   *
+   * Use this for database transactions, per-request HTTP clients with the
+   * actor's token, idempotency sessions, or anything else with a per-request
+   * lifetime.
+   *
+   * @example
+   * ```ts
+   * import { defineApp, defineRequestScope, getRequestScoped } from '@lastshotlabs/slingshot';
+   *
+   * const dbTx = defineRequestScope({
+   *   name: 'dbTransaction',
+   *   factory: async ({ request }) => beginTransaction(),
+   *   cleanup: async tx => { if (tx.isOpen()) await tx.rollback(); },
+   * });
+   *
+   * export default defineApp({
+   *   requestScopes: [dbTx],
+   *   // ...
+   * });
+   * ```
+   */
+  requestScopes?: readonly import('@lastshotlabs/slingshot-core').RequestScope[];
+
+  /**
+   * App-level health configuration. Register custom readiness probes via
+   * `health.indicators` — each one becomes a check on `/health/ready` and
+   * its `severity` controls whether a failure flips the overall status.
+   *
+   * @example
+   * ```ts
+   * import { defineApp, defineHealthIndicator } from '@lastshotlabs/slingshot';
+   *
+   * const stripeHealth = defineHealthIndicator({
+   *   name: 'stripe',
+   *   severity: 'warning',
+   *   check: async () => {
+   *     const ok = await pingStripe();
+   *     return ok
+   *       ? { status: 'healthy' }
+   *       : { status: 'unhealthy', message: 'Stripe ping failed' };
+   *   },
+   * });
+   *
+   * export default defineApp({
+   *   health: { indicators: [stripeHealth] },
+   *   // ...
+   * });
+   * ```
+   */
+  health?: import('@lastshotlabs/slingshot-core').HealthAppConfig;
   /** Zod validation error formatting configuration. */
   validation?: ValidationConfig;
   /** File upload configuration. When set, registers storage adapter and upload settings. */
@@ -441,6 +524,16 @@ async function prepareBootstrap<T extends object>(
     return Promise.resolve();
   });
 
+  // Load typed env-validated config namespaces early so any config-dependent
+  // boot step (plugins, packages, infrastructure) can read them via cfg.get().
+  if (config.configs && config.configs.length > 0) {
+    const { loadConfigs } = await import('@lastshotlabs/slingshot-core');
+    loadConfigs(
+      config.configs,
+      process.env as Readonly<Record<string, string | undefined>>,
+    );
+  }
+
   const { meta: appConfig = {}, security: securityInput = {}, db = {} } = config;
   const securityConfig: SecurityConfig = {
     ...securityInput,
@@ -530,6 +623,7 @@ async function prepareBootstrap<T extends object>(
       secrets: resolvedSecrets,
       uploadRegistryTtlSeconds: config.upload?.registryTtlSeconds,
       runtime,
+      health: config.health,
     });
   });
 
@@ -618,6 +712,7 @@ async function assembleApp<T extends object>(
       validation: config.validation,
       tracing: bootstrap.tracingConfig,
       isProd: bootstrap.isProd,
+      requestScopes: config.requestScopes,
     });
   });
 

@@ -196,6 +196,11 @@ export interface InfrastructureOptions {
   auditLogTtlDays?: number;
   /** Runtime abstraction for database, password hashing, filesystem, glob, and HTTP server APIs. */
   runtime: SlingshotRuntime;
+  /**
+   * App-level health configuration. Indicators are stored on the framework
+   * config so the `/health/ready` route can run them on every request.
+   */
+  health?: import('@lastshotlabs/slingshot-core').HealthAppConfig;
 }
 
 function freezeArrayCopy<T>(value: readonly T[]): readonly T[] {
@@ -306,6 +311,7 @@ export async function createInfrastructure(
     trustProxy,
     registrar,
     secrets,
+    health: appHealth,
     uploadRegistryTtlSeconds,
     auditLogTtlDays,
     runtime,
@@ -510,6 +516,11 @@ export async function createInfrastructure(
       password: runtime.password,
       sqlite: runtime.sqlite,
       storeInfra: resolvedPersistence.storeInfra,
+      health: appHealth
+        ? Object.freeze({
+            indicators: appHealth.indicators ? freezeArrayCopy(appHealth.indicators) : undefined,
+          })
+        : undefined,
     };
 
     return {

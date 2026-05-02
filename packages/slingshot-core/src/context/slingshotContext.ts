@@ -823,6 +823,12 @@ export interface SlingshotResolvedConfig {
    * the auth plugin where the shape is known.
    */
   readonly captcha: unknown;
+  /**
+   * App-level health configuration — user-defined readiness probes registered
+   * via `defineApp({ health: { indicators: [...] } })`. Read by the
+   * `/health/ready` route on every request.
+   */
+  readonly health?: import('../observability/health').HealthAppConfig;
 }
 
 export type { SlingshotFrameworkConfig } from './frameworkConfig';

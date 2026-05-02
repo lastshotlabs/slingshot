@@ -1,18 +1,20 @@
 ---
 title: Webhooks
-description: Manage outbound webhook endpoints and inbound webhook intake
+description: Outbound webhook delivery — endpoint management, registry-governed subscriptions, scope, and delivery records
 ---
 
-`@lastshotlabs/slingshot-webhooks` owns endpoint management, scoped delivery, and inbound provider
-intake. Event owners define what can be delivered; this package projects those events to subscribers.
+`@lastshotlabs/slingshot-webhooks` owns endpoint management, scoped delivery, and inbound
+provider intake. Event owners declare what can leave the process via `defineEvent(...)`;
+this package projects those events to subscriber endpoints with retries, dead-letter
+handling, and scope enforcement.
 
 ## When to use it
 
-Use the webhook package when you need:
+Reach for the webhook package when you need:
 
-- signed outbound delivery to customer-owned endpoints
-- endpoint management with retries and dead-letter handling
-- inbound provider intake mounted under the same package surface
+- Signed outbound delivery to customer-owned endpoints
+- Endpoint management (subscribe, list, update, revoke) with retries and dead-letter handling
+- Inbound provider intake mounted under the same package surface
 
 ## Quick start
 
@@ -31,13 +33,96 @@ const webhooks = createWebhookPlugin({
 });
 ```
 
+## Registry-governed subscriptions
+
+Webhook delivery in Slingshot is registry-governed. The webhook package no longer owns a
+separate allowlist of string event names — **event owners declare what can leave the
+process** via `defineEvent(...)`, and the webhook package can only deliver events that
+opted in.
+
+```typescript
+events.register(
+  defineEvent('billing:invoice.paid', {
+    ownerPlugin: 'billing',
+    exposure: ['tenant-webhook'],
+    resolveScope: (payload, ctx) => ({
+      tenantId: payload.tenantId,
+      actorId: ctx.actorId ?? null,
+    }),
+  }),
+);
+```
+
+The definition decides:
+
+- Which exposure classes are allowed: `tenant-webhook`, `user-webhook`, `app-webhook`
+- How scope is projected for routing
+- Whether external delivery is possible at all
+
+If scope cannot be resolved for an externally exposed event, publish fails closed —
+the webhook package never silently broadens delivery.
+
+## Endpoint subscriptions
+
+Endpoint management uses **subscriptions** — patterns that the framework normalizes to
+concrete event keys at write time:
+
+```json
+{
+  "ownerType": "tenant",
+  "ownerId": "tenant-a",
+  "tenantId": "tenant-a",
+  "url": "https://example.com/webhooks",
+  "secret": "whsec_...",
+  "subscriptions": [{ "pattern": "billing:invoice.*" }]
+}
+```
+
+Subscription patterns are normalized when the endpoint is created or updated. The stored
+record keeps the concrete approved event keys *plus* the optional `sourcePattern` they
+came from. The result:
+
+- Writes fail if a pattern does not resolve to any approved events
+- Future event registrations do not silently expand existing endpoints
+- Reads and queue jobs operate on frozen concrete subscriptions — no late-binding surprises
+
+## Scope and authorization
+
+Delivery is scope-aware by design:
+
+| Endpoint owner | Can receive |
+| --- | --- |
+| `ownerType: 'tenant'` | Tenant-scoped webhook events for that tenant only |
+| `ownerType: 'user'` | User-scoped webhook events for that user only |
+| `ownerType: 'app'` | App-scoped webhook events for that app only |
+
+Cross-tenant widening is rejected by the subscriber authorizer *before* delivery is queued.
+
+## Delivery records
+
+Webhook jobs and delivery records preserve the publish-time envelope identity:
+
+- `event` — the event key
+- `eventId` — stable per-publish identifier
+- `occurredAt` — original publish timestamp
+- Subscriber identity (`ownerType` / `ownerId`)
+- Source scope projected by `resolveScope`
+- The projected payload
+
+Queues stay transport-focused: they carry the already-projected payload and metadata —
+they do not re-run authorization or rebuild scope from raw payload fragments.
+
 ## Production notes
 
-- Keep management routes fail-closed with an explicit admin guard.
+- Keep management routes fail-closed with an explicit admin guard (`managementRole`).
 - Use `subscriptions` rather than legacy event allowlists when configuring endpoints.
 - Treat endpoint URLs and delivery secrets as untrusted input at the boundary.
+- Legacy stored endpoint rows are normalized at startup; if a row cannot be mapped safely
+  to `ownerType` / `ownerId` / concrete `subscriptions`, it is disabled instead of widened.
 
 ## Go deeper
 
-- [Package docs](/slingshot/packages/slingshot-webhooks/)
-- [Webhook Governance](/slingshot/guides/webhook-governance/)
+- [Package docs](/slingshot/packages/slingshot-webhooks/) — full API reference
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — declaring deliverable events
+- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — the other client-facing event transport
+- [Internals: Event Bus](/slingshot/internals/event-bus/) — transport contract and adapter details

@@ -1,13 +1,15 @@
 ---
-title: Permissions
+title: Authorization
 description: Control who can do what — RBAC, resource-level checks, and entity route policy
 ---
 
-Auth tells you _who_ is making the request. Permissions tell you _whether they are allowed_
-to do what they are asking.
+Auth tells you _who_ is making the request. Authorization tells you _whether they are
+allowed_ to do what they are asking.
 
-In Slingshot, these are separate concerns. Auth gives you an actor. Permissions decide what
-that actor can access.
+In Slingshot, these are separate concerns. Auth gives you an actor. The permissions system
+decides what that actor can access. This page covers the mental model and the surfaces
+you'll touch most often. For plugin setup, grant lifecycle, and operational patterns, see
+**[Permissions: Setup and Patterns](/slingshot/guides/permissions/)**.
 
 ## The simplest version: role checks
 

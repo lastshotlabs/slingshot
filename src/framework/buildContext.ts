@@ -393,6 +393,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       redis: infra.redis ?? undefined,
       mongo: configMongo,
       captcha: frozenCaptcha,
+      health: infra.frameworkConfig.health,
     }),
     redis: infra.redis ?? null,
     mongo: contextMongo,

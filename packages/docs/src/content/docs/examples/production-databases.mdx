@@ -234,18 +234,30 @@ Different parts of your app can use different stores. Each adapter config is ind
 
 ## Running migrations
 
-Slingshot generates database migrations from your entity definitions:
+Slingshot generates database migrations from your entity definitions. Each
+`migrate generate` invocation diffs every entity against its last snapshot
+and writes one timestamped `.sql` file per backend under `migrations/`.
 
 ```bash
-# Generate migrations for all entities
-slingshot migrate:generate
+# Generate a new migration from current entity diffs
+slingshot migrate generate --name init
 
-# Apply pending migrations
-slingshot migrate:run
+# Apply pending migrations to the configured DB
+slingshot migrate apply
 
-# Show current migration status
-slingshot migrate:status
+# Show applied vs pending migrations (and detect file drift)
+slingshot migrate status
+
+# Inner-loop shortcut: generate + apply in one step
+slingshot migrate dev --name add_nickname
 ```
+
+The backend is auto-detected from `infrastructure.db.postgres`,
+`infrastructure.db.sqlite`, or `infrastructure.db.mongo` in your manifest.
+Override with `--backend postgres|sqlite|mongo`, or pass a connection string
+with `--db-url` (Postgres falls back to `DATABASE_URL`; Mongo to `MONGODB_URI`
+/ `MONGO_URL`). Applied migrations are tracked in the
+`_slingshot_entity_migrations` table (or collection, for Mongo).
 
 ## Where to go next
 

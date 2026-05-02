@@ -36,6 +36,7 @@ export async function handleIncomingEvent(
       console.debug(`[wsDispatch] unknown event '${eventName}' — no handler configured`);
     }
     return true;
+  }
 
   const context: WsEventContext = {
     socketId: ws.data.id,

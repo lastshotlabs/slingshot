@@ -162,8 +162,8 @@ describe('publish() options', () => {
     expect(sent.id.length).toBeGreaterThan(0);
     expect(sent.text).toBe('hello');
 
-    // lastEventIds should record that id for the socket.
-    expect(state.lastEventIds.get('s1')).toBe(sent.id);
+    // lastEventIds should record that id for the socket+room composite key.
+    expect(state.lastEventIds.get(`s1\0${ROOM}`)).toBe(sent.id);
   });
 
   it('trackDelivery: true with multiple sockets — each socket gets the same id recorded', () => {
@@ -179,8 +179,8 @@ describe('publish() options', () => {
     const sentA = JSON.parse(sockA.calls[0]);
     const sentB = JSON.parse(sockB.calls[0]);
     expect(sentA.id).toBe(sentB.id);
-    expect(state.lastEventIds.get('a')).toBe(sentA.id);
-    expect(state.lastEventIds.get('b')).toBe(sentB.id);
+    expect(state.lastEventIds.get(`a\0${ROOM}`)).toBe(sentA.id);
+    expect(state.lastEventIds.get(`b\0${ROOM}`)).toBe(sentB.id);
   });
 
   it('trackDelivery: undefined — lastEventIds unchanged', () => {

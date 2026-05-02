@@ -140,7 +140,12 @@ export function createMemoryAdapter(
     return null;
   }
 
-  function startScheduleChecker(): void {
+  function startScheduleChecker(
+    adapterApi: {
+      runTask(name: string, input: unknown): Promise<unknown>;
+      runWorkflow(name: string, input: unknown): Promise<unknown>;
+    },
+  ): void {
     if (scheduleCheckerInterval) return;
     scheduleCheckerInterval = setInterval(() => {
       if (shuttingDown) return;
@@ -154,9 +159,9 @@ export function createMemoryAdapter(
           void (async () => {
             try {
               if (sched.target.type === 'task') {
-                await runTask(sched.target.name, sched.input ?? {});
+                await adapterApi.runTask(sched.target.name, sched.input ?? {});
               } else {
-                await runWorkflow(sched.target.name, sched.input ?? {});
+                await adapterApi.runWorkflow(sched.target.name, sched.input ?? {});
               }
             } catch (err) {
               logger.error('[slingshot-orchestration] Scheduled run failed', {
@@ -177,9 +182,9 @@ export function createMemoryAdapter(
             void (async () => {
               try {
                 if (sched.target.type === 'task') {
-                  await runTask(sched.target.name, sched.input ?? {});
+                  await adapterApi.runTask(sched.target.name, sched.input ?? {});
                 } else {
-                  await runWorkflow(sched.target.name, sched.input ?? {});
+                  await adapterApi.runWorkflow(sched.target.name, sched.input ?? {});
                 }
               } catch (err) {
                 logger.error('[slingshot-orchestration] Scheduled run failed', {
@@ -595,7 +600,7 @@ export function createMemoryAdapter(
     },
     async start() {
       started = true;
-      if (schedules.size > 0) startScheduleChecker();
+      if (schedules.size > 0) startScheduleChecker(this);
     },
     async shutdown() {
       shuttingDown = true;
@@ -694,7 +699,7 @@ export function createMemoryAdapter(
         nextRunAt: nextRunAt ?? undefined,
       };
       schedules.set(id, handle);
-      if (started) startScheduleChecker();
+      if (started) startScheduleChecker(this);
       return { id, target, cron, input, nextRunAt: nextRunAt ?? undefined };
     },
     async unschedule(scheduleId) {

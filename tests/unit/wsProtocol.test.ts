@@ -198,13 +198,13 @@ describe('wsProtocol — integration', () => {
   });
 
   it('writeSession + pruneExpiredSessions lifecycle', () => {
-    state.lastEventIds.set('s1', 'evt-5');
+    state.lastEventIds.set(`s1\0room1`, 'evt-5');
     writeSession(state, 's1', 'sess-1', new Set(['room1']), 120_000);
 
     expect(state.sessionRegistry.size).toBe(1);
     const entry = state.sessionRegistry.get('sess-1')!;
     expect(entry.rooms).toEqual(['room1']);
-    expect(entry.lastEventId).toBe('evt-5');
+    expect(entry.lastEventId).toBe(JSON.stringify({ room1: 'evt-5' }));
 
     // Add an expired one
     state.sessionRegistry.set('sess-old', {

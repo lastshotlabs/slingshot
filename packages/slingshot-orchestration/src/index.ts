@@ -50,6 +50,7 @@ export type {
   ObservabilityCapability,
   OrchestrationAdapter,
   OrchestrationCapability,
+  OrchestrationErrorCode,
   OrchestrationEventMap,
   OrchestrationEventSink,
   OrchestrationRuntime,

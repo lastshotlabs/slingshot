@@ -124,10 +124,11 @@ describe('postgresWsMessages', () => {
     const msg = makeMessage('chat', { senderId: 'user1', payload: { text: 'hello' } });
     await repo.persist(msg, { maxCount: 100, ttlSeconds: 86400 });
 
-    // Should have INSERT + DELETE (maxCount enforcement)
-    expect(mock.calls).toHaveLength(2);
+    // BEGIN + INSERT + DELETE (maxCount enforcement) + COMMIT
+    expect(mock.calls).toHaveLength(4);
+    expect(mock.calls[0].sql).toBe('BEGIN');
 
-    const insertCall = mock.calls[0];
+    const insertCall = mock.calls[1];
     expect(insertCall.sql).toContain('INSERT INTO ws_messages');
     expect(insertCall.params).toEqual([
       msg.id,
@@ -137,13 +138,15 @@ describe('postgresWsMessages', () => {
       JSON.stringify(msg.payload),
       msg.createdAt,
     ]);
+
+    expect(mock.calls[3].sql).toBe('COMMIT');
   });
 
   test('persist enforces maxCount', async () => {
     const msg = makeMessage('chat', { payload: 'hello' });
     await repo.persist(msg, { maxCount: 50, ttlSeconds: 86400 });
 
-    const deleteCall = mock.calls[1];
+    const deleteCall = mock.calls[2];
     expect(deleteCall.sql).toContain('DELETE FROM ws_messages');
     expect(deleteCall.sql).toContain('NOT IN');
     expect(deleteCall.sql).toContain('LIMIT $3');

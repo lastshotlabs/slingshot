@@ -71,7 +71,15 @@ async function runTransportAuthPreflight(
 }
 
 /**
- * Create an OpenAPI route declaration from a `SlingshotHandler`.
+ * Create an OpenAPI route declaration from a {@link SlingshotHandler}.
+ *
+ * Maps the handler's `input` schema to either a request body (POST/PUT/PATCH) or
+ * query parameters (GET/DELETE/HEAD), and builds a standard response map including
+ * the configured success status code.
+ *
+ * @param handler - The handler whose input/output schemas define the route contract.
+ * @param opts - Method, path, tags, summary, optional params schema, and success status override.
+ * @returns A `@hono/zod-openapi` route definition ready for `app.openapi()`.
  */
 export function toRoute(handler: SlingshotHandler, opts: RouteOpts) {
   const successStatus = opts.successStatus ?? (opts.method === 'post' ? 201 : 200);
@@ -112,7 +120,17 @@ export function toRoute(handler: SlingshotHandler, opts: RouteOpts) {
 }
 
 /**
- * Create a Hono route handler that invokes a `SlingshotHandler`.
+ * Create a Hono route handler that invokes a {@link SlingshotHandler}.
+ *
+ * Runs transport-level auth preflight (userAuth / bearer guards), parses the JSON body
+ * for write methods, merges query params + body + path params into a single input object,
+ * constructs {@link HandlerMeta} with request context (actor, tenant, IP, idempotency key),
+ * and delegates to `handler.invoke()`. Returns 204 for null/undefined output or when
+ * `successStatus` is 204.
+ *
+ * @param handler - The handler to wrap.
+ * @param opts - Optional method and success status overrides.
+ * @returns An async Hono handler function.
  */
 export function toRouteHandler(
   handler: SlingshotHandler,

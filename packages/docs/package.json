@@ -16,7 +16,7 @@
     "sharp": "^0.33",
     "typedoc": "^0.28",
     "typedoc-plugin-markdown": "^4.6",
-    "zod": "^3.25"
+    "zod": "^4.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",

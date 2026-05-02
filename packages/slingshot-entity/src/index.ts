@@ -168,11 +168,16 @@ export {
   generateMigrationSqlite,
   generateMigrationPostgres,
   generateMigrationMongo,
+  generateInitialMigrationPostgres,
+  generateInitialMigrationSqlite,
+  generateInitialMigrationMongo,
   loadSnapshot,
   saveSnapshot,
 } from './migrations';
 /** Schema diff and migration-plan result types for storage evolution workflows. */
 export type { MigrationPlan, MigrationChange, EntitySnapshot } from './migrations';
+/** Resolve the backend-specific table / collection name for an entity. */
+export { storageName } from './lib/naming';
 
 // Validation (Zod schemas)
 /** Validate entity and operation config before generation or runtime assembly. */

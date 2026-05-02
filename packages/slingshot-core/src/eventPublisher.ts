@@ -9,11 +9,27 @@ import { createDefaultSubscriberAuthorizer, eventHasExternalExposure } from './e
 import type { EventDefinitionRegistry } from './eventDefinitionRegistry';
 import { type EventEnvelope, createEventEnvelope } from './eventEnvelope';
 
+/**
+ * High-level event API exposed on the Slingshot context.
+ *
+ * Wraps an {@link EventDefinitionRegistry} and a {@link SlingshotEventBus} to
+ * provide validated, envelope-wrapped event publishing with scope projection.
+ */
 export interface SlingshotEvents {
+  /** The underlying definition registry shared across all plugins. */
   readonly definitions: EventDefinitionRegistry;
+  /** Register a new event definition (typically called during plugin setup). */
   register<K extends EventKey>(definition: EventDefinition<K>): void;
+  /** Retrieve a registered definition by key, or `undefined` if not registered. */
   get<K extends EventKey>(key: K): EventDefinition<K> | undefined;
+  /** Return all registered event definitions. */
   list(): readonly EventDefinition[];
+  /**
+   * Validate, envelope-wrap, and emit an event through the bus.
+   *
+   * @throws If the event key is not registered or the payload fails schema validation.
+   * @throws If the definition exposes external delivery but `resolveScope` returns `null`.
+   */
   publish<K extends EventKey>(
     key: K,
     payload: SlingshotEventMap[K],
@@ -60,6 +76,16 @@ function validatePayload<K extends EventKey>(
   return result.data;
 }
 
+/**
+ * Create a {@link SlingshotEvents} instance backed by a definition registry and event bus.
+ *
+ * The returned publisher validates payloads against the definition's Zod schema,
+ * resolves event scope via the definition's `resolveScope`, wraps the result in a
+ * deep-frozen {@link EventEnvelope}, and emits it through the provided bus.
+ *
+ * @param options - Registry and bus to wire together.
+ * @returns A fully wired event publisher ready for plugin use.
+ */
 export function createEventPublisher(options: CreateEventPublisherOptions): SlingshotEvents {
   return {
     definitions: options.definitions,
@@ -116,6 +142,17 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
   };
 }
 
+/**
+ * Check whether a subscription principal is authorized to receive a given event envelope.
+ *
+ * Uses the definition's custom `authorizeSubscriber` when provided, otherwise falls back
+ * to the default scope-matching authorizer from {@link createDefaultSubscriberAuthorizer}.
+ *
+ * @param definition - The event definition containing authorization rules.
+ * @param principal - The subscriber identity to authorize (user, tenant, or system).
+ * @param envelope - The event envelope carrying scope metadata for the check.
+ * @returns `true` if the principal is allowed to receive this event.
+ */
 export function authorizeEventSubscriber<K extends EventKey>(
   definition: EventDefinition<K>,
   principal: EventSubscriptionPrincipal,
@@ -123,5 +160,5 @@ export function authorizeEventSubscriber<K extends EventKey>(
 ): boolean {
   const authorizer =
     definition.authorizeSubscriber ?? createDefaultSubscriberAuthorizer(definition);
-  return authorizer?.(principal, envelope) ?? false;
+  return authorizer(principal, envelope);
 }

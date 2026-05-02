@@ -1,16 +1,46 @@
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { existsSync } from 'node:fs';
 import Module, { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const docsRoot = resolve(__dirname, '..');
 const originalExec = childProcess.exec;
 const originalSpawn = childProcess.spawn;
 const originalModuleLoad = Module._load;
+const originalResolveFilename = Module._resolveFilename;
 const esbuildShimUrl = pathToFileURL(resolve(__dirname, 'esbuild-safe-shim.mjs')).href;
 const esbuildShimPath = resolve(__dirname, 'esbuild-safe-shim.cjs');
+const starlightRoutePrefix = '@astrojs/starlight/routes/';
+const astroCommand = process.env.SLINGSHOT_DOCS_ASTRO_COMMAND ?? process.argv[2];
+
+if (astroCommand === 'dev') {
+  Module._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
+    if (
+      typeof request === 'string' &&
+      request.startsWith(starlightRoutePrefix) &&
+      request.endsWith('.astro')
+    ) {
+      const routePath = resolve(
+        docsRoot,
+        'node_modules',
+        '@astrojs',
+        'starlight',
+        'routes',
+        request.slice(starlightRoutePrefix.length),
+      );
+
+      if (existsSync(routePath)) {
+        return routePath;
+      }
+    }
+
+    return originalResolveFilename.call(this, request, parent, isMain, options);
+  };
+}
 
 async function detectSpawnBlocked() {
   return new Promise((resolve, reject) => {

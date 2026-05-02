@@ -874,7 +874,7 @@ export function createKafkaAdapter(
   function removeEnvelopeListener<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (envelope: EventEnvelope<K>) => void,
-  ): void {
+  ): boolean {
     if (
       durableListeners
         .get(event as string)
@@ -882,9 +882,11 @@ export function createKafkaAdapter(
     ) {
       throw new KafkaDurableSubscriptionOffError();
     }
-    envelopeListeners
-      .get(event as string)
-      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+    return (
+      envelopeListeners
+        .get(event as string)
+        ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>) ?? false
+    );
   }
 
   function registerEnvelopeListener<K extends keyof SlingshotEventMap>(
@@ -1578,24 +1580,24 @@ export function createKafkaAdapter(
     off<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
-    ): void {
+    ): boolean {
       const wrappers = payloadListenerWrappers.get(event as string);
       const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
       if (!wrapper) {
-        return;
+        return false;
       }
       wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
       if (wrappers?.size === 0) {
         payloadListenerWrappers.delete(event as string);
       }
-      removeEnvelopeListener(event, wrapper as (envelope: EventEnvelope<K>) => void);
+      return removeEnvelopeListener(event, wrapper as (envelope: EventEnvelope<K>) => void);
     },
 
     offEnvelope<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (envelope: EventEnvelope<K>) => void,
-    ): void {
-      removeEnvelopeListener(event, listener);
+    ): boolean {
+      return removeEnvelopeListener(event, listener);
     },
 
     async shutdown(): Promise<void> {

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock, test } from 'bun:test';
 import type { StoredMessage, WsState } from '@lastshotlabs/slingshot-core';
 
 type RecoveryModule = typeof import('../../src/framework/ws/recovery');
@@ -18,6 +18,24 @@ async function loadRecoveryModule(): Promise<RecoveryModule> {
 afterAll(() => {
   mock.restore();
 });
+
+function createSocket(id: string) {
+  return {
+    data: { id, endpoint: '/ws', rooms: new Set<string>() },
+    send: () => {},
+    subscribe: () => {},
+    close: () => {},
+  } as any;
+}
+
+function createMockApp() {
+  return {} as any;
+}
+
+async function mockGetHistory() {
+  const mod = await import('../../src/framework/ws/messages');
+  return { getMessageHistory: mod.getMessageHistory };
+}
 
 function createWsState(): WsState {
   return {
@@ -303,13 +321,14 @@ describe('wsRecovery', () => {
 
   describe('writeSession', () => {
     it('creates a session entry with correct fields', () => {
-      state.lastEventIds.set('s1', 'm5');
+      state.lastEventIds.set(`s1\0room1`, 'm5');
+      state.lastEventIds.set(`s1\0room2`, 'm7');
       writeSession(state, 's1', 'sess-new', new Set(['room1', 'room2']), 120_000);
 
       expect(state.sessionRegistry.size).toBe(1);
       const entry = state.sessionRegistry.get('sess-new')!;
       expect(entry.rooms.sort()).toEqual(['room1', 'room2']);
-      expect(entry.lastEventId).toBe('m5');
+      expect(entry.lastEventId).toBe(JSON.stringify({ room1: 'm5', room2: 'm7' }));
       expect(entry.expiresAt).toBeGreaterThan(Date.now());
     });
 
@@ -394,7 +413,7 @@ describe('wsRecovery', () => {
     });
 
     test('recover uses per-room cursor from session', async () => {
-      const { getMessageHistory: mockHistory } = await mockGetHistory();
+      getMessageHistoryMock.mockClear();
       const socket = createSocket('s1');
 
       // Store per-room cursors in session
@@ -417,9 +436,9 @@ describe('wsRecovery', () => {
       );
 
       // Each room should have been queried with its own cursor
-      expect(mockHistory).toHaveBeenCalledTimes(2);
+      expect(getMessageHistoryMock).toHaveBeenCalledTimes(2);
       // First call: room-a with after: 'msg-a2'
-      expect(mockHistory).toHaveBeenNthCalledWith(
+      expect(getMessageHistoryMock).toHaveBeenNthCalledWith(
         1,
         '/ws',
         'room-a',
@@ -427,7 +446,7 @@ describe('wsRecovery', () => {
         app,
       );
       // Second call: room-b with after: 'msg-b0'
-      expect(mockHistory).toHaveBeenNthCalledWith(
+      expect(getMessageHistoryMock).toHaveBeenNthCalledWith(
         2,
         '/ws',
         'room-b',
@@ -437,7 +456,7 @@ describe('wsRecovery', () => {
     });
 
     test('recover falls back to plain string lastEventId (backward compat)', async () => {
-      const { getMessageHistory: mockHistory } = await mockGetHistory();
+      getMessageHistoryMock.mockClear();
       const socket = createSocket('s1');
 
       // Plain string cursor (old client / old session format)
@@ -459,14 +478,14 @@ describe('wsRecovery', () => {
       );
 
       // Both rooms should use the same cursor for backward compat
-      expect(mockHistory).toHaveBeenNthCalledWith(
+      expect(getMessageHistoryMock).toHaveBeenNthCalledWith(
         1,
         '/ws',
         'room-a',
         { after: 'msg-42' },
         app,
       );
-      expect(mockHistory).toHaveBeenNthCalledWith(
+      expect(getMessageHistoryMock).toHaveBeenNthCalledWith(
         2,
         '/ws',
         'room-b',

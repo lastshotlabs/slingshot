@@ -137,11 +137,14 @@ bun add nodemailer
 # Start with a manifest
 slingshot start
 
-# Run database migrations
-slingshot migrate
+# Run database migrations (Prisma-style flow)
+slingshot migrate generate --name init   # write a new migration from entity diffs
+slingshot migrate apply                  # apply pending migrations to the DB
+slingshot migrate status                 # show applied vs pending
+slingshot migrate dev --name init        # generate + apply, the inner-loop shortcut
 
-# Check infrastructure config
-slingshot infra check
+# Generate entity source files (types, adapters) without applying SQL
+slingshot generate --manifest ./app.manifest.json --outdir ./src/generated
 ```
 
 ## Prerequisites

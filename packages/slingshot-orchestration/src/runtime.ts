@@ -108,7 +108,8 @@ export function createOrchestrationRuntime(
     },
     onProgress(runId, callback) {
       if (!supportsCapability(options.adapter, 'progress')) {
-        return Promise.reject(throwUnsupported('progress'));
+        throwUnsupported('progress');
+        return () => {};
       }
       return (options.adapter as ProgressCapability).onProgress(runId, callback);
     },

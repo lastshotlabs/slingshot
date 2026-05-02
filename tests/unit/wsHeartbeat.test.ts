@@ -172,6 +172,7 @@ describe('wsHeartbeat', () => {
     clearHeartbeatState(state);
     const ep1 = '/ws1';
     const ep2 = '/ws2';
+    const ws = mockWs('s1');
     state.socketRegistry.set('s1', ws);
     state.socketRegistry.set('s2', ws);
 

@@ -14,6 +14,11 @@ export { loadSnapshot, saveSnapshot } from './snapshotStore';
 export { generateMigrationSqlite } from './generators/sqlite';
 export { generateMigrationPostgres } from './generators/postgres';
 export { generateMigrationMongo } from './generators/mongo';
+export {
+  generateInitialMigrationPostgres,
+  generateInitialMigrationSqlite,
+} from './generators/initial';
+export { generateInitialMigrationMongo } from './generators/initialMongo';
 
 /**
  * Generate migration scripts for all specified backends by diffing two entity

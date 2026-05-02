@@ -163,12 +163,12 @@ export function createFcmProvider(config: {
   /** Maximum milliseconds for FCM HTTP requests. Default: 10000. */
   timeoutMs?: number;
 }): PushProvider {
+  const timeoutMs = Math.max(1, config.timeoutMs ?? DEFAULT_FCM_TIMEOUT_MS);
   const tokens = new FcmAccessTokenProvider(config.serviceAccount, timeoutMs);
   const circuitThreshold = Math.max(
     1,
     config.tokenFailureCircuitThreshold ?? DEFAULT_FCM_TOKEN_FAILURE_CIRCUIT,
   );
-  const timeoutMs = Math.max(1, config.timeoutMs ?? DEFAULT_FCM_TIMEOUT_MS);
   let consecutiveTokenFailures = 0;
   let lastFailureAt: number | null = null;
 

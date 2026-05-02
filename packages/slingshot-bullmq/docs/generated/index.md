@@ -29,6 +29,7 @@ bun add @lastshotlabs/slingshot-bullmq
 
 ## Package Scripts
 
+- `bench`: `bun run tests/bench/emit-throughput.bench.ts`
 - `build`: `tsc -p tsconfig.build.json`
 - `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`

@@ -270,7 +270,7 @@ export function createInProcessMetricsEmitter(logger?: Logger): InProcessMetrics
   // warning so we don't spam the console when a high-cardinality label is
   // accidentally used on a hot path.
   const cardinalityCapWarned = new Set<string>();
-  const log = logger ?? noopLogger;
+  const log: Pick<Logger, 'warn'> = logger ?? { warn: (msg: string) => console.warn(msg) };
 
   function warnCardinalityCap(kind: 'counter' | 'gauge' | 'timing', name: string): void {
     const key = `${kind}:${name}`;

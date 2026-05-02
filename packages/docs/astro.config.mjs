@@ -1,9 +1,6 @@
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const docsSite = process.env.DOCS_SITE_URL ?? 'https://lastshotlabs.github.io';
 const spawnBlocked = process.env.SLINGSHOT_DOCS_SPAWN_BLOCKED === '1';
 
@@ -39,13 +36,7 @@ export default defineConfig({
           },
         }
       : {}),
-    resolve: {
-      alias: {
-        // Force Astro/Starlight to use Zod v3 from this package,
-        // not the hoisted Zod v4 from the workspace root.
-        zod: resolve(__dirname, 'node_modules/zod'),
-      },
-    },
+    resolve: {},
   },
   integrations: [
     starlight({
@@ -53,6 +44,9 @@ export default defineConfig({
       disable404Route: true,
       description:
         'Composable Slingshot packages for app assembly, package-first authoring, entities, events, realtime, and platform tooling',
+      components: {
+        ThemeProvider: './src/components/ThemeProvider.astro',
+      },
       social: [
         {
           icon: 'github',

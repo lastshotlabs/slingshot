@@ -21,6 +21,12 @@ export type EntityGeneratedRouteKey =
   | 'delete'
   | `operations.${string}`;
 
+/**
+ * Execution context passed to entity route executors.
+ *
+ * Extends the typed route context with entity-specific fields: the resolved entity
+ * config, the backing adapter, data scope bindings, and cross-entity adapter lookup.
+ */
 export interface EntityRouteExecutionContext<
   TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
 > extends TypedRouteContext<TRequest> {
@@ -62,6 +68,12 @@ export interface EntityRouteExecutorDefinition<
   build: EntityRouteExecutorBuilder<TRequest>;
 }
 
+/**
+ * A user-defined extra route mounted alongside the generated CRUD routes for an entity.
+ *
+ * Extra routes participate in collision detection and specificity sorting with
+ * generated routes, but their executors are always user-provided via `buildExecutor`.
+ */
 export interface EntityExtraRoute<TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec> {
   key?: string;
   method: Lowercase<NamedOpHttpMethod> | 'delete' | 'patch';
@@ -78,6 +90,12 @@ export interface EntityExtraRoute<TRequest extends TypedRouteRequestSpec = Typed
   buildExecutor: EntityRouteExecutorBuilder<TRequest>;
 }
 
+/**
+ * Override map for replacing generated CRUD and named operation route executors.
+ *
+ * Each key corresponds to a generated route key. Values can be a bare executor builder
+ * function or a full {@link EntityRouteExecutorDefinition} with request/response schemas.
+ */
 export interface EntityRouteExecutorOverrides {
   create?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
   list?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
@@ -87,6 +105,11 @@ export interface EntityRouteExecutorOverrides {
   operations?: Record<string, EntityRouteExecutorBuilder | EntityRouteExecutorDefinition>;
 }
 
+/**
+ * A fully resolved entity route with method, path, specificity score, and optional
+ * operation config. Produced by {@link planEntityRoutes} after collision detection
+ * and sorted by specificity (static segments first, then dynamic).
+ */
 export interface PlannedEntityRoute {
   kind: 'generated' | 'extra';
   routeKey: string;
@@ -106,6 +129,7 @@ export interface PlannedEntityRoute {
   responses?: TypedRouteResponses;
 }
 
+/** Freeze an extra route definition for safe registration during plugin setup. */
 export function defineEntityRoute<
   const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
 >(route: EntityExtraRoute<TRequest>): EntityExtraRoute<TRequest> {
@@ -116,6 +140,7 @@ export function defineEntityRoute<
   });
 }
 
+/** Freeze an executor definition or builder for safe registration during plugin setup. */
 export function defineEntityExecutor(
   builder: EntityRouteExecutorBuilder,
 ): EntityRouteExecutorBuilder;
@@ -136,6 +161,7 @@ export function defineEntityExecutor(
   });
 }
 
+/** Normalize dynamic path params to `:` for collision detection (e.g. `/notes/:id` → `notes/:`). */
 export function normalizeEntityRouteShape(path: string): string {
   return normalizeRoutePath(path)
     .split('/')
@@ -144,6 +170,7 @@ export function normalizeEntityRouteShape(path: string): string {
     .join('/');
 }
 
+/** Score a route path by specificity: static segments add 1000, dynamic segments subtract 10, plus segment count. */
 export function scoreEntityRouteSpecificity(path: string): number {
   const segments = normalizeRoutePath(path).split('/').filter(Boolean);
   return (
@@ -152,6 +179,16 @@ export function scoreEntityRouteSpecificity(path: string): number {
   );
 }
 
+/**
+ * Plan all entity routes (generated CRUD + named operations + extras), detect collisions,
+ * and return them sorted by specificity (most-specific first within each HTTP method).
+ *
+ * @param entity - Resolved entity config with route and field definitions.
+ * @param operations - Named operation configs keyed by operation name.
+ * @param options - Optional route path prefix, parent path, extra routes, and executor overrides.
+ * @returns Sorted array of planned routes ready for registration.
+ * @throws If two routes collide on the same method + normalized path.
+ */
 export function planEntityRoutes(
   entity: ResolvedEntityConfig,
   operations: Record<string, OperationConfig> | undefined,

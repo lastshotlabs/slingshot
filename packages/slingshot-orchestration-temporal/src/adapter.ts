@@ -151,6 +151,7 @@ async function maybeQueryState(
   handle: ReturnType<Client['workflow']['getHandle']>,
   runId: string,
   instrumentation: AdapterInstrumentation,
+  logger: Logger,
 ) {
   // Single-flight: if a query is already in flight for this runId reuse the
   // outstanding promise so the next caller awaits the existing query rather
@@ -269,16 +270,9 @@ export function createTemporalOrchestrationAdapter(
   };
 
   function rebuildRegistry(): void {
-    // Rebuild the local worker registry from the current set of registered
-    // task/workflow definitions. This is a no-op until the adapter has been
-    // started and definitions have been registered.
-    if (!started) return;
-    for (const [name, def] of tasks) {
-      workerRegistry.registerTask(name, def);
-    }
-    for (const [name, def] of workflows) {
-      workerRegistry.registerWorkflow(name, def);
-    }
+    // Worker registrations are handled independently by the Temporal worker
+    // setup via installWorkerRegistries(). The local tasks/workflows maps
+    // are already populated by registerTask/registerWorkflow.
   }
 
   function ensureMutable(): void {
@@ -431,7 +425,7 @@ export function createTemporalOrchestrationAdapter(
 
       const memo = getMemo(description);
       const status = mapTemporalStatus(description.status.name);
-      const state = await maybeQueryState(handle, runId, instrumentation);
+      const state = await maybeQueryState(handle, runId, instrumentation, logger);
 
       const run: Run | WorkflowRun = {
         id: runId,
@@ -683,7 +677,7 @@ export function createTemporalOrchestrationAdapter(
           // Re-check after any await — disposal may have happened while the
           // previous tick was queued.
           if (disposed) return;
-          const state = await maybeQueryState(handle, runId, instrumentation);
+          const state = await maybeQueryState(handle, runId, instrumentation, logger);
           if (disposed) return;
           if (state?.progress !== undefined) {
             const serialized = JSON.stringify(state.progress);

@@ -29,6 +29,7 @@ bun add @lastshotlabs/slingshot-kafka
 
 ## Package Scripts
 
+- `bench`: `bun run tests/bench/kafka-throughput.bench.ts`
 - `build`: `tsc -p tsconfig.build.json`
 - `coverage`: `bun test --coverage`
 - `test`: `bun test`

@@ -6,7 +6,7 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 - **Entity** - `@lastshotlabs/slingshot-entity`: config-driven entity CRUD, code generation, search, transitions
 - **Auth** - `@lastshotlabs/slingshot-auth`: auth providers, sessions, MFA, OAuth, WebAuthn, passkeys
 - **Community** - `@lastshotlabs/slingshot-community`: messaging, channels, reactions, notifications
-- **CLI** - `slingshot init`, `slingshot sync`, `slingshot deploy`
+- **CLI** - `slingshot init`, `slingshot migrate generate|apply|status|dev`, `slingshot deploy`
 
 ## Capability Map
 

@@ -866,6 +866,7 @@ export function createBullMQAdapter(
           event: rec.event,
           payload: rec.payload,
           attempts: 1,
+          firstSeen: Date.now(),
         });
       }
       if (highestId >= nextEntryId) {

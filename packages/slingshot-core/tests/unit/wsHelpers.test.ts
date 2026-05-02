@@ -66,4 +66,36 @@ describe('isValidRoomName', () => {
   test('accepts mixed valid characters', () => {
     expect(isValidRoomName('org:tenant-1/entity.channel_name')).toBe(true);
   });
+
+  test('accepts 127 character room name', () => {
+    expect(isValidRoomName('a'.repeat(127))).toBe(true);
+  });
+
+  test('rejects unicode characters', () => {
+    expect(isValidRoomName('room-café')).toBe(false);
+    expect(isValidRoomName('room-🎉')).toBe(false);
+    expect(isValidRoomName('日本語')).toBe(false);
+  });
+
+  test('accepts rooms with consecutive valid separators', () => {
+    expect(isValidRoomName('room//name')).toBe(true);
+    expect(isValidRoomName('room::name')).toBe(true);
+    expect(isValidRoomName('room..name')).toBe(true);
+    expect(isValidRoomName('room--name')).toBe(true);
+  });
+
+  test('accepts rooms that are only separators', () => {
+    expect(isValidRoomName(':::')).toBe(true);
+    expect(isValidRoomName('---')).toBe(true);
+    expect(isValidRoomName('...')).toBe(true);
+    expect(isValidRoomName('///')).toBe(true);
+  });
+
+  test('rejects room name with tab character', () => {
+    expect(isValidRoomName('room\tname')).toBe(false);
+  });
+
+  test('rejects room name with null byte', () => {
+    expect(isValidRoomName('room\0name')).toBe(false);
+  });
 });

@@ -3,7 +3,7 @@ import { Client } from '@temporalio/client';
 import type { ClientInterceptors, ConnectionLike } from '@temporalio/client';
 import type { DataConverter } from '@temporalio/common';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
@@ -81,7 +81,7 @@ export function createTemporalActivities(options: {
     ...(options.dataConverter ? { dataConverter: options.dataConverter } : {}),
     ...(options.interceptors ? { interceptors: options.interceptors } : {}),
   });
-  const logger = options.logger ?? noopLogger;
+  const logger = options.logger ?? createConsoleLogger();
 
   return {
     async executeSlingshotTask(

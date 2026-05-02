@@ -114,22 +114,33 @@ describe('sync-workspace-docs', () => {
 describe('docs content config', () => {
   test('registers the docs collection with Astro content', async () => {
     const docsSchemaToken = Symbol('docsSchema');
+    const docsLoaderToken = Symbol('docsLoader');
+
+    mock.module('@astrojs/starlight/loaders', () => ({
+      docsLoader: () => docsLoaderToken,
+    }));
 
     mock.module('@astrojs/starlight/schema', () => ({
       docsSchema: () => docsSchemaToken,
     }));
 
     mock.module('astro:content', () => ({
-      defineCollection: ({ schema }: { schema: unknown }) => ({ schema, kind: 'collection' }),
+      defineCollection: ({ loader, schema }: { loader: unknown; schema: unknown }) => ({
+        loader,
+        schema,
+        kind: 'collection',
+      }),
     }));
 
     const mod = await import('../src/content.config');
     const docsCollection = mod.collections.docs as unknown as {
+      loader: unknown;
       schema: unknown;
       kind: string;
     };
 
     expect(docsCollection.kind).toBe('collection');
+    expect(docsCollection.loader).toBe(docsLoaderToken);
     expect(docsCollection.schema).toBe(docsSchemaToken);
   });
 });

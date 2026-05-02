@@ -330,7 +330,7 @@ describe('wsMessages (mongo backend)', () => {
     expect(history.every(m => m.createdAt > 1000)).toBe(true);
   });
 
-  test('getHistory with before cursor for nonexistent id returns all', async () => {
+  test('getHistory with before cursor for nonexistent id returns empty', async () => {
     const { model } = makeMockMongoModel();
     const conn = makeMockConn(model);
     const mg = makeMockMongoose();
@@ -340,12 +340,12 @@ describe('wsMessages (mongo backend)', () => {
     await repo.persist(makeMessage('chat', { payload: '1' }, 1000), config);
     await repo.persist(makeMessage('chat', { payload: '2' }, 2000), config);
 
-    // Nonexistent cursor id — findById returns null, no $or filter applied
+    // Nonexistent cursor id — findById returns null, returns empty per contract
     const history = await repo.getHistory(ENDPOINT, 'chat', { before: 'nonexistent-id' });
-    expect(history).toHaveLength(2);
+    expect(history).toHaveLength(0);
   });
 
-  test('getHistory with after cursor for nonexistent id returns all', async () => {
+  test('getHistory with after cursor for nonexistent id returns empty', async () => {
     const { model } = makeMockMongoModel();
     const conn = makeMockConn(model);
     const mg = makeMockMongoose();
@@ -355,8 +355,9 @@ describe('wsMessages (mongo backend)', () => {
     await repo.persist(makeMessage('chat', { payload: '1' }, 1000), config);
     await repo.persist(makeMessage('chat', { payload: '2' }, 2000), config);
 
+    // Nonexistent cursor id — findById returns null, returns empty per contract
     const history = await repo.getHistory(ENDPOINT, 'chat', { after: 'nonexistent-id' });
-    expect(history).toHaveLength(2);
+    expect(history).toHaveLength(0);
   });
 
   test('clear swallows errors (best-effort)', async () => {

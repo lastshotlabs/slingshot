@@ -1,5 +1,5 @@
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import type { Logger } from '@lastshotlabs/slingshot-core';
+import type { Logger, LogFields } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,7 +104,7 @@ export function createConsoleAuditLogger(baseLogger?: Logger): AdminAuditLogger 
 
   return {
     log(event: AdminAuditEvent): void {
-      logger.info('admin-audit-event', event);
+      logger.info('admin-audit-event', event as unknown as LogFields);
     },
   };
 }

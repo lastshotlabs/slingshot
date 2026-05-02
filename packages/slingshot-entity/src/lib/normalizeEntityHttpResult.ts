@@ -6,6 +6,17 @@ function normalizeDateValue(value: unknown): unknown {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+/**
+ * Convert `Date` field values to ISO-8601 strings for HTTP serialization.
+ *
+ * Iterates the entity's `date`-typed fields and replaces any `Date` instances with
+ * their `.toISOString()` representation. Returns the original reference unchanged
+ * if no conversions were needed.
+ *
+ * @param config - Resolved entity config defining which fields are date-typed.
+ * @param value - A single entity record (plain object).
+ * @returns The record with dates normalized, or the original object if unchanged.
+ */
 export function normalizeEntityRecordResult(config: ResolvedEntityConfig, value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value;
@@ -29,6 +40,16 @@ export function normalizeEntityRecordResult(config: ResolvedEntityConfig, value:
   return changed ? normalized : value;
 }
 
+/**
+ * Apply date normalization to each item in a paginated list result.
+ *
+ * Expects a `{ items: unknown[] }` shape. Returns the original reference unchanged
+ * if no items required normalization.
+ *
+ * @param config - Resolved entity config defining which fields are date-typed.
+ * @param value - A paginated result object with an `items` array.
+ * @returns The list with normalized records, or the original object if unchanged.
+ */
 export function normalizeEntityListResult(config: ResolvedEntityConfig, value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value;
@@ -51,6 +72,18 @@ export function normalizeEntityListResult(config: ResolvedEntityConfig, value: u
   return changed ? { ...page, items } : value;
 }
 
+/**
+ * Normalize a named operation's HTTP result for JSON serialization.
+ *
+ * Only applies to `lookup` operations — other operation kinds return the value as-is.
+ * For lookups, delegates to {@link normalizeEntityRecordResult} (single) or
+ * {@link normalizeEntityListResult} (list) based on `opConfig.returns`.
+ *
+ * @param config - Resolved entity config.
+ * @param opConfig - The operation config (only `kind: 'lookup'` triggers normalization).
+ * @param value - The raw operation result.
+ * @returns The normalized result.
+ */
 export function normalizeNamedOperationHttpResult(
   config: ResolvedEntityConfig,
   opConfig: OperationConfig,

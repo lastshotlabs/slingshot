@@ -284,7 +284,11 @@ export function createBullMQOrchestrationAdapter(
             : String(job.id);
         cacheRunId(existingRunId, String(job.id));
         return createResultHandle(existingRunId, () =>
-          cancellation.waitForRunResult(existingRunId, job, sm.getQueueEventsForTaskName(name)),
+          cancellation.waitForRunResult(
+            existingRunId,
+            job as Job<Record<string, unknown>>,
+            sm.getQueueEventsForTaskName(name),
+          ),
         );
       }
       job = await queue.add(
@@ -310,7 +314,11 @@ export function createBullMQOrchestrationAdapter(
       );
       cacheRunId(runId, String(job.id));
       return createResultHandle(runId, () =>
-        cancellation.waitForRunResult(runId, job, sm.getQueueEventsForTaskName(name)),
+        cancellation.waitForRunResult(
+          runId,
+          job as Job<Record<string, unknown>>,
+          sm.getQueueEventsForTaskName(name),
+        ),
       );
     },
 
@@ -335,7 +343,7 @@ export function createBullMQOrchestrationAdapter(
           }
           return cancellation.waitForRunResult(
             existingRunId,
-            job,
+            job as Job<Record<string, unknown>>,
             sharedState.workflowQueueEvents,
           );
         });
@@ -364,7 +372,11 @@ export function createBullMQOrchestrationAdapter(
         if (!sharedState.workflowQueueEvents) {
           throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
         }
-        return cancellation.waitForRunResult(runId, job, sharedState.workflowQueueEvents);
+        return cancellation.waitForRunResult(
+          runId,
+          job as Job<Record<string, unknown>>,
+          sharedState.workflowQueueEvents,
+        );
       });
     },
 
@@ -452,7 +464,9 @@ export function createBullMQOrchestrationAdapter(
       }
       const filtered: Array<
         import('@lastshotlabs/slingshot-orchestration').Run | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
-      > = [...visibleRuns.values()]
+      > = ([...visibleRuns.values()] as Array<
+        import('@lastshotlabs/slingshot-orchestration').Run | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
+      >)
         .filter(run => {
           const r = run as import('@lastshotlabs/slingshot-orchestration').Run;
           if (filter?.name && r.name !== filter.name) return false;
@@ -482,7 +496,7 @@ export function createBullMQOrchestrationAdapter(
     onProgress(runId, callback) {
       return createProgressListener(
         runId,
-        callback,
+        callback as (progress: unknown) => void,
         runIdToJobId,
         sm.ensureStarted,
         () => {

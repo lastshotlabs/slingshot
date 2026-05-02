@@ -150,15 +150,15 @@ export function createRouterAdapter(opts: RouterAdapterOptions): SlingshotEventB
     off<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
-    ): void {
-      resolveAdapter(event as string, opts).off(event, listener);
+    ): boolean {
+      return resolveAdapter(event as string, opts).off(event, listener);
     },
 
     offEnvelope<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (envelope: EventEnvelope<K>) => void,
-    ): void {
-      resolveAdapter(event as string, opts).offEnvelope(event, listener);
+    ): boolean {
+      return resolveAdapter(event as string, opts).offEnvelope(event, listener);
     },
 
     async shutdown(): Promise<void> {

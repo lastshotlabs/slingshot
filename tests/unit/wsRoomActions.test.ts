@@ -388,8 +388,8 @@ describe('publish — per-socket path', () => {
     const parsed = JSON.parse(sentTexts[0]);
     expect(parsed.text).toBe('hello');
     expect(typeof parsed.id).toBe('string');
-    // lastEventIds should be tracked
-    expect(state.lastEventIds.has('sock-1')).toBe(true);
+    // lastEventIds should be tracked with composite key (socketId\0room)
+    expect(state.lastEventIds.has(`sock-1\0room-1`)).toBe(true);
   });
 
   test('publish with exclude skips excluded socket ids', () => {
@@ -683,8 +683,8 @@ describe('subscribe / unsubscribe with presence and trackDelivery', () => {
       }
     });
     expect(leaveMsg).toBeDefined();
-    // lastEventIds should be tracked for sock-2 (the receiver)
-    expect(state.lastEventIds.has('sock-2')).toBe(true);
+    // lastEventIds should be tracked for sock-2 (the receiver) with composite key
+    expect(state.lastEventIds.has(`sock-2\0room-1`)).toBe(true);
   });
 });
 

@@ -412,6 +412,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
   let unsubscribers: Array<() => void> = [];
   let innerPlugin: SlingshotPlugin | undefined;
   let runtimeAdapter: WebhookAdapter | undefined;
+  let inboundRateLimiter: RateLimiter | undefined;
 
   // Lazy metrics resolution — proxied so the dispatcher pipeline picks up the
   // framework-owned emitter the moment setupPost runs.
@@ -575,11 +576,29 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       }
 
       if ((config.inbound?.length ?? 0) > 0 && !disabled.has(WEBHOOK_ROUTES.INBOUND)) {
+        // Resolve the rate limiter so the plugin owns the lifecycle — the built-in
+        // sliding window limiter creates a periodic cleanup timer that must be
+        // released on teardown to prevent timer leaks across plugin reloads.
+        let resolvedInboundRateLimiter: RateLimiter | undefined;
+        if (config.inboundRateLimit) {
+          if (
+            'check' in config.inboundRateLimit &&
+            typeof config.inboundRateLimit.check === 'function'
+          ) {
+            resolvedInboundRateLimiter = config.inboundRateLimit as RateLimiter;
+          } else {
+            resolvedInboundRateLimiter = createSlidingWindowRateLimiter(
+              config.inboundRateLimit as { maxRequests?: number; windowMs?: number },
+            );
+            inboundRateLimiter = resolvedInboundRateLimiter;
+          }
+        }
+
         app.route(
           `${mountPath}/inbound`,
           createInboundRouter([...(config.inbound ?? [])], bus, {
             maxBodyBytes: config.inboundMaxBodyBytes,
-            rateLimiter: config.inboundRateLimit,
+            rateLimiter: resolvedInboundRateLimiter,
           }),
         );
       }
@@ -613,6 +632,8 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         unsub();
       }
       unsubscribers = [];
+      inboundRateLimiter?.close?.();
+      inboundRateLimiter = undefined;
       await queue.stop();
       await innerPlugin?.teardown?.();
     },

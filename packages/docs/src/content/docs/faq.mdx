@@ -138,15 +138,28 @@ Entity plugins generate migration SQL from your entity definitions. Two paths:
 **Via the CLI (recommended for CI/CD):**
 
 ```bash
-# Generate migration files
-slingshot migrate generate --stage dev
+# Generate a new migration from current entity diffs (writes a timestamped
+# .sql file under migrations/<backend>/ and advances entity snapshots).
+slingshot migrate generate --name add_nickname
 
-# Apply pending migrations
-slingshot migrate run --stage dev
+# Apply all pending migrations to the configured database. Idempotent —
+# already-applied migrations are tracked in `_slingshot_entity_migrations`.
+slingshot migrate apply
 
-# Preview what would run
-slingshot migrate status --stage dev
+# Show applied vs pending migrations and detect drift (applied files that
+# have been edited after running).
+slingshot migrate status
+
+# Inner-loop shortcut: generate + apply in one step.
+slingshot migrate dev --name add_nickname
 ```
+
+The CLI auto-detects the backend from `infrastructure.db.postgres`,
+`infrastructure.db.sqlite`, or `infrastructure.db.mongo` in `app.manifest.json`.
+Override with `--backend postgres|sqlite|mongo`, or pass a connection string via
+`--db-url` (Postgres falls back to `DATABASE_URL`; Mongo to `MONGODB_URI` /
+`MONGO_URL`). For Mongo, install the `mongodb` driver in your project; for
+Postgres, install `pg`; for SQLite, install `better-sqlite3`.
 
 **Via the migration API in code:**
 

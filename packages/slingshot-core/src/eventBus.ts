@@ -31,7 +31,7 @@ export type { SlingshotEventMap, SecurityEventKey } from './eventMap';
 export interface DynamicEventBus {
   emit(event: string, payload: unknown): void;
   on(event: string, handler: (payload: unknown) => void | Promise<void>): void;
-  off(event: string, handler: (payload: unknown) => void | Promise<void>): void;
+  off(event: string, handler: (payload: unknown) => void | Promise<void>): boolean;
 }
 
 /**
@@ -263,14 +263,16 @@ export class InProcessAdapter implements SlingshotEventBus {
         result = fn(envelope as EventEnvelope);
       } catch (err) {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
-        this.logger?.error(msg, { event, error: err });
+        if (this.logger) this.logger.error(msg, { event, error: err });
+        else console.error(msg, err);
         continue;
       }
       const p = Promise.resolve(result);
       this.pendingHandlers.add(p);
       p.catch((err: unknown) => {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
-        this.logger?.error(msg, { event, error: err });
+        if (this.logger) this.logger.error(msg, { event, error: err });
+        else console.error(msg, err);
       }).finally(() => {
         this.pendingHandlers.delete(p);
       });

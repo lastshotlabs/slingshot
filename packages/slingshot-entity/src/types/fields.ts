@@ -114,6 +114,24 @@ export interface FieldOptions {
    * Defaults to `true` for primary key fields.
    */
   immutable?: boolean;
+  /**
+   * When true the field is hidden from generated API responses. The field is
+   * still stored, can still be set in create/update inputs, and is still
+   * queryable internally; it just never appears in any response schema or
+   * response body produced by generated entity routes. Use for credentials,
+   * secrets, internal flags, and audit-only data.
+   */
+  private?: boolean;
+  /**
+   * Restrict which named input variants are allowed to set this field. The
+   * field is settable only by variants whose name appears here; the default
+   * variant and any unlisted variant strip the field from create/update.
+   *
+   * Used together with `routes.<op>.input: 'variantName'` to gate fields like
+   * `role` (admin) or `passwordHash` (internal) so they don't leak into the
+   * public-facing schemas.
+   */
+  inputVariants?: readonly string[];
 }
 
 type ResolveOpt<O> = O extends { optional: true }
@@ -129,6 +147,12 @@ type ResolveDflt<O> = O extends { default: infer D extends string | number | boo
   : undefined;
 
 type ResolveUpd<O> = O extends { onUpdate: 'now' } ? 'now' : undefined;
+
+type ResolveInputVariants<O> = O extends {
+  inputVariants: infer V extends readonly string[];
+}
+  ? V
+  : undefined;
 
 /**
  * The resolved, frozen description of a single entity field.
@@ -153,11 +177,21 @@ export interface FieldDef<
   Default extends string | number | boolean | undefined = string | number | boolean | undefined,
   OnUpdate extends 'now' | undefined = 'now' | undefined,
   EnumValues extends readonly string[] = readonly string[],
+  InputVariants extends readonly string[] | undefined = readonly string[] | undefined,
 > {
   readonly type: T;
   readonly optional: IsOptional;
   readonly primary: boolean;
   readonly immutable: boolean;
+  /** When true, the field is hidden from generated API responses. */
+  readonly private: boolean;
+  /**
+   * Named input-variant allowlist. Empty/undefined means every variant
+   * (including default) may set this field. The literal array type is
+   * preserved through the `InputVariants` type parameter so that the
+   * variant union can be derived at the entity level for narrowing.
+   */
+  readonly inputVariants?: InputVariants;
   readonly format?: string;
   readonly default?: Default;
   readonly onUpdate?: OnUpdate;
@@ -165,4 +199,4 @@ export interface FieldDef<
   readonly enumValues?: EnumValues;
 }
 
-export type { ResolveDflt, ResolveOpt, ResolveUpd };
+export type { ResolveDflt, ResolveInputVariants, ResolveOpt, ResolveUpd };

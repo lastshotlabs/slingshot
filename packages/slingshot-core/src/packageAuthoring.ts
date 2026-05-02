@@ -71,6 +71,32 @@ export interface TypedRouteResponseSpec {
   readonly contentType?: string;
   /** Optional Zod schema used to document the response payload. */
   readonly schema?: ZodTypeAny;
+  /**
+   * Optional DTO variant name — only honored on entity-generated routes
+   * (CRUD plus entity custom ops), where the framework knows which entity's
+   * `dto` map to look up against. The selected `entity.dto[variant]` mapper
+   * runs in place of `dto.default` for this status.
+   *
+   * For package-domain routes that have no implicit entity context, pass the
+   * variant function directly via `transform` (e.g. `transform: User.dto.admin`).
+   * For standard CRUD routes prefer `routes.<op>.dto`, which gives the same
+   * effect declared at the route-config level.
+   *
+   * If the named variant is missing from `entity.dto`, the framework logs a
+   * one-time warning and falls through to no projection.
+   */
+  readonly dto?: string;
+  /**
+   * Optional transform run on the response body before serialization. Receives
+   * whatever the handler passed to `respond.json(...)` and returns the value
+   * actually sent on the wire. Use this to project storage records into
+   * API DTOs, redact internal fields, or coerce types.
+   *
+   * Runs after entity-level DTO mapping (private-field stripping plus the
+   * selected `dto[variant]` mapper). Pass a `createDtoMapper(...)` result
+   * here for typed shape mapping.
+   */
+  readonly transform?: (value: unknown) => unknown;
 }
 
 /** Response metadata keyed by HTTP status code. */

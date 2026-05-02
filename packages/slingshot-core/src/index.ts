@@ -527,6 +527,8 @@ export type {
   CustomAutoDefaultResolver,
   CustomOnUpdateResolver,
   EntityConfig,
+  EntityDtoConfig,
+  EntityDtoMapper,
   ResolvedEntityConfig,
   InferEntity,
   InferFieldType,

@@ -61,6 +61,7 @@ export type {
   EntityStorageHints,
   EntityTtlConfig,
   EntityConfig,
+  ExtractInputVariants,
   ResolvedEntityConfig,
   // Filter types
   FilterExpression,

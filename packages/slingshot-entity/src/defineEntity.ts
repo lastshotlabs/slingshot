@@ -3,6 +3,7 @@
  *
  * Validates config using Zod schema, resolves PK and storage name.
  */
+import type { EntityDtoConfig } from '@lastshotlabs/slingshot-core';
 import type { EntityConfig, FieldDef, ResolvedEntityConfig } from './types';
 import { entityConfigSchema } from './validation';
 
@@ -69,10 +70,13 @@ export { index, relation } from './builders/entityHelpers';
  * // Message._storageName === 'chat_messages'
  * ```
  */
-export function defineEntity<const F extends Record<string, FieldDef>>(
+export function defineEntity<
+  const F extends Record<string, FieldDef>,
+  const D extends EntityDtoConfig = EntityDtoConfig,
+>(
   name: string,
-  config: Omit<EntityConfig<F>, 'name'>,
-): ResolvedEntityConfig<F> {
+  config: Omit<EntityConfig<F, D>, 'name'>,
+): ResolvedEntityConfig<F, D> {
   // Validate using Zod schema — provides structured error messages with paths
   const fullConfig = { name, ...config };
   const result = entityConfigSchema.safeParse(fullConfig);
@@ -128,7 +132,7 @@ export function defineEntity<const F extends Record<string, FieldDef>>(
     onUpdate: config.conventions?.onUpdate,
   };
 
-  const resolved: ResolvedEntityConfig<F> = {
+  const resolved = {
     name,
     ...config,
     _pkField: pkField,
@@ -136,7 +140,7 @@ export function defineEntity<const F extends Record<string, FieldDef>>(
     _systemFields,
     _storageFields,
     _conventions,
-  };
+  } as ResolvedEntityConfig<F, D>;
   deepFreezeEntity(resolved);
   return resolved;
 }

@@ -141,9 +141,25 @@ export interface EntityZodSchemas {
  * generated spec as a named `$ref` component.
  *
  * @param config - The resolved entity configuration.
+ * @param inputVariant - Optional input-variant name. When provided, the
+ *   generated `create` and `update` schemas include fields whose
+ *   `inputVariants` array contains this name; default-variant routes
+ *   (no name passed) strip any field with a non-empty allowlist.
  * @returns `EntityZodSchemas` with `entity`, `create`, `update`, `list`, and `listOptions`.
  */
-export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSchemas {
+export function buildEntityZodSchemas(
+  config: ResolvedEntityConfig,
+  inputVariant?: string,
+): EntityZodSchemas {
+  // A field is settable by the requested input variant when it has no
+  // `inputVariants` allowlist or when the requested name appears in the list.
+  function isSettableByVariant(def: FieldDef): boolean {
+    const allow = def.inputVariants;
+    if (!allow || allow.length === 0) return true;
+    if (!inputVariant) return false;
+    return allow.includes(inputVariant);
+  }
+
   const fieldDefs = Object.entries(config.fields);
 
   // Optional belongsTo relations make the FK nullable at the HTTP boundary.
@@ -182,12 +198,14 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   // Register so the schema appears as a named component in the OpenAPI spec
   const entity = registerSchema(config.name, entityRaw);
 
-  // Create input schema (excludes auto-defaults, onUpdate fields, and
-  // dataScope-injected fields which are marked optional)
+  // Create input schema — excludes auto-defaults, onUpdate fields, and
+  // variant-gated fields not allowed by the requested input variant.
+  // dataScope-injected fields are present but optional.
   const createShape: Record<string, z.ZodType> = {};
   for (const [fieldName, def] of fieldDefs) {
     if (def.onUpdate === 'now') continue;
     if (isAutoDefault(def.default)) continue;
+    if (!isSettableByVariant(def)) continue;
     const isNullable = nullableFkFields.has(fieldName) || def.optional;
     const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
     const base = fieldToZod({ ...def, optional: false }, isNullable);
@@ -196,11 +214,12 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   }
   const create = z.object(createShape);
 
-  // Update input schema (all mutable, non-onUpdate fields as optional)
+  // Update input schema — all mutable, non-onUpdate, variant-allowed fields as optional.
   const updateShape: Record<string, z.ZodType> = {};
   for (const [fieldName, def] of fieldDefs) {
     if (def.immutable) continue;
     if (def.onUpdate === 'now') continue;
+    if (!isSettableByVariant(def)) continue;
     const isNullable = nullableFkFields.has(fieldName) || def.optional;
     const base = fieldToZod({ ...def, optional: false }, isNullable);
     updateShape[fieldName] = base.optional();

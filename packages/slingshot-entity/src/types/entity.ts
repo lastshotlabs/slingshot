@@ -2,6 +2,7 @@
  * Entity configuration types.
  */
 import type {
+  EntityDtoConfig,
   EntityRouteConfig,
   EntityStorageConventions,
   EntityStorageFieldMap,
@@ -211,7 +212,28 @@ export interface EntityTtlConfig {
  * });
  * ```
  */
-export interface EntityConfig<F extends Record<string, FieldDef> = Record<string, FieldDef>> {
+/**
+ * Extract the union of all named input-variant strings declared on the
+ * fields of an entity. Used to narrow `routes.<op>.input` so picking a
+ * variant name not declared on any field is a compile error.
+ *
+ * @example
+ * ```ts
+ * type F = {
+ *   email: FieldDef<'string'>;
+ *   role:  FieldDef<'string'> & { inputVariants: readonly ['admin'] };
+ * };
+ * type V = ExtractInputVariants<F>; // 'admin'
+ * ```
+ */
+export type ExtractInputVariants<F extends Record<string, FieldDef>> = {
+  [K in keyof F]: NonNullable<F[K]['inputVariants']>[number];
+}[keyof F];
+
+export interface EntityConfig<
+  F extends Record<string, FieldDef> = Record<string, FieldDef>,
+  D extends EntityDtoConfig = EntityDtoConfig,
+> {
   readonly name: string;
   /** Optional namespace prefix applied to the derived storage name. */
   readonly namespace?: string;
@@ -231,9 +253,18 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
   readonly tenant?: TenantConfig;
   readonly ttl?: EntityTtlConfig;
   readonly storage?: EntityStorageHints;
+  /**
+   * Entity-level DTO mapping config. Declare `default` plus any named variants
+   * (`list`, `admin`, `public`, …); routes pick a variant via `routes.<op>.dto`
+   * (entity CRUD) or `responses[status].dto` (entity custom ops).
+   */
+  readonly dto?: D;
   /** Declarative route configuration. When set, route generation includes auth,
-   *  permissions, rate limits, events, and middleware. */
-  readonly routes?: EntityRouteConfig;
+   *  permissions, rate limits, events, and middleware. The DTO variant slot
+   *  on each operation is narrowed to the keys of `dto`, and the input variant
+   *  slot is narrowed to the union of `field.inputVariants` strings — picking
+   *  a typo is a compile error. */
+  readonly routes?: EntityRouteConfig<Extract<keyof D, string>, ExtractInputVariants<F>>;
   /**
    * Consumer-configurable system field name overrides.
    *
@@ -290,7 +321,8 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
  */
 export interface ResolvedEntityConfig<
   F extends Record<string, FieldDef> = Record<string, FieldDef>,
-> extends EntityConfig<F> {
+  D extends EntityDtoConfig = EntityDtoConfig,
+> extends EntityConfig<F, D> {
   /** The name of the primary key field, resolved from the field with `primary: true`. */
   readonly _pkField: string;
   /**

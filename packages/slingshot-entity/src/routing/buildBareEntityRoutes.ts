@@ -334,13 +334,112 @@ function buildTypedResponse(
   };
 }
 
+function stripPrivateFields(value: unknown, privateFields: Set<string>): unknown {
+  if (privateFields.size === 0) return value;
+  if (Array.isArray(value)) {
+    return value.map(item => stripPrivateFields(item, privateFields));
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    // Paginated shape: { items: [...], nextCursor, ... } — recurse into items.
+    if (Array.isArray(obj.items)) {
+      return {
+        ...obj,
+        items: obj.items.map(item => stripPrivateFields(item, privateFields)),
+      };
+    }
+    // Plain record: drop private keys at the top level.
+    const out: Record<string, unknown> = {};
+    let stripped = false;
+    for (const [k, v] of Object.entries(obj)) {
+      if (privateFields.has(k)) {
+        stripped = true;
+        continue;
+      }
+      out[k] = v;
+    }
+    return stripped ? out : value;
+  }
+  return value;
+}
+
+/**
+ * Apply entity-level response projection: strip `private: true` fields, then
+ * apply the selected `dto` mapper if present. The variant name selects which
+ * mapper from `config.dto` to apply (`'default'` when unset).
+ *
+ * Used for both the planned-route path and the legacy direct-handler path.
+ */
+const warnedUnknownVariants = new Set<string>();
+
+function applyEntityProjection(
+  data: unknown,
+  config: ResolvedEntityConfig,
+  variant?: string,
+): unknown {
+  const privateFields = new Set<string>();
+  for (const [name, def] of Object.entries(config.fields)) {
+    if (def.private) privateFields.add(name);
+  }
+  let value = stripPrivateFields(data, privateFields);
+  const variantKey = variant ?? 'default';
+  const mapper = config.dto?.[variantKey];
+  if (!mapper) {
+    // Warn once per (entity, variant) when an explicit variant name was
+    // provided but no matching mapper exists in `config.dto`. Silent fall-through
+    // would mean the route returns raw records, which is almost certainly a typo.
+    if (variant) {
+      const warnKey = `${config.name}:${variant}`;
+      if (!warnedUnknownVariants.has(warnKey)) {
+        warnedUnknownVariants.add(warnKey);
+        const available = Object.keys(config.dto ?? {});
+        console.warn(
+          `[slingshot] Unknown DTO variant '${variant}' on entity '${config.name}'. ` +
+            `Available: [${available.join(', ') || '(none)'}]. Falling through to no projection.`,
+        );
+      }
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item =>
+      item && typeof item === 'object' ? mapper(item as Record<string, unknown>) : item,
+    );
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    if (Array.isArray(obj.items)) {
+      return {
+        ...obj,
+        items: obj.items.map(item =>
+          item && typeof item === 'object' ? mapper(item as Record<string, unknown>) : item,
+        ),
+      };
+    }
+    return mapper(obj);
+  }
+  return value;
+}
+
 function createResponseHelpers(
   c: Context<AppEnv>,
   route: PlannedEntityRoute,
+  config: ResolvedEntityConfig,
 ): EntityRouteExecutionContext['respond'] & { setOpResult(opName: string, result: unknown): void } {
+  function applyTransform(data: unknown, status: number): unknown {
+    // 1) Apply entity-level projection: strip private fields, run selected dto mapper.
+    const responseSpec = route.responses?.[status];
+    let value = applyEntityProjection(data, config, responseSpec?.dto);
+    // 2) Apply user-supplied per-route transform if present for this status.
+    if (responseSpec?.transform) value = responseSpec.transform(value);
+    return value;
+  }
   return {
     json(data: unknown, status = 200) {
-      return c.json(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+      return c.json(
+        applyTransform(data, status),
+        status as import('hono/utils/http-status').ContentfulStatusCode,
+      );
     },
     text(data: string, status = 200) {
       return c.text(data, status as import('hono/utils/http-status').ContentfulStatusCode);
@@ -996,6 +1095,18 @@ export function buildBareEntityRoutes<
     ? `${options.parentPath.replace(/^\//, '')}/${entitySegment}`
     : entitySegment;
   const schemas = buildEntityZodSchemas(config);
+  // Cache per-variant schema builds — each (entity, variant) combo is built at most
+  // once per call to buildBareEntityRoutes. The default-variant build is reused via
+  // `schemas` above; named variants are produced lazily when a route asks for them.
+  const variantSchemaCache = new Map<string, ReturnType<typeof buildEntityZodSchemas>>();
+  function schemasForVariant(variant: string | undefined): ReturnType<typeof buildEntityZodSchemas> {
+    if (!variant) return schemas;
+    const cached = variantSchemaCache.get(variant);
+    if (cached) return cached;
+    const built = buildEntityZodSchemas(config, variant);
+    variantSchemaCache.set(variant, built);
+    return built;
+  }
   const disabled = new Set(config.routes?.disable ?? []);
   const tag = options?.tag ?? config.name;
   const dataScopes = normalizeDataScopes(options?.dataScope ?? config.routes?.dataScope);
@@ -1047,7 +1158,7 @@ export function buildBareEntityRoutes<
           return policyResponse;
         }
 
-        const helpers = createResponseHelpers(c, route);
+        const helpers = createResponseHelpers(c, route, config);
         const execContext: EntityRouteExecutionContext = {
           request: c,
           actor: getActor(c),
@@ -1177,17 +1288,18 @@ export function buildBareEntityRoutes<
       c.set('__opResult' as never, result as never);
       if (opConfig.kind === 'lookup' && opConfig.returns === 'one') {
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
-        return c.json(result, 200);
+        return c.json(applyEntityProjection(result, config), 200);
       }
       if (opConfig.kind === 'exists') {
         return result ? c.body(null, 200) : c.body(null, 404);
       }
-      return c.json(result, 200);
+      return c.json(applyEntityProjection(result, config), 200);
     });
   }
 
   // POST /{segment} — create
   if (!routeDisabled(disabled, 'create', 'POST', `/${segment}`)) {
+    const createSchemas = schemasForVariant(config.routes?.create?.input);
     registerRoute(
       router,
       createRoute({
@@ -1195,7 +1307,7 @@ export function buildBareEntityRoutes<
         path: `/${segment}`,
         tags: [tag],
         summary: `Create ${config.name}`,
-        request: { body: { content: { 'application/json': { schema: schemas.create } } } },
+        request: { body: { content: { 'application/json': { schema: createSchemas.create } } } },
         responses: {
           201: {
             content: { 'application/json': { schema: schemas.entity } },
@@ -1204,11 +1316,22 @@ export function buildBareEntityRoutes<
         },
       }),
       async c => {
-        const input = (await c.req.json()) as unknown;
-        const bodyRecord =
-          typeof input === 'object' && input !== null
-            ? { ...(input as Record<string, unknown>) }
-            : {};
+        const raw = (await c.req.json()) as unknown;
+        // Parse against the variant-filtered create schema so fields not allowed
+        // by `routes.create.input` (e.g. `role` on the public variant) are
+        // silently stripped before reaching the adapter — making the variant
+        // gate a real security boundary, not just OpenAPI documentation.
+        const parsed = (createSchemas.create as z.ZodTypeAny).safeParse(raw);
+        if (!parsed.success) {
+          return c.json(
+            {
+              success: false,
+              error: { name: 'ZodError', message: parsed.error.message },
+            },
+            400,
+          ) as never;
+        }
+        const bodyRecord = { ...(parsed.data as Record<string, unknown>) };
 
         if (dataScopes.length > 0) {
           const resolution = resolveDataScopes(dataScopes, 'create', c);
@@ -1224,7 +1347,7 @@ export function buildBareEntityRoutes<
         const result = await adapter.create(bodyRecord);
         c.set('__opName' as never, 'create' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(result, 201);
+        return c.json(applyEntityProjection(result, config, config.routes?.create?.dto), 201);
       },
     );
   }
@@ -1291,7 +1414,7 @@ export function buildBareEntityRoutes<
         const result = await adapter.list(listOpts);
         c.set('__opName' as never, 'list' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(result, 200);
+        return c.json(applyEntityProjection(result, config, config.routes?.list?.dto), 200);
       },
     );
   }
@@ -1346,13 +1469,14 @@ export function buildBareEntityRoutes<
 
         c.set('__opName' as never, 'get' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(result, 200);
+        return c.json(applyEntityProjection(result, config, config.routes?.get?.dto), 200);
       },
     );
   }
 
   // PATCH /{segment}/:id — update (using PATCH to match generated routes.ts)
   if (!routeDisabled(disabled, 'update', 'PATCH', `/${segment}/:id`)) {
+    const updateSchemas = schemasForVariant(config.routes?.update?.input);
     registerRoute(
       router,
       createRoute({
@@ -1360,7 +1484,7 @@ export function buildBareEntityRoutes<
         path: `/${segment}/:id`,
         tags: [tag],
         summary: `Update ${config.name}`,
-        request: { body: { content: { 'application/json': { schema: schemas.update } } } },
+        request: { body: { content: { 'application/json': { schema: updateSchemas.update } } } },
         responses: {
           200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
           404: {
@@ -1371,11 +1495,20 @@ export function buildBareEntityRoutes<
       }),
       async c => {
         const id = readRequiredParam(c, 'id');
-        const input = (await c.req.json()) as unknown;
-        const bodyRecord =
-          typeof input === 'object' && input !== null
-            ? { ...(input as Record<string, unknown>) }
-            : {};
+        const raw = (await c.req.json()) as unknown;
+        // Parse against the variant-filtered update schema so fields not allowed
+        // by `routes.update.input` are silently stripped before reaching the adapter.
+        const parsed = (updateSchemas.update as z.ZodTypeAny).safeParse(raw);
+        if (!parsed.success) {
+          return c.json(
+            {
+              success: false,
+              error: { name: 'ZodError', message: parsed.error.message },
+            },
+            400,
+          ) as never;
+        }
+        const bodyRecord = { ...(parsed.data as Record<string, unknown>) };
 
         if (dataScopes.length > 0) {
           const offending = findScopedFieldInBody(dataScopes, bodyRecord);
@@ -1416,7 +1549,7 @@ export function buildBareEntityRoutes<
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
         c.set('__opName' as never, 'update' as never);
         c.set('__opResult' as never, result as never);
-        return c.json(result, 200);
+        return c.json(applyEntityProjection(result, config, config.routes?.update?.dto), 200);
       },
     );
   }

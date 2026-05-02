@@ -112,6 +112,12 @@ export interface GeneratedSchemas {
  * The function is pure — it has no side effects and can be called at any time.
  *
  * @param config - The resolved entity config produced by `defineEntity(...).config`.
+ * @param inputVariant - Optional input-variant name. When provided, fields whose
+ *   `inputVariants` array does not include this name are stripped from `createSchema`
+ *   and `updateSchema`. Default behaviour (omit or pass `'default'`) excludes any
+ *   field with a non-empty `inputVariants` allowlist. Variant-only fields (e.g.
+ *   `role` gated to `'admin'`) appear in the generated schema only when the matching
+ *   variant is requested.
  * @returns `GeneratedSchemas` containing `entitySchema`, `createSchema`, `updateSchema`,
  *          and `listOptionsSchema`.
  *
@@ -119,9 +125,15 @@ export interface GeneratedSchemas {
  * ```ts
  * const { createSchema } = generateSchemas(Message);
  * const body = createSchema.parse(req.body); // throws ZodError on invalid input
+ *
+ * // Admin variant: includes role-gated fields
+ * const { createSchema: adminCreate } = generateSchemas(User, 'admin');
  * ```
  */
-export function generateSchemas(config: ResolvedEntityConfig): GeneratedSchemas {
+export function generateSchemas(
+  config: ResolvedEntityConfig,
+  inputVariant?: string,
+): GeneratedSchemas {
   const entityShape: Record<string, z.ZodType> = {};
   const createShape: Record<string, z.ZodType> = {};
   const updateShape: Record<string, z.ZodType> = {};
@@ -137,6 +149,17 @@ export function generateSchemas(config: ResolvedEntityConfig): GeneratedSchemas 
     }
   }
 
+  // A field is settable by the requested input variant when:
+  // - it has no `inputVariants` allowlist (always settable), OR
+  // - the requested variant name appears in the allowlist.
+  // Default behaviour (no variant requested) excludes any field with an allowlist.
+  function isSettableByVariant(def: FieldDef): boolean {
+    const allow = def.inputVariants;
+    if (!allow || allow.length === 0) return true;
+    if (!inputVariant) return false;
+    return allow.includes(inputVariant);
+  }
+
   for (const [name, def] of Object.entries(config.fields)) {
     const base = zodTypeForField(def);
 
@@ -144,15 +167,18 @@ export function generateSchemas(config: ResolvedEntityConfig): GeneratedSchemas 
     // itself is optional — a field that can be absent should accept null on update.
     const isNullable = nullableFkFields.has(name) || def.optional;
 
-    // --- Entity schema: all fields ---
-    const entityBase = isNullable ? base.nullable() : base;
-    entityShape[name] = isNullable ? entityBase.optional() : entityBase;
+    // --- Entity schema (responses): all fields except private ---
+    if (!def.private) {
+      const entityBase = isNullable ? base.nullable() : base;
+      entityShape[name] = isNullable ? entityBase.optional() : entityBase;
+    }
 
-    // --- Create schema: exclude auto-default & onUpdate fields ---
+    // --- Create schema: exclude auto-default, onUpdate, and variant-gated fields ---
     const hasAuto = isAutoDefault(def.default);
     const hasOnUpdate = def.onUpdate === 'now';
+    const settable = isSettableByVariant(def);
 
-    if (!hasAuto && !hasOnUpdate) {
+    if (!hasAuto && !hasOnUpdate && settable) {
       const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
       const createBase = isNullable ? base.nullable() : base;
       if (isNullable || hasLiteralDefault) {
@@ -162,8 +188,8 @@ export function generateSchemas(config: ResolvedEntityConfig): GeneratedSchemas 
       }
     }
 
-    // --- Update schema: exclude immutable & onUpdate ---
-    if (!def.immutable && !hasOnUpdate) {
+    // --- Update schema: exclude immutable, onUpdate, and variant-gated fields ---
+    if (!def.immutable && !hasOnUpdate && settable) {
       const updateBase = isNullable ? base.nullable() : base;
       updateShape[name] = updateBase.optional();
     }

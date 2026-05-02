@@ -116,6 +116,12 @@ const fieldSchema = z.object({
     .boolean()
     .optional()
     .describe('Whether the field becomes read-only after creation. Omit to allow updates.'),
+  private: z
+    .boolean()
+    .optional()
+    .describe(
+      'Hide the field from generated API responses. The field is still stored, settable, and queryable internally; it just never appears on the wire.',
+    ),
   format: z
     .string()
     .min(1)

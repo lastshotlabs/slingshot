@@ -555,7 +555,10 @@ export interface RouteEventScopeConfig {
  * };
  * ```
  */
-export interface RouteOperationConfig {
+export interface RouteOperationConfig<
+  TDtoVariant extends string = string,
+  TInputVariant extends string = string,
+> {
   /**
    * Auth strategy for this operation. Overrides `defaults.auth` when set.
    *
@@ -615,6 +618,54 @@ export interface RouteOperationConfig {
    * the first successful response for later retries of the same logical request.
    */
   idempotency?: boolean | RouteIdempotencyConfig;
+
+  /**
+   * DTO variant selector — names a key in the entity's `dto` map. The framework
+   * applies that variant's mapper to records returned by this operation instead
+   * of the entity's `dto.default`. Omit to use the default.
+   *
+   * Narrowed to the actual variant names declared on the entity when the route
+   * config is authored alongside `dto` inside `defineEntity` — picking a typo
+   * is a compile error.
+   *
+   * @example
+   * ```ts
+   * routes: {
+   *   list: { dto: 'list' },     // GET /users → UserListItemDto
+   *   get:  { dto: 'public' },   // GET /users/:id → UserPublicDto
+   * }
+   * ```
+   */
+  dto?: TDtoVariant;
+
+  /**
+   * Input-variant selector — controls which fields are settable in the
+   * generated create/update schemas for this operation. Fields with an
+   * `inputVariants` allowlist that includes this name are added to the
+   * schema; default-variant routes strip those fields automatically.
+   *
+   * Narrowed to the actual variant names declared by `field.inputVariants`
+   * across the entity's fields when authored alongside those fields inside
+   * `defineEntity` — picking a typo is a compile error.
+   *
+   * Use this to expose admin-only or internal-only fields on a specific
+   * route without leaking them into the public-facing schema.
+   *
+   * @example
+   * ```ts
+   * fields: {
+   *   email: field.string(),
+   *   role:  field.string({ inputVariants: ['admin'] }),  // only admin variant can set
+   * }
+   * routes: {
+   *   create: {},                     // POST /users — public, role NOT settable
+   *   operations: {
+   *     adminCreate: { input: 'admin', http: { method: 'POST', path: 'admin' } },
+   *   },
+   * }
+   * ```
+   */
+  input?: TInputVariant;
 }
 
 /**
@@ -644,7 +695,10 @@ export type NamedOpHttpMethod = 'get' | 'head' | 'post' | 'put' | 'patch' | 'del
  * }
  * ```
  */
-export interface RouteNamedOperationConfig extends RouteOperationConfig {
+export interface RouteNamedOperationConfig<
+  TDtoVariant extends string = string,
+  TInputVariant extends string = string,
+> extends RouteOperationConfig<TDtoVariant, TInputVariant> {
   /**
    * HTTP method for this named operation. When omitted, the runtime infers a default
    * from the operation kind (`lookup` → `'get'`, `exists` → `'head'`, otherwise `'post'`
@@ -1013,7 +1067,10 @@ export interface RouteCascadeConfig {
  * });
  * ```
  */
-export interface EntityRouteConfig {
+export interface EntityRouteConfig<
+  TDtoVariant extends string = string,
+  TInputVariant extends string = string,
+> {
   /**
    * Config for the `POST /entity` create route.
    *
@@ -1021,7 +1078,7 @@ export interface EntityRouteConfig {
    * Merged on top of `defaults`. Auth, permission, rate-limit, events, and middleware
    * defined here override the corresponding keys in `defaults`.
    */
-  create?: RouteOperationConfig;
+  create?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Config for the `GET /entity/:id` get-by-ID route.
@@ -1030,7 +1087,7 @@ export interface EntityRouteConfig {
    * Merged on top of `defaults`. Override `auth` to `'none'` for public entity reads
    * while keeping other operations protected.
    */
-  get?: RouteOperationConfig;
+  get?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Config for the `GET /entity` list route.
@@ -1039,7 +1096,7 @@ export interface EntityRouteConfig {
    * Merged on top of `defaults`. Commonly set to `{ auth: 'none' }` when entities are
    * publicly browsable but writes require authentication.
    */
-  list?: RouteOperationConfig;
+  list?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Config for the `PATCH /entity/:id` partial-update route.
@@ -1048,7 +1105,7 @@ export interface EntityRouteConfig {
    * Merged on top of `defaults`. Use `ownerField` in `permission` to allow the resource
    * owner to update their own record without an explicit permission grant.
    */
-  update?: RouteOperationConfig;
+  update?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Config for the `DELETE /entity/:id` delete route.
@@ -1057,7 +1114,7 @@ export interface EntityRouteConfig {
    * Merged on top of `defaults`. Set a tighter `rateLimit` here than on `create` since
    * deletes are typically lower-frequency but higher-impact operations.
    */
-  delete?: RouteOperationConfig;
+  delete?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Named custom operations beyond the standard CRUD set.
@@ -1068,7 +1125,7 @@ export interface EntityRouteConfig {
    * same precedence rules as CRUD operations. Use `resolveOpConfig(routes, opName)` to get
    * the merged config for a given operation name at route-registration time.
    */
-  operations?: Record<string, RouteNamedOperationConfig>;
+  operations?: Record<string, RouteNamedOperationConfig<TDtoVariant, TInputVariant>>;
 
   /**
    * Default config applied to all operations (merged, specific ops override).
@@ -1079,7 +1136,7 @@ export interface EntityRouteConfig {
    * repeating it on every operation, then selectively override individual operations
    * (e.g. `list: { auth: 'none' }`) as needed.
    */
-  defaults?: RouteOperationConfig;
+  defaults?: RouteOperationConfig<TDtoVariant, TInputVariant>;
 
   /**
    * Route keys to exclude from generation.

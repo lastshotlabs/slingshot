@@ -254,14 +254,24 @@ function registerRoute(
   router.openapi(route, handler);
 }
 
-function createDomainRespond(c: import('hono').Context<AppEnv>, routeKey: string) {
+function createDomainRespond(
+  c: import('hono').Context<AppEnv>,
+  routeKey: string,
+  responses?: TypedRouteResponses,
+) {
+  function applyTransform(data: unknown, status: number): unknown {
+    const spec = responses?.[status];
+    if (!spec?.transform) return data;
+    return spec.transform(data);
+  }
   return {
     json(data: unknown, status = 200) {
       c.set('__packageRouteKey' as never, routeKey as never);
-      if (typeof data === 'object' && data !== null) {
-        c.set('__opResult' as never, data as never);
+      const transformed = applyTransform(data, status);
+      if (typeof transformed === 'object' && transformed !== null) {
+        c.set('__opResult' as never, transformed as never);
       }
-      return c.json(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+      return c.json(transformed, status as import('hono/utils/http-status').ContentfulStatusCode);
     },
     text(data: string, status = 200) {
       c.set('__packageRouteKey' as never, routeKey as never);
@@ -961,7 +971,7 @@ function createPackagePlugin(
               const actor = getActor(c);
               const params = parsedParams.data as Record<string, string>;
               const query = asObjectRecord(parsedQuery.data);
-              const respond = createDomainRespond(c, routeKey);
+              const respond = createDomainRespond(c, routeKey, routeDefinition.responses);
               const requestContext = {
                 actor,
                 requestId: c.get('requestId' as never) as string | undefined,

@@ -1,162 +1,339 @@
 ---
 title: DTO Mapping
-description: Shape entity records into API responses with typed transformers
+description: Project storage records into API responses and gate input fields per route — symmetric input and output baked into the route surface
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Your storage shape rarely matches your API shape — entity records carry `_id`, ObjectId
-refs, raw `Date` objects, and internal fields like `passwordHash` and
-`internalNotes` that have no business in a public response. `createDtoMapper` builds
-a typed mapper from a Zod schema that turns DB documents into clean DTOs without the
-manual field-by-field copying.
+Your storage shape rarely matches your API shape. Records carry internal fields like
+`passwordHash`, `internalNotes`, denormalized counters, and related-record IDs that have no
+business in a public response — and your public create endpoint shouldn't accept
+`role: 'admin'` from the body. Slingshot bakes both the **outgoing projection** and the
+**incoming field gating** into the route surface, symmetrically.
 
 ## What you can do
 
-- Define a DTO shape with a Zod schema — type and runtime validation in one place
-- Auto-rename `_id` to `id` (with `toString()`)
-- Rename ObjectId reference fields from DB names to API names
-- Convert `Date` fields to ISO strings
-- Map subdocument arrays through their own mappers
-- Coerce nullable Zod fields from `undefined` to `null`
+**Output (responses):**
 
-## Map a User record to a UserDto
+| Capability                                  | Surface                                       |
+| ------------------------------------------- | --------------------------------------------- |
+| Hide a field from every response            | `field.string({ private: true })`             |
+| Project records into one default shape      | `defineEntity('User', { dto: { default } })`  |
+| Have multiple shapes per entity (list, etc.)| `dto: { default, list, admin, ... }`          |
+| Pick a variant for a CRUD route             | `routes: { list: { dto: 'list' } }`           |
+| Pick a variant on a custom entity route     | `responses[200]: { dto: 'admin' }`            |
+| Project a domain-route response             | `responses[200]: { transform: User.dto.admin }` |
+| Transform one route's response in isolation | `responses[200]: { transform: fn }`           |
+| Build a typed mapper from a Zod schema      | `createDtoMapper(schema, config)`             |
 
-```typescript title="src/users/dto.ts"
-// @skip-typecheck
-import { createDtoMapper } from '@lastshotlabs/slingshot';
+**Input (request bodies):**
+
+| Capability                                       | Surface                                        |
+| ------------------------------------------------ | ---------------------------------------------- |
+| Gate a field to specific input variants          | `field.string({ inputVariants: ['admin'] })`   |
+| Pick the input variant for a CRUD route          | `routes: { create: { input: 'admin' } }`       |
+| Pick the input variant on a custom entity route  | `op.custom({ http: { ... } , input: 'admin' })` |
+| Override the request schema entirely (any route) | `request: { body: customZodSchema }`           |
+
+The layers compose: private fields are stripped first, then the selected DTO mapper runs
+(`dto.default` unless a variant was named), then any per-route `transform`. You never call
+a mapper from inside a handler — the framework runs the chain on the way out for every
+generated route.
+
+## Layer 1: hide fields
+
+Mark sensitive or internal fields as `private` in the entity definition. They never appear
+in any response, but they're still stored, settable, and queryable internally.
+
+```typescript title="src/entities/user.ts"
+import { defineEntity, field } from '@lastshotlabs/slingshot';
+
+export const User = defineEntity('User', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    email: field.string(),
+    passwordHash: field.string({ private: true }),       // hidden from responses
+    internalNotes: field.string({ private: true, optional: true }),
+    createdAt: field.date({ default: 'now' }),
+  },
+});
+```
+
+`POST /users`, `GET /users`, `GET /users/:id`, `PATCH /users/:id` — every generated route
+omits `passwordHash` and `internalNotes` from the response. The OpenAPI spec at `/openapi.json`
+also excludes them from the documented response schema.
+
+This handles the most common case — "drop a field" — without touching a mapper.
+
+## Layer 2: entity-level DTO map
+
+When you need to rename fields, derive new ones, or coerce types (Mongo `_id` → `id`,
+`Date` → ISO string, `ObjectId` ref → string), declare a `default` mapper on the entity.
+The framework applies it to every record returned by every generated route — single
+records, arrays, and the `items` of paginated responses.
+
+```typescript title="src/entities/user.ts"
+import { createDtoMapper, defineEntity, field } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
 
-const userDtoSchema = z.object({
+const UserDto = z.object({
   id: z.string(),
   email: z.string().email(),
-  displayName: z.string().nullable(),
   organizationId: z.string(),
+  handle: z.string(),
   createdAt: z.string(),
-  updatedAt: z.string(),
 });
 
-export type UserDto = z.infer<typeof userDtoSchema>;
-
-export const toUserDto = createDtoMapper(userDtoSchema, {
-  refs: { organization: 'organizationId' },
-  dates: ['createdAt', 'updatedAt'],
-});
-```
-
-Internal fields like `passwordHash` and `internalNotes` simply aren't in
-`userDtoSchema.shape`, so they never reach the response. The mapper iterates the
-schema's fields, not the input document — extra DB fields are silently dropped.
-
-## Use the mapper in a handler
-
-```typescript title="src/users/package.ts"
-// @skip-typecheck
-import { definePackage, domain, route } from '@lastshotlabs/slingshot';
-import { toUserDto } from './dto';
-
-export const usersPackage = definePackage({
-  name: 'users',
-  domains: [
-    domain({
-      name: 'users',
-      basePath: '/users',
-      routes: [
-        route.get({
-          path: '/:id',
-          handler: async ({ params, ctx, respond }) => {
-            const user = await ctx.persistence.users.findById(params.id);
-            if (!user) return respond.notFound();
-            return respond.json(toUserDto(user));
-          },
-        }),
-        route.get({
-          path: '/',
-          handler: async ({ ctx, respond }) => {
-            const users = await ctx.persistence.users.list();
-            return respond.json({ items: users.map(toUserDto) });
-          },
-        }),
-      ],
+export const User = defineEntity('User', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    email: field.string(),
+    organization: field.string(),                  // stored as ObjectId-style ref
+    passwordHash: field.string({ private: true }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  dto: {
+    default: createDtoMapper(UserDto, {
+      refs: { organization: 'organizationId' },    // rename ref field
+      dates: ['createdAt'],                        // Date → ISO string
     }),
-  ],
+  },
 });
 ```
 
-Pass single records or arrays through the same mapper — it's a plain function, so
-`.map(toUserDto)` works without ceremony.
+`createDtoMapper` builds a typed function from your Zod schema and a small config:
 
-## Subdocument arrays
+- `refs` — rename ObjectId-style fields to their `Id` API names
+- `dates` — list of fields to convert from `Date` to ISO string
+- `subdocs` — sub-mappers for nested document arrays
 
-When a record has nested documents — comments on a post, line items on an order —
-declare a sub-mapper for the field:
+The handler still works with raw records; the mapper runs on the response body.
+
+### Multiple variants per entity
+
+When one entity needs more than one shape — slimmer rows for list views, fuller payloads
+for admin endpoints, or a public-facing projection that drops sensitive fields — declare
+named variants alongside `default` in the same map. Routes pick a variant by name; the
+default is used when none is specified.
+
+```typescript title="src/entities/user.ts"
+const UserDto       = z.object({ id: z.string(), email: z.string(), role: z.string() });
+const UserListItem  = z.object({ id: z.string(), email: z.string() });
+const UserPublicDto = z.object({ id: z.string(), handle: z.string() });
+const UserAdminDto  = z.object({ id: z.string(), email: z.string(), role: z.string(), createdAt: z.string() });
+
+export const User = defineEntity('User', {
+  fields: { /* ... */ },
+  dto: {
+    default: createDtoMapper(UserDto,       {}),
+    list:    createDtoMapper(UserListItem,  {}),
+    public:  createDtoMapper(UserPublicDto, {}),
+    admin:   createDtoMapper(UserAdminDto,  { dates: ['createdAt'] }),
+  },
+  routes: {
+    list: { dto: 'list' },     // GET /users → UserListItem
+    get:  { dto: 'public' },   // GET /users/:id → UserPublicDto
+    // create / update fall through to dto.default
+  },
+});
+```
+
+For custom operations on the same entity, pick a variant on the response spec instead
+of the route config:
+
+```typescript
+op.custom({
+  http: {
+    method: 'GET',
+    path: '/admin/:id',
+    responses: { 200: { description: 'Admin view', dto: 'admin' } },
+  },
+  handler: async ({ params, ctx }) => ctx.users.findById(params.id),
+});
+```
+
+For package-domain routes (which can return records of any entity, so there's no
+implicit lookup target), pass the variant function directly through `transform`:
+
+```typescript
+route.get({
+  path: '/users/:id/admin',
+  responses: {
+    200: { description: 'Admin view', transform: User.dto.admin },
+  },
+  handler: async ({ ctx, params, respond }) => {
+    const user = await ctx.users.findById(params.id);
+    return respond.json(user);
+  },
+});
+```
+
+`User.dto.admin` is just the mapper function you declared on the entity — passing
+it as `transform` runs it on the response body the same way Layer 2 does for
+entity-generated routes.
+
+## Layer 3: per-route transform
+
+When one route needs a different shape than the rest — a public preview that shows a
+subset of fields, an admin endpoint that includes more — declare the transform on the
+route's response spec. It runs after the entity-level mapper, so it sees the projected
+DTO.
+
+```typescript title="src/blog/posts.ts"
+// @skip-typecheck
+import { domain, route } from '@lastshotlabs/slingshot';
+
+route.get({
+  path: '/posts/:id/preview',
+  responses: {
+    200: {
+      description: 'Public preview',
+      schema: PostPreview,
+      transform: post => ({
+        title: (post as { title: string }).title,
+        excerpt: (post as { body: string }).body.slice(0, 200),
+      }),
+    },
+  },
+  handler: async ({ params, ctx, respond }) => {
+    const post = await ctx.posts.findById(params.id);
+    if (!post) return respond.notFound();
+    return respond.json(post); // raw record — transform shapes it before sending
+  },
+});
+```
+
+The `transform` runs synchronously between your handler returning and the response being
+serialized. It works for any route — entity-generated, package-domain, or `routesDir`.
+
+## Input-side: gating which fields a route accepts
+
+Output DTOs control what flows out. Input variants control what flows **in**. They use the
+same naming model — declare the variant on the field, pick it on the route — but apply to
+the auto-generated create/update schemas instead of the response.
+
+### Mark a field as variant-only
+
+```typescript title="src/entities/user.ts"
+export const User = defineEntity('User', {
+  fields: {
+    id:    field.string({ primary: true, default: 'uuid' }),
+    email: field.string(),
+    role:  field.string({ inputVariants: ['admin'] }),       // only admin variant can set
+    passwordHash: field.string({ private: true, inputVariants: ['internal'] }), // server-only
+  },
+});
+```
+
+A field with an `inputVariants` allowlist is **never settable by the default variant** —
+it's only included in the create/update schema when a route explicitly names a variant
+that's in the list.
+
+### Pick the input variant per route
+
+```typescript title="src/entities/user.ts"
+defineEntity('User', {
+  fields: { /* as above */ },
+  routes: {
+    // POST /users — public route, default variant. `role` is silently stripped from
+    // the request body before the adapter sees it.
+    create: {},
+
+    // POST /users/admin — admin variant. `role` is settable here.
+    operations: {
+      adminCreate: {
+        input: 'admin',
+        http: { method: 'POST', path: 'admin' },
+      },
+    },
+  },
+});
+```
+
+The framework parses every request body against the variant-filtered Zod schema. Fields
+not in the schema are silently dropped (Zod's `.strip()` default), so a malicious client
+that POSTs `{ email, role: 'admin' }` to the public endpoint hits the adapter with only
+`{ email }` — the variant gate is a real security boundary, not just OpenAPI documentation.
+
+### Why not just custom routes?
+
+You can always declare a custom op with its own `request: { body: SomeSchema }`. The
+variant model gives you something stronger: a single field-level declaration that
+propagates to every route. Add `inputVariants: ['admin']` to one field, and **every**
+public route in your app automatically rejects (strips) that field. No risk of forgetting
+to enforce the gate on a new endpoint.
+
+## How the layers compose
+
+For every request on its way **in** to a generated entity route, the framework runs:
+
+1. **Parse against the variant-filtered create/update schema** — fields whose
+   `inputVariants` allowlist excludes the route's chosen `input` variant are stripped from
+   the parsed body. Default-variant routes strip any field with a non-empty allowlist.
+2. **Apply dataScope bindings** — server-injected fields (e.g. `tenantId` from request
+   context) overwrite client-supplied values.
+3. **Hand to the adapter** — the adapter sees only the gated, server-augmented body.
+
+For every record on its way **out** of a generated entity route, the framework runs:
+
+1. **Strip private fields** — drop everything marked `private: true`.
+2. **Selected DTO mapper** — `dto[variant](record)` where `variant` is taken from
+   `routes.<op>.dto` (CRUD routes) or `responses[status].dto` (entity custom ops),
+   falling back to `dto.default` when no variant is named. Picking an unknown
+   variant logs a one-time warning and skips mapping.
+3. **Per-route transform** — `responses[status].transform(value)` if configured.
+
+You can use any combination. Most apps need only Layer 1 — `private: true` flags on a few
+fields. Apps with a richer API contract reach for Layer 2 (single shape, just `default`)
+and add named variants when one entity needs more than one. Layer 3 is the escape hatch
+for the one route whose shape doesn't justify a named variant.
+
+## Custom domain routes
+
+Custom routes (inside `definePackage`'s `domains`) are not entity-generated, so private
+fields and entity-level mappers don't apply automatically — you control the response shape
+yourself. Use `responses.<status>.transform` if you want a typed projection helper:
 
 ```typescript
 // @skip-typecheck
-import { createDtoMapper } from '@lastshotlabs/slingshot';
+import { route, createDtoMapper } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
 
-const lineItemDtoSchema = z.object({
-  id: z.string(),
-  productId: z.string(),
-  quantity: z.number(),
-  total: z.number(),
-});
+const userDtoMapper = createDtoMapper(
+  z.object({ id: z.string(), email: z.string(), handle: z.string() }),
+  { dates: [] },
+);
 
-const toLineItemDto = createDtoMapper(lineItemDtoSchema, {
-  refs: { product: 'productId' },
-});
-
-const orderDtoSchema = z.object({
-  id: z.string(),
-  customerId: z.string(),
-  items: z.array(lineItemDtoSchema),
-  placedAt: z.string(),
-});
-
-export const toOrderDto = createDtoMapper(orderDtoSchema, {
-  refs: { customer: 'customerId' },
-  dates: ['placedAt'],
-  subdocs: { items: toLineItemDto },
+route.get({
+  path: '/me',
+  responses: {
+    200: { description: 'Current user', transform: userDtoMapper },
+  },
+  handler: async ({ ctx, respond }) => {
+    const user = await ctx.users.findById(ctx.actor.id);
+    return respond.json(user);
+  },
 });
 ```
 
-Each line item flows through `toLineItemDto`, so refs and dates inside the
-subdocument get mapped consistently.
+## What `createDtoMapper` produces
 
-<Aside type="tip">
-  Nullable Zod fields (`.nullable()`, `.optional()`, or `.default(...)` wrapping a
-  nullable type) get `undefined → null` coercion automatically. Other fields pass
-  through unchanged.
-</Aside>
+A function `(record) => dto`. It iterates the keys in your Zod schema and:
 
-## Related: `zodToMongoose`
+- Maps `_id` → `id` automatically (calling `toString()`)
+- Maps `refs` (DB field → API field) with `toString()`
+- Coerces `dates` to ISO strings via `toISOString()`
+- Recurses into `subdocs` arrays through their sub-mappers
+- Coerces `undefined` to `null` for nullable Zod fields
+- Drops any input field not in the schema
 
-`createDtoMapper` is the *DB-to-API* primitive. Its symmetric counterpart is
-`zodToMongoose`, which generates a Mongoose schema *from* a Zod schema — letting you
-keep one source of truth for the shape and project it into both directions:
-
-```typescript
-// @skip-typecheck
-import { zodToMongoose } from '@lastshotlabs/slingshot';
-import { Schema, model } from 'mongoose';
-import { z } from 'zod';
-
-const userZodSchema = z.object({
-  email: z.string().email(),
-  passwordHash: z.string(),
-  organizationId: z.string(),
-});
-
-const UserSchema = new Schema(zodToMongoose(userZodSchema));
-export const User = model('User', UserSchema);
-```
-
-One Zod definition, a Mongoose schema for storage, and a `createDtoMapper` for
-responses — three concerns, one source.
+It's a plain function. Use it standalone if you ever need to project a record outside the
+framework — for example, when serializing to a queue payload or a cache entry.
 
 ## What's next
 
-- [Pagination](/slingshot/app-authoring/pagination/) — combine DTOs with cursor-based pagination
+- [Pagination](/slingshot/app-authoring/pagination/) — combine projections with cursor pagination
 - [Validation](/slingshot/app-authoring/validation/) — request validation with the same Zod schemas
 - [Data and Entities](/slingshot/core-features/data-and-entities/) — the broader entity story

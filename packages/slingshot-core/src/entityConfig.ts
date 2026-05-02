@@ -104,6 +104,36 @@ export interface FieldOptions {
   primary?: boolean;
   /** Cannot be changed after creation (excluded from UpdateInput). */
   immutable?: boolean;
+  /**
+   * Hide the field from generated API responses. The field is still stored, can
+   * still be set in create/update inputs, and is still queryable internally;
+   * it just never appears in any response schema or response body produced by
+   * generated entity routes. Use for credentials, secrets, internal flags, and
+   * audit-only data.
+   */
+  private?: boolean;
+  /**
+   * Restrict which named input variants are allowed to set this field. The
+   * field is always settable by variants whose name appears in this array; it
+   * is NEVER settable by the default input variant or by variants not listed.
+   *
+   * Used together with `routes.<op>.input: 'variantName'` to gate fields like
+   * `role` (admin-only) or `passwordHash` (internal-only) so they don't leak
+   * into the public-facing create/update schemas.
+   *
+   * Omit (or leave empty) to make the field settable by every variant — the
+   * default behavior.
+   *
+   * @example
+   * ```ts
+   * fields: {
+   *   email: field.string(),
+   *   role:  field.string({ inputVariants: ['admin'] }),         // only admin variant can set
+   *   passwordHash: field.string({ inputVariants: ['internal'] }), // server-only path
+   * }
+   * ```
+   */
+  inputVariants?: readonly string[];
 }
 
 /**
@@ -126,11 +156,23 @@ export interface FieldDef<
   Default extends string | number | boolean | undefined = string | number | boolean | undefined,
   OnUpdate extends 'now' | undefined = 'now' | undefined,
   EnumValues extends readonly string[] = readonly string[],
+  InputVariants extends readonly string[] | undefined = readonly string[] | undefined,
 > {
   readonly type: T;
   readonly optional: IsOptional;
   readonly primary: boolean;
   readonly immutable: boolean;
+  /**
+   * Field is hidden from generated API responses. See `FieldOptions.private`.
+   */
+  readonly private: boolean;
+  /**
+   * Named input-variant allowlist. Empty/undefined means all variants
+   * (including default) may set this field. The literal type of this array
+   * is preserved through the `InputVariants` type parameter so that the
+   * variant union can be derived at the entity level for narrowing.
+   */
+  readonly inputVariants?: InputVariants;
   readonly default?: Default;
   readonly onUpdate?: OnUpdate;
   readonly enumValues?: EnumValues;
@@ -156,6 +198,12 @@ type ResolveDflt<O> = O extends { default: infer D extends string | number | boo
 
 type ResolveUpd<O> = O extends { onUpdate: 'now' } ? 'now' : undefined;
 
+type ResolveInputVariants<O> = O extends {
+  inputVariants: infer V extends readonly string[];
+}
+  ? V
+  : undefined;
+
 // ============================================================================
 // field.*() builder API
 // ============================================================================
@@ -168,12 +216,21 @@ function makeField<
   type: T,
   opts?: O,
   enumValues?: EV,
-): FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> {
-  const field: FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> = {
+): FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV, ResolveInputVariants<O>> {
+  const field: FieldDef<
+    T,
+    ResolveOpt<O>,
+    ResolveDflt<O>,
+    ResolveUpd<O>,
+    EV,
+    ResolveInputVariants<O>
+  > = {
     type,
     optional: (opts?.optional ?? false) as ResolveOpt<O>,
     primary: opts?.primary ?? false,
     immutable: opts?.immutable ?? opts?.primary ?? false, // PK is immutable by default
+    private: opts?.private ?? false,
+    inputVariants: opts?.inputVariants as ResolveInputVariants<O>,
     default: opts?.default as ResolveDflt<O>,
     onUpdate: opts?.onUpdate as ResolveUpd<O>,
     enumValues,
@@ -786,6 +843,49 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
   readonly storageFields?: EntityStorageFieldMap;
   /** Storage convention overrides (Redis key format, custom ID/default generators, etc.). */
   readonly conventions?: EntityStorageConventions;
+  /**
+   * Optional DTO mapping applied to every record returned by generated routes.
+   * Declare a `default` mapper plus any named variants (`list`, `admin`,
+   * `public`, …); routes pick one via `routes.<op>.dto` (entity CRUD) or
+   * `responses[status].dto` (custom and domain routes). The selected mapper
+   * runs after `private: true` field stripping and before any per-route
+   * `transform`.
+   */
+  readonly dto?: EntityDtoConfig;
+}
+
+/**
+ * Single DTO mapper function — receives a storage record and returns the
+ * API shape for it. The framework applies the selected mapper to single
+ * records, arrays, and the `items` of paginated responses automatically.
+ *
+ * `createDtoMapper(...)` from `@lastshotlabs/slingshot` produces a function
+ * that fits this contract.
+ */
+export type EntityDtoMapper = (record: Record<string, unknown>) => unknown;
+
+/**
+ * Entity-level DTO config — a flat map of mapper names to mapper functions.
+ *
+ * The reserved `default` key is applied when a route does not name a variant.
+ * Any other key becomes a named variant selectable via `routes.<op>.dto` (for
+ * entity CRUD routes) or `responses[status].dto` (for custom ops and domain
+ * routes). Single-shape entities use only `{ default: ... }`.
+ *
+ * @example
+ * ```ts
+ * dto: {
+ *   default: createDtoMapper(UserDto, { dates: ['createdAt'] }),
+ *   list:    createDtoMapper(UserListItemDto, { dates: ['createdAt'] }),
+ *   admin:   createDtoMapper(UserAdminDto, { dates: ['createdAt'] }),
+ * }
+ * ```
+ */
+export interface EntityDtoConfig {
+  /** Default mapper — applied when a route does not select a named variant. */
+  readonly default?: EntityDtoMapper;
+  /** Named variants — selected by name via `routes.<op>.dto` or `responses[status].dto`. */
+  readonly [variant: string]: EntityDtoMapper | undefined;
 }
 
 // ============================================================================

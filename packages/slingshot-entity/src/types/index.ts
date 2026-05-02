@@ -4,6 +4,7 @@ export type {
   FieldOptions,
   FieldType,
   ResolveDflt,
+  ResolveInputVariants,
   ResolveOpt,
   ResolveUpd,
 } from './fields';
@@ -17,6 +18,7 @@ export type {
   EntityStorageHints,
   EntityTtlConfig,
   EntityConfig,
+  ExtractInputVariants,
   ResolvedEntityConfig,
 } from './entity';
 

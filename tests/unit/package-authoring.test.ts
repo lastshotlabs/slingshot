@@ -675,4 +675,50 @@ describe('package-first authoring', () => {
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' });
   });
+
+  test('per-route responses[status].transform shapes the response body', async () => {
+    const observedHandlerOutput: Array<unknown> = [];
+
+    const notesPackage = definePackage({
+      name: 'notes',
+      domains: [
+        domain({
+          name: 'projections',
+          basePath: '/projections',
+          routes: [
+            route.get({
+              path: '/wrapped',
+              responses: {
+                200: {
+                  description: 'Wrapped payload',
+                  transform: value => {
+                    observedHandlerOutput.push(value);
+                    return { wrapped: true, payload: value };
+                  },
+                },
+              },
+              async handler(ctx: PackageDomainRouteContext) {
+                return ctx.respond.json({ note: 'plain' });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const result = await createApp({
+      ...baseConfig,
+      packages: [notesPackage],
+    });
+    createdContexts.push(result.ctx);
+
+    const response = await result.app.request('/projections/wrapped');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      wrapped: true,
+      payload: { note: 'plain' },
+    });
+    // Transform sees the raw handler output (not the wrapped envelope).
+    expect(observedHandlerOutput).toEqual([{ note: 'plain' }]);
+  });
 });

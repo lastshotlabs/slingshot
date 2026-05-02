@@ -110,20 +110,17 @@ When one package needs to read or write another package's entity data, use `enti
 
 ### Scenario: search package reads blog posts
 
+Pass the entity module directly to `entityRef` — its type, including any registered
+operations, flows through to `entities.get(...)` automatically:
+
 ```typescript title="src/packages/search.ts"
 // @skip-typecheck
-import { definePackage, domain, entityRef, route } from '@lastshotlabs/slingshot';
-import type { PackageEntityAdapterFor } from '@lastshotlabs/slingshot-entity';
+import { definePackage, domain, entity, entityRef, route } from '@lastshotlabs/slingshot';
 import { Post } from '../entities/post';
 import { PostOps } from '../entities/post-operations';
 
-// Create a typed reference to the blog package's Post entity
-type PostAdapter = PackageEntityAdapterFor<typeof Post, typeof PostOps.operations>;
-
-const PostRef = entityRef<PostAdapter>({
-  plugin: 'blog',
-  entity: 'Post',
-});
+const postModule = entity({ config: Post, operations: PostOps });
+const PostRef = entityRef(postModule, { plugin: 'blog' });
 
 export const searchPackage = definePackage({
   name: 'search',
@@ -139,12 +136,9 @@ export const searchPackage = definePackage({
           summary: 'Search posts by keyword',
           handler: async ({ query, entities, respond }) => {
             const posts = entities.get(PostRef);
-            const results = await posts.list({});
-            // Filter by query in-memory for simplicity
+            const all = await posts.list({});
             const keyword = String(query?.q ?? '').toLowerCase();
-            const filtered = results.items.filter((p: any) =>
-              p.title.toLowerCase().includes(keyword),
-            );
+            const filtered = all.items.filter(p => p.title.toLowerCase().includes(keyword));
             return respond.json({ results: filtered });
           },
         }),
@@ -154,9 +148,9 @@ export const searchPackage = definePackage({
           summary: 'Look up a post by slug',
           handler: async ({ params, entities, respond }) => {
             const posts = entities.get(PostRef);
-            const result = await posts.bySlug({ slug: params.slug });
-            if (!result) return respond.notFound();
-            return respond.json({ post: result });
+            const post = await posts.bySlug({ slug: params.slug });
+            if (!post) return respond.notFound();
+            return respond.json({ post });
           },
         }),
       ],
@@ -171,18 +165,19 @@ export const searchPackage = definePackage({
 
 - Standard methods: `get`, `list`, `create`, `update`, `delete`
 - Operation methods: `byAuthor`, `bySlug`, `publish` (from `PostOps`)
-- Full TypeScript autocompletion
+- Full TypeScript autocompletion — no manual `PackageEntityAdapterFor` annotations
 
-### entityRef without type imports
+### entityRef without the entity module
 
-If you do not have access to the entity type (e.g., the entity is in a third-party package),
-you can create an untyped ref:
+If you don't have access to the entity module (e.g., the entity is in a third-party
+package whose source you don't import), use the stringly-typed form. The adapter still
+works at runtime, but operation methods aren't autocompleted:
 
 ```typescript
 const PostRef = entityRef({ plugin: 'blog', entity: 'Post' });
 ```
 
-The adapter will work at runtime but will not have TypeScript autocompletion for operation methods.
+Reach for this form only when you can't import the entity module directly.
 
 ## Real-world example: a SaaS app
 
@@ -291,5 +286,6 @@ const orderPackage = definePackage({
 
 ## Next
 
-- [definePackage](/slingshot/package-first/define-package/) — the full package contract
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — the other way to decouple packages
+- [Escape Hatches](/slingshot/package-first/escape-hatches/) — when capabilities and entityRef aren't enough
 - [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — how entity adapters resolve across backends

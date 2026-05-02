@@ -1,0 +1,38 @@
+---
+import Default from '@astrojs/starlight/components/Head.astro';
+import { ClientRouter } from 'astro:transitions';
+---
+
+<Default><slot /></Default>
+<ClientRouter />
+
+<script is:inline>
+  // Preserve sidebar scroll across Astro view transitions.
+  // Starlight re-renders the sidebar from server HTML on each navigation
+  // (so the "current page" highlight stays correct); we restore scroll manually.
+  (() => {
+    const SIDEBAR_SELECTORS = [
+      '.sidebar-pane',
+      '.sidebar-content',
+      'starlight-sidebar-states',
+      'aside .sidebar',
+    ];
+    function findSidebar() {
+      for (const sel of SIDEBAR_SELECTORS) {
+        const el = document.querySelector(sel);
+        if (el) return el;
+      }
+      return null;
+    }
+    let savedScroll = 0;
+    document.addEventListener('astro:before-preparation', () => {
+      const el = findSidebar();
+      if (el) savedScroll = el.scrollTop;
+    });
+    document.addEventListener('astro:page-load', () => {
+      if (!savedScroll) return;
+      const el = findSidebar();
+      if (el) el.scrollTop = savedScroll;
+    });
+  })();
+</script>

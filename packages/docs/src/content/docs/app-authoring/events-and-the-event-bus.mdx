@@ -1,29 +1,31 @@
 ---
 title: Events and the Event Bus
-description: Typed events, canonical publishing, scopes, exposure, and app-level transport
+description: Typed events, fanout, route shorthand, exposure rules, and the shared bus behind SSE and webhooks
 ---
 
-The event bus is part of the core application model.
+The event bus is the shared transport behind package-to-package side effects, SSE, webhook
+delivery, search sync, and lifecycle events. Every Slingshot app gets one — `createApp()`
+creates an in-process bus by default.
 
-Every Slingshot app gets one. If you do not supply `eventBus`, `createApp()` creates a default
-in-process adapter for you.
-
-These examples extend the [starter app](/slingshot/app-authoring/starter-app/) with a publication
-event for blog posts.
+You define an event once. Anyone can publish it. Anyone can subscribe. No imports between
+packages, no tight coupling.
 
 ## The model
 
-- `defineEvent(...)` defines the event contract
-- `ctx.events.publish(...)` is the canonical publish path
-- `bus.on(...)` is the subscription surface
-- event definitions control exposure and scope for SSE, webhooks, and external consumers
+| Concept                        | Surface                                                  |
+| ------------------------------ | -------------------------------------------------------- |
+| Type the event payload         | `declare module ... interface SlingshotEventMap { ... }` |
+| Register exposure and scope    | `defineEvent(...)` in `setupMiddleware({ events })`      |
+| Publish from a route directly  | `event: 'key'` or `{ key, payload }` on the route        |
+| Publish from anywhere else     | `ctx.events.publish('key', payload)`                     |
+| Subscribe                      | `bus.on('key', handler)` in `setupPost`                  |
+| Swap the transport             | `defineApp({ eventBus: ... })`                           |
 
-## Define an event once
+## Define the event type
+
+Augment the framework event map once to get typed `publish` and `on` calls everywhere:
 
 ```typescript title="src/blog/events.ts"
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { defineEvent } from '@lastshotlabs/slingshot-core';
-
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
     'blog:post.published': {
@@ -32,8 +34,22 @@ declare module '@lastshotlabs/slingshot-core' {
       title: string;
       slug: string;
     };
+    'user.created': { userId: string; email: string };
   }
 }
+```
+
+Once augmented, every `publish` and `on` call for these keys is type-checked end to end.
+
+## Register exposure and scope
+
+The type augmentation only describes the payload shape. To control whether the event flows
+to browsers (SSE), webhook subscribers, or external connectors, register a runtime
+definition with `defineEvent(...)`:
+
+```typescript title="src/blog/events.ts"
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { defineEvent } from '@lastshotlabs/slingshot-core';
 
 export const blogEventsPlugin: SlingshotPlugin = {
   name: 'blog-events',
@@ -42,7 +58,7 @@ export const blogEventsPlugin: SlingshotPlugin = {
       defineEvent('blog:post.published', {
         ownerPlugin: 'blog',
         exposure: ['client-safe', 'user-webhook'],
-        resolveScope(payload, _ctx) {
+        resolveScope(payload) {
           return {
             userId: payload.authorId,
             actorId: payload.authorId,
@@ -56,110 +72,172 @@ export const blogEventsPlugin: SlingshotPlugin = {
 };
 ```
 
-The definition is not ceremony. It controls validation, exposure, and scope resolution for every
-downstream transport that depends on the event model.
+| Exposure          | Reaches                                                 |
+| ----------------- | ------------------------------------------------------- |
+| `internal`        | In-process subscribers only                             |
+| `client-safe`     | Browser SSE clients                                     |
+| `user-webhook`    | Webhooks scoped to the event's user                     |
+| `tenant-webhook`  | Webhooks scoped to the event's tenant                   |
+| `app-webhook`     | App-wide webhook subscribers                            |
+| `connector`       | External connector integrations                         |
 
-## Publish through `ctx.events`
+`resolveScope` produces the routing key used by SSE filtering, webhook fan-out, and any
+other consumer that needs to know "who is this event about." A single event model fans
+out into every transport without each transport inventing its own allowlist.
 
-```typescript title="src/publish-post.ts"
-// @skip-typecheck
-import { createApp, getContext } from '@lastshotlabs/slingshot';
-import { blogEventsPlugin } from './blog/events';
-import { blogPackage } from './blog/package';
+## Three ways to publish
 
-const { app } = await createApp({
-  packages: [blogPackage],
-  plugins: [blogEventsPlugin],
-});
-const ctx = getContext(app);
+### From a generated entity route
 
-ctx.events.publish('blog:post.published', {
-  postId: 'post-123',
-  authorId: 'user-123',
-  title: 'Shipping the docs rewrite',
-  slug: 'shipping-the-docs-rewrite',
+Set `event` on a CRUD or named operation in the entity's `routes` config — the framework
+publishes after the operation succeeds, with the record as payload:
+
+```typescript title="src/blog/post.ts"
+defineEntity('Post', {
+  fields: { /* ... */ },
+  routes: {
+    create: { event: 'blog:post.published' },                        // shorthand: emit on create
+    update: { event: { key: 'blog:post.updated', payload: ['id', 'title'] } }, // explicit fields
+  },
 });
 ```
 
-This is the canonical path because it produces the framework event envelope, applies the
-registered event definition, and keeps SSE and webhook filtering coherent.
+The shorthand passes the full record as payload. The object form lets you whitelist which
+fields go on the wire.
 
-Use raw `bus.emit(...)` only for lower-level or transport-specific behavior.
+### From a custom domain route
 
-## Subscribe in `setupPost`
+Same `event:` field on `route.*()`:
 
-```typescript title="src/blog/subscribers.ts"
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
+```typescript title="src/packages/blog.ts"
+route.post({
+  path: '/posts/:id/publish',
+  auth: 'userAuth',
+  event: { key: 'blog:post.published', payload: ['id', 'title', 'slug'] },
+  handler: async ({ params, ctx, respond }) => {
+    const post = await ctx.posts.publish(params.id);
+    return respond.json(post);
+  },
+});
+```
 
-export const analyticsPlugin: SlingshotPlugin = {
-  name: 'analytics',
+Events declared this way fire only when the handler returns a 2xx response — error paths
+do not leak partial state to subscribers.
+
+### From anywhere else
+
+Use `ctx.events.publish(...)` from any handler, plugin lifecycle hook, or background job.
+This is the canonical path for non-route-driven events:
+
+```typescript
+// @skip-typecheck
+import { getContext } from '@lastshotlabs/slingshot';
+
+const ctx = getContext(app);
+ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' });
+```
+
+`ctx.events.publish` produces the framework event envelope, applies the registered event
+definition, and keeps SSE and webhook filtering coherent. Use raw `bus.emit(...)` only for
+transport-specific behavior where you don't want the registered envelope.
+
+## Subscribe
+
+Subscribe in `setupPost` so all publishers are wired before any subscriber starts listening:
+
+```typescript title="src/packages/notifications.ts"
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+export const notificationsPlugin: SlingshotPlugin = {
+  name: 'notifications',
   setupPost({ bus }) {
     bus.on('blog:post.published', async payload => {
-      await savePublicationAudit(payload.postId, payload.slug);
+      await sendNewPostNotification(payload.authorId, payload.title);
+    });
+
+    bus.on('user.created', async ({ email }) => {
+      await sendWelcomeEmail(email);
     });
   },
 };
-
-declare function savePublicationAudit(postId: string, slug: string): Promise<void>;
 ```
 
-`setupPost` is the safe point for subscriptions because route and runtime registration is complete.
+No dependency between the publisher and the subscriber. The blog package fires
+`blog:post.published`; notifications, search, analytics, and webhooks all subscribe
+independently.
 
-## Exposure and scope are first-class
+## Fanout: one event, many effects
 
-Event definitions can mark events as:
+A single event can drive many side effects. Each subscriber does its own thing:
 
-- `internal`
-- `client-safe`
-- `tenant-webhook`
-- `user-webhook`
-- `app-webhook`
-- `connector`
+```
+blog:post.published
+  ├── notifications plugin → sends email + push to author's followers
+  ├── search plugin        → indexes the post in OpenSearch
+  ├── SSE endpoint         → notifies subscribed dashboards in realtime
+  ├── webhook service      → POSTs to user-configured webhook URLs
+  └── orchestration        → enqueues a "boost new post" workflow
+```
 
-That is how one event model fans out into multiple delivery surfaces without requiring each surface
-to invent its own allowlist rules.
+This is the entire reason the bus exists. The auth package never imports the mail package
+even when login emails go out — auth fires `auth:login`, mail subscribes.
+
+## Built-in events
+
+These fire automatically with no setup:
+
+| Event                          | When it fires             |
+| ------------------------------ | ------------------------- |
+| `auth:user.created`            | A new user registers      |
+| `auth:user.deleted`            | A user account is deleted |
+| `auth:login`                   | A user logs in            |
+| `auth:logout`                  | A user logs out           |
+| `app:ready`                    | All plugins have booted   |
+| `app:shutdown`                 | Server is shutting down   |
+| `security.rate_limit.exceeded` | A rate limit was hit      |
+
+Subscribe to any of them with `bus.on(...)` in `setupPost`.
 
 ## Security-sensitive events
 
-Some namespaces are intentionally not browser-deliverable. `SECURITY_EVENT_TYPES` and related
-framework rules exist so transports like SSE can filter sensitive events safely.
+Some namespaces are intentionally not browser-deliverable. `SECURITY_EVENT_TYPES` and the
+related framework rules ensure SSE and other client-facing transports filter sensitive
+events even if a plugin accidentally marks one `client-safe`. Auth tokens, rate-limit
+internals, and security signals never reach the browser regardless of configuration.
 
 ## Scaling the bus
 
-The default in-process adapter is correct for a single process. At scale, supply a shared bus:
+The default in-process adapter is correct for a single process. For multi-instance
+deployments, swap to a shared transport — your event definitions and subscribers don't
+change, only the wire:
 
-```typescript title="app.config.ts (excerpt)"
+```typescript title="app.config.ts"
+// @skip-typecheck
 import { defineApp } from '@lastshotlabs/slingshot';
 
-declare const mySharedEventBus: import('@lastshotlabs/slingshot-core').SlingshotEventBus;
+declare const sharedBus: import('@lastshotlabs/slingshot-core').SlingshotEventBus;
 
 export default defineApp({
-  eventBus: mySharedEventBus,
+  eventBus: sharedBus, // or 'bullmq', when using slingshot-bullmq
 });
 ```
 
-That decision affects cross-instance event delivery, webhook fan-out, and any package behavior that
-depends on events crossing instance boundaries.
+Cross-instance event delivery, webhook fan-out, and any package behavior that depends on
+events crossing process boundaries flow through this single decision.
 
 ## The default, the customization, and the escape hatch
 
-- default: let `createApp()` create the in-process bus and publish through `ctx.events`
-- customize: register explicit event definitions with `defineEvent(...)` and subscribe in
-  `setupPost`
-- escape hatch: provide your own `eventBus` implementation when the app needs shared multi-instance
-  delivery
-
-## This is why the bus is a core page
-
-The event bus is not a plugin-authoring side topic. It is the shared event transport behind:
-
-- package-to-package side effects
-- SSE
-- webhook delivery
-- search sync
-- security and lifecycle events
+- **Default** — let `createApp()` create the in-process bus and publish through routes
+  (`event:` shorthand) or `ctx.events.publish(...)`.
+- **Customize** — register explicit event definitions with `defineEvent(...)` to control
+  exposure and scope; subscribe in `setupPost`.
+- **Escape hatch** — provide your own `eventBus` implementation when the app needs shared
+  multi-instance delivery or a transport the framework doesn't ship (Kafka, NATS, custom).
 
 ## Next
 
-- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
-- [Internals: Event Bus](/slingshot/internals/event-bus/)
+- [Escape Hatches](/slingshot/package-first/escape-hatches/) — drop below the package surface when needed
+- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — stream events to browsers
+- [Custom Event Bus](/slingshot/examples/custom-event-bus/) — BullMQ + Redis transport setup
+- [Event Bus Reference](/slingshot/authoring/event-bus/) — plugin-level bus API
+- [Internals: Event Bus](/slingshot/internals/event-bus/) — transport contract and adapter details

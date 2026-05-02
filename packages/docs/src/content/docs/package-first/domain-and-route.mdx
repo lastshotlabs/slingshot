@@ -1,9 +1,9 @@
 ---
-title: domain and route
+title: Domains and Routes
 description: Typed custom routes with auth, validation, OpenAPI, and events — owned by the package
 ---
 
-Not every route should be generated from an entity. When your package needs endpoints that do not
+Not every route should be generated from an entity. When your package needs endpoints that don't
 map to CRUD — webhooks, preview rendering, third-party callbacks, health checks, dashboards — use
 `domain()` and `route.*()`.
 
@@ -288,4 +288,5 @@ export const appPackage = definePackage({
 ## Next
 
 - [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — cross-package service contracts and entity access
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — publish typed events from a route via the `event:` shorthand
 - [Entity System](/slingshot/entity-system/) — when the route should be generated from a data model

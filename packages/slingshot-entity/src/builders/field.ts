@@ -6,6 +6,7 @@ import type {
   FieldOptions,
   FieldType,
   ResolveDflt,
+  ResolveInputVariants,
   ResolveOpt,
   ResolveUpd,
 } from '../types';
@@ -18,12 +19,21 @@ function makeField<
   type: T,
   opts?: O,
   enumValues?: EV,
-): FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> {
-  const result: FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> = {
+): FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV, ResolveInputVariants<O>> {
+  const result: FieldDef<
+    T,
+    ResolveOpt<O>,
+    ResolveDflt<O>,
+    ResolveUpd<O>,
+    EV,
+    ResolveInputVariants<O>
+  > = {
     type,
     optional: (opts?.optional ?? false) as ResolveOpt<O>,
     primary: opts?.primary ?? false,
     immutable: opts?.immutable ?? opts?.primary ?? false,
+    private: opts?.private ?? false,
+    inputVariants: opts?.inputVariants as ResolveInputVariants<O>,
     format: opts?.format,
     default: opts?.default as ResolveDflt<O>,
     onUpdate: opts?.onUpdate as ResolveUpd<O>,

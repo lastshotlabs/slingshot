@@ -30,6 +30,7 @@ function resolveField(manifest: ManifestField): FieldDef {
     // Mirror the TypeScript builder: primary keys default to immutable unless
     // the manifest explicitly opts out. See packages/slingshot-entity/src/builders/field.ts.
     immutable: manifest.immutable ?? primary,
+    private: manifest.private ?? false,
     format: manifest.format,
     default: manifest.default,
     onUpdate: manifest.onUpdate,

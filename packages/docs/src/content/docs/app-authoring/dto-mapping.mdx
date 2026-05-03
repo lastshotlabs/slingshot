@@ -15,25 +15,25 @@ business in a public response — and your public create endpoint shouldn't acce
 
 **Output (responses):**
 
-| Capability                                  | Surface                                       |
-| ------------------------------------------- | --------------------------------------------- |
-| Hide a field from every response            | `field.string({ private: true })`             |
-| Project records into one default shape      | `defineEntity('User', { dto: { default } })`  |
-| Have multiple shapes per entity (list, etc.)| `dto: { default, list, admin, ... }`          |
-| Pick a variant for a CRUD route             | `routes: { list: { dto: 'list' } }`           |
-| Pick a variant on a custom entity route     | `responses[200]: { dto: 'admin' }`            |
-| Project a domain-route response             | `responses[200]: { transform: User.dto.admin }` |
-| Transform one route's response in isolation | `responses[200]: { transform: fn }`           |
-| Build a typed mapper from a Zod schema      | `createDtoMapper(schema, config)`             |
+| Capability                                   | Surface                                         |
+| -------------------------------------------- | ----------------------------------------------- |
+| Hide a field from every response             | `field.string({ private: true })`               |
+| Project records into one default shape       | `defineEntity('User', { dto: { default } })`    |
+| Have multiple shapes per entity (list, etc.) | `dto: { default, list, admin, ... }`            |
+| Pick a variant for a CRUD route              | `routes: { list: { dto: 'list' } }`             |
+| Pick a variant on a custom entity route      | `responses[200]: { dto: 'admin' }`              |
+| Project a domain-route response              | `responses[200]: { transform: User.dto.admin }` |
+| Transform one route's response in isolation  | `responses[200]: { transform: fn }`             |
+| Build a typed mapper from a Zod schema       | `createDtoMapper(schema, config)`               |
 
 **Input (request bodies):**
 
-| Capability                                       | Surface                                        |
-| ------------------------------------------------ | ---------------------------------------------- |
-| Gate a field to specific input variants          | `field.string({ inputVariants: ['admin'] })`   |
-| Pick the input variant for a CRUD route          | `routes: { create: { input: 'admin' } }`       |
+| Capability                                       | Surface                                         |
+| ------------------------------------------------ | ----------------------------------------------- |
+| Gate a field to specific input variants          | `field.string({ inputVariants: ['admin'] })`    |
+| Pick the input variant for a CRUD route          | `routes: { create: { input: 'admin' } }`        |
 | Pick the input variant on a custom entity route  | `op.custom({ http: { ... } , input: 'admin' })` |
-| Override the request schema entirely (any route) | `request: { body: customZodSchema }`           |
+| Override the request schema entirely (any route) | `request: { body: customZodSchema }`            |
 
 The layers compose: private fields are stripped first, then the selected DTO mapper runs
 (`dto.default` unless a variant was named), then any per-route `transform`. You never call
@@ -53,7 +53,7 @@ export const User = defineEntity('User', {
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     email: field.string(),
-    passwordHash: field.string({ private: true }),       // hidden from responses
+    passwordHash: field.string({ private: true }), // hidden from responses
     internalNotes: field.string({ private: true, optional: true }),
     createdAt: field.date({ default: 'now' }),
   },
@@ -74,8 +74,8 @@ The framework applies it to every record returned by every generated route — s
 records, arrays, and the `items` of paginated responses.
 
 ```typescript title="src/entities/user.ts"
-import { createDtoMapper, defineEntity, field } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { createDtoMapper, defineEntity, field } from '@lastshotlabs/slingshot';
 
 const UserDto = z.object({
   id: z.string(),
@@ -90,14 +90,14 @@ export const User = defineEntity('User', {
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     email: field.string(),
-    organization: field.string(),                  // stored as ObjectId-style ref
+    organization: field.string(), // stored as ObjectId-style ref
     passwordHash: field.string({ private: true }),
     createdAt: field.date({ default: 'now' }),
   },
   dto: {
     default: createDtoMapper(UserDto, {
-      refs: { organization: 'organizationId' },    // rename ref field
-      dates: ['createdAt'],                        // Date → ISO string
+      refs: { organization: 'organizationId' }, // rename ref field
+      dates: ['createdAt'], // Date → ISO string
     }),
   },
 });
@@ -119,22 +119,29 @@ named variants alongside `default` in the same map. Routes pick a variant by nam
 default is used when none is specified.
 
 ```typescript title="src/entities/user.ts"
-const UserDto       = z.object({ id: z.string(), email: z.string(), role: z.string() });
-const UserListItem  = z.object({ id: z.string(), email: z.string() });
+const UserDto = z.object({ id: z.string(), email: z.string(), role: z.string() });
+const UserListItem = z.object({ id: z.string(), email: z.string() });
 const UserPublicDto = z.object({ id: z.string(), handle: z.string() });
-const UserAdminDto  = z.object({ id: z.string(), email: z.string(), role: z.string(), createdAt: z.string() });
+const UserAdminDto = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  createdAt: z.string(),
+});
 
 export const User = defineEntity('User', {
-  fields: { /* ... */ },
+  fields: {
+    /* ... */
+  },
   dto: {
-    default: createDtoMapper(UserDto,       {}),
-    list:    createDtoMapper(UserListItem,  {}),
-    public:  createDtoMapper(UserPublicDto, {}),
-    admin:   createDtoMapper(UserAdminDto,  { dates: ['createdAt'] }),
+    default: createDtoMapper(UserDto, {}),
+    list: createDtoMapper(UserListItem, {}),
+    public: createDtoMapper(UserPublicDto, {}),
+    admin: createDtoMapper(UserAdminDto, { dates: ['createdAt'] }),
   },
   routes: {
-    list: { dto: 'list' },     // GET /users → UserListItem
-    get:  { dto: 'public' },   // GET /users/:id → UserPublicDto
+    list: { dto: 'list' }, // GET /users → UserListItem
+    get: { dto: 'public' }, // GET /users/:id → UserPublicDto
     // create / update fall through to dto.default
   },
 });
@@ -219,9 +226,9 @@ the auto-generated create/update schemas instead of the response.
 ```typescript title="src/entities/user.ts"
 export const User = defineEntity('User', {
   fields: {
-    id:    field.string({ primary: true, default: 'uuid' }),
+    id: field.string({ primary: true, default: 'uuid' }),
     email: field.string(),
-    role:  field.string({ inputVariants: ['admin'] }),       // only admin variant can set
+    role: field.string({ inputVariants: ['admin'] }), // only admin variant can set
     passwordHash: field.string({ private: true, inputVariants: ['internal'] }), // server-only
   },
 });
@@ -235,7 +242,9 @@ that's in the list.
 
 ```typescript title="src/entities/user.ts"
 defineEntity('User', {
-  fields: { /* as above */ },
+  fields: {
+    /* as above */
+  },
   routes: {
     // POST /users — public route, default variant. `role` is silently stripped from
     // the request body before the adapter sees it.
@@ -298,8 +307,8 @@ yourself. Use `responses.<status>.transform` if you want a typed projection help
 
 ```typescript
 // @skip-typecheck
-import { route, createDtoMapper } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { createDtoMapper, route } from '@lastshotlabs/slingshot';
 
 const userDtoMapper = createDtoMapper(
   z.object({ id: z.string(), email: z.string(), handle: z.string() }),

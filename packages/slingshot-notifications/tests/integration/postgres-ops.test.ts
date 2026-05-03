@@ -43,8 +43,7 @@ class FakeNotificationsPostgresPool {
         .filter(row => !row.dispatched && row.deliverAt != null && new Date(row.deliverAt) <= now)
         .sort(
           (left, right) =>
-            new Date(left.deliverAt ?? 0).getTime() -
-              new Date(right.deliverAt ?? 0).getTime() ||
+            new Date(left.deliverAt ?? 0).getTime() - new Date(right.deliverAt ?? 0).getTime() ||
             left.id.localeCompare(right.id),
         )
         .slice(0, limit);
@@ -74,8 +73,7 @@ class FakeNotificationsPostgresPool {
         })
         .sort(
           (left, right) =>
-            new Date(left.deliverAt ?? 0).getTime() -
-              new Date(right.deliverAt ?? 0).getTime() ||
+            new Date(left.deliverAt ?? 0).getTime() - new Date(right.deliverAt ?? 0).getTime() ||
             left.id.localeCompare(right.id),
         )
         .slice(0, limit);

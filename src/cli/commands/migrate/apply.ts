@@ -24,7 +24,8 @@ export default class MigrateApply extends Command {
       options: ['postgres', 'sqlite', 'mongo'],
     }),
     'db-url': Flags.string({
-      description: 'Override connection string (or sqlite path). Falls back to DATABASE_URL or app config.',
+      description:
+        'Override connection string (or sqlite path). Falls back to DATABASE_URL or app config.',
     }),
     'migrations-dir': Flags.string({
       description: 'Directory containing migration files.',

@@ -11,7 +11,6 @@
  *   bun run tests/bench/kafka-throughput.bench.ts        # quick mode
  *   BENCH=1 bun run tests/bench/kafka-throughput.bench.ts # full bench (50,000 events)
  */
-
 import { performance } from 'node:perf_hooks';
 import { JSON_SERIALIZER, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 
@@ -123,7 +122,10 @@ function createFakeKafkaAdapter() {
       const batch = buf.messages.splice(0, buf.messages.length);
 
       for (const msg of batch) {
-        const envelope = serializer.deserialize(msg.headers['slingshot.event'], Buffer.from(msg.value));
+        const envelope = serializer.deserialize(
+          msg.headers['slingshot.event'],
+          Buffer.from(msg.value),
+        );
         const payload = (envelope as { payload?: unknown })?.payload ?? envelope;
         handler(msg.headers['slingshot.event'], payload, msg);
       }
@@ -262,10 +264,18 @@ async function benchEndToEndLatency(): Promise<void> {
   console.log(`[BENCH] kafka-e2e-latency`);
   console.log(`[BENCH]   mode: fake Kafka adapter`);
   console.log(`[BENCH]   events: ${validCount}`);
-  console.log(`[BENCH]   avg-latency-ms: ${formatDuration(validLatencies.reduce((a, b) => a + b, 0) / Math.max(1, validCount))}`);
-  console.log(`[BENCH]   p50-latency-ms: ${formatDuration(computePercentiles(validLatencies, 50))}`);
-  console.log(`[BENCH]   p95-latency-ms: ${formatDuration(computePercentiles(validLatencies, 95))}`);
-  console.log(`[BENCH]   p99-latency-ms: ${formatDuration(computePercentiles(validLatencies, 99))}`);
+  console.log(
+    `[BENCH]   avg-latency-ms: ${formatDuration(validLatencies.reduce((a, b) => a + b, 0) / Math.max(1, validCount))}`,
+  );
+  console.log(
+    `[BENCH]   p50-latency-ms: ${formatDuration(computePercentiles(validLatencies, 50))}`,
+  );
+  console.log(
+    `[BENCH]   p95-latency-ms: ${formatDuration(computePercentiles(validLatencies, 95))}`,
+  );
+  console.log(
+    `[BENCH]   p99-latency-ms: ${formatDuration(computePercentiles(validLatencies, 99))}`,
+  );
 }
 
 // ---------------------------------------------------------------------------

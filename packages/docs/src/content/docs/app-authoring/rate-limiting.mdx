@@ -26,10 +26,10 @@ import { defineApp } from '@lastshotlabs/slingshot';
 export default defineApp({
   security: {
     rateLimit: {
-      windowMs: 60_000,         // 1 minute window
-      max: 100,                 // 100 requests per window
-      store: 'memory',          // 'memory' | 'redis'
-      fingerprintLimit: false,  // see Bot Protection
+      windowMs: 60_000, // 1 minute window
+      max: 100, // 100 requests per window
+      store: 'memory', // 'memory' | 'redis'
+      fingerprintLimit: false, // see Bot Protection
     },
   },
 });
@@ -54,8 +54,8 @@ security: {
 ```
 
 <Aside type="caution">
-  Disabling rate limiting in production is rarely correct. Prefer raising `max` or
-  whitelisting specific IPs instead.
+  Disabling rate limiting in production is rarely correct. Prefer raising `max` or whitelisting
+  specific IPs instead.
 </Aside>
 
 ## Per-route rate limiting
@@ -110,12 +110,12 @@ single bucket key so a single client juggling user agents still hits the same bu
 
 The middleware sets standard headers on every response:
 
-| Header                   | Meaning                                 |
-| ------------------------ | --------------------------------------- |
-| `X-RateLimit-Limit`      | Max requests in the current window      |
-| `X-RateLimit-Remaining`  | Requests left before the limiter fires  |
-| `X-RateLimit-Reset`      | Unix timestamp when the window resets   |
-| `Retry-After`            | Seconds to wait (only on `429`)         |
+| Header                  | Meaning                                |
+| ----------------------- | -------------------------------------- |
+| `X-RateLimit-Limit`     | Max requests in the current window     |
+| `X-RateLimit-Remaining` | Requests left before the limiter fires |
+| `X-RateLimit-Reset`     | Unix timestamp when the window resets  |
+| `Retry-After`           | Seconds to wait (only on `429`)        |
 
 Clients that handle these headers gracefully can self-throttle before the limiter rejects.
 

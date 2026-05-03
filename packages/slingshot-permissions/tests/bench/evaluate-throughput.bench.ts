@@ -11,11 +11,10 @@
  *   bun run tests/bench/evaluate-throughput.bench.ts        # quick mode (1,000 iterations)
  *   BENCH=1 bun run tests/bench/evaluate-throughput.bench.ts # full bench (10,000 iterations)
  */
-
 import { performance } from 'node:perf_hooks';
-import { createPermissionRegistry } from '../../src/lib/registry';
 import { createMemoryPermissionsAdapter } from '../../src/adapters/memory';
 import { createPermissionEvaluator } from '../../src/lib/evaluator';
+import { createPermissionRegistry } from '../../src/lib/registry';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -123,7 +122,13 @@ function setup(): {
     }
   }
 
-  return { evaluator, subjects, actions, resourceTypes: Array.from({ length: RESOURCE_TYPES }, (_, i) => `resource_${i}`), tenants };
+  return {
+    evaluator,
+    subjects,
+    actions,
+    resourceTypes: Array.from({ length: RESOURCE_TYPES }, (_, i) => `resource_${i}`),
+    tenants,
+  };
 }
 
 // ---------------------------------------------------------------------------

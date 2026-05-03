@@ -79,7 +79,7 @@ concrete event keys at write time:
 ```
 
 Subscription patterns are normalized when the endpoint is created or updated. The stored
-record keeps the concrete approved event keys *plus* the optional `sourcePattern` they
+record keeps the concrete approved event keys _plus_ the optional `sourcePattern` they
 came from. The result:
 
 - Writes fail if a pattern does not resolve to any approved events
@@ -90,13 +90,13 @@ came from. The result:
 
 Delivery is scope-aware by design:
 
-| Endpoint owner | Can receive |
-| --- | --- |
+| Endpoint owner        | Can receive                                       |
+| --------------------- | ------------------------------------------------- |
 | `ownerType: 'tenant'` | Tenant-scoped webhook events for that tenant only |
-| `ownerType: 'user'` | User-scoped webhook events for that user only |
-| `ownerType: 'app'` | App-scoped webhook events for that app only |
+| `ownerType: 'user'`   | User-scoped webhook events for that user only     |
+| `ownerType: 'app'`    | App-scoped webhook events for that app only       |
 
-Cross-tenant widening is rejected by the subscriber authorizer *before* delivery is queued.
+Cross-tenant widening is rejected by the subscriber authorizer _before_ delivery is queued.
 
 ## Delivery records
 
@@ -125,7 +125,7 @@ onDeadLetter: (job, err, services) => {
   // err: Error — the last failure
   // services: HookServices | undefined — framework accessor (when wired)
   services?.bus.emit('app:webhook.dlq', { deliveryId: job.deliveryId });
-}
+};
 ```
 
 The third argument is the framework `HookServices` accessor. When the queue is

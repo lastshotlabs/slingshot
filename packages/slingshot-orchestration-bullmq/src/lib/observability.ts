@@ -2,10 +2,9 @@
 // Observability: metrics, health checks, and associated types for the
 // BullMQ orchestration adapter.
 // ---------------------------------------------------------------------------
-
 import type { Queue } from 'bullmq';
-import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { QueueEvents } from 'bullmq';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { Run } from '@lastshotlabs/slingshot-orchestration';
 
 // ---------------------------------------------------------------------------

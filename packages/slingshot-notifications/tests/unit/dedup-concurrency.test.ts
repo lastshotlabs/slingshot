@@ -12,7 +12,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { notificationOperations } from '../../src/entities/notification';
 import { createNotificationsTestAdapters } from '../../src/testing';
 
-function createPayload(userId: string, source: string, type: string, dedupKey: string): Record<string, unknown> {
+function createPayload(
+  userId: string,
+  source: string,
+  type: string,
+  dedupKey: string,
+): Record<string, unknown> {
   return {
     userId,
     source,

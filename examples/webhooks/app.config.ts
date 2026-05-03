@@ -1,9 +1,9 @@
+import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import {
   type SlingshotPlugin,
   defineEvent,
   getContext,
 } from '../../packages/slingshot-core/src/index.ts';
-import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createWebhookPlugin } from '../../packages/slingshot-webhooks/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 

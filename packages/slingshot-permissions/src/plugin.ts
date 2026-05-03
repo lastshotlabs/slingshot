@@ -199,17 +199,17 @@ export function createPermissionsPlugin(
       const evaluatorHealth = evaluatorRef?.getHealth() ?? null;
 
       // Refresh adapter health if the cached value is stale.
-      if (
-        adapterHealthRef &&
-        Date.now() - lastAdapterHealthCheck > ADAPTER_HEALTH_TTL_MS
-      ) {
-        void adapterHealthRef.healthCheck().then(aHealth => {
-          adapterHealth = aHealth;
-          lastAdapterHealthCheck = Date.now();
-        }).catch(() => {
-          adapterHealth = { status: 'disconnected' as const };
-          lastAdapterHealthCheck = Date.now();
-        });
+      if (adapterHealthRef && Date.now() - lastAdapterHealthCheck > ADAPTER_HEALTH_TTL_MS) {
+        void adapterHealthRef
+          .healthCheck()
+          .then(aHealth => {
+            adapterHealth = aHealth;
+            lastAdapterHealthCheck = Date.now();
+          })
+          .catch(() => {
+            adapterHealth = { status: 'disconnected' as const };
+            lastAdapterHealthCheck = Date.now();
+          });
       }
 
       let status: PermissionsHealth['status'] = 'healthy';

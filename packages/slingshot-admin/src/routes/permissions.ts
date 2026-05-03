@@ -1,6 +1,11 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createConsoleLogger, createRoute, errorResponse, validateGrant } from '@lastshotlabs/slingshot-core';
+import {
+  createConsoleLogger,
+  createRoute,
+  errorResponse,
+  validateGrant,
+} from '@lastshotlabs/slingshot-core';
 import type {
   AdminPrincipal,
   Logger,

@@ -114,10 +114,13 @@ export function wireActivityLog(
   for (const [shortname, eventConfig] of Object.entries(config.events)) {
     const eventKey = eventKeyMap[shortname];
     if (!eventKey) {
-      activityLogger.warn('No event key found for shortname — declare the event on the entity routes config', {
-        entityName,
-        shortname,
-      });
+      activityLogger.warn(
+        'No event key found for shortname — declare the event on the entity routes config',
+        {
+          entityName,
+          shortname,
+        },
+      );
       continue;
     }
 

@@ -7,11 +7,11 @@ import { Aside } from '@astrojs/starlight/components';
 
 Slingshot gives you three ways to add routes. They are not alternatives; they layer.
 
-| Use this              | When                                                                |
-| --------------------- | ------------------------------------------------------------------- |
-| **Generated routes**  | An entity has standard CRUD or operation routes                     |
-| **Package routes**    | A feature has custom HTTP handlers that belong to a domain          |
-| **`routesDir`**       | Top-level routes that don't fit a package, or quick experiments     |
+| Use this             | When                                                            |
+| -------------------- | --------------------------------------------------------------- |
+| **Generated routes** | An entity has standard CRUD or operation routes                 |
+| **Package routes**   | A feature has custom HTTP handlers that belong to a domain      |
+| **`routesDir`**      | Top-level routes that don't fit a package, or quick experiments |
 
 This page covers the second and third. Generated entity routes are covered under
 [Data and Entities](/slingshot/core-features/data-and-entities/).
@@ -22,8 +22,8 @@ Package routes live inside `definePackage`. They are typed, schema-validated, an
 in OpenAPI alongside generated routes.
 
 ```typescript title="src/blog/package.ts"
-import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 export const blogPackage = definePackage({
   name: 'blog',
@@ -108,9 +108,8 @@ don't drive routing — paths come from what you register on the Hono instance. 
 freely.
 
 <Aside>
-  Routes discovered via `routesDir` mount **after** package routes. If you need to
-  intercept before package routes (e.g., a global guard), add a plugin with
-  `setupMiddleware` instead.
+  Routes discovered via `routesDir` mount **after** package routes. If you need to intercept before
+  package routes (e.g., a global guard), add a plugin with `setupMiddleware` instead.
 </Aside>
 
 ## Inside a handler
@@ -127,8 +126,8 @@ route.get({
   path: '/me',
   auth: 'userAuth',
   handler: async ({ c, respond }) => {
-    const ctx = getContext(c);              // SlingshotContext for this app
-    const actor = getActor(c);              // resolved user / m2m / anon
+    const ctx = getContext(c); // SlingshotContext for this app
+    const actor = getActor(c); // resolved user / m2m / anon
     const tenantId = getRequestTenantId(c); // multi-tenant scope
     return respond.json({ actor, tenantId });
   },
@@ -142,21 +141,21 @@ and `respond.error(...)` are typed helpers that pair with the route's response s
 
 ```typescript
 // @skip-typecheck
-import { route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { route } from '@lastshotlabs/slingshot';
 
 route.post({
   path: '/items',
   summary: 'Create an item',
   description: 'Longer description for OpenAPI docs',
   tags: ['items'],
-  auth: 'userAuth',                 // 'userAuth' | 'none' | array of guards
+  auth: 'userAuth', // 'userAuth' | 'none' | array of guards
   request: { body: z.object({ name: z.string() }) },
   responses: {
     201: { description: 'Created', schema: z.object({ id: z.string() }) },
     409: { description: 'Conflict', schema: z.object({ error: z.string() }) },
   },
-  middleware: ['rateLimit'],        // names from package middleware map
+  middleware: ['rateLimit'], // names from package middleware map
   handler: async ({ body, respond }) => {
     return respond.json({ id: '...' }, 201);
   },

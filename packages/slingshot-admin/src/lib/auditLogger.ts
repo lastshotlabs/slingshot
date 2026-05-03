@@ -1,5 +1,5 @@
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import type { Logger, LogFields } from '@lastshotlabs/slingshot-core';
+import type { LogFields, Logger } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,8 +99,7 @@ export function createMemoryAuditLogger(): AdminAuditLogger & {
  * (defaults to a console logger with `{ plugin: 'slingshot-admin' }` base).
  */
 export function createConsoleAuditLogger(baseLogger?: Logger): AdminAuditLogger {
-  const logger: Logger =
-    baseLogger ?? createConsoleLogger({ base: { plugin: 'slingshot-admin' } });
+  const logger: Logger = baseLogger ?? createConsoleLogger({ base: { plugin: 'slingshot-admin' } });
 
   return {
     log(event: AdminAuditEvent): void {

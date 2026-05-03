@@ -20,8 +20,8 @@ import type {
   StoreInfra,
   TestableRepoFactories,
 } from '@lastshotlabs/slingshot-core';
-import type { ResolvedOperations } from '../types';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { ResolvedOperations } from '../types';
 import { createMemoryEntityAdapter } from './memoryAdapter';
 import { createMongoEntityAdapter } from './mongoAdapter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
@@ -193,7 +193,10 @@ function wrapWithSearchSync<
       } catch (error) {
         factoriesLogger.error('search-sync write-through indexDocument failed', {
           storageName: config._storageName,
-          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message, stack: error.stack }
+              : error,
         });
       }
       return;
@@ -215,7 +218,10 @@ function wrapWithSearchSync<
       } catch (error) {
         factoriesLogger.error('search-sync write-through indexDocument failed', {
           storageName: config._storageName,
-          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message, stack: error.stack }
+              : error,
         });
       }
       return;
@@ -236,7 +242,10 @@ function wrapWithSearchSync<
       } catch (error) {
         factoriesLogger.error('search-sync write-through deleteDocument failed', {
           storageName: config._storageName,
-          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message, stack: error.stack }
+              : error,
         });
       }
       return;

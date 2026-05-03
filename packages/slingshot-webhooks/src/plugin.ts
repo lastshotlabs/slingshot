@@ -26,6 +26,8 @@ import type { DispatchOptions } from './lib/dispatcher';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
 import { logWebhookEvent } from './lib/log';
+import type { RateLimiter } from './lib/rateLimit';
+import { createSlidingWindowRateLimiter } from './lib/rateLimit';
 import type { GovernedWebhookRuntime } from './manifest/runtime';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
@@ -37,8 +39,6 @@ import type { InboundProvider } from './types/inbound';
 import { WEBHOOKS_PLUGIN_STATE_KEY, WEBHOOKS_RUNTIME_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
-import type { RateLimiter } from './lib/rateLimit';
-import { createSlidingWindowRateLimiter } from './lib/rateLimit';
 
 /**
  * Path-param validator for webhook endpoint IDs.

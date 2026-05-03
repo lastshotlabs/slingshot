@@ -3,7 +3,6 @@
 // Manages lazy-start initialization, reset-after-failure, and graceful
 // shutdown with worker drain.
 // ---------------------------------------------------------------------------
-
 import { Queue, QueueEvents, Worker } from 'bullmq';
 import type { ConnectionOptions, QueueOptions } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
@@ -13,10 +12,10 @@ import type {
   OrchestrationEventSink,
 } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
-import { errInfo } from './cancellation';
 import { bullmqBackoffStrategy } from '../taskRuntime';
 import { createBullMQTaskProcessor } from '../taskWorker';
 import { createBullMQWorkflowProcessor } from '../workflowWorker';
+import { errInfo } from './cancellation';
 
 // ---------------------------------------------------------------------------
 // Constants

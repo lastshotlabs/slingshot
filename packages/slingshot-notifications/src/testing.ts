@@ -220,9 +220,7 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       };
       return {
         records: (result.records ?? [])
-          .filter(
-            (row): row is Record<string, unknown> => row != null && typeof row === 'object',
-          )
+          .filter((row): row is Record<string, unknown> => row != null && typeof row === 'object')
           .map(row => toNotificationRecord(row)),
         nextCursor: result.nextCursor ?? null,
       };

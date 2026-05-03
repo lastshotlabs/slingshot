@@ -30,8 +30,11 @@ function randomInt(rng: () => number, min: number, max: number): number {
 }
 
 function randomString(rng: () => number, maxLen: number): string {
-  const pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_:.-!@#$%^&*()\n\r\t😀👍🎉' +
-    "' OR 1=1--" + '"; DROP TABLE--' + '<script>alert(1)</script>';
+  const pool =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_:.-!@#$%^&*()\n\r\t😀👍🎉' +
+    "' OR 1=1--" +
+    '"; DROP TABLE--' +
+    '<script>alert(1)</script>';
   const len = randomInt(rng, 0, maxLen);
   let out = '';
   for (let i = 0; i < len; i++) {
@@ -81,25 +84,27 @@ describe('bullmqAdapterOptionsSchema fuzz', () => {
   test('port boundary values', () => {
     const valid = [1, 1024, 65535, 6379, 0xffff, 65536];
     for (const port of valid) {
-      expect(() =>
-        bullmqAdapterOptionsSchema.parse({ connection: { port } }),
-      ).not.toThrow();
+      expect(() => bullmqAdapterOptionsSchema.parse({ connection: { port } })).not.toThrow();
     }
 
     const invalid = [0, -1, 3.14, NaN, Infinity];
     for (const port of invalid) {
-      expect(() =>
-        bullmqAdapterOptionsSchema.parse({ connection: { port } }),
-      ).toThrow(ZodError);
+      expect(() => bullmqAdapterOptionsSchema.parse({ connection: { port } })).toThrow(ZodError);
     }
   });
 
   test('attempts boundary values', () => {
     expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 1 })).not.toThrow();
     expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 100 })).not.toThrow();
-    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 0 })).toThrow(ZodError);
-    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: -1 })).toThrow(ZodError);
-    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 3.5 })).toThrow(ZodError);
+    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 0 })).toThrow(
+      ZodError,
+    );
+    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: -1 })).toThrow(
+      ZodError,
+    );
+    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, attempts: 3.5 })).toThrow(
+      ZodError,
+    );
   });
 
   test('validation field rejects garbage values', () => {
@@ -118,9 +123,7 @@ describe('bullmqAdapterOptionsSchema fuzz', () => {
   test('non-object connection is rejected', () => {
     const garbage = [null, 'string', 42, true, []];
     for (const conn of garbage) {
-      expect(() =>
-        bullmqAdapterOptionsSchema.parse({ connection: conn as any }),
-      ).toThrow(ZodError);
+      expect(() => bullmqAdapterOptionsSchema.parse({ connection: conn as any })).toThrow(ZodError);
     }
   });
 
@@ -131,9 +134,9 @@ describe('bullmqAdapterOptionsSchema fuzz', () => {
     expect(() =>
       bullmqAdapterOptionsSchema.parse({ connection: {}, enqueueTimeoutMs: 300000 }),
     ).not.toThrow();
-    expect(() =>
-      bullmqAdapterOptionsSchema.parse({ connection: {}, enqueueTimeoutMs: 0 }),
-    ).toThrow(ZodError);
+    expect(() => bullmqAdapterOptionsSchema.parse({ connection: {}, enqueueTimeoutMs: 0 })).toThrow(
+      ZodError,
+    );
     expect(() =>
       bullmqAdapterOptionsSchema.parse({ connection: {}, enqueueTimeoutMs: -100 }),
     ).toThrow(ZodError);
@@ -181,7 +184,9 @@ describe('event key sanitization fuzz', () => {
     const eventKey = 'entity:post.created:v2';
 
     let called = false;
-    bus.on(eventKey as any, async () => { called = true; });
+    bus.on(eventKey as any, async () => {
+      called = true;
+    });
     bus.emit(eventKey as any, { ok: true } as any);
 
     expect(called).toBe(true);
@@ -195,7 +200,9 @@ describe('event key sanitization fuzz', () => {
     for (let i = 0; i < 50; i++) {
       const key = randomString(rng, 30);
       let called = false;
-      bus.on(key as any, async () => { called = true; });
+      bus.on(key as any, async () => {
+        called = true;
+      });
       bus.emit(key as any, { seq: i } as any);
       expect(called).toBe(true);
     }
@@ -227,7 +234,9 @@ describe('event key sanitization fuzz', () => {
 
     for (const key of sqlKeys) {
       let called = false;
-      bus.on(key as any, async () => { called = true; });
+      bus.on(key as any, async () => {
+        called = true;
+      });
       bus.emit(key as any, { ok: true } as any);
       expect(called).toBe(true);
     }
@@ -237,16 +246,13 @@ describe('event key sanitization fuzz', () => {
 
   test('emoji event keys are handled without crash', async () => {
     const bus = createBullMQAdapter({ connection: {} });
-    const emojiKeys = [
-      'user:😀:login',
-      '👍:notification',
-      '🎉:🎉:🎉',
-      'order:created:🏷️',
-    ];
+    const emojiKeys = ['user:😀:login', '👍:notification', '🎉:🎉:🎉', 'order:created:🏷️'];
 
     for (const key of emojiKeys) {
       let called = false;
-      bus.on(key as any, async () => { called = true; });
+      bus.on(key as any, async () => {
+        called = true;
+      });
       bus.emit(key as any, { emoji: true } as any);
       expect(called).toBe(true);
     }
@@ -272,7 +278,9 @@ describe('event key sanitization fuzz', () => {
     const bus = createBullMQAdapter({ connection: {} });
 
     let called = false;
-    bus.on('' as any, async () => { called = true; });
+    bus.on('' as any, async () => {
+      called = true;
+    });
     bus.emit('' as any, { ok: true } as any);
 
     expect(called).toBe(true);
@@ -285,7 +293,9 @@ describe('event key sanitization fuzz', () => {
     const bus = createBullMQAdapter({ connection: {} });
 
     let called = false;
-    bus.on(longKey as any, async () => { called = true; });
+    bus.on(longKey as any, async () => {
+      called = true;
+    });
     bus.emit(longKey as any, { ok: true } as any);
 
     expect(called).toBe(true);

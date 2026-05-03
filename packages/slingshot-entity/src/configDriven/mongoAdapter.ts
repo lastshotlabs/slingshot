@@ -492,7 +492,8 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         // best-effort clear — log so connection or schema issues are visible
         mongoAdapterLogger.error('clear() failed', {
           storageName: config._storageName,
-          error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+          error:
+            err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
         });
       }
     },

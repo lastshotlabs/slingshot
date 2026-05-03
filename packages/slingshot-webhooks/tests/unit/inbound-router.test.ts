@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test';
-import { createInboundRouter } from '../../src/routes/inbound';
-import { WebhookInboundConfigError } from '../../src/errors/webhookErrors';
-import type { InboundProvider } from '../../src/types/inbound';
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import { WebhookInboundConfigError } from '../../src/errors/webhookErrors';
+import { createInboundRouter } from '../../src/routes/inbound';
+import type { InboundProvider } from '../../src/types/inbound';
 
 // ---------------------------------------------------------------------------
 // Helpers

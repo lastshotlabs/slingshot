@@ -14,7 +14,7 @@ creation, partner webhooks — anything where a duplicate POST would be expensiv
 The middleware reads the `Idempotency-Key` request header. On the first request it runs the
 handler, captures status and body, and stores the result keyed by the actor ID and the key. On a
 repeat request with the same key, the handler is skipped and the original response is replayed
-byte-for-byte. If a second request reuses the key with a *different* body or path, the framework
+byte-for-byte. If a second request reuses the key with a _different_ body or path, the framework
 replies with `409 idempotency_key_conflict` instead of replaying.
 
 Storage lives in `ctx.persistence.idempotency` — the same `IdempotencyAdapter` resolved from
@@ -23,8 +23,8 @@ your `db` config. Memory by default, Redis or Postgres in production.
 ## Mounting it
 
 ```typescript title="src/billing/package.ts"
-import { definePackage, domain, idempotent, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { definePackage, domain, idempotent, route } from '@lastshotlabs/slingshot';
 
 export const billingPackage = definePackage({
   name: 'billing',
@@ -50,7 +50,10 @@ export const billingPackage = definePackage({
   ],
 });
 
-declare function processCharge(input: { amount: number; currency: string }): Promise<{ id: string }>;
+declare function processCharge(input: {
+  amount: number;
+  currency: string;
+}): Promise<{ id: string }>;
 ```
 
 The TTL is in seconds (default `86400`). Tune it to your retry policy: long enough that the
@@ -66,8 +69,8 @@ before storage. That blocks key enumeration attacks against shared storage but m
 the signing secret invalidates outstanding keys.
 
 <Aside type="tip">
-  Idempotency cuts off at the first successful response. If the handler throws, nothing is
-  cached — the next retry runs the handler fresh.
+  Idempotency cuts off at the first successful response. If the handler throws, nothing is cached —
+  the next retry runs the handler fresh.
 </Aside>
 
 ## What's next

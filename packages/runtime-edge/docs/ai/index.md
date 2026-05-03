@@ -5,14 +5,14 @@ description: Edge runtime adapter for Slingshot — Web Crypto password, KV ISR,
 
 ## Capabilities
 
-| Capability | API |
-|---|---|
-| Password | Web Crypto PBKDF2 — two-format parser supporting legacy hashes |
-| SQLite | Stub — throws `EdgeUnsupportedError` |
-| Server | Stub — throws `EdgeUnsupportedError` |
+| Capability | API                                                                   |
+| ---------- | --------------------------------------------------------------------- |
+| Password   | Web Crypto PBKDF2 — two-format parser supporting legacy hashes        |
+| SQLite     | Stub — throws `EdgeUnsupportedError`                                  |
+| Server     | Stub — throws `EdgeUnsupportedError`                                  |
 | Filesystem | Read-only via `fileStore` (fetch-based) — three-layer cap enforcement |
-| Glob | Stub — throws `EdgeUnsupportedError` |
-| KV ISR | `kv-isr.ts` — Cloudflare Workers KV-backed ISR adapter |
+| Glob       | Stub — throws `EdgeUnsupportedError`                                  |
+| KV ISR     | `kv-isr.ts` — Cloudflare Workers KV-backed ISR adapter                |
 
 ## Runtime Contract
 

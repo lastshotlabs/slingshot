@@ -51,7 +51,7 @@ a new route:
 
 ```typescript title="src/plugins/customHealth.ts"
 // @skip-typecheck
-import { createRouter, type SlingshotPlugin } from '@lastshotlabs/slingshot';
+import { type SlingshotPlugin, createRouter } from '@lastshotlabs/slingshot';
 
 export const customHealthPlugin: SlingshotPlugin = {
   name: 'custom-health',
@@ -72,9 +72,9 @@ Keep the response shape consistent with the framework's checks (`status`, `times
 optional details) so your monitoring tooling can treat them uniformly.
 
 <Aside type="tip">
-  Both health endpoints are excluded by default from request logging, audit logging, and
-  metrics — they are noisy and uninteresting. If you do need them logged, override the
-  middleware's `excludePaths` option.
+  Both health endpoints are excluded by default from request logging, audit logging, and metrics —
+  they are noisy and uninteresting. If you do need them logged, override the middleware's
+  `excludePaths` option.
 </Aside>
 
 ## What's next

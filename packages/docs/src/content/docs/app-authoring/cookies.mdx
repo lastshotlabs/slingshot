@@ -23,8 +23,8 @@ Slingshot uses Hono's request context, so reach for `setCookie` / `getCookie` fr
 
 ```typescript title="src/preferences/package.ts"
 // @skip-typecheck
-import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 import { getCookie, setCookie } from 'hono/cookie';
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 export const preferencesPackage = definePackage({
   name: 'preferences',
@@ -67,8 +67,8 @@ on tamper.
 
 ```typescript
 // @skip-typecheck
-import { signCookieValue, verifyCookieValue } from '@lastshotlabs/slingshot';
 import { getCookie, setCookie } from 'hono/cookie';
+import { signCookieValue, verifyCookieValue } from '@lastshotlabs/slingshot';
 
 const secret = process.env.COOKIE_SECRET!;
 
@@ -82,7 +82,7 @@ const value = raw ? verifyCookieValue(raw, secret) : null;
 // value === 'experiment-b' if untampered, or null if signature is invalid
 ```
 
-Signed cookies are *not* encrypted — anyone with the cookie can read the original
+Signed cookies are _not_ encrypted — anyone with the cookie can read the original
 value. Use them when you need integrity, not confidentiality.
 
 ## Framework cookie and header names
@@ -90,19 +90,19 @@ value. Use them when you need integrity, not confidentiality.
 The auth plugin sets a fixed set of cookies. The names are exported as constants so you
 can reference them in middleware, tests, and clients without typos:
 
-| Constant                 | Value           | Purpose                                  |
-| ------------------------ | --------------- | ---------------------------------------- |
-| `COOKIE_TOKEN`           | `token`         | Session access token (HttpOnly)          |
-| `COOKIE_REFRESH_TOKEN`   | `refresh_token` | Long-lived refresh token (HttpOnly)      |
-| `COOKIE_CSRF_TOKEN`      | `csrf_token`    | CSRF synchronizer token (readable by JS) |
-| `HEADER_USER_TOKEN`      | `x-user-token`  | Header alternative to the access cookie  |
-| `HEADER_REFRESH_TOKEN`   | `x-refresh-token` | Header alternative to refresh cookie    |
-| `HEADER_CSRF_TOKEN`      | `x-csrf-token`  | CSRF token submitted by the client       |
+| Constant               | Value             | Purpose                                  |
+| ---------------------- | ----------------- | ---------------------------------------- |
+| `COOKIE_TOKEN`         | `token`           | Session access token (HttpOnly)          |
+| `COOKIE_REFRESH_TOKEN` | `refresh_token`   | Long-lived refresh token (HttpOnly)      |
+| `COOKIE_CSRF_TOKEN`    | `csrf_token`      | CSRF synchronizer token (readable by JS) |
+| `HEADER_USER_TOKEN`    | `x-user-token`    | Header alternative to the access cookie  |
+| `HEADER_REFRESH_TOKEN` | `x-refresh-token` | Header alternative to refresh cookie     |
+| `HEADER_CSRF_TOKEN`    | `x-csrf-token`    | CSRF token submitted by the client       |
 
 ```typescript
 // @skip-typecheck
-import { COOKIE_TOKEN, HEADER_CSRF_TOKEN } from '@lastshotlabs/slingshot';
 import { getCookie } from 'hono/cookie';
+import { COOKIE_TOKEN, HEADER_CSRF_TOKEN } from '@lastshotlabs/slingshot';
 
 const session = getCookie(c, COOKIE_TOKEN);
 const csrf = c.req.header(HEADER_CSRF_TOKEN);
@@ -130,9 +130,8 @@ export default defineApp({
 ```
 
 <Aside type="tip">
-  CSRF only matters for cookie auth. Bearer-token and M2M requests bypass the check —
-  they're inherently CSRF-safe because attackers can't make a browser forge an
-  `Authorization` header.
+  CSRF only matters for cookie auth. Bearer-token and M2M requests bypass the check — they're
+  inherently CSRF-safe because attackers can't make a browser forge an `Authorization` header.
 </Aside>
 
 ## What's next

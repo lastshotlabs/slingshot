@@ -44,9 +44,7 @@ export default class MigrateReset extends Command {
     const { flags } = await this.parse(MigrateReset);
 
     if (!flags.force) {
-      this.error(
-        'Refusing to reset without --force. This drops every entity table and all data.',
-      );
+      this.error('Refusing to reset without --force. This drops every entity table and all data.');
     }
 
     const manifest = await loadManifest(flags.config);

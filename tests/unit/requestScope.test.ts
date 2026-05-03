@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { defineRequestScope, getRequestScoped, route } from '@lastshotlabs/slingshot-core';
-import { domain, definePackage } from '@lastshotlabs/slingshot-core';
+import { definePackage, domain } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 
 const baseConfig = {

@@ -16,16 +16,16 @@ it as `z` from `'zod'`.)
 
 ## What you can do
 
-| Capability         | Example                                                  |
-| ------------------ | -------------------------------------------------------- |
-| Validate shape     | `z.object({ title: z.string() })`                        |
-| Constrain values   | `z.string().min(1).max(200)`                             |
-| Coerce types       | `z.coerce.number().int()`                                |
-| Transform values   | `z.string().email().toLowerCase().trim()`                |
-| Refine with rules  | `z.string().refine(s => s.startsWith('act_'))`           |
-| Cross-field rules  | `.superRefine((data, ctx) => { /* ... */ })`             |
-| Optional fields    | `z.string().optional()` / `.nullable()` / `.default(0)`  |
-| Discriminated unions | `z.discriminatedUnion('kind', [...])`                  |
+| Capability           | Example                                                 |
+| -------------------- | ------------------------------------------------------- |
+| Validate shape       | `z.object({ title: z.string() })`                       |
+| Constrain values     | `z.string().min(1).max(200)`                            |
+| Coerce types         | `z.coerce.number().int()`                               |
+| Transform values     | `z.string().email().toLowerCase().trim()`               |
+| Refine with rules    | `z.string().refine(s => s.startsWith('act_'))`          |
+| Cross-field rules    | `.superRefine((data, ctx) => { /* ... */ })`            |
+| Optional fields      | `z.string().optional()` / `.nullable()` / `.default(0)` |
+| Discriminated unions | `z.discriminatedUnion('kind', [...])`                   |
 
 Everything happens before the handler. If validation fails, the request is rejected with a
 structured `400`; if validation passes, the handler argument is fully typed.
@@ -34,10 +34,13 @@ structured `400`; if validation passes, the handler argument is fully typed.
 
 ```typescript title="src/blog/posts.ts"
 // @skip-typecheck
-import { domain, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { domain, route } from '@lastshotlabs/slingshot';
 
-declare function createPost(input: { title: string; body: string }): Promise<{ id: string; title: string }>;
+declare function createPost(input: {
+  title: string;
+  body: string;
+}): Promise<{ id: string; title: string }>;
 declare function fetchPost(id: string, opts: { includeAuthor?: boolean }): Promise<unknown>;
 
 export const postsDomain = domain({
@@ -168,10 +171,12 @@ route.patch({
   path: '/:id',
   request: {
     params: PostId,
-    body: PostBody.partial(),     // PATCH allows partial
+    body: PostBody.partial(), // PATCH allows partial
   },
   responses: { 200: { description: 'Updated', schema: Post } },
-  handler: async ({ params, body, respond }) => { /* ... */ },
+  handler: async ({ params, body, respond }) => {
+    /* ... */
+  },
 });
 ```
 
@@ -257,8 +262,8 @@ register them once and they appear as `$ref` entries in the spec instead of bein
 everywhere:
 
 ```typescript title="src/schemas/registry.ts"
-import { registerSchema } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { registerSchema } from '@lastshotlabs/slingshot';
 
 export const Pagination = registerSchema(
   'Pagination',

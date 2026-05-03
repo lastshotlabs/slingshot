@@ -65,9 +65,7 @@ export function warnUnknownPluginKeys(
   const known = new Set(Object.keys(schema.shape));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) {
-      log.warn(
-        `[${pluginName}] Unknown config key "${key}" — will be ignored. Check for typos.`,
-      );
+      log.warn(`[${pluginName}] Unknown config key "${key}" — will be ignored. Check for typos.`);
     }
   }
 }

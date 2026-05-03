@@ -1490,9 +1490,12 @@ export function createBullMQAdapter(
         drainTimer = null;
       }
       if (pendingBuffer.length > 0) {
-        logger.warn('shutdown: discarding buffered events that could not be enqueued to Redis. These events will not be retried.', {
-          discarded: pendingBuffer.length,
-        });
+        logger.warn(
+          'shutdown: discarding buffered events that could not be enqueued to Redis. These events will not be retried.',
+          {
+            discarded: pendingBuffer.length,
+          },
+        );
         pendingBuffer.length = 0;
       }
       envelopeListeners.clear();

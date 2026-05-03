@@ -2,14 +2,13 @@
 // Cancellation persistence, snapshot serialization, job cancellation,
 // and run-lookup helpers for the BullMQ orchestration adapter.
 // ---------------------------------------------------------------------------
-
 import { Job, type JobType } from 'bullmq';
 import type { Queue, QueueEvents } from 'bullmq';
 import { withTimeout } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import {
-  OrchestrationError,
   type CancelOutcome,
+  OrchestrationError,
   type OrchestrationEventSink,
   type Run,
   type StepRun,
@@ -403,9 +402,7 @@ export function createCancellationFns(state: CancellationState) {
     }
   }
 
-  async function getPersistedCancelledSnapshot(
-    runId: string,
-  ): Promise<(Run | WorkflowRun) | null> {
+  async function getPersistedCancelledSnapshot(runId: string): Promise<(Run | WorkflowRun) | null> {
     const client = await getCancellationSnapshotStore();
     const payload = await client.get(getCancelledRunKey(runId));
     if (!payload) {
@@ -495,10 +492,7 @@ export function createCancellationFns(state: CancellationState) {
     let job = await findJobByRunId(state.defaultTaskQueue, runId);
     if (job) {
       if (!state.taskQueueEvents) {
-        throw new OrchestrationError(
-          'ADAPTER_ERROR',
-          'Task queue events are not started.',
-        );
+        throw new OrchestrationError('ADAPTER_ERROR', 'Task queue events are not started.');
       }
       return {
         job,
@@ -512,10 +506,7 @@ export function createCancellationFns(state: CancellationState) {
     job = await findJobByRunId(state.workflowQueue, runId);
     if (job) {
       if (!state.workflowQueueEvents) {
-        throw new OrchestrationError(
-          'ADAPTER_ERROR',
-          'Workflow queue events are not started.',
-        );
+        throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
       }
       return {
         job,

@@ -165,11 +165,11 @@ export function defineConfig<S extends z.ZodObject>(spec: {
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
         const issues = parsed.error.issues
-          .map(issue => `  ${prefix}${fieldToEnvKey(String(issue.path[0] ?? ''))}: ${issue.message}`)
+          .map(
+            issue => `  ${prefix}${fieldToEnvKey(String(issue.path[0] ?? ''))}: ${issue.message}`,
+          )
           .join('\n');
-        throw new Error(
-          `[slingshot] Config '${namespace}' validation failed:\n${issues}`,
-        );
+        throw new Error(`[slingshot] Config '${namespace}' validation failed:\n${issues}`);
       }
       cached = parsed.data as Inferred;
       return cached;

@@ -88,8 +88,15 @@ describe('eventEnvelope', () => {
   });
 
   test('isEventEnvelope rejects objects missing key', () => {
-    expect(isEventEnvelope({ meta: { eventId: 'a', occurredAt: 'b', ownerPlugin: 'c', exposure: [] } })).toBe(false);
-    expect(isEventEnvelope({ key: 123, meta: { eventId: 'a', occurredAt: 'b', ownerPlugin: 'c', exposure: [] } })).toBe(false);
+    expect(
+      isEventEnvelope({ meta: { eventId: 'a', occurredAt: 'b', ownerPlugin: 'c', exposure: [] } }),
+    ).toBe(false);
+    expect(
+      isEventEnvelope({
+        key: 123,
+        meta: { eventId: 'a', occurredAt: 'b', ownerPlugin: 'c', exposure: [] },
+      }),
+    ).toBe(false);
   });
 
   test('envelope payload nested objects are frozen', () => {

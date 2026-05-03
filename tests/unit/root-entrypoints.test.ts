@@ -75,5 +75,4 @@ describe('root entrypoints', () => {
 
     expect(typeof cliUtils.resolvePlatformConfig).toBe('function');
   });
-
 });

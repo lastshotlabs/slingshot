@@ -1099,7 +1099,9 @@ export function buildBareEntityRoutes<
   // once per call to buildBareEntityRoutes. The default-variant build is reused via
   // `schemas` above; named variants are produced lazily when a route asks for them.
   const variantSchemaCache = new Map<string, ReturnType<typeof buildEntityZodSchemas>>();
-  function schemasForVariant(variant: string | undefined): ReturnType<typeof buildEntityZodSchemas> {
+  function schemasForVariant(
+    variant: string | undefined,
+  ): ReturnType<typeof buildEntityZodSchemas> {
     if (!variant) return schemas;
     const cached = variantSchemaCache.get(variant);
     if (cached) return cached;

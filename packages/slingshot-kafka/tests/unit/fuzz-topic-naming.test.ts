@@ -8,7 +8,7 @@
  *   3. Group IDs follow the same stability guarantees.
  */
 import { describe, expect, test } from 'bun:test';
-import { toTopicName, toGroupId } from '../../src/kafkaTopicNaming';
+import { toGroupId, toTopicName } from '../../src/kafkaTopicNaming';
 
 // ---------------------------------------------------------------------------
 // Seeded PRNG (Linear Congruential Generator)
@@ -85,10 +85,7 @@ function hasEmptySegment(topic: string, separator: string): boolean {
 // ---------------------------------------------------------------------------
 // Collision detection
 // ---------------------------------------------------------------------------
-function computeCollisions(
-  inputs: string[],
-  fn: (input: string) => string,
-): Map<string, string[]> {
+function computeCollisions(inputs: string[], fn: (input: string) => string): Map<string, string[]> {
   const mapping = new Map<string, string[]>();
   for (const input of inputs) {
     const output = fn(input);
@@ -130,10 +127,7 @@ describe('toTopicName fuzz', () => {
     }
 
     // Check for collisions — different event names should NOT map to the same topic
-    const collisions = computeCollisions(
-      eventNames,
-      evt => toTopicName(prefix, evt),
-    );
+    const collisions = computeCollisions(eventNames, evt => toTopicName(prefix, evt));
     if (collisions.size > 0) {
       // If there are collisions, they must be from event names that only
       // differ by the separator replacement (e.g. "a:b" and "a.b" both map
@@ -276,13 +270,7 @@ describe('toGroupId fuzz', () => {
     const prefix = 'slingshot';
     const topic = toTopicName(prefix, 'entity:post.created');
 
-    const names = [
-      '😀-consumer',
-      '👍worker',
-      'emoji🎉group',
-      '普通の名前',
-      'русское-имя',
-    ];
+    const names = ['😀-consumer', '👍worker', 'emoji🎉group', '普通の名前', 'русское-имя'];
 
     for (const name of names) {
       const groupId = toGroupId(prefix, topic, name);
@@ -315,13 +303,7 @@ describe('empty and edge-case inputs', () => {
   });
 
   test('event name with only special chars converts predictably', () => {
-    const events = [
-      ':',
-      '::',
-      ':::',
-      'a:',
-      ':b',
-    ];
+    const events = [':', '::', ':::', 'a:', ':b'];
     for (const event of events) {
       const topic = toTopicName('p', event);
       expect(topic).not.toContain(':');

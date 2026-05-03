@@ -602,9 +602,7 @@ export const notificationOperations = defineOperations(Notification, {
         const hasMore = rows.length - startIndex > limit;
         return Promise.resolve({
           records: rows.slice(startIndex, startIndex + limit),
-          nextCursor: hasMore
-            ? (rows[startIndex + limit - 1]?.id ?? null)
-            : null,
+          nextCursor: hasMore ? (rows[startIndex + limit - 1]?.id ?? null) : null,
         });
       },
     sqlite:
@@ -630,7 +628,7 @@ export const notificationOperations = defineOperations(Notification, {
         return Promise.resolve({
           records: hasMore ? typed.slice(0, limit) : typed,
           nextCursor: hasMore
-            ? (typed[limit - 1] as unknown as Record<string, unknown>).id as string
+            ? ((typed[limit - 1] as unknown as Record<string, unknown>).id as string)
             : null,
         });
       },
@@ -657,9 +655,7 @@ export const notificationOperations = defineOperations(Notification, {
         const hasMore = rows.length > limit;
         return {
           records: (hasMore ? rows.slice(0, limit) : rows) as NotificationRecord[],
-          nextCursor: hasMore
-            ? (rows[limit - 1] as Record<string, unknown>).id as string
-            : null,
+          nextCursor: hasMore ? ((rows[limit - 1] as Record<string, unknown>).id as string) : null,
         };
       },
     mongo:
@@ -679,9 +675,10 @@ export const notificationOperations = defineOperations(Notification, {
         let findQuery: Record<string, unknown> = baseQuery;
 
         if (cursor) {
-          const cursorRow = (await target.findOne({ id: cursor })) as
-            | Record<string, unknown>
-            | null;
+          const cursorRow = (await target.findOne({ id: cursor })) as Record<
+            string,
+            unknown
+          > | null;
           if (cursorRow) {
             const cursorDeliverAt = cursorRow['deliverAt'];
             findQuery = {
@@ -703,9 +700,7 @@ export const notificationOperations = defineOperations(Notification, {
         const hasMore = rows.length > limit;
         return {
           records: (hasMore ? rows.slice(0, limit) : rows) as NotificationRecord[],
-          nextCursor: hasMore
-            ? (rows[limit - 1] as NotificationRecord).id
-            : null,
+          nextCursor: hasMore ? (rows[limit - 1] as NotificationRecord).id : null,
         };
       },
   }),

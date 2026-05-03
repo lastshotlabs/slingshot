@@ -11,11 +11,7 @@ export interface OrchestrationLogger {
   error(msg: string, fields?: Record<string, unknown>): void;
 }
 
-function formatLine(
-  level: string,
-  msg: string,
-  fields?: Record<string, unknown>,
-): string {
+function formatLine(level: string, msg: string, fields?: Record<string, unknown>): string {
   return JSON.stringify({
     level,
     timestamp: new Date().toISOString(),

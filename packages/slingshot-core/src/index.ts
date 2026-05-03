@@ -1,3 +1,7 @@
+// Emit a one-time pre-1.0 stability warning for the entire framework.
+// Deduplicated per-package per-stability-level across all Slingshot packages.
+import { emitPackageStabilityWarning } from './stability';
+
 /** Core plugin lifecycle contracts implemented by Slingshot feature packages. */
 export type {
   SlingshotPlugin,
@@ -795,7 +799,4 @@ export {
 export type { ConfigDefinition, ConfigSource } from './config';
 export { defineConfig, loadConfigs } from './config';
 
-// Emit a one-time pre-1.0 stability warning for the entire framework.
-// Deduplicated per-package per-stability-level across all Slingshot packages.
-import { emitPackageStabilityWarning } from './stability';
 emitPackageStabilityWarning('@lastshotlabs/slingshot-core', 'experimental');

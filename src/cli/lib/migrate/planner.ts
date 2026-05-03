@@ -139,10 +139,7 @@ export function planMigration(args: {
  * write succeeds — if the write throws, the snapshot dir stays consistent with
  * the previous migration, so the next run will regenerate the same plan.
  */
-export function writeMigration(args: {
-  plan: PlannedMigration;
-  snapshotDir: string;
-}): void {
+export function writeMigration(args: { plan: PlannedMigration; snapshotDir: string }): void {
   const { plan, snapshotDir } = args;
   if (!plan.sql.trim()) return;
 

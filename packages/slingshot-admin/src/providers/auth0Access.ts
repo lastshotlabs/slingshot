@@ -157,10 +157,7 @@ export function createAuth0AccessProvider(
             algorithms: ['RS256'],
           }),
           new Promise<never>((_, reject) => {
-            timerId = setTimeout(
-              () => reject(new Error('JWT verification timed out')),
-              timeoutMs,
-            );
+            timerId = setTimeout(() => reject(new Error('JWT verification timed out')), timeoutMs);
           }),
         ]).finally(() => {
           // Always clear the timeout timer so it does not linger after the

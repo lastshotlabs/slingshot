@@ -15,7 +15,7 @@ Set `presence: true` on a `WsEndpointConfig` and the framework attaches per-sock
 to the WebSocket state. When a socket subscribes to a room the user is added to that room's
 presence set; when the last socket for that user leaves, the user is removed. Multiple
 sockets per user (multi-tab, mobile + desktop) collapse to a single presence entry — only the
-*first* connection and *last* disconnection produce events.
+_first_ connection and _last_ disconnection produce events.
 
 Reads are O(1). `getRoomPresence(state, endpoint, room)` returns the user IDs currently in a
 room; `getUserPresence(state, userId)` returns every room a user is in across endpoints.
@@ -86,13 +86,13 @@ sockets — instance A does not know about instance B's connected users. Cross-i
 runs through the WebSocket transport (Redis pub/sub by default), so when instance A broadcasts
 a `presence:join` to a room, instance B's connected clients in that room receive it.
 
-The presence *registry* itself is not replicated. If you need a globally-correct online list,
+The presence _registry_ itself is not replicated. If you need a globally-correct online list,
 fold the join/leave events into a shared store (Redis SET keyed by room) inside an
 `onRoomSubscribe` hook.
 
 <Aside type="tip">
-  Presence is cheap. The state structures are flat maps; a thousand users in a room costs a
-  few KB. Worry about cardinality in metrics, not in presence.
+  Presence is cheap. The state structures are flat maps; a thousand users in a room costs a few KB.
+  Worry about cardinality in metrics, not in presence.
 </Aside>
 
 ## What's next

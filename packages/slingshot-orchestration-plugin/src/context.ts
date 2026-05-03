@@ -11,9 +11,8 @@ export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration';
 /**
  * Typed plugin-state key for the orchestration runtime slot.
  */
-export const ORCHESTRATION_RUNTIME_KEY = definePluginStateKey<OrchestrationRuntime>(
-  ORCHESTRATION_PLUGIN_KEY,
-);
+export const ORCHESTRATION_RUNTIME_KEY =
+  definePluginStateKey<OrchestrationRuntime>(ORCHESTRATION_PLUGIN_KEY);
 
 /**
  * Read the orchestration runtime published by `createOrchestrationPlugin()`.

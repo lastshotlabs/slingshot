@@ -59,14 +59,16 @@ reconnect sends a single `recover` message:
 
 ```typescript title="src/client/recover.ts"
 // @skip-typecheck
-ws.send(JSON.stringify({
-  action: 'recover',
-  data: {
-    sessionId: lastSessionId,
-    rooms: ['room:42', 'room:99'],
-    lastEventId: lastReceivedEventId,
-  },
-}));
+ws.send(
+  JSON.stringify({
+    action: 'recover',
+    data: {
+      sessionId: lastSessionId,
+      rooms: ['room:42', 'room:99'],
+      lastEventId: lastReceivedEventId,
+    },
+  }),
+);
 
 ws.addEventListener('message', e => {
   const msg = JSON.parse(e.data);
@@ -94,10 +96,10 @@ A long one (10 min) is more forgiving but holds session metadata longer. Five mi
 reasonable default for most real-time apps.
 
 <Aside type="caution">
-  Sessions are kept on the instance that handled the original socket. In multi-instance
-  deployments the reconnecting client may land on a different node and find its session
-  missing — the framework reports `session_expired` in that case. Sticky load balancing or a
-  shared session store (a future enhancement) is required for cross-node recovery.
+  Sessions are kept on the instance that handled the original socket. In multi-instance deployments
+  the reconnecting client may land on a different node and find its session missing — the framework
+  reports `session_expired` in that case. Sticky load balancing or a shared session store (a future
+  enhancement) is required for cross-node recovery.
 </Aside>
 
 ## What's next

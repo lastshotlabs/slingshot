@@ -95,11 +95,7 @@ export type { PermissionsPluginConfig } from './plugin';
 /**
  * Permissions error classes with machine-readable codes.
  */
-export {
-  PermissionsError,
-  PermissionsConfigError,
-  PermissionsAdapterError,
-} from './errors';
+export { PermissionsError, PermissionsConfigError, PermissionsAdapterError } from './errors';
 /**
  * TTL-based evaluation cache for permission checks.
  */

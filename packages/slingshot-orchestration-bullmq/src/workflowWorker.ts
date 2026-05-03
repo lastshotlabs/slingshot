@@ -91,8 +91,7 @@ export function createBullMQWorkflowProcessor(options: {
    */
   hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
 }) {
-  const logger =
-    options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
+  const logger = options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
   function resolveTask(step: StepEntry): AnyResolvedTask {
     if (step.taskRef) return step.taskRef;
     const task = options.taskRegistry.get(step.task);

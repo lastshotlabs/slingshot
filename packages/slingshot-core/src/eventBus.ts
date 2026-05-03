@@ -233,10 +233,7 @@ export class InProcessAdapter implements SlingshotEventBus {
   private readonly validation: ValidationMode;
   private readonly logger?: Logger;
 
-  constructor(
-    serializationOpts?: EventBusSerializationOptions,
-    logger?: Logger,
-  ) {
+  constructor(serializationOpts?: EventBusSerializationOptions, logger?: Logger) {
     this.registry = serializationOpts?.schemaRegistry;
     this.validation = serializationOpts?.validation ?? 'off';
     this.logger = logger;

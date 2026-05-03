@@ -1435,10 +1435,7 @@ export interface ResolvedEntityConfig<
 export function defineEntity<
   F extends Record<string, FieldDef>,
   const TMwName extends string = string,
->(
-  name: string,
-  config: Omit<EntityConfig<F, TMwName>, 'name'>,
-): ResolvedEntityConfig<F, TMwName> {
+>(name: string, config: Omit<EntityConfig<F, TMwName>, 'name'>): ResolvedEntityConfig<F, TMwName> {
   const fields = config.fields;
 
   // Find primary key

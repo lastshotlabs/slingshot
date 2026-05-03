@@ -184,9 +184,7 @@ export function createAutoModMiddleware(deps: {
       tenantId,
     };
 
-    const hookDecision = deps.autoModerationHook
-      ? await deps.autoModerationHook(target)
-      : 'allow';
+    const hookDecision = deps.autoModerationHook ? await deps.autoModerationHook(target) : 'allow';
     const ruleDecision = await evaluateRules({
       adapter: deps.autoModRuleAdapter,
       tenantId,

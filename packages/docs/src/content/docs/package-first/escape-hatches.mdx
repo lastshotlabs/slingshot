@@ -13,13 +13,13 @@ authoring tier, not a seam below packages.
 
 ## Decision guide
 
-| You need...                                          | Reach for                    |
-| ---------------------------------------------------- | ---------------------------- |
-| Custom logic in a generated CRUD route               | Executor override            |
-| A new route inside the entity shell                  | Extra route                  |
-| Full control over entity storage construction        | Manual adapter wiring        |
-| Custom system field names for an existing database   | Entity `systemFields` config |
-| Custom storage conventions (Redis keys, table names) | Entity `conventions` config  |
+| You need...                                          | Reach for                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Custom logic in a generated CRUD route               | Executor override                                                              |
+| A new route inside the entity shell                  | Extra route                                                                    |
+| Full control over entity storage construction        | Manual adapter wiring                                                          |
+| Custom system field names for an existing database   | Entity `systemFields` config                                                   |
+| Custom storage conventions (Redis keys, table names) | Entity `conventions` config                                                    |
 | Direct lifecycle control (async bootstrap, teardown) | `SlingshotPlugin` ([Plugin Interface](/slingshot/authoring/plugin-interface/)) |
 
 ## Executor overrides

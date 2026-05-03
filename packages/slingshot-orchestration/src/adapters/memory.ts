@@ -1,9 +1,9 @@
-import { logger } from '../internal/logger';
 import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
 import { createIdempotencyScope } from '../idempotency';
+import { logger } from '../internal/logger';
 import { assertPayloadSize, resolveMaxPayloadBytes } from '../serialization';
 import type {
   AnyResolvedTask,
@@ -91,9 +91,12 @@ export function createMemoryAdapter(
      */
     hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
   } = {},
-): OrchestrationAdapter & ObservabilityCapability & SignalCapability & ScheduleCapability & {
-  health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
-} {
+): OrchestrationAdapter &
+  ObservabilityCapability &
+  SignalCapability &
+  ScheduleCapability & {
+    health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
+  } {
   const parsed = memoryAdapterOptionsSchema.parse({
     concurrency: options.concurrency,
     maxPayloadBytes: options.maxPayloadBytes,
@@ -116,9 +119,15 @@ export function createMemoryAdapter(
   const workflowChildren = new Map<string, Set<string>>();
   const delayedWorkflowStarts = new Map<string, AbortController>();
   // Signal infrastructure
-  const signalQueues = new Map<string, Array<{ name: string; payload: unknown; receivedAt: Date }>>();
+  const signalQueues = new Map<
+    string,
+    Array<{ name: string; payload: unknown; receivedAt: Date }>
+  >();
   // Schedule infrastructure
-  const schedules = new Map<string, ScheduleHandle & { _timeout?: ReturnType<typeof setTimeout> }>();
+  const schedules = new Map<
+    string,
+    ScheduleHandle & { _timeout?: ReturnType<typeof setTimeout> }
+  >();
   let scheduleCheckerInterval: ReturnType<typeof setInterval> | undefined;
 
   function parseCronNext(cron: string, from: Date = new Date()): Date | null {
@@ -153,12 +162,10 @@ export function createMemoryAdapter(
     return null;
   }
 
-  function startScheduleChecker(
-    adapterApi: {
-      runTask(name: string, input: unknown): Promise<unknown>;
-      runWorkflow(name: string, input: unknown): Promise<unknown>;
-    },
-  ): void {
+  function startScheduleChecker(adapterApi: {
+    runTask(name: string, input: unknown): Promise<unknown>;
+    runWorkflow(name: string, input: unknown): Promise<unknown>;
+  }): void {
     if (scheduleCheckerInterval) return;
     scheduleCheckerInterval = setInterval(() => {
       if (shuttingDown) return;
@@ -213,7 +220,12 @@ export function createMemoryAdapter(
             const nextAfter = new Date(Date.now() + 60_000);
             const computed = parseCronNext(sched.cron, nextAfter);
             const current = schedules.get(id);
-            if (current) schedules.set(id, { ...current, nextRunAt: computed ?? undefined, _timeout: undefined });
+            if (current)
+              schedules.set(id, {
+                ...current,
+                nextRunAt: computed ?? undefined,
+                _timeout: undefined,
+              });
           }, delay);
           const current = schedules.get(id);
           if (current) schedules.set(id, { ...current, _timeout: timeout });

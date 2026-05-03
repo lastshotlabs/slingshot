@@ -63,11 +63,11 @@ You get all of this from one function call.
 
 ## defineApp, createApp, and createServer
 
-| Function         | Use when                                                |
-| ---------------- | ------------------------------------------------------- |
-| `defineApp()`    | Authoring `app.config.ts` — the canonical path          |
-| `createServer()` | Custom imperative entry points (rare)                   |
-| `createApp()`    | Testing, custom hosting, or programmatic use            |
+| Function         | Use when                                       |
+| ---------------- | ---------------------------------------------- |
+| `defineApp()`    | Authoring `app.config.ts` — the canonical path |
+| `createServer()` | Custom imperative entry points (rare)          |
+| `createApp()`    | Testing, custom hosting, or programmatic use   |
 
 `defineApp()` is a typed identity helper for the config object. The CLI runner picks up the
 default export and calls `createServer()` for you.

@@ -73,10 +73,7 @@ export { index, relation } from './builders/entityHelpers';
 export function defineEntity<
   const F extends Record<string, FieldDef>,
   const D extends EntityDtoConfig = EntityDtoConfig,
->(
-  name: string,
-  config: Omit<EntityConfig<F, D>, 'name'>,
-): ResolvedEntityConfig<F, D> {
+>(name: string, config: Omit<EntityConfig<F, D>, 'name'>): ResolvedEntityConfig<F, D> {
   // Validate using Zod schema — provides structured error messages with paths
   const fullConfig = { name, ...config };
   const result = entityConfigSchema.safeParse(fullConfig);

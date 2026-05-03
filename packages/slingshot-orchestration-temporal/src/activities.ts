@@ -178,7 +178,9 @@ export function createTemporalActivities(options: {
         // Log and emit the error, then rethrow so Temporal can retry the activity.
         // Swallowing hook errors would allow a workflow to appear successful even
         // when its completion hook failed — better to be loud and retryable.
-        logger.error('Workflow hook failed', { err: error instanceof Error ? error.message : String(error) });
+        logger.error('Workflow hook failed', {
+          err: error instanceof Error ? error.message : String(error),
+        });
         await options.eventSink?.emit('orchestration.workflow.hookError', {
           runId: args.runId,
           workflow: args.workflowName,

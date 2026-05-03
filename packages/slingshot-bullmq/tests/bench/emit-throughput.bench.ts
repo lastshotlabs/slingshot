@@ -14,7 +14,6 @@
  *   bun run tests/bench/emit-throughput.bench.ts        # quick mode (100 iterations)
  *   BENCH=1 bun run tests/bench/emit-throughput.bench.ts # full bench (10,000 iterations)
  */
-
 import { performance } from 'node:perf_hooks';
 import { createBullMQAdapter } from '../../src/bullmqAdapter';
 

@@ -1,16 +1,17 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import type { PermissionEvaluator, PermissionRegistry, PermissionsAdapter } from '@lastshotlabs/slingshot-core';
-import {
-  createMemoryAuditLogger,
-  createConsoleAuditLogger,
-} from '../../src/lib/auditLogger';
+import type {
+  PermissionEvaluator,
+  PermissionRegistry,
+  PermissionsAdapter,
+} from '@lastshotlabs/slingshot-core';
+import { createConsoleAuditLogger, createMemoryAuditLogger } from '../../src/lib/auditLogger';
 import type { AdminAuditEvent, AdminAuditLogger } from '../../src/lib/auditLogger';
 import { createMemoryManagedUserProvider } from '../../src/providers/memoryAccess';
 import { createAdminRouter } from '../../src/routes/admin';
-import { createPermissionsRouter } from '../../src/routes/permissions';
 import { createMailRouter } from '../../src/routes/mail';
+import { createPermissionsRouter } from '../../src/routes/permissions';
 import type { AdminEnv } from '../../src/types/env';
 
 // ---------------------------------------------------------------------------
@@ -86,7 +87,13 @@ function buildPermissionsApp(opts: BuildPermissionsAppOptions = {}) {
 
   const registry: PermissionRegistry = {
     getDefinition: mock(async () => null),
-    listResourceTypes: mock(() => [{ resourceType: 'admin:user', actions: ['read', 'write'], roles: { admin: ['read', 'write'] } }]),
+    listResourceTypes: mock(() => [
+      {
+        resourceType: 'admin:user',
+        actions: ['read', 'write'],
+        roles: { admin: ['read', 'write'] },
+      },
+    ]),
   };
 
   app.route(
@@ -197,7 +204,9 @@ describe('AdminAuditLogger implementations', () => {
   });
 
   test('createConsoleAuditLogger returns an object with log method', () => {
-    const logger = createConsoleAuditLogger(NULL_LOGGER as Parameters<typeof createConsoleAuditLogger>[0]);
+    const logger = createConsoleAuditLogger(
+      NULL_LOGGER as Parameters<typeof createConsoleAuditLogger>[0],
+    );
     expect(logger).toHaveProperty('log');
     expect(typeof logger.log).toBe('function');
   });

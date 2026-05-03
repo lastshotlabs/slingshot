@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   DEFAULT_MAX_ENTRIES,
   createConsoleLogger,
@@ -6,8 +8,6 @@ import {
 import type { HookServices, Logger } from '@lastshotlabs/slingshot-core';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const logger: Logger = createConsoleLogger({
   base: { component: 'slingshot-webhooks:memory-queue' },
@@ -32,11 +32,7 @@ export interface MemoryQueueConfig {
    * that has registered one; otherwise `undefined`).
    * May be async; callback failures are caught and logged.
    */
-  onDeadLetter?: (
-    job: WebhookJob,
-    err: Error,
-    services?: HookServices,
-  ) => void | Promise<void>;
+  onDeadLetter?: (job: WebhookJob, err: Error, services?: HookServices) => void | Promise<void>;
   /**
    * Late-bound accessor for framework {@link HookServices}. The plugin sets
    * this during `setupMiddleware`; the queue invokes it just before each

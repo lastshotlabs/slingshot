@@ -5,14 +5,14 @@ description: Node.js runtime adapter for Slingshot — password, SQLite, fs, glo
 
 ## Capabilities
 
-| Capability | API |
-|---|---|
-| Password | `bcryptjs` (bundled) — hash + verify |
-| SQLite | `better-sqlite3` (peer dep, lazy loaded) — CRUD, WAL, transactions |
-| Filesystem | `node:fs` — sync read/write/exists |
-| Glob | `tinyglobby` (peer dep) — async scan |
-| Server | `@hono/node-server` — HTTP + WebSocket via `ws` |
-| Process safety | `uncaughtException` + controlled exit |
+| Capability     | API                                                                |
+| -------------- | ------------------------------------------------------------------ |
+| Password       | `bcryptjs` (bundled) — hash + verify                               |
+| SQLite         | `better-sqlite3` (peer dep, lazy loaded) — CRUD, WAL, transactions |
+| Filesystem     | `node:fs` — sync read/write/exists                                 |
+| Glob           | `tinyglobby` (peer dep) — async scan                               |
+| Server         | `@hono/node-server` — HTTP + WebSocket via `ws`                    |
+| Process safety | `uncaughtException` + controlled exit                              |
 
 ## Runtime Contract
 

@@ -84,17 +84,14 @@ class FcmAccessTokenProvider {
     const assertion = `${header}.${claims}.${base64UrlEncode(signature)}`;
 
     const response = await withTimeout(
-      fetch(
-        this.serviceAccount.token_uri ?? 'https://oauth2.googleapis.com/token',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            assertion,
-          }),
-        },
-      ),
+      fetch(this.serviceAccount.token_uri ?? 'https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion,
+        }),
+      }),
       this.timeoutMs,
       'fcm.token-fetch',
     );

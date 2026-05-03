@@ -87,10 +87,9 @@ export default class Start extends Command {
       server = await createServer(config);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `[slingshot] Server failed to start (config: ${configPath}):\n  ${message}`,
-        { cause: err },
-      );
+      throw new Error(`[slingshot] Server failed to start (config: ${configPath}):\n  ${message}`, {
+        cause: err,
+      });
     }
     this.log(
       `[slingshot] Server running at http://localhost:${(server as { port?: number }).port ?? 3000}`,

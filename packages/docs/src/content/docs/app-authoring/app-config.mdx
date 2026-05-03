@@ -21,20 +21,20 @@ export default defineApp({
   port: 3000,
 
   // composition
-  packages: [],   // feature modules
-  plugins: [],    // cross-cutting integrations
+  packages: [], // feature modules
+  plugins: [], // cross-cutting integrations
   routesDir: './src/routes',
 
   // infrastructure
-  db: {},         // postgres / sqlite / mongo / redis
-  secrets: {},    // env / file / ssm / custom
+  db: {}, // postgres / sqlite / mongo / redis
+  secrets: {}, // env / file / ssm / custom
   eventBus: undefined, // in-process by default
 
   // request shape
-  security: {},   // signing, cors, csrf, rate limit
+  security: {}, // signing, cors, csrf, rate limit
   middleware: [], // extra Hono middleware
   validation: {}, // error formatting
-  upload: {},     // file uploads
+  upload: {}, // file uploads
   versioning: ['v1', 'v2'],
 
   // realtime
@@ -42,9 +42,9 @@ export default defineApp({
   sse: { endpoints: {} },
 
   // ops
-  jobs: {},          // orchestration / job queues
-  logging: {},       // structured logs
-  metrics: {},       // prometheus
+  jobs: {}, // orchestration / job queues
+  logging: {}, // structured logs
+  metrics: {}, // prometheus
   observability: {}, // tracing
 
   // multi-tenancy
@@ -75,9 +75,11 @@ attributes, and structured log entries. Set them in production. They default to
 ```typescript
 defineApp({
   port: 3000,
-  hostname: '0.0.0.0',     // optional; '0.0.0.0' is the default
+  hostname: '0.0.0.0', // optional; '0.0.0.0' is the default
   unix: '/var/run/app.sock', // mutually exclusive with port/hostname/tls
-  tls: { /* Bun TLS options */ },
+  tls: {
+    /* Bun TLS options */
+  },
   maxRequestBodySize: 50 * 1024 * 1024,
 });
 ```
@@ -139,7 +141,12 @@ defineApp({
     headers: {
       contentSecurityPolicy: "default-src 'self'",
     },
-    botProtection: { enabled: true, blocklistCidrs: [/* ... */] },
+    botProtection: {
+      enabled: true,
+      blocklistCidrs: [
+        /* ... */
+      ],
+    },
   },
 });
 ```

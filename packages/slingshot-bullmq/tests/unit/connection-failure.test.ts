@@ -9,7 +9,9 @@ import { createFakeBullMQModule, fakeBullMQState } from '../../src/testing/fakeB
 mock.module('bullmq', () => createFakeBullMQModule());
 const { createBullMQAdapter } = await import('../../src/bullmqAdapter');
 
-afterEach(() => { fakeBullMQState.reset(); });
+afterEach(() => {
+  fakeBullMQState.reset();
+});
 
 describe('createBullMQAdapter -- connection startup', () => {
   test('adapter creation does not throw with minimal connection opts', () => {
@@ -19,7 +21,9 @@ describe('createBullMQAdapter -- connection startup', () => {
   test('non-durable emit works after creation with empty connection', () => {
     const bus = createBullMQAdapter({ connection: {} });
     let called = false;
-    bus.on('auth:login' as any, () => { called = true; });
+    bus.on('auth:login' as any, () => {
+      called = true;
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(called).toBe(true);
   });
@@ -34,7 +38,9 @@ describe('createBullMQAdapter -- connection startup', () => {
       await new Promise(r => setTimeout(r, 20));
       expect(bus.getHealthDetails().status).toBe('degraded');
       expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('multiple consecutive startup failures buffer all events without crash', async () => {
@@ -46,7 +52,9 @@ describe('createBullMQAdapter -- connection startup', () => {
       for (let i = 0; i < 5; i++) bus.emit('auth:login' as any, { seq: i } as any);
       await new Promise(r => setTimeout(r, 20));
       expect(bus.getHealthDetails().pendingBufferSize).toBe(5);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -70,7 +78,9 @@ describe('createBullMQAdapter -- drain backoff behavior', () => {
 
       await bus._drainPendingBuffer();
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('drain backoff resets to zero when buffer empties', async () => {
@@ -94,14 +104,19 @@ describe('createBullMQAdapter -- drain backoff behavior', () => {
       expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
       await bus._drainPendingBuffer();
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('drain backoff is capped at drainMaxMs', async () => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     try {
       const bus = createBullMQAdapter({
-        connection: {}, drainBaseMs: 60_000, drainMaxMs: 200, maxEnqueueAttempts: 10,
+        connection: {},
+        drainBaseMs: 60_000,
+        drainMaxMs: 200,
+        maxEnqueueAttempts: 10,
       });
       bus.on('auth:login' as any, async () => {}, { durable: true, name: 'backoff-cap' });
       fakeBullMQState.nextAddError(new Error('down'));
@@ -112,7 +127,9 @@ describe('createBullMQAdapter -- drain backoff behavior', () => {
       expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
       await bus._drainPendingBuffer();
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -122,7 +139,10 @@ describe('createBullMQAdapter -- maxEnqueueAttempts exhaustion', () => {
     const dropped: string[] = [];
     try {
       const bus = createBullMQAdapter({
-        connection: {}, maxEnqueueAttempts: 2, drainBaseMs: 50, drainMaxMs: 200,
+        connection: {},
+        maxEnqueueAttempts: 2,
+        drainBaseMs: 50,
+        drainMaxMs: 200,
         onDrop: (event, reason) => dropped.push(`${event}:${reason}`),
       });
       bus.on('auth:login' as any, async () => {}, { durable: true, name: 'max-attempts' });
@@ -134,7 +154,9 @@ describe('createBullMQAdapter -- maxEnqueueAttempts exhaustion', () => {
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
       expect(bus.getHealthDetails().bufferDroppedCount).toBe(1);
       expect(dropped).toContain('auth:login:max-attempts');
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('events survive within default maxEnqueueAttempts and drain on recovery', async () => {
@@ -153,7 +175,9 @@ describe('createBullMQAdapter -- maxEnqueueAttempts exhaustion', () => {
       expect(bus.getHealthDetails().bufferDroppedCount).toBe(0);
       await bus._drainPendingBuffer();
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('permanent error during drain drops immediately regardless of attempts', async () => {
@@ -170,6 +194,8 @@ describe('createBullMQAdapter -- maxEnqueueAttempts exhaustion', () => {
       expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
       expect(bus.getHealthDetails().bufferDroppedCount).toBe(1);
       expect(bus.getHealthDetails().permanentErrorCount).toBe(1);
-    } finally { errorSpy.mockRestore(); }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

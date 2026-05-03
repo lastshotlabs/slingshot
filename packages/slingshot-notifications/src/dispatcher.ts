@@ -183,10 +183,7 @@ export interface CreateIntervalDispatcherOptions {
    * }
    * ```
    */
-  readonly onDeadLetter?: (
-    event: DeadLetterEvent,
-    services?: HookServices,
-  ) => void | Promise<void>;
+  readonly onDeadLetter?: (event: DeadLetterEvent, services?: HookServices) => void | Promise<void>;
   /**
    * Late-bound accessor for framework {@link HookServices}. The plugin sets
    * this during `setupMiddleware`; the dispatcher invokes it just before each

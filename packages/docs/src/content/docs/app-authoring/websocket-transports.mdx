@@ -59,8 +59,8 @@ interface and pass an instance to `ws.transport`:
 
 ```typescript title="src/lib/natsTransport.ts"
 // @skip-typecheck
+import { type NatsConnection, connect } from 'nats';
 import type { WsTransportAdapter } from '@lastshotlabs/slingshot';
-import { connect, type NatsConnection } from 'nats';
 
 export function createNatsTransport(url: string): WsTransportAdapter {
   let nc: NatsConnection | null = null;
@@ -101,9 +101,8 @@ sticky sessions break recovery and presence in subtle ways — pay the Redis cos
 sleep better.
 
 <Aside type="tip">
-  `disconnect()` is called on graceful shutdown. ioredis-style clients should use
-  `disconnect()` over `quit()` because subscribe-mode clients hang on `quit()` waiting for
-  unrelated commands.
+  `disconnect()` is called on graceful shutdown. ioredis-style clients should use `disconnect()`
+  over `quit()` because subscribe-mode clients hang on `quit()` waiting for unrelated commands.
 </Aside>
 
 ## What's next

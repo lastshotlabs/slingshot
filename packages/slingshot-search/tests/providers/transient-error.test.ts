@@ -55,9 +55,9 @@ describe('Algolia isTransientError', () => {
   });
 
   it('returns true for Algolia-specific temporarily/retry messages', () => {
-    expect(algoliaIsTransient(new Error('[slingshot-search:algolia] temporarily unavailable'))).toBe(
-      true,
-    );
+    expect(
+      algoliaIsTransient(new Error('[slingshot-search:algolia] temporarily unavailable')),
+    ).toBe(true);
     expect(algoliaIsTransient(new Error('[slingshot-search:algolia] please retry later'))).toBe(
       true,
     );

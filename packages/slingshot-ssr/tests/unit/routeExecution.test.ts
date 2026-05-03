@@ -62,13 +62,20 @@ describe('executeRouteModule', () => {
        }`,
     );
 
-    const exec = await executeRouteModule(makeMatch(file, { slug: 'hello' }), makeCtx({
-      params: { slug: 'hello' },
-    }));
+    const exec = await executeRouteModule(
+      makeMatch(file, { slug: 'hello' }),
+      makeCtx({
+        params: { slug: 'hello' },
+      }),
+    );
 
     expect(exec.loaderResult).toEqual({ data: { slug: 'hello' } });
     expect(exec.meta).toEqual({});
-    const rendered = exec.Page({ loaderData: { slug: 'hello' }, params: { slug: 'hello' }, query: {} });
+    const rendered = exec.Page({
+      loaderData: { slug: 'hello' },
+      params: { slug: 'hello' },
+      query: {},
+    });
     expect(rendered).toEqual({ tag: 'h1', text: 'hello' });
   });
 

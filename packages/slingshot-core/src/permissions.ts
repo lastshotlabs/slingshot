@@ -437,9 +437,8 @@ export interface PermissionsState {
 /**
  * Typed plugin-state key for the permissions runtime slot.
  */
-export const PERMISSIONS_RUNTIME_KEY = definePluginStateKey<PermissionsState>(
-  PERMISSIONS_STATE_KEY,
-);
+export const PERMISSIONS_RUNTIME_KEY =
+  definePluginStateKey<PermissionsState>(PERMISSIONS_STATE_KEY);
 
 /**
  * Resolve `PermissionsState` from plugin state when the permissions plugin is present.

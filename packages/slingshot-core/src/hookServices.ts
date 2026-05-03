@@ -35,15 +35,15 @@ import { getContextOrNull } from './context/index';
 import type { SlingshotEventBus } from './eventBus';
 import type { Logger } from './observability/logger';
 import {
+  PACKAGE_CAPABILITIES_PREFIX,
   type PackageCapabilityHandle,
   type PackageCapabilityReader,
   type PackageEntityReader,
   type PackageEntityRef,
-  PACKAGE_CAPABILITIES_PREFIX,
   type SlingshotPackageEntityModuleLike,
 } from './packageAuthoring';
-import type { PluginStateMap } from './pluginStateTypes';
 import { requireEntityAdapter } from './pluginState';
+import type { PluginStateMap } from './pluginStateTypes';
 
 /**
  * Out-of-request hook services. Mirrors the accessor surface

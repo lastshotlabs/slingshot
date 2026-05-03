@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { defineApp } from '../../src/defineApp';
 import { discoverAppConfig, loadAppConfig } from '../../src/cli/commands/start';
+import { defineApp } from '../../src/defineApp';
 
 describe('defineApp', () => {
   test('returns the input config unchanged (identity)', () => {

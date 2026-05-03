@@ -12,14 +12,14 @@ packages, no tight coupling.
 
 ## The model
 
-| Concept                        | Surface                                                  |
-| ------------------------------ | -------------------------------------------------------- |
-| Type the event payload         | `declare module ... interface SlingshotEventMap { ... }` |
-| Register exposure and scope    | `defineEvent(...)` in `setupMiddleware({ events })`      |
-| Publish from a route directly  | `event: 'key'` or `{ key, payload }` on the route        |
-| Publish from anywhere else     | `ctx.events.publish('key', payload)`                     |
-| Subscribe                      | `bus.on('key', handler)` in `setupPost`                  |
-| Swap the transport             | `defineApp({ eventBus: ... })`                           |
+| Concept                       | Surface                                                  |
+| ----------------------------- | -------------------------------------------------------- |
+| Type the event payload        | `declare module ... interface SlingshotEventMap { ... }` |
+| Register exposure and scope   | `defineEvent(...)` in `setupMiddleware({ events })`      |
+| Publish from a route directly | `event: 'key'` or `{ key, payload }` on the route        |
+| Publish from anywhere else    | `ctx.events.publish('key', payload)`                     |
+| Subscribe                     | `bus.on('key', handler)` in `setupPost`                  |
+| Swap the transport            | `defineApp({ eventBus: ... })`                           |
 
 ## Define the event type
 
@@ -50,9 +50,9 @@ to browsers (SSE), webhook subscribers, or external connectors, register a runti
 definition with `defineEvent(...)`:
 
 ```typescript title="src/blog/events.ts"
-import './event-types';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { defineEvent } from '@lastshotlabs/slingshot-core';
+import './event-types';
 
 export const blogEventsPlugin: SlingshotPlugin = {
   name: 'blog-events',
@@ -75,14 +75,14 @@ export const blogEventsPlugin: SlingshotPlugin = {
 };
 ```
 
-| Exposure          | Reaches                                                 |
-| ----------------- | ------------------------------------------------------- |
-| `internal`        | In-process subscribers only                             |
-| `client-safe`     | Browser SSE clients                                     |
-| `user-webhook`    | Webhooks scoped to the event's user                     |
-| `tenant-webhook`  | Webhooks scoped to the event's tenant                   |
-| `app-webhook`     | App-wide webhook subscribers                            |
-| `connector`       | External connector integrations                         |
+| Exposure         | Reaches                               |
+| ---------------- | ------------------------------------- |
+| `internal`       | In-process subscribers only           |
+| `client-safe`    | Browser SSE clients                   |
+| `user-webhook`   | Webhooks scoped to the event's user   |
+| `tenant-webhook` | Webhooks scoped to the event's tenant |
+| `app-webhook`    | App-wide webhook subscribers          |
+| `connector`      | External connector integrations       |
 
 `resolveScope` produces the routing key used by SSE filtering, webhook fan-out, and any
 other consumer that needs to know "who is this event about." A single event model fans
@@ -97,9 +97,11 @@ publishes after the operation succeeds, with the record as payload:
 
 ```typescript title="src/blog/post.ts"
 defineEntity('Post', {
-  fields: { /* ... */ },
+  fields: {
+    /* ... */
+  },
   routes: {
-    create: { event: 'blog:post.published' },                        // shorthand: emit on create
+    create: { event: 'blog:post.published' }, // shorthand: emit on create
     update: { event: { key: 'blog:post.updated', payload: ['id', 'title'] } }, // explicit fields
   },
 });

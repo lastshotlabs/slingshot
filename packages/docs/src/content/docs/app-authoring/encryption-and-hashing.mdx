@@ -12,14 +12,14 @@ timing-safe equality.
 
 ## What you can do
 
-| Primitive                  | Use it for                                                |
-| -------------------------- | --------------------------------------------------------- |
-| `runtime.password.hash`    | Hashing user passwords (argon2id by default in Bun)       |
-| `runtime.password.verify`  | Verifying a plaintext password against a stored hash      |
-| `hmacSign`                 | Signing webhook payloads, cookies, cursors                |
-| `hmacVerify`               | Verifying inbound HMAC signatures                         |
-| `sha256`                   | Non-keyed hashing — fingerprints, dedup keys              |
-| `timingSafeEqual`          | Comparing secrets without leaking timing                  |
+| Primitive                 | Use it for                                           |
+| ------------------------- | ---------------------------------------------------- |
+| `runtime.password.hash`   | Hashing user passwords (argon2id by default in Bun)  |
+| `runtime.password.verify` | Verifying a plaintext password against a stored hash |
+| `hmacSign`                | Signing webhook payloads, cookies, cursors           |
+| `hmacVerify`              | Verifying inbound HMAC signatures                    |
+| `sha256`                  | Non-keyed hashing — fingerprints, dedup keys         |
+| `timingSafeEqual`         | Comparing secrets without leaking timing             |
 
 ## Password hashing
 
@@ -93,10 +93,9 @@ if (timingSafeEqual(providedToken, expectedToken)) {
 ```
 
 <Aside type="caution">
-  Never compare secrets with `===`. `===` short-circuits at the first byte mismatch and
-  leaks the matching prefix length to a remote attacker who can measure response times
-  precisely. `timingSafeEqual` runs in constant time regardless of where the values
-  diverge.
+  Never compare secrets with `===`. `===` short-circuits at the first byte mismatch and leaks the
+  matching prefix length to a remote attacker who can measure response times precisely.
+  `timingSafeEqual` runs in constant time regardless of where the values diverge.
 </Aside>
 
 ## What's next

@@ -12,15 +12,15 @@ context (`c`) or an app instance and return what you need.
 
 ## What you can do
 
-| Helper                     | Returns                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `getActor(c)`              | The resolved `Actor` — never `null` (anonymous actor for unauthed requests)  |
-| `getActorId(c)`            | The actor's user ID, or `null` for anonymous                                 |
-| `getActorTenantId(c)`      | The actor's home tenant, or `null` when tenantless                           |
-| `getRequestTenantId(c)`    | The tenant scope of *this request* (header, subdomain, resolver)             |
-| `getContext(app)`          | The full `SlingshotContext` — throws if not attached                         |
-| `getContextOrNull(app)`    | The full `SlingshotContext`, or `null` when not yet attached                 |
-| `attachContext(app, ctx)`  | Attach a context to a bare Hono app (test utility — internal use otherwise)  |
+| Helper                    | Returns                                                                     |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `getActor(c)`             | The resolved `Actor` — never `null` (anonymous actor for unauthed requests) |
+| `getActorId(c)`           | The actor's user ID, or `null` for anonymous                                |
+| `getActorTenantId(c)`     | The actor's home tenant, or `null` when tenantless                          |
+| `getRequestTenantId(c)`   | The tenant scope of _this request_ (header, subdomain, resolver)            |
+| `getContext(app)`         | The full `SlingshotContext` — throws if not attached                        |
+| `getContextOrNull(app)`   | The full `SlingshotContext`, or `null` when not yet attached                |
+| `attachContext(app, ctx)` | Attach a context to a bare Hono app (test utility — internal use otherwise) |
 
 ## Read the actor inside a handler
 
@@ -60,8 +60,8 @@ forget.
 
 ## Actor tenant vs request tenant
 
-`getActorTenantId(c)` is the tenant the actor *belongs to*. `getRequestTenantId(c)` is
-the tenant the request is *scoped to* — set by tenant-resolution middleware from a
+`getActorTenantId(c)` is the tenant the actor _belongs to_. `getRequestTenantId(c)` is
+the tenant the request is _scoped to_ — set by tenant-resolution middleware from a
 header, subdomain, or path segment. They almost always match, but they can differ for
 cross-tenant operations (a platform admin acting in another tenant's scope).
 
@@ -69,7 +69,7 @@ cross-tenant operations (a platform admin acting in another tenant's scope).
 // @skip-typecheck
 import { getActorTenantId, getRequestTenantId } from '@lastshotlabs/slingshot';
 
-const home = getActorTenantId(c);    // where the actor lives
+const home = getActorTenantId(c); // where the actor lives
 const scope = getRequestTenantId(c); // where the request is operating
 if (home !== scope) {
   // cross-tenant — verify elevated permissions
@@ -107,9 +107,9 @@ instance. You only need it directly when stitching together a custom test harnes
 bare Hono app — almost no application code calls this.
 
 <Aside type="caution">
-  Calling `attachContext` more than once on the same app with a different context throws.
-  The framework holds context references via WeakMap and overwriting causes hard-to-debug
-  bugs across plugin DI tables.
+  Calling `attachContext` more than once on the same app with a different context throws. The
+  framework holds context references via WeakMap and overwriting causes hard-to-debug bugs across
+  plugin DI tables.
 </Aside>
 
 ## What's next

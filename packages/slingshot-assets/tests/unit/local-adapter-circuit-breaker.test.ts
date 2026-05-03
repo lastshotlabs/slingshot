@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { localStorage, LocalCircuitOpenError } from '../../src/adapters/local';
+import { LocalCircuitOpenError, localStorage } from '../../src/adapters/local';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -396,11 +396,7 @@ describe('localStorage retry', () => {
 
     const delays: number[] = [];
     const realSetTimeout = globalThis.setTimeout;
-    const mockTimer = ((
-      fn: TimerHandler,
-      delay?: number,
-      ...args: unknown[]
-    ) => {
+    const mockTimer = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
       delays.push(delay ?? 0);
       return realSetTimeout(fn as (...a: unknown[]) => void, 0, ...args);
     }) as unknown as typeof setTimeout;

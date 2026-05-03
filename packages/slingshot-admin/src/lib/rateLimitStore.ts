@@ -6,7 +6,6 @@
  * multi-instance deploy — production deploys should inject a Redis-backed
  * implementation so all replicas share the same counter.
  */
-
 import { type Logger, noopLogger } from '@lastshotlabs/slingshot-core';
 
 /** Result returned by {@link AdminRateLimitStore.hit}. */

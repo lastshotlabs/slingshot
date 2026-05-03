@@ -77,7 +77,10 @@ export default defineConfig({
             { label: 'App Config', slug: 'app-authoring/app-config' },
             { label: 'Packages', slug: 'package-first/define-package' },
             { label: 'Domains and Routes', slug: 'package-first/domain-and-route' },
-            { label: 'Capabilities and entityRef', slug: 'package-first/capabilities-and-entity-ref' },
+            {
+              label: 'Capabilities and entityRef',
+              slug: 'package-first/capabilities-and-entity-ref',
+            },
             { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'Events and the Event Bus', slug: 'app-authoring/events-and-the-event-bus' },
             { label: 'HookServices', slug: 'app-authoring/hook-services' },
@@ -231,10 +234,19 @@ export default defineConfig({
             { label: 'Testing Plugins', slug: 'authoring/testing-plugins' },
             { label: 'Testing Apps', slug: 'guides/testing' },
             { label: 'Publishing', slug: 'authoring/publishing' },
-            { label: 'createServer and createApp', slug: 'app-authoring/create-server-and-create-app' },
-            { label: 'Runtime and Infrastructure', slug: 'app-authoring/runtime-and-infrastructure' },
+            {
+              label: 'createServer and createApp',
+              slug: 'app-authoring/create-server-and-create-app',
+            },
+            {
+              label: 'Runtime and Infrastructure',
+              slug: 'app-authoring/runtime-and-infrastructure',
+            },
             { label: 'Starter App', slug: 'app-authoring/starter-app' },
-            { label: 'OpenAPI and Validation Reference', slug: 'app-authoring/openapi-and-validation' },
+            {
+              label: 'OpenAPI and Validation Reference',
+              slug: 'app-authoring/openapi-and-validation',
+            },
             {
               label: 'Maturity and Package Status',
               slug: 'core-features/maturity-and-package-status',

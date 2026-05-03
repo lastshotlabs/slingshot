@@ -101,12 +101,8 @@ export interface PackageEntityModule<
 /**
  * Extract the middleware-name union from a {@link ResolvedEntityConfig}'s second generic.
  */
-type EntityMiddlewareNamesOf<TConfig> = TConfig extends ResolvedEntityConfig<
-  Record<string, FieldDef>,
-  infer TMwName
->
-  ? TMwName
-  : never;
+type EntityMiddlewareNamesOf<TConfig> =
+  TConfig extends ResolvedEntityConfig<Record<string, FieldDef>, infer TMwName> ? TMwName : never;
 
 type EntityOperationsInput =
   | Record<string, OperationConfig>

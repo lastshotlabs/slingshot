@@ -33,14 +33,14 @@ providers in `app.config.ts` and pass them to `createAdminPlugin()`:
 ```typescript title="app.config.ts"
 // @skip-typecheck
 import { defineApp } from '@lastshotlabs/slingshot';
-import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 import { createAdminPlugin } from '@lastshotlabs/slingshot-admin';
 import {
+  createMemoryAuditLog,
   createSlingshotAuthAccessProvider,
   createSlingshotAuthManagedUserProvider,
-  createMemoryAuditLog,
 } from '@lastshotlabs/slingshot-admin/providers';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
   plugins: [

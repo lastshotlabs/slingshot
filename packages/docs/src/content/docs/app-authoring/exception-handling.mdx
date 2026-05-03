@@ -26,8 +26,8 @@ The canonical way to surface a typed HTTP failure:
 
 ```typescript
 // @skip-typecheck
-import { HttpError, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { HttpError, route } from '@lastshotlabs/slingshot';
 
 route.get({
   path: '/posts/:id',
@@ -96,8 +96,8 @@ express):
 
 ```typescript
 // @skip-typecheck
-import { ValidationError, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { ValidationError, route } from '@lastshotlabs/slingshot';
 
 route.post({
   path: '/bookings',

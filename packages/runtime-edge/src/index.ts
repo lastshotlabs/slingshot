@@ -1,12 +1,8 @@
 // packages/runtime-edge/src/index.ts
-import {
-  type Logger,
-  TimeoutError,
-  createConsoleLogger,
-} from '@lastshotlabs/slingshot-core';
-import { withAbortTimeout } from './lib/withAbortTimeout';
+import { type Logger, TimeoutError, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 import { EdgeFileSizeExceededError, EdgePasswordConfigError, EdgeUnsupportedError } from './errors';
+import { withAbortTimeout } from './lib/withAbortTimeout';
 
 /**
  * Runtime-specific error classes thrown by the Edge adapter for unsupported

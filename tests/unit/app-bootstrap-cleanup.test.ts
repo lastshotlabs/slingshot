@@ -38,8 +38,12 @@ function makeTestBus(shutdown: () => Promise<void>): SlingshotEventBus {
     emit() {},
     on() {},
     onEnvelope() {},
-    off() { return true; },
-    offEnvelope() { return true; },
+    off() {
+      return true;
+    },
+    offEnvelope() {
+      return true;
+    },
     shutdown,
   };
 }

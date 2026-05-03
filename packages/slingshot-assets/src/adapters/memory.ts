@@ -1,10 +1,6 @@
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
-import {
-  type CircuitBreakerState,
-  CircuitOpenError,
-  createCircuitBreaker,
-} from './circuitBreaker';
+import { type CircuitBreakerState, CircuitOpenError, createCircuitBreaker } from './circuitBreaker';
 
 /**
  * Structured error thrown when the memory storage circuit breaker is open.

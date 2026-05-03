@@ -9,8 +9,8 @@
  * signals; this script just needs to boot the server and stay alive until
  * Bun kills it.
  */
-import { discoverAppConfig, loadAppConfig } from './commands/start';
 import { createServer } from '../server';
+import { discoverAppConfig, loadAppConfig } from './commands/start';
 
 const cwd = process.cwd();
 const configOverride = process.env.SLINGSHOT_DEV_CONFIG ?? undefined;

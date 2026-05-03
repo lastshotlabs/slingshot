@@ -1,7 +1,12 @@
 // packages/slingshot-ssg/src/renderer.ts
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { PathTraversalError, createConsoleLogger, deepFreeze, safeJoin } from '@lastshotlabs/slingshot-core';
+import {
+  PathTraversalError,
+  createConsoleLogger,
+  deepFreeze,
+  safeJoin,
+} from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { initRouteTree, resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import {

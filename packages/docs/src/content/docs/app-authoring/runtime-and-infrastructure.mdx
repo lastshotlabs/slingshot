@@ -9,7 +9,7 @@ Slingshot treats infrastructure as part of app assembly, not as scattered packag
 
 ```typescript title="app.config.ts"
 // @skip-typecheck
-import { defineApp, type AppConfig } from '@lastshotlabs/slingshot';
+import { type AppConfig, defineApp } from '@lastshotlabs/slingshot';
 
 declare const myRuntime: AppConfig['runtime'];
 

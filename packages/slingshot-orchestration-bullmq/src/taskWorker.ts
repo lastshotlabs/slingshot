@@ -60,8 +60,7 @@ export function createBullMQTaskProcessor(options: {
    */
   hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
 }) {
-  const logger =
-    options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
+  const logger = options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
   return async function process(job: Job<Record<string, unknown>>) {
     if (job.name === '__slingshot_sleep') {
       return { sleptMs: job.data['durationMs'] };

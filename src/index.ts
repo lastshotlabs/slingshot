@@ -339,4 +339,3 @@ export type {
 } from '@lastshotlabs/slingshot-core';
 export { entity } from '@lastshotlabs/slingshot-entity';
 export type { EntityModuleWiring, PackageEntityModule } from '@lastshotlabs/slingshot-entity';
-

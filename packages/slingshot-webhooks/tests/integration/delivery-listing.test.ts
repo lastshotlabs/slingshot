@@ -85,9 +85,7 @@ describe('webhook delivery listing via HTTP routes', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-1', tenantId: 'tenant-a' },
@@ -96,10 +94,9 @@ describe('webhook delivery listing via HTTP routes', () => {
 
       await waitForDeliveries(runtime, endpointId, 1, 'delivered');
 
-      const listRes = await app.request(
-        `/webhooks/endpoints/${endpointId}/deliveries`,
-        { headers: adminHeaders() },
-      );
+      const listRes = await app.request(`/webhooks/endpoints/${endpointId}/deliveries`, {
+        headers: adminHeaders(),
+      });
       expect(listRes.status).toBe(200);
       const list = (await listRes.json()) as {
         items: Array<Record<string, unknown>>;
@@ -121,9 +118,7 @@ describe('webhook delivery listing via HTTP routes', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
 
       // Publish 5 events to create 5 deliveries
       for (let i = 0; i < 5; i++) {
@@ -137,10 +132,9 @@ describe('webhook delivery listing via HTTP routes', () => {
       await waitForDeliveries(runtime, endpointId, 5, 'delivered');
 
       // Verify all 5 are visible without pagination
-      const allRes = await app.request(
-        `/webhooks/endpoints/${endpointId}/deliveries?limit=10`,
-        { headers: adminHeaders() },
-      );
+      const allRes = await app.request(`/webhooks/endpoints/${endpointId}/deliveries?limit=10`, {
+        headers: adminHeaders(),
+      });
       expect(allRes.status).toBe(200);
       const allData = (await allRes.json()) as {
         items: Array<Record<string, unknown>>;
@@ -148,10 +142,9 @@ describe('webhook delivery listing via HTTP routes', () => {
       expect(allData.items.length).toBe(5);
 
       // First page: limit=2
-      const page1Res = await app.request(
-        `/webhooks/endpoints/${endpointId}/deliveries?limit=2`,
-        { headers: adminHeaders() },
-      );
+      const page1Res = await app.request(`/webhooks/endpoints/${endpointId}/deliveries?limit=2`, {
+        headers: adminHeaders(),
+      });
       expect(page1Res.status).toBe(200);
       const page1 = (await page1Res.json()) as {
         items: Array<Record<string, unknown>>;
@@ -206,17 +199,13 @@ describe('webhook delivery listing via HTTP routes', () => {
 
     // We'll create two endpoints: one with success, one with failure
     // Use the success endpoint first
-    const { app, events, runtime, teardown } = await createWebhooksTestApp(
-      {
-        events: ['auth:*'],
-        queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
-        dispatch: dispatchFor(fetchOkMock),
-      },
-    );
+    const { app, events, runtime, teardown } = await createWebhooksTestApp({
+      events: ['auth:*'],
+      queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
+      dispatch: dispatchFor(fetchOkMock),
+    });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
 
       // Publish a single event to create a delivered delivery
       events.publish(
@@ -250,9 +239,7 @@ describe('webhook delivery listing via HTTP routes', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-1', tenantId: 'tenant-a' },
@@ -299,10 +286,9 @@ describe('webhook delivery listing via HTTP routes', () => {
   it('requires admin role for listing deliveries', async () => {
     const { app, teardown } = await createWebhooksTestApp({ events: ['auth:*'] });
     try {
-      const res = await app.request(
-        '/webhooks/endpoints/some-endpoint/deliveries',
-        { headers: userHeaders() },
-      );
+      const res = await app.request('/webhooks/endpoints/some-endpoint/deliveries', {
+        headers: userHeaders(),
+      });
       expect(res.status).toBe(403);
     } finally {
       await teardown();
@@ -345,10 +331,9 @@ describe('webhook delivery listing via HTTP routes', () => {
       ]);
 
       // List deliveries for endpoint A
-      const listARes = await app.request(
-        `/webhooks/endpoints/${endpointA}/deliveries`,
-        { headers: adminHeaders() },
-      );
+      const listARes = await app.request(`/webhooks/endpoints/${endpointA}/deliveries`, {
+        headers: adminHeaders(),
+      });
       expect(listARes.status).toBe(200);
       const listA = (await listARes.json()) as {
         items: Array<Record<string, unknown>>;
@@ -357,10 +342,9 @@ describe('webhook delivery listing via HTTP routes', () => {
       expect(listA.items[0].endpointId).toBe(endpointA);
 
       // List deliveries for endpoint B
-      const listBRes = await app.request(
-        `/webhooks/endpoints/${endpointB}/deliveries`,
-        { headers: adminHeaders() },
-      );
+      const listBRes = await app.request(`/webhooks/endpoints/${endpointB}/deliveries`, {
+        headers: adminHeaders(),
+      });
       expect(listBRes.status).toBe(200);
       const listB = (await listBRes.json()) as {
         items: Array<Record<string, unknown>>;

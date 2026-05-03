@@ -11,12 +11,12 @@
  * Postgres uses `pg`; SQLite uses `better-sqlite3` (the CLI bundle is built
  * for Node, so we cannot use `bun:sqlite`).
  */
+import { runInNewContext } from 'node:vm';
 import { createHash } from 'crypto';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { createRequire } from 'module';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
-import { runInNewContext } from 'node:vm';
 import type { Backend } from './discover';
 import { migrationsDirFor } from './planner';
 
@@ -89,7 +89,9 @@ function readPendingFromDisk(migrationsDir: string, backend: Backend): PendingMi
   const ext = migrationExtension(backend);
   const dir = migrationsDirFor(migrationsDir, backend);
   if (!existsSync(dir)) return [];
-  const files = readdirSync(dir).filter(f => f.endsWith(ext)).sort();
+  const files = readdirSync(dir)
+    .filter(f => f.endsWith(ext))
+    .sort();
   return files
     .map(filename => {
       const id = parseId(filename, ext);
@@ -124,7 +126,7 @@ async function loadPgPool(connectionString: string): Promise<PgPool> {
   } catch {
     throw new Error(
       "Postgres support requires the 'pg' package. Install it with `bun add pg` " +
-        "(or `npm i pg`) in your project.",
+        '(or `npm i pg`) in your project.',
     );
   }
   // `pg` is CommonJS; ESM dynamic-import wraps it as `{ default: { Pool, ... } }`.
@@ -159,10 +161,10 @@ async function pgListApplied(client: PgClient): Promise<AppliedMigration[]> {
 
 async function pgApplyOne(client: PgClient, m: PendingMigration): Promise<void> {
   await client.query(m.sql);
-  await client.query(
-    `INSERT INTO ${TRACKING_TABLE} (id, checksum) VALUES ($1, $2)`,
-    [m.id, m.checksum],
-  );
+  await client.query(`INSERT INTO ${TRACKING_TABLE} (id, checksum) VALUES ($1, $2)`, [
+    m.id,
+    m.checksum,
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +239,10 @@ interface MongoCollection {
     sort: (s: Record<string, number>) => { toArray: () => Promise<Record<string, unknown>[]> };
   };
   insertOne: (doc: Record<string, unknown>) => Promise<unknown>;
-  createIndex: (spec: Record<string, number>, options?: Record<string, unknown>) => Promise<unknown>;
+  createIndex: (
+    spec: Record<string, number>,
+    options?: Record<string, unknown>,
+  ) => Promise<unknown>;
   dropIndex: (spec: Record<string, number> | string) => Promise<unknown>;
   updateMany: (filter: unknown, update: unknown) => Promise<unknown>;
 }
@@ -316,7 +321,10 @@ async function mongoListApplied(db: MongoDb): Promise<AppliedMigration[]> {
  * then awaits the whole thing.
  */
 function wrapMongoScript(script: string): string {
-  const transformed = script.replace(/^(\s*)(?!await\s)(db\.(getCollection|collection)\b)/gm, '$1await $2');
+  const transformed = script.replace(
+    /^(\s*)(?!await\s)(db\.(getCollection|collection)\b)/gm,
+    '$1await $2',
+  );
   return `(async () => {\n${transformed}\n})()`;
 }
 
@@ -425,9 +433,7 @@ export async function dropAll(args: {
   } else if (args.backend === 'mongo') {
     const { client, db } = await loadMongoClient(args.connectionString);
     try {
-      const existing = new Set(
-        (await db.listCollections().toArray()).map(c => c.name),
-      );
+      const existing = new Set((await db.listCollections().toArray()).map(c => c.name));
       for (const name of args.tableNames) {
         if (existing.has(name)) {
           await db.dropCollection(name);

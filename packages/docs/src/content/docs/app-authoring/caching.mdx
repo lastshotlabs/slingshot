@@ -39,8 +39,16 @@ export const catalogPackage = definePackage({
       name: 'products',
       basePath: '/products',
       routes: [
-        route.get({ path: '/', middleware: ['cacheList'], handler: async ({ respond }) => respond.json([]) }),
-        route.get({ path: '/:id', middleware: ['cacheItem'], handler: async ({ respond }) => respond.json({}) }),
+        route.get({
+          path: '/',
+          middleware: ['cacheList'],
+          handler: async ({ respond }) => respond.json([]),
+        }),
+        route.get({
+          path: '/:id',
+          middleware: ['cacheItem'],
+          handler: async ({ respond }) => respond.json({}),
+        }),
       ],
     }),
   ],
@@ -57,8 +65,8 @@ When the underlying data changes you bust the cache by exact key or glob pattern
 reference so the helper can find the right adapter:
 
 ```typescript title="src/catalog/package.ts"
-import { bustCache, bustCachePattern, definePackage, domain, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { bustCache, bustCachePattern, definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 export const writePackage = definePackage({
   name: 'catalog-writes',

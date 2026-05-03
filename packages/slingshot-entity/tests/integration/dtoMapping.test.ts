@@ -67,10 +67,35 @@ describe('private field stripping', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        passwordHash: { type: 'string', primary: false, immutable: false, optional: false, private: true },
-        internalNotes: { type: 'string', primary: false, immutable: false, optional: true, private: true },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        passwordHash: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: true,
+        },
+        internalNotes: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: true,
+          private: true,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -97,9 +122,28 @@ describe('private field stripping', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        passwordHash: { type: 'string', primary: false, immutable: false, optional: false, private: true },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        passwordHash: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: true,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -132,9 +176,28 @@ describe('entity-level dto.default', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        passwordHash: { type: 'string', primary: false, immutable: false, optional: false, private: true },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        passwordHash: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: true,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -175,16 +238,40 @@ describe('named DTO variants', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
         role: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        passwordHash: { type: 'string', primary: false, immutable: false, optional: false, private: true },
+        passwordHash: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: true,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
       dto: {
         // Default: full DTO (id, email, role)
-        default: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, role: r.role, shape: 'default' }),
+        default: (r: Record<string, unknown>) => ({
+          id: r.id,
+          email: r.email,
+          role: r.role,
+          shape: 'default',
+        }),
         // List variant: slimmer (id, email)
         list: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, shape: 'list' }),
         // Public variant: id only
@@ -238,9 +325,28 @@ describe('named DTO variants', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        passwordHash: { type: 'string', primary: false, immutable: false, optional: false, private: true },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        passwordHash: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: true,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -266,10 +372,30 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
         // role is admin-only — public POST /users should silently strip it.
-        role: { type: 'string', primary: false, immutable: false, optional: false, private: false, inputVariants: ['admin'] },
+        role: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+          inputVariants: ['admin'],
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -300,9 +426,29 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        role: { type: 'string', primary: false, immutable: false, optional: false, private: false, inputVariants: ['admin'] },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        role: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+          inputVariants: ['admin'],
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -334,15 +480,33 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
         role: { type: 'string', primary: false, immutable: false, optional: false, private: false },
       },
       _pkField: 'id',
       _storageName: 'users',
       dto: {
         default: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, shape: 'default' }),
-        admin: (r: Record<string, unknown>) => ({ id: r.id, email: r.email, role: r.role, shape: 'admin' }),
+        admin: (r: Record<string, unknown>) => ({
+          id: r.id,
+          email: r.email,
+          role: r.role,
+          shape: 'admin',
+        }),
       },
       routes: {
         operations: {
@@ -375,8 +539,21 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
       },
       _pkField: 'id',
       _storageName: 'users',
@@ -396,10 +573,7 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
         },
       },
     });
-    await adapter_create_helper(config, [
-      { email: 'a@b.com' },
-      { email: 'c@d.com' },
-    ]);
+    await adapter_create_helper(config, [{ email: 'a@b.com' }, { email: 'c@d.com' }]);
 
     async function adapter_create_helper(_cfg: typeof config, seeds: Record<string, unknown>[]) {
       // helper: noop; we'll use a fresh adapter below
@@ -438,9 +612,29 @@ describe('input variants (field.inputVariants + routes.<op>.input)', () => {
     const config = asResolvedConfig({
       name: 'User',
       fields: {
-        id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid', private: false },
-        email: { type: 'string', primary: false, immutable: false, optional: false, private: false },
-        role: { type: 'string', primary: false, immutable: false, optional: false, private: false, inputVariants: ['admin'] },
+        id: {
+          type: 'string',
+          primary: true,
+          immutable: true,
+          optional: false,
+          default: 'uuid',
+          private: false,
+        },
+        email: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+        },
+        role: {
+          type: 'string',
+          primary: false,
+          immutable: false,
+          optional: false,
+          private: false,
+          inputVariants: ['admin'],
+        },
       },
       _pkField: 'id',
       _storageName: 'users',

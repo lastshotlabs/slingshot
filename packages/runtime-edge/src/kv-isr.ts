@@ -1,6 +1,6 @@
 // packages/runtime-edge/src/kv-isr.ts
-import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
 import { withAbortTimeout } from './lib/withAbortTimeout';
 
 // ---------------------------------------------------------------------------

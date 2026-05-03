@@ -89,8 +89,7 @@ export function createCircuitBreaker(opts: {
 
   async function guard<T>(fn: () => Promise<T>, op: string): Promise<T> {
     if (!tryEnterHalfOpen()) {
-      const retryAfterMs =
-        openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
+      const retryAfterMs = openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
       throw new CircuitOpenError(
         `[slingshot-assets] Circuit breaker open after ${consecutiveFailures} ` +
           `consecutive failures. Retrying in ~${retryAfterMs}ms. Operation: ${op}`,

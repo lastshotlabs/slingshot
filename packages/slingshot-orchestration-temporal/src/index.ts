@@ -1,7 +1,10 @@
 /**
  * Create the Temporal-backed orchestration adapter used by Slingshot servers.
  */
-export { createTemporalOrchestrationAdapter, type TemporalOrchestrationHealthCapability } from './adapter';
+export {
+  createTemporalOrchestrationAdapter,
+  type TemporalOrchestrationHealthCapability,
+} from './adapter';
 /**
  * Create a Temporal worker supervisor for Slingshot task and workflow definitions.
  */

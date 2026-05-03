@@ -7,14 +7,14 @@ description: Bun runtime adapter for Slingshot — password, SQLite, fs, glob, H
 
 All implemented via Bun-native APIs (no external deps at runtime):
 
-| Capability | API |
-|---|---|
-| Password | `Bun.password.hash()` / `.verify()` — bcrypt |
-| SQLite | `bun:sqlite` — CRUD, prepared statements, WAL mode |
-| Filesystem | `Bun.file()`, `Bun.write()` — streaming I/O |
-| Glob | `new Bun.Glob().scan()` |
-| Server | `Bun.serve()` — HTTP + WebSocket |
-| Process safety | SIGTERM/SIGINT handler with controlled fatal exit |
+| Capability     | API                                                |
+| -------------- | -------------------------------------------------- |
+| Password       | `Bun.password.hash()` / `.verify()` — bcrypt       |
+| SQLite         | `bun:sqlite` — CRUD, prepared statements, WAL mode |
+| Filesystem     | `Bun.file()`, `Bun.write()` — streaming I/O        |
+| Glob           | `new Bun.Glob().scan()`                            |
+| Server         | `Bun.serve()` — HTTP + WebSocket                   |
+| Process safety | SIGTERM/SIGINT handler with controlled fatal exit  |
 
 ## Runtime Contract
 

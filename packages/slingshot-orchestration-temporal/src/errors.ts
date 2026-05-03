@@ -1,10 +1,10 @@
-import type { OrchestrationErrorCode } from '@lastshotlabs/slingshot-orchestration';
 import {
   CancelledFailure,
   TerminatedFailure,
   TimeoutFailure,
   WorkflowFailedError,
 } from '@temporalio/client';
+import type { OrchestrationErrorCode } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 
 export { toRunError } from './runError';

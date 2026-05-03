@@ -1,5 +1,9 @@
 import { createPrivateKey, createSign } from 'node:crypto';
-import { HeaderInjectionError, sanitizeHeaderValue, withTimeout } from '@lastshotlabs/slingshot-core';
+import {
+  HeaderInjectionError,
+  sanitizeHeaderValue,
+  withTimeout,
+} from '@lastshotlabs/slingshot-core';
 import { deriveUuidV4FromKey } from '../lib/idempotency';
 import type { ApnsAuthInput } from '../types/config';
 import type { PushSendResult } from '../types/models';

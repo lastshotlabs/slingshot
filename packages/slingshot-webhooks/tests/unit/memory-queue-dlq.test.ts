@@ -217,7 +217,10 @@ describe('webhooks memory queue with file-backed DLQ', () => {
 
     // File should now have 11 lines (10 original + 1 new)
     const content = readFileSync(dlqPath, 'utf-8');
-    const lineCount = content.trim().split('\n').filter(l => l.trim()).length;
+    const lineCount = content
+      .trim()
+      .split('\n')
+      .filter(l => l.trim()).length;
     expect(lineCount).toBe(11);
   });
 });

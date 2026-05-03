@@ -246,22 +246,25 @@ export function localStorage(config: LocalStorageConfig): LocalStorageAdapter {
           );
         }
 
-        await withRetry(async () => {
-          if (data instanceof Blob) {
-            const buffer = await data.arrayBuffer();
-            await fs.write(filePath, new Uint8Array(buffer));
-          } else if (data instanceof ReadableStream) {
-            const response = new Response(data);
-            const buffer = await response.arrayBuffer();
-            await fs.write(filePath, new Uint8Array(buffer));
-          } else {
-            await fs.write(filePath, data);
-          }
-        }, retryAttempts, retryBaseDelayMs, isRetryableFsError);
+        await withRetry(
+          async () => {
+            if (data instanceof Blob) {
+              const buffer = await data.arrayBuffer();
+              await fs.write(filePath, new Uint8Array(buffer));
+            } else if (data instanceof ReadableStream) {
+              const response = new Response(data);
+              const buffer = await response.arrayBuffer();
+              await fs.write(filePath, new Uint8Array(buffer));
+            } else {
+              await fs.write(filePath, data);
+            }
+          },
+          retryAttempts,
+          retryBaseDelayMs,
+          isRetryableFsError,
+        );
 
-        const url = config.baseUrl
-          ? `${config.baseUrl.replace(/\/$/, '')}/${key}`
-          : undefined;
+        const url = config.baseUrl ? `${config.baseUrl.replace(/\/$/, '')}/${key}` : undefined;
         return url === undefined ? {} : { url };
       }, 'put');
     },

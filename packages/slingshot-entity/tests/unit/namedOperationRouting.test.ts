@@ -119,9 +119,7 @@ describe('resolveNamedOperationRoute', () => {
       fields: { id: 'param:id', id2: 'param:id' },
     };
     const result = resolveNamedOperationRoute('byId', opConfig);
-    const paramSegments = result.path
-      .split('/')
-      .filter(s => s.startsWith(':'));
+    const paramSegments = result.path.split('/').filter(s => s.startsWith(':'));
     const paramNames = paramSegments.map(s => s.slice(1));
     expect(new Set(paramNames).size).toBe(paramNames.length);
   });

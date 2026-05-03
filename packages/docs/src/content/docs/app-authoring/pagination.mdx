@@ -27,6 +27,7 @@ fabricate or tamper with them.
 Best for stable lists with a known size where users browse by page:
 
 ```typescript title="src/catalog/package.ts"
+import { z } from 'zod';
 import {
   definePackage,
   domain,
@@ -35,7 +36,6 @@ import {
   parseOffsetParams,
   route,
 } from '@lastshotlabs/slingshot';
-import { z } from 'zod';
 
 const Product = z.object({ id: z.string(), name: z.string() });
 
@@ -50,7 +50,10 @@ export const catalogPackage = definePackage({
           path: '/',
           request: { query: offsetParams() },
           responses: {
-            200: { description: 'Page of products', schema: paginatedResponse(Product, 'ProductPage') },
+            200: {
+              description: 'Page of products',
+              schema: paginatedResponse(Product, 'ProductPage'),
+            },
           },
           handler: async ({ input, respond }) => {
             const { limit, offset } = parseOffsetParams(input.query);
@@ -63,7 +66,10 @@ export const catalogPackage = definePackage({
   ],
 });
 
-declare function listProducts(opts: { skip: number; take: number }): Promise<{ id: string; name: string }[]>;
+declare function listProducts(opts: {
+  skip: number;
+  take: number;
+}): Promise<{ id: string; name: string }[]>;
 ```
 
 ## Cursor pagination
@@ -71,6 +77,7 @@ declare function listProducts(opts: { skip: number; take: number }): Promise<{ i
 Best for large lists, infinite scroll, or anywhere new rows are appended frequently:
 
 ```typescript title="src/feed/package.ts"
+import { z } from 'zod';
 import {
   cursorParams,
   cursorResponse,
@@ -79,7 +86,6 @@ import {
   parseCursorParams,
   route,
 } from '@lastshotlabs/slingshot';
-import { z } from 'zod';
 
 const Post = z.object({ id: z.string(), title: z.string(), createdAt: z.string() });
 
@@ -130,9 +136,9 @@ verification fails — handle it as a 400, not as "first page", so a tampered cu
 silently restarts the iteration.
 
 <Aside type="tip">
-  Pick cursor pagination by default for any list larger than a few hundred items. Offset
-  pagination drifts on writes — if a row is inserted while a user is on page 3, page 4 will
-  duplicate the last item or skip one.
+  Pick cursor pagination by default for any list larger than a few hundred items. Offset pagination
+  drifts on writes — if a row is inserted while a user is on page 3, page 4 will duplicate the last
+  item or skip one.
 </Aside>
 
 ## What's next

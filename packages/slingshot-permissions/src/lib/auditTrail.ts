@@ -8,7 +8,6 @@
  * The audit trail is opt-in: create an `AuditTrailStore`, then wrap your
  * adapter with `withAuditTrail()`.
  */
-
 import type { Logger, PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
 

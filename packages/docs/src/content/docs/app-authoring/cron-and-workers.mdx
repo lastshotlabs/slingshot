@@ -89,9 +89,8 @@ A common pattern is one repo, two deploys: an `api` role that handles HTTP only 
 disabled at the load balancer.
 
 <Aside type="tip">
-  The framework also tracks worker names across deploys. When a worker is removed from
-  `workersDir`, its scheduler is cleaned up on the next boot — no orphaned cron jobs
-  stuck in Redis.
+  The framework also tracks worker names across deploys. When a worker is removed from `workersDir`,
+  its scheduler is cleaned up on the next boot — no orphaned cron jobs stuck in Redis.
 </Aside>
 
 ## When you need full task orchestration

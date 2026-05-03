@@ -25,14 +25,28 @@ import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 
 class MockRedisClient {
   private values = new Map<string, string>();
-  async get(key: string) { return this.values.get(key) ?? null; }
-  async set(key: string, value: string) { this.values.set(key, value); }
-  async mget(...keys: string[]) { return keys.map(k => this.values.get(k) ?? null); }
-  async zadd() { return 1; }
-  async zrange() { return [] as string[]; }
+  async get(key: string) {
+    return this.values.get(key) ?? null;
+  }
+  async set(key: string, value: string) {
+    this.values.set(key, value);
+  }
+  async mget(...keys: string[]) {
+    return keys.map(k => this.values.get(k) ?? null);
+  }
+  async zadd() {
+    return 1;
+  }
+  async zrange() {
+    return [] as string[];
+  }
   async zrem() {}
-  async del(...keys: string[]) { for (const k of keys) this.values.delete(k); }
-  reset() { this.values.clear(); }
+  async del(...keys: string[]) {
+    for (const k of keys) this.values.delete(k);
+  }
+  reset() {
+    this.values.clear();
+  }
 }
 
 const mockRedis = new MockRedisClient();
@@ -46,11 +60,19 @@ class MockQueue {
     this.name = name;
     MockQueue.instances.push(this);
   }
-  async add() { return { id: 'mock-job-' + Date.now() }; }
-  async getJobs() { return []; }
-  async getJobSchedulers() { return []; }
+  async add() {
+    return { id: 'mock-job-' + Date.now() };
+  }
+  async getJobs() {
+    return [];
+  }
+  async getJobSchedulers() {
+    return [];
+  }
   async removeJobScheduler() {}
-  get client() { return Promise.resolve(mockRedis); }
+  get client() {
+    return Promise.resolve(mockRedis);
+  }
   async close() {}
 }
 
@@ -89,9 +111,15 @@ class MockWorker {
   }
   on() {}
   emit() {}
-  async pause() { this.paused = true; }
-  async getActiveCount() { return 0; }
-  async close() { this.closed = true; }
+  async pause() {
+    this.paused = true;
+  }
+  async getActiveCount() {
+    return 0;
+  }
+  async close() {
+    this.closed = true;
+  }
 }
 
 mock.module('bullmq', () => ({
@@ -145,7 +173,9 @@ const TASK = defineTask({
   name: 'fuzz-task',
   input: z.object({ value: z.string() }),
   output: z.object({ value: z.string() }),
-  async handler(input) { return input; },
+  async handler(input) {
+    return input;
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -187,7 +217,14 @@ function checkInvariants(history: StateSnapshot[]): void {
     }
 
     // Invariant 4: After failed state, operations calling ensureStarted fail
-    if (failed && (snap.op === 'runTask' || snap.op === 'start' || snap.op === 'getRun' || snap.op === 'listRuns') && !snap.ok) {
+    if (
+      failed &&
+      (snap.op === 'runTask' ||
+        snap.op === 'start' ||
+        snap.op === 'getRun' ||
+        snap.op === 'listRuns') &&
+      !snap.ok
+    ) {
       // OK — expected to fail when state machine is in failed state
     }
   }
@@ -201,7 +238,18 @@ type Op = 'start' | 'shutdown' | 'reset' | 'runTask' | 'getRun' | 'listRuns';
 function generateSequence(rng: () => number, length: number): Op[] {
   const ops: Op[] = [];
   // Weighted distribution — more of the interesting operations
-  const pool: Op[] = ['start', 'start', 'shutdown', 'shutdown', 'reset', 'runTask', 'runTask', 'runTask', 'getRun', 'listRuns'];
+  const pool: Op[] = [
+    'start',
+    'start',
+    'shutdown',
+    'shutdown',
+    'reset',
+    'runTask',
+    'runTask',
+    'runTask',
+    'getRun',
+    'listRuns',
+  ];
   for (let i = 0; i < length; i++) {
     ops.push(pick(rng, pool));
   }
@@ -260,7 +308,7 @@ describe('state machine fuzz — random sequences', () => {
           snap.errorType =
             err instanceof OrchestrationAdapterDisposedError
               ? 'disposed'
-              : (err as Error)?.name ?? 'unknown';
+              : ((err as Error)?.name ?? 'unknown');
         }
 
         // Capture health after each operation
@@ -277,7 +325,11 @@ describe('state machine fuzz — random sequences', () => {
       checkInvariants(history);
 
       // Ensure cleanup
-      try { await adapter.shutdown(); } catch { /* best-effort */ }
+      try {
+        await adapter.shutdown();
+      } catch {
+        /* best-effort */
+      }
     }
   });
 
@@ -311,7 +363,11 @@ describe('state machine fuzz — random sequences', () => {
         }
         expect(threw).toBe(true);
       } finally {
-        try { await adapter.shutdown(); } catch { /* best-effort */ }
+        try {
+          await adapter.shutdown();
+        } catch {
+          /* best-effort */
+        }
       }
     }
   });
@@ -561,7 +617,7 @@ describe('long random sequences', () => {
           // All operations after shutdown must throw OrchestrationAdapterDisposedError
           expect(
             err instanceof OrchestrationAdapterDisposedError ||
-            (err as Error)?.name === 'OrchestrationAdapterDisposedError',
+              (err as Error)?.name === 'OrchestrationAdapterDisposedError',
           ).toBe(true);
         }
         // Clear the fail flag on error so subsequent ops might succeed
@@ -574,7 +630,11 @@ describe('long random sequences', () => {
     }
 
     // Final cleanup
-    try { await adapter.shutdown(); } catch { /* best-effort */ }
+    try {
+      await adapter.shutdown();
+    } catch {
+      /* best-effort */
+    }
     // Failures should have occurred (the random injection should have hit)
     expect(failures).toBeGreaterThan(0);
   });

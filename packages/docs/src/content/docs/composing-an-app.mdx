@@ -8,16 +8,16 @@ in order and you'll know how the framework fits together.
 
 ## The pieces
 
-| Piece | What it is | Declared with |
-| --- | --- | --- |
-| **App** | The root. Lists the packages and plugins it composes. | `defineApp(...)` |
-| **Package** | A self-contained feature module — your blog, your notifications, your saas modules. Owns its entities, routes, middleware. | `definePackage(...)` |
-| **Plugin** | A framework-level plugin — auth, postgres, bullmq, search. Provides infrastructure your packages depend on. | `SlingshotPlugin` |
-| **Entity** | A typed data model. Generates CRUD routes, DTOs, OpenAPI. | `defineEntity(...)` |
-| **Domain + Route** | A typed custom route inside a package, for things that don't map to CRUD. | `domain(...)`, `route.*()` |
-| **Capability** | A typed cross-package service contract. | `defineCapability(...)` |
-| **entityRef** | A typed reference to another package's entity adapter. | `entityRef(...)` |
-| **Event** | A typed message published by one piece, subscribed by another. | `defineEvent(...)` + the event bus |
+| Piece              | What it is                                                                                                                 | Declared with                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| **App**            | The root. Lists the packages and plugins it composes.                                                                      | `defineApp(...)`                   |
+| **Package**        | A self-contained feature module — your blog, your notifications, your saas modules. Owns its entities, routes, middleware. | `definePackage(...)`               |
+| **Plugin**         | A framework-level plugin — auth, postgres, bullmq, search. Provides infrastructure your packages depend on.                | `SlingshotPlugin`                  |
+| **Entity**         | A typed data model. Generates CRUD routes, DTOs, OpenAPI.                                                                  | `defineEntity(...)`                |
+| **Domain + Route** | A typed custom route inside a package, for things that don't map to CRUD.                                                  | `domain(...)`, `route.*()`         |
+| **Capability**     | A typed cross-package service contract.                                                                                    | `defineCapability(...)`            |
+| **entityRef**      | A typed reference to another package's entity adapter.                                                                     | `entityRef(...)`                   |
+| **Event**          | A typed message published by one piece, subscribed by another.                                                             | `defineEvent(...)` + the event bus |
 
 ## Two tiers: packages and plugins
 
@@ -66,24 +66,24 @@ effects) — never through direct imports between packages.
 There are three authoring tiers, not two. Each owns a different concern, and middleware
 can live at any of them.
 
-| Tier                | What it is                                                                                              | Middleware story                                                                                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`defineApp`**     | Root config: lists plugins and packages, configures framework subsystems (auth, db, security, etc.).    | `middleware: MiddlewareHandler[]` — **static global**, runs after plugin middleware and before route matching. No lifecycle hooks needed.                   |
-| **`definePackage`** | App-side feature composition: declarative entities, domain routes, named middleware, capabilities, mount path. | `middleware: Record<string, MiddlewareHandler>` — **named registry**, attached to specific package routes by reference (e.g. `route.post({ middleware: ['rateLimit'] })`). Scoped to the package. |
-| **`SlingshotPlugin`** | Framework-side plugin authoring: lifecycle hooks, async bootstrap, registrar registrations.            | Imperative `app.use('*', ...)` from inside `setupMiddleware`. Required when middleware needs **dynamic, conditional, or async setup**.                     |
+| Tier                  | What it is                                                                                                     | Middleware story                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`defineApp`**       | Root config: lists plugins and packages, configures framework subsystems (auth, db, security, etc.).           | `middleware: MiddlewareHandler[]` — **static global**, runs after plugin middleware and before route matching. No lifecycle hooks needed.                                                         |
+| **`definePackage`**   | App-side feature composition: declarative entities, domain routes, named middleware, capabilities, mount path. | `middleware: Record<string, MiddlewareHandler>` — **named registry**, attached to specific package routes by reference (e.g. `route.post({ middleware: ['rateLimit'] })`). Scoped to the package. |
+| **`SlingshotPlugin`** | Framework-side plugin authoring: lifecycle hooks, async bootstrap, registrar registrations.                    | Imperative `app.use('*', ...)` from inside `setupMiddleware`. Required when middleware needs **dynamic, conditional, or async setup**.                                                            |
 
 Under the hood, packages compile into framework plugins — there is one runtime concept
 (plugins) and two authoring surfaces (`definePackage` declarative, `SlingshotPlugin`
 imperative), with `defineApp` as the assembly root. Pick by what you're modeling:
 
-| If you are building...                                                                                  | Use                                          |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| App-level static cross-cutting middleware (tracing, request-id, custom logging)                         | `defineApp({ middleware: [...] })`           |
-| A feature with its own routes/entities (blog, billing, chat)                                            | `definePackage(...)`                         |
-| Per-package middleware that some of the package's routes opt into                                       | `definePackage.middleware` (named registry)  |
-| Auth, persistence, queues, search, mail (anything needing async bootstrap)                              | `SlingshotPlugin`                            |
-| Anything that registers with the framework registrar (route auth, request actor resolver, rate limit adapter) | `SlingshotPlugin`                            |
-| Conditional mounting based on resolved config                                                           | `SlingshotPlugin`                            |
+| If you are building...                                                                                        | Use                                         |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| App-level static cross-cutting middleware (tracing, request-id, custom logging)                               | `defineApp({ middleware: [...] })`          |
+| A feature with its own routes/entities (blog, billing, chat)                                                  | `definePackage(...)`                        |
+| Per-package middleware that some of the package's routes opt into                                             | `definePackage.middleware` (named registry) |
+| Auth, persistence, queues, search, mail (anything needing async bootstrap)                                    | `SlingshotPlugin`                           |
+| Anything that registers with the framework registrar (route auth, request actor resolver, rate limit adapter) | `SlingshotPlugin`                           |
+| Conditional mounting based on resolved config                                                                 | `SlingshotPlugin`                           |
 
 ### The actual rule
 
@@ -114,14 +114,14 @@ behavior.
 
 ### Where each layer of middleware lives
 
-| Layer                                | Mounted by                              | Scope                                                       | Use for                                                                |
-| ------------------------------------ | --------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Framework defaults                   | The framework, from `defineApp` config  | All routes (CORS, secure headers, rate limiting baseline)    | Things every app needs that are config-driven, not code                |
-| App-level static middleware          | `defineApp({ middleware: [...] })`      | All routes, after plugin middleware, before route matching   | Tracing, request-id, custom logging — anything static you'd otherwise have to wrap in a plugin |
-| Plugin imperative middleware         | `SlingshotPlugin.setupMiddleware`       | All routes (or a path prefix), runs earliest                | Auth, CSRF, identify, MFA enforcement — anything needing async/conditional setup |
-| Package-named middleware             | `definePackage({ middleware: { ... } })`| Only the package's routes that reference the name           | Per-feature middleware: ownership checks, package-scoped rate limits   |
-| Per-route middleware                 | `route.*({ middleware: ['name', ...] })` | One route                                                   | Endpoint-specific constraints                                          |
-| Entity hooks                         | `defineEntity` `afterHooks`, etc.       | Generated routes for one entity                              | Cross-cutting on an entity's lifecycle (audit, denormalization, downstream events) |
+| Layer                        | Mounted by                               | Scope                                                      | Use for                                                                                        |
+| ---------------------------- | ---------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Framework defaults           | The framework, from `defineApp` config   | All routes (CORS, secure headers, rate limiting baseline)  | Things every app needs that are config-driven, not code                                        |
+| App-level static middleware  | `defineApp({ middleware: [...] })`       | All routes, after plugin middleware, before route matching | Tracing, request-id, custom logging — anything static you'd otherwise have to wrap in a plugin |
+| Plugin imperative middleware | `SlingshotPlugin.setupMiddleware`        | All routes (or a path prefix), runs earliest               | Auth, CSRF, identify, MFA enforcement — anything needing async/conditional setup               |
+| Package-named middleware     | `definePackage({ middleware: { ... } })` | Only the package's routes that reference the name          | Per-feature middleware: ownership checks, package-scoped rate limits                           |
+| Per-route middleware         | `route.*({ middleware: ['name', ...] })` | One route                                                  | Endpoint-specific constraints                                                                  |
+| Entity hooks                 | `defineEntity` `afterHooks`, etc.        | Generated routes for one entity                            | Cross-cutting on an entity's lifecycle (audit, denormalization, downstream events)             |
 
 For "cross-cutting metrics" specifically — pick by scope:
 

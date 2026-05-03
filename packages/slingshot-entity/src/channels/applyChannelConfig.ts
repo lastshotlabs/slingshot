@@ -299,7 +299,7 @@ export function buildSubscribeGuard(
         }
         if (!entity) return false;
         // Use loose equality so string "123" matches number 123 from DB rows
-         
+
         if (entity[declaration.permission.ownerField] != actor.id) return false;
       }
     }

@@ -98,6 +98,7 @@ interface BullMQAdapterHealth {
 ```
 
 `status` rolls up as:
+
 - `'unhealthy'` when events have been dropped from the pending buffer (`bufferDroppedCount > 0`)
 - `'degraded'` when the pending buffer is non-empty (Redis was recently unreachable)
 - `'healthy'` otherwise
@@ -122,7 +123,7 @@ Use `getHealth()` for in-path checks that must not perform I/O.
 - `prefix` defaults to `"slingshot:events"`. If you run multiple Slingshot apps against the
   same Redis instance, set a distinct prefix per app to avoid cross-app event delivery.
 - **Durable subscriptions:** subscriptions registered via `onEnvelope` survive process
-  restarts only because BullMQ queues are Redis-backed. The subscription *binding* (which
+  restarts only because BullMQ queues are Redis-backed. The subscription _binding_ (which
   event keys to subscribe to) must be re-registered on each startup — it is not persisted
   to Redis. Always call `onEnvelope` during app initialization, not conditionally at runtime.
 - **Shutdown behavior:** call `offEnvelope` for each subscribed key during graceful shutdown

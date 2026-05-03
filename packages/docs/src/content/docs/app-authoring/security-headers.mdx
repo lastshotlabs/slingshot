@@ -29,8 +29,7 @@ export default defineApp({
     headers: {
       contentSecurityPolicy:
         "default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.stripe.com",
-      permissionsPolicy:
-        'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+      permissionsPolicy: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
     },
   },
 });
@@ -44,18 +43,18 @@ middleware runs. Anything you set this way overrides the corresponding default.
 Slingshot mounts Hono's `secureHeaders` middleware globally, which sets the following
 on every response unless you override them:
 
-| Header                       | Default value                                       |
-| ---------------------------- | --------------------------------------------------- |
-| `Strict-Transport-Security`  | `max-age=15552000; includeSubDomains`               |
-| `X-Frame-Options`            | `SAMEORIGIN`                                        |
-| `X-Content-Type-Options`     | `nosniff`                                           |
-| `Referrer-Policy`            | `no-referrer`                                       |
-| `Cross-Origin-Resource-Policy` | `same-origin`                                     |
-| `Cross-Origin-Opener-Policy` | `same-origin`                                       |
-| `Origin-Agent-Cluster`       | `?1`                                                |
-| `X-DNS-Prefetch-Control`     | `off`                                               |
-| `X-Permitted-Cross-Domain-Policies` | `none`                                       |
-| `X-XSS-Protection`           | `0` (disabled — modern guidance is to opt out)      |
+| Header                              | Default value                                  |
+| ----------------------------------- | ---------------------------------------------- |
+| `Strict-Transport-Security`         | `max-age=15552000; includeSubDomains`          |
+| `X-Frame-Options`                   | `SAMEORIGIN`                                   |
+| `X-Content-Type-Options`            | `nosniff`                                      |
+| `Referrer-Policy`                   | `no-referrer`                                  |
+| `Cross-Origin-Resource-Policy`      | `same-origin`                                  |
+| `Cross-Origin-Opener-Policy`        | `same-origin`                                  |
+| `Origin-Agent-Cluster`              | `?1`                                           |
+| `X-DNS-Prefetch-Control`            | `off`                                          |
+| `X-Permitted-Cross-Domain-Policies` | `none`                                         |
+| `X-XSS-Protection`                  | `0` (disabled — modern guidance is to opt out) |
 
 These ship in both development and production. `Strict-Transport-Security` only takes
 effect when the response is served over HTTPS, so it's harmless in local dev.
@@ -81,7 +80,7 @@ export const embedsPackage = definePackage({
           path: '/widget',
           handler: ({ c, respond }) => {
             c.header('X-Frame-Options', 'ALLOW-FROM https://partner.example');
-            c.header('Content-Security-Policy', "frame-ancestors https://partner.example");
+            c.header('Content-Security-Policy', 'frame-ancestors https://partner.example');
             return respond.html('<div>...</div>');
           },
         }),
@@ -96,10 +95,9 @@ middleware instead — it runs before route middleware and lets you set headers 
 repeating the call in every handler.
 
 <Aside type="caution">
-  CSP is unforgiving. A typo in a directive often falls through to `default-src`,
-  which silently breaks scripts, images, or fetches. Test CSP changes in
-  Report-Only mode (`Content-Security-Policy-Report-Only`) before flipping them to
-  enforce.
+  CSP is unforgiving. A typo in a directive often falls through to `default-src`, which silently
+  breaks scripts, images, or fetches. Test CSP changes in Report-Only mode
+  (`Content-Security-Policy-Report-Only`) before flipping them to enforce.
 </Aside>
 
 ## What's next

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createMemoryPermissionsAdapter } from '../../src/adapters/memory';
-import { createPermissionEvaluator } from '../../src/lib/evaluator';
-import { createEvaluationCache } from '../../src/lib/evaluationCache';
-import { createPermissionRegistry } from '../../src/lib/registry';
 import type { ResourceTypeDefinition } from '@lastshotlabs/slingshot-core';
+import { createMemoryPermissionsAdapter } from '../../src/adapters/memory';
+import { createEvaluationCache } from '../../src/lib/evaluationCache';
+import { createPermissionEvaluator } from '../../src/lib/evaluator';
+import { createPermissionRegistry } from '../../src/lib/registry';
 
 const postDef: ResourceTypeDefinition = {
   resourceType: 'post',
@@ -107,12 +107,8 @@ describe('evaluationCache', () => {
 
       cache.invalidate();
 
-      expect(
-        cache.get('user-1', 'user', 'read', { resourceType: 'post' }),
-      ).toBeUndefined();
-      expect(
-        cache.get('user-2', 'user', 'write', { resourceType: 'post' }),
-      ).toBeUndefined();
+      expect(cache.get('user-1', 'user', 'read', { resourceType: 'post' })).toBeUndefined();
+      expect(cache.get('user-2', 'user', 'write', { resourceType: 'post' })).toBeUndefined();
     });
 
     test('invalidateForActor clears only matching entries', () => {
@@ -124,16 +120,10 @@ describe('evaluationCache', () => {
       cache.invalidateForActor('user-1');
 
       // user-1 entries are gone
-      expect(
-        cache.get('user-1', 'user', 'read', { resourceType: 'post' }),
-      ).toBeUndefined();
-      expect(
-        cache.get('user-1', 'user', 'write', { resourceType: 'post' }),
-      ).toBeUndefined();
+      expect(cache.get('user-1', 'user', 'read', { resourceType: 'post' })).toBeUndefined();
+      expect(cache.get('user-1', 'user', 'write', { resourceType: 'post' })).toBeUndefined();
       // user-2 entry remains
-      expect(
-        cache.get('user-2', 'user', 'read', { resourceType: 'post' }),
-      ).toBeDefined();
+      expect(cache.get('user-2', 'user', 'read', { resourceType: 'post' })).toBeDefined();
     });
 
     test('can set false result and retrieve it', () => {
@@ -181,11 +171,9 @@ describe('evaluationCache', () => {
         cache,
       });
 
-      const result = await evaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'read',
-        { resourceType: 'post' },
-      );
+      const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
 
       expect(result).toBe(true);
       // Should NOT have called the adapter for this check
@@ -215,11 +203,9 @@ describe('evaluationCache', () => {
         cache,
       });
 
-      const result = await evaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'delete',
-        { resourceType: 'post' },
-      );
+      const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'delete', {
+        resourceType: 'post',
+      });
 
       expect(result).toBe(false);
       expect(adapterCalls).toBe(0);
@@ -229,9 +215,7 @@ describe('evaluationCache', () => {
       let adapterCalls = 0;
       const trackingAdapter = {
         ...adapter,
-        async createGrant(
-          g: Parameters<typeof adapter.createGrant>[0],
-        ) {
+        async createGrant(g: Parameters<typeof adapter.createGrant>[0]) {
           return adapter.createGrant(g);
         },
         async getEffectiveGrantsForSubject() {
@@ -262,20 +246,16 @@ describe('evaluationCache', () => {
         grantedBy: 'system',
       });
 
-      const first = await evaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'read',
-        { resourceType: 'post' },
-      );
+      const first = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
       expect(first).toBe(true);
       expect(adapterCalls).toBe(1);
 
       // Second call — should be cached
-      const second = await evaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'read',
-        { resourceType: 'post' },
-      );
+      const second = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
       expect(second).toBe(true);
       // adapter calls should NOT have increased
       expect(adapterCalls).toBe(1);
@@ -285,9 +265,7 @@ describe('evaluationCache', () => {
       let adapterCalls = 0;
       const trackingAdapter = {
         ...adapter,
-        async createGrant(
-          g: Parameters<typeof adapter.createGrant>[0],
-        ) {
+        async createGrant(g: Parameters<typeof adapter.createGrant>[0]) {
           return adapter.createGrant(g);
         },
         async getEffectiveGrantsForSubject() {
@@ -325,11 +303,9 @@ describe('evaluationCache', () => {
 
       // Invalidate and call again
       cache.invalidate();
-      const result = await evaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'read',
-        { resourceType: 'post' },
-      );
+      const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
       expect(result).toBe(true);
       expect(adapterCalls).toBe(2);
     });

@@ -11,8 +11,8 @@
  * `registerSchema('SearchFilter', ...)` so the generator emits a `$ref` at
  * each use site instead.
  */
-import { describe, expect, it } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, it } from 'bun:test';
 import type { AppEnv, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createFederatedRouter } from '../../src/routes/federated';
 import { createSearchManager } from '../../src/searchManager';

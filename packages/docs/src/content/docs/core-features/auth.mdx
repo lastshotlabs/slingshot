@@ -165,16 +165,16 @@ const Post = defineEntity('Post', {
 
 Auth fires lifecycle hooks at well-defined moments:
 
-| Hook                  | When it fires                                            | Return value used for                  |
-| --------------------- | -------------------------------------------------------- | -------------------------------------- |
-| `preLogin`            | Before credential verification                           | Side effects only                      |
-| `postLogin`           | After session is persisted, **before** the JWT is signed | `{ customClaims }` merged into the JWT |
-| `preRegister`         | Before account creation                                  | Side effects only                      |
-| `postRegister`        | After account creation                                   | Side effects only                      |
-| `prePasswordChange`   | Before password is rotated                               | Side effects only                      |
-| `postPasswordChange`  | After password is rotated                                | Side effects only                      |
-| `preDeleteAccount`    | Before account row is removed                            | Side effects only                      |
-| `postDeleteAccount`   | After account row is removed                             | Side effects only                      |
+| Hook                 | When it fires                                            | Return value used for                  |
+| -------------------- | -------------------------------------------------------- | -------------------------------------- |
+| `preLogin`           | Before credential verification                           | Side effects only                      |
+| `postLogin`          | After session is persisted, **before** the JWT is signed | `{ customClaims }` merged into the JWT |
+| `preRegister`        | Before account creation                                  | Side effects only                      |
+| `postRegister`       | After account creation                                   | Side effects only                      |
+| `prePasswordChange`  | Before password is rotated                               | Side effects only                      |
+| `postPasswordChange` | After password is rotated                                | Side effects only                      |
+| `preDeleteAccount`   | Before account row is removed                            | Side effects only                      |
+| `postDeleteAccount`  | After account row is removed                             | Side effects only                      |
 
 Each hook receives the relevant identifiers plus a `HookContext` that carries
 request metadata (`ip`, `userAgent`, `requestId`) and a `services?: HookServices`
@@ -292,8 +292,8 @@ Then use it like `slingshot-auth`:
 ```typescript title="app.config.ts"
 // @skip-typecheck
 import { defineApp } from '@lastshotlabs/slingshot';
-import { createMyAuthPlugin } from './src/auth/myAuthPlugin';
 import { appPackage } from './src/app/package';
+import { createMyAuthPlugin } from './src/auth/myAuthPlugin';
 
 export default defineApp({
   port: 3000,

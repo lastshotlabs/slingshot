@@ -1,8 +1,8 @@
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
-import { logger } from '../internal/logger';
 import { createCachedRunHandle } from '../adapter';
 import { OrchestrationError } from '../errors';
+import { logger } from '../internal/logger';
 import type {
   AnyResolvedTask,
   OrchestrationEventMap,

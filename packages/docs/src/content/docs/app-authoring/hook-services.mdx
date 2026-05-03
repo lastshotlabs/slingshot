@@ -5,7 +5,7 @@ description: The typed accessor bag that lets out-of-request callbacks — auth 
 
 import { Aside } from '@astrojs/starlight/components';
 
-Some callbacks fire *outside* a request:
+Some callbacks fire _outside_ a request:
 
 - `slingshot-auth` `postLogin` runs after a session row is persisted, before the JWT is signed.
 - An orchestration workflow's `onComplete` runs from a worker tick.
@@ -49,7 +49,7 @@ interface HookServices {
 package-authored route handlers use. The same adapter-resolution code works in either
 place — request-time or hook-time.
 
-## What it explicitly does *not* carry
+## What it explicitly does _not_ carry
 
 `HookServices` deliberately omits anything request-scoped:
 
@@ -58,24 +58,24 @@ place — request-time or hook-time.
   transactional reads/writes they manage that themselves through the entity adapter.
 - No middleware-derived data (rate-limit counters, idempotency state, etc.).
 
-If you find yourself wanting these in a hook, it's a sign the work belongs *back* on the
+If you find yourself wanting these in a hook, it's a sign the work belongs _back_ on the
 request — emit an event the request handler subscribes to, or do the work synchronously
 and return its data to the caller.
 
 ## Where you receive it
 
-| Surface                                                | Where `services` lives                          |
-| ------------------------------------------------------ | ----------------------------------------------- |
+| Surface                                                                                                                                                                       | Where `services` lives                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `slingshot-auth` lifecycle hooks (`preLogin`, `postLogin`, `preRegister`, `postRegister`, `prePasswordChange`, `postPasswordChange`, `preDeleteAccount`, `postDeleteAccount`) | `services?` on the data argument (via `HookContext`) |
-| Orchestration workflow hooks (`onStart`, `onComplete`, `onFail`) | `services?` on the single hook context argument |
-| Orchestration `TaskContext` (in-process adapters)     | `ctx.services?`                                 |
-| Webhook queue `onDeadLetter`                           | third positional argument: `(job, err, services?)` |
-| Notifications dispatcher `onDeadLetter`                | second positional argument: `(event, services?)` |
-| Notifications builder `onPublishError`                 | second positional argument: `(input, services?)` |
-| Mail queue `onDeadLetter`                              | third positional argument: `(job, error, services?)` |
-| Search sync `onFlushDeadLetter`                        | second positional argument: `(entry, services?)` |
-| Search manager `onTenantIndexEvicted`                  | second positional argument: `(event, services?)` |
-| Game engine `ProcessHandlerContext`                    | `ctx.services?`                                 |
+| Orchestration workflow hooks (`onStart`, `onComplete`, `onFail`)                                                                                                              | `services?` on the single hook context argument      |
+| Orchestration `TaskContext` (in-process adapters)                                                                                                                             | `ctx.services?`                                      |
+| Webhook queue `onDeadLetter`                                                                                                                                                  | third positional argument: `(job, err, services?)`   |
+| Notifications dispatcher `onDeadLetter`                                                                                                                                       | second positional argument: `(event, services?)`     |
+| Notifications builder `onPublishError`                                                                                                                                        | second positional argument: `(input, services?)`     |
+| Mail queue `onDeadLetter`                                                                                                                                                     | third positional argument: `(job, error, services?)` |
+| Search sync `onFlushDeadLetter`                                                                                                                                               | second positional argument: `(entry, services?)`     |
+| Search manager `onTenantIndexEvicted`                                                                                                                                         | second positional argument: `(event, services?)`     |
+| Game engine `ProcessHandlerContext`                                                                                                                                           | `ctx.services?`                                      |
 
 The shape of the surrounding payload differs, but `services` is always the same type and
 always optional.
@@ -186,9 +186,9 @@ non-services path is a sensible no-op rather than a failure.
 ```ts
 // @skip-typecheck
 postLogin: async ({ userId, services }) => {
-  if (!services) return undefined;          // Test path: no claims to add.
+  if (!services) return undefined; // Test path: no claims to add.
   // ... real work using services ...
-}
+};
 ```
 
 ## Late-binding for queue and dispatcher callbacks
@@ -214,18 +214,18 @@ where `app`, `pluginState`, and `bus` are all available together). The queue inv
 the provider just before each callback, so the bound `services` reflects current
 framework state.
 
-If you construct one of these queues *yourself* — rather than letting a Slingshot
+If you construct one of these queues _yourself_ — rather than letting a Slingshot
 plugin auto-construct it — build the services bag with `buildHookServices()` and pass
 the provider:
 
 ```ts
 import {
-  buildHookServices,
-  createConsoleLogger,
-  getContext,
   type HookServices,
   type PluginSetupContext,
   type SlingshotPlugin,
+  buildHookServices,
+  createConsoleLogger,
+  getContext,
 } from '@lastshotlabs/slingshot-core';
 
 // Stand-in for whichever queue/dispatcher you're constructing — webhook bullmq queue,

@@ -93,9 +93,7 @@ export function createRedisTransport(opts: RedisTransportOptions): WsTransportAd
   return {
     async publish(endpoint: string, room: string, message: string, origin: string): Promise<void> {
       if (!pubClient)
-        return Promise.reject(
-          new Error('[RedisTransport] Not connected — call connect() first'),
-        );
+        return Promise.reject(new Error('[RedisTransport] Not connected — call connect() first'));
       const payload = JSON.stringify({ msg: message, origin });
       await pubClient.publish(channelForKey(wsEndpointKey(endpoint, room)), payload);
     },

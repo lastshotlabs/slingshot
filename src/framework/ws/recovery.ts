@@ -70,7 +70,7 @@ export async function handleRecover(
     let messages: Awaited<ReturnType<typeof getMessageHistory>>;
     try {
       const roomCursor = perRoomCursors?.[room] ?? session.lastEventId;
-    messages = await getMessageHistory(ws.data.endpoint, room, { after: roomCursor }, app);
+      messages = await getMessageHistory(ws.data.endpoint, room, { after: roomCursor }, app);
     } catch (err) {
       // Abort recovery on any message-history failure so the client sees a
       // deterministic failure rather than a partially-replayed session.
@@ -112,8 +112,7 @@ export function writeSession(
     const cursor = state.lastEventIds.get(`${socketId}\0${room}`);
     if (cursor) roomCursors[room] = cursor;
   }
-  const lastEventId =
-    Object.keys(roomCursors).length > 0 ? JSON.stringify(roomCursors) : '';
+  const lastEventId = Object.keys(roomCursors).length > 0 ? JSON.stringify(roomCursors) : '';
   state.sessionRegistry.set(sessionId, {
     rooms: [...rooms],
     lastEventId,

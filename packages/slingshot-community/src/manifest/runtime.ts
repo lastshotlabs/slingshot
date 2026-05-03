@@ -60,11 +60,12 @@ type ThreadAdapter = {
 };
 
 type ReplyAdapter = {
-  getById(
-    id: string,
-  ): Promise<
-    { createdAt?: string | Date; threadId?: string; containerId: string; status?: string } | null
-  >;
+  getById(id: string): Promise<{
+    createdAt?: string | Date;
+    threadId?: string;
+    containerId: string;
+    status?: string;
+  } | null>;
   update(id: string, data: unknown): Promise<unknown>;
   updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
 };

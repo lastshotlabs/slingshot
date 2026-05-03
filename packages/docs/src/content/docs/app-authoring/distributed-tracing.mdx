@@ -43,8 +43,8 @@ Configure the OTel SDK separately, before calling `createServer()`:
 
 ```typescript title="src/tracing.ts"
 // @skip-typecheck
-import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT }),
@@ -101,8 +101,8 @@ your APM tool indexes those attributes, a single trace ID jumps from a request l
 full waterfall — including plugin calls, database queries, and any custom spans you recorded.
 
 <Aside type="tip">
-  Tracing is opt-in for a reason: in dev it adds noise without much benefit. Turn it on in
-  staging and prod, leave it off locally unless you are debugging a specific latency issue.
+  Tracing is opt-in for a reason: in dev it adds noise without much benefit. Turn it on in staging
+  and prod, leave it off locally unless you are debugging a specific latency issue.
 </Aside>
 
 ## What's next

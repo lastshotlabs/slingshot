@@ -16,12 +16,10 @@ type OpenApiSpec = {
 
 describe('defineApp + createEntityPlugin entity wiring', () => {
   test('boots a canonical app.config.ts equivalent of manifest top-level entities', async () => {
-    const dir = join(
-      process.cwd(),
-      '.tmp',
-      'defineApp-entities',
-      crypto.randomUUID(),
-    ).replaceAll('\\', '/');
+    const dir = join(process.cwd(), '.tmp', 'defineApp-entities', crypto.randomUUID()).replaceAll(
+      '\\',
+      '/',
+    );
     mkdirSync(dir, { recursive: true });
     let server: TestServer | undefined;
 

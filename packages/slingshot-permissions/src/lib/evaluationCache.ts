@@ -119,7 +119,9 @@ export function createEvaluationCache(options?: EvaluationCacheOptions): Evaluat
   }
 
   if (maxEntries <= 0) {
-    throw new Error('[slingshot-permissions] evaluationCache maxEntries must be a positive number or Infinity');
+    throw new Error(
+      '[slingshot-permissions] evaluationCache maxEntries must be a positive number or Infinity',
+    );
   }
 
   const store = new Map<string, EvaluationCacheEntry>();

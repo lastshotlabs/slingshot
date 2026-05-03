@@ -10,25 +10,25 @@ canonical home for each one.
 
 ## What lives on a route
 
-| Concern | Where it's set | Page |
-| --- | --- | --- |
-| Path, method, handler | `route.get/post/...({ path, handler })` | [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) |
-| Request validation | `request: { body, params, query }` (Zod) | [Validation](/slingshot/app-authoring/validation/) |
-| Response shape | `responses[status]: { schema, transform, dto }` + entity `dto` | [DTO Mapping](/slingshot/app-authoring/dto-mapping/) |
-| Auth, permission, rate limit, idempotency, events | `routes.<op>` for entities, `route.*` for domain routes | [Route Policy](/slingshot/entity-system/route-policy/) |
-| Per-route logic before/after the handler | `middleware: [...]` | [Middleware](/slingshot/app-authoring/middleware/) |
-| Error responses | thrown `HttpError` or `respond.notFound()` etc. | [Exception Handling](/slingshot/app-authoring/exception-handling/) |
-| Authenticated identity | `actor` on the handler context | [Context and Actors](/slingshot/app-authoring/context-and-request-model/) |
-| Helper utilities for context | `getActor`, `getRequestTenantId`, etc. | [Context and Actor Helpers](/slingshot/app-authoring/context-helpers/) |
-| Cursor-based listing | `pagination` config + `respond.json({ items, cursor })` | [Pagination](/slingshot/app-authoring/pagination/) |
-| Retry-safe writes | `idempotency: true` on the route | [Idempotent Requests](/slingshot/app-authoring/idempotency/) |
-| Server-generated request ID | automatic — surfaced via `c.get('requestId')` | [Request IDs](/slingshot/app-authoring/request-ids/) |
-| Versioned API surface | `versioning: { ... }` in app config | [API Versioning](/slingshot/app-authoring/api-versioning/) |
-| Generated docs | automatic from `request` + `responses` schemas | [OpenAPI](/slingshot/guides/openapi/) |
+| Concern                                           | Where it's set                                                 | Page                                                                      |
+| ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Path, method, handler                             | `route.get/post/...({ path, handler })`                        | [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/)      |
+| Request validation                                | `request: { body, params, query }` (Zod)                       | [Validation](/slingshot/app-authoring/validation/)                        |
+| Response shape                                    | `responses[status]: { schema, transform, dto }` + entity `dto` | [DTO Mapping](/slingshot/app-authoring/dto-mapping/)                      |
+| Auth, permission, rate limit, idempotency, events | `routes.<op>` for entities, `route.*` for domain routes        | [Route Policy](/slingshot/entity-system/route-policy/)                    |
+| Per-route logic before/after the handler          | `middleware: [...]`                                            | [Middleware](/slingshot/app-authoring/middleware/)                        |
+| Error responses                                   | thrown `HttpError` or `respond.notFound()` etc.                | [Exception Handling](/slingshot/app-authoring/exception-handling/)        |
+| Authenticated identity                            | `actor` on the handler context                                 | [Context and Actors](/slingshot/app-authoring/context-and-request-model/) |
+| Helper utilities for context                      | `getActor`, `getRequestTenantId`, etc.                         | [Context and Actor Helpers](/slingshot/app-authoring/context-helpers/)    |
+| Cursor-based listing                              | `pagination` config + `respond.json({ items, cursor })`        | [Pagination](/slingshot/app-authoring/pagination/)                        |
+| Retry-safe writes                                 | `idempotency: true` on the route                               | [Idempotent Requests](/slingshot/app-authoring/idempotency/)              |
+| Server-generated request ID                       | automatic — surfaced via `c.get('requestId')`                  | [Request IDs](/slingshot/app-authoring/request-ids/)                      |
+| Versioned API surface                             | `versioning: { ... }` in app config                            | [API Versioning](/slingshot/app-authoring/api-versioning/)                |
+| Generated docs                                    | automatic from `request` + `responses` schemas                 | [OpenAPI](/slingshot/guides/openapi/)                                     |
 
 ## The two route flavors
 
-Both flavors share every concern listed above. The difference is *what generates them*:
+Both flavors share every concern listed above. The difference is _what generates them_:
 
 **Entity routes** — auto-generated from `defineEntity({ ..., routes: { ... } })`. CRUD is
 free (`POST /users`, `GET /users/:id`, etc.). Named operations come from
@@ -37,9 +37,11 @@ under the entity's path. Concerns are declared per-op:
 
 ```typescript
 defineEntity('Post', {
-  fields: { /* ... */ },
+  fields: {
+    /* ... */
+  },
   routes: {
-    list:   { auth: 'none' },                    // public list
+    list: { auth: 'none' }, // public list
     create: { permission: { requires: 'post:write' }, dto: 'default' },
     operations: {
       publish: { permission: { requires: 'post:moderate' } },

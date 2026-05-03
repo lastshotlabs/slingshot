@@ -45,7 +45,8 @@ export function createContentTargetGuardMiddleware(
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
-    const targetType = readString(body, 'targetType') || (readString(body, 'threadId') ? 'thread' : '');
+    const targetType =
+      readString(body, 'targetType') || (readString(body, 'threadId') ? 'thread' : '');
     const targetId = readString(body, 'targetId') || readString(body, 'threadId');
     if (!targetType || !targetId) {
       return c.json({ error: 'targetType and targetId are required' }, 400);

@@ -30,11 +30,11 @@ import {
 } from './middleware/deleteStorageFile';
 import {
   ASSETS_PLUGIN_STATE_KEY,
+  ASSETS_RUNTIME_KEY,
   type AssetAdapter,
   type AssetsHealth,
   type AssetsHealthDetails,
   type AssetsPluginConfig,
-  ASSETS_RUNTIME_KEY,
   type AssetsPluginState,
   type OrphanedKeyRecord,
   type StorageAdapterRef,

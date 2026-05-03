@@ -30,8 +30,8 @@ import { createContainerCreationGuardMiddleware } from './middleware/containerCr
 import { createGrantManagerMiddleware } from './middleware/grantManager';
 import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
 import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middleware/peerGuards';
-import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
+import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
 import { probePushFormatterRegistrar } from './peers/push';
 import { DEFAULT_SCORING_CONFIG } from './types/config';

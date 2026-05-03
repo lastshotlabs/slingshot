@@ -116,4 +116,3 @@ test('permissions state is frozen at bootstrap', async () => {
   expect(state).toBeDefined();
   expect(Object.isFrozen(state)).toBe(true);
 });
-

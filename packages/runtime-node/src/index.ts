@@ -15,7 +15,6 @@
  *
  * See the peer files in src/ for shared error types and the README for usage.
  */
-
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
@@ -919,11 +918,9 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
             logWebSocketHandlerError('message', err);
             return;
           }
-          void Promise.resolve(handler.message(rtWs, payload)).catch(
-            (error: unknown) => {
-              logWebSocketHandlerError('message', error);
-            },
-          );
+          void Promise.resolve(handler.message(rtWs, payload)).catch((error: unknown) => {
+            logWebSocketHandlerError('message', error);
+          });
         });
         ws.on('pong', () => {
           aliveSockets.add(ws);

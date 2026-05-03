@@ -56,11 +56,7 @@ interface BullMQWebhookQueueConfig {
    * queue is owned by a plugin that has registered one) the framework
    * `HookServices` accessor.
    */
-  onDeadLetter?: (
-    job: WebhookJob,
-    err: Error,
-    services?: HookServices,
-  ) => void | Promise<void>;
+  onDeadLetter?: (job: WebhookJob, err: Error, services?: HookServices) => void | Promise<void>;
   /**
    * Late-bound accessor for framework {@link HookServices}. The plugin sets
    * this during `setupMiddleware`; the worker invokes it just before each

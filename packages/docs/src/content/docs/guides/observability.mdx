@@ -105,8 +105,8 @@ Then import it before your server:
 ```javascript
 // app.config.ts is loaded by `slingshot start`. Import the tracing
 // SDK first so it's installed before any application code runs.
-import './tracing';
 import { defineApp } from '@lastshotlabs/slingshot';
+import './tracing';
 
 export default defineApp({
   observability: { tracing: { enabled: true } },

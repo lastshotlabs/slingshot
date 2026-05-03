@@ -1,6 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
 import {
-  createConsoleLogger,
   type EventDefinition,
   type EventDefinitionRegistry,
   type EventEnvelope,
@@ -8,6 +7,7 @@ import {
   type EventScope,
   type EventSubscriptionPrincipal,
   type PaginatedResult,
+  createConsoleLogger,
 } from '@lastshotlabs/slingshot-core';
 import { authorizeEventSubscriber } from '@lastshotlabs/slingshot-core';
 import type {

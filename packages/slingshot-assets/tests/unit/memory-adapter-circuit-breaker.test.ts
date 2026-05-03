@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { memoryStorage, MemoryCircuitOpenError } from '../../src/adapters/memory';
+import { MemoryCircuitOpenError, memoryStorage } from '../../src/adapters/memory';
 
 describe('memoryStorage circuit breaker', () => {
   afterEach(() => {

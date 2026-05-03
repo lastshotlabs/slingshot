@@ -11,12 +11,11 @@
  *   bun run tests/bench/search-throughput.bench.ts        # quick mode (100 iterations)
  *   BENCH=1 bun run tests/bench/search-throughput.bench.ts # full bench (1,000 iterations)
  */
-
 import { performance } from 'node:perf_hooks';
-import type { SearchProvider, SearchIndexSettings } from '../../src/types/provider';
+import { SearchCircuitOpenError, createSearchCircuitBreaker } from '../../src/searchCircuitBreaker';
+import type { SearchIndexSettings, SearchProvider } from '../../src/types/provider';
 import type { SearchQuery } from '../../src/types/query';
 import type { SearchResponse } from '../../src/types/response';
-import { createSearchCircuitBreaker, SearchCircuitOpenError } from '../../src/searchCircuitBreaker';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -198,7 +197,16 @@ function createLatencySimulatingProvider(latencyMs: number): SearchProvider {
       return Promise.all(queries.map(q => provider.search(q.indexName, q.query)));
     },
 
-    async suggest(_indexName: string, query: { q: string; limit?: number; fields?: ReadonlyArray<string>; highlight?: boolean; filter?: unknown }) {
+    async suggest(
+      _indexName: string,
+      query: {
+        q: string;
+        limit?: number;
+        fields?: ReadonlyArray<string>;
+        highlight?: boolean;
+        filter?: unknown;
+      },
+    ) {
       await new Promise(r => setTimeout(r, latencyMs));
       return {
         suggestions: [{ text: 'suggestion', score: 1, field: 'title' }],
@@ -262,7 +270,15 @@ async function runBenchClosed(label: string): Promise<{
 
   await provider.teardown();
 
-  return { label, queries: QUERIES, totalMs, throughput, p50: computePercentiles(latencies, 50), p95: computePercentiles(latencies, 95), p99: computePercentiles(latencies, 99) };
+  return {
+    label,
+    queries: QUERIES,
+    totalMs,
+    throughput,
+    p50: computePercentiles(latencies, 50),
+    p95: computePercentiles(latencies, 95),
+    p99: computePercentiles(latencies, 99),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +327,15 @@ async function runBenchBreakerOpen(label: string): Promise<{
   latencies.sort();
   const throughput = (QUERIES / totalMs) * 1000;
 
-  return { label, queries: QUERIES, totalMs, throughput, p50: computePercentiles(latencies, 50), p95: computePercentiles(latencies, 95), p99: computePercentiles(latencies, 99) };
+  return {
+    label,
+    queries: QUERIES,
+    totalMs,
+    throughput,
+    p50: computePercentiles(latencies, 50),
+    p95: computePercentiles(latencies, 95),
+    p99: computePercentiles(latencies, 99),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -474,7 +474,10 @@ export function createChatManifestRuntime(args: {
     if (!sourceMessage) {
       throw new HTTPException(404, { message: 'Source message not found' });
     }
-    if (sourceMessage.deletedAt || (sourceMessage.scheduledAt && !sourceMessage.scheduledDelivered)) {
+    if (
+      sourceMessage.deletedAt ||
+      (sourceMessage.scheduledAt && !sourceMessage.scheduledDelivered)
+    ) {
       throw new HTTPException(404, { message: 'Source message not found' });
     }
 

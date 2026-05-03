@@ -10,11 +10,7 @@
  * can roll back before the connection is released.
  */
 import type { MiddlewareHandler } from 'hono';
-import {
-  type AppEnv,
-  type RequestScope,
-  setRequestScopeStore,
-} from '@lastshotlabs/slingshot-core';
+import { type AppEnv, type RequestScope, setRequestScopeStore } from '@lastshotlabs/slingshot-core';
 
 export function createRequestScopesMiddleware(
   scopes: readonly RequestScope[],

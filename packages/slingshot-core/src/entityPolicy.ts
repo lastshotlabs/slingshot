@@ -3,7 +3,12 @@ import type { AppEnv } from './context';
 import { getContext, getContextOrNull } from './context/index';
 import type { PolicyResolver } from './entityRouteConfig';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
-import { definePluginStateKey, publishPluginState, readPluginState, resolvePluginState } from './pluginState';
+import {
+  definePluginStateKey,
+  publishPluginState,
+  readPluginState,
+  resolvePluginState,
+} from './pluginState';
 
 /**
  * Plugin-state key owned by `slingshot-entity`.

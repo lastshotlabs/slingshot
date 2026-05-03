@@ -73,20 +73,14 @@ describe('webhook delivery lifecycle', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-1', tenantId: 'tenant-a' },
         { requestTenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
       );
 
-      const delivery = await waitForDelivery(
-        runtime,
-        endpointId,
-        d => d.status === 'delivered',
-      );
+      const delivery = await waitForDelivery(runtime, endpointId, d => d.status === 'delivered');
 
       expect(delivery.status).toBe('delivered');
       expect(delivery.attempts).toBe(1);
@@ -121,20 +115,14 @@ describe('webhook delivery lifecycle', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-2', tenantId: 'tenant-a' },
         { requestTenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
       );
 
-      const delivery = await waitForDelivery(
-        runtime,
-        endpointId,
-        d => d.status === 'dead',
-      );
+      const delivery = await waitForDelivery(runtime, endpointId, d => d.status === 'dead');
 
       // Non-retryable 400 goes dead immediately with 1 attempt
       expect(delivery.attempts).toBe(1);
@@ -156,20 +144,14 @@ describe('webhook delivery lifecycle', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-3', tenantId: 'tenant-a' },
         { requestTenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
       );
 
-      const delivery = await waitForDelivery(
-        runtime,
-        endpointId,
-        d => d.status === 'dead',
-      );
+      const delivery = await waitForDelivery(runtime, endpointId, d => d.status === 'dead');
 
       // All 3 attempts were made before going dead
       expect(delivery.attempts).toBe(3);
@@ -192,9 +174,7 @@ describe('webhook delivery lifecycle', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-4', tenantId: 'tenant-a' },
@@ -202,11 +182,7 @@ describe('webhook delivery lifecycle', () => {
       );
 
       // Wait for delivery to fail and become dead
-      const deadDelivery = await waitForDelivery(
-        runtime,
-        endpointId,
-        d => d.status === 'dead',
-      );
+      const deadDelivery = await waitForDelivery(runtime, endpointId, d => d.status === 'dead');
       expect(deadDelivery.status).toBe('dead');
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -214,10 +190,10 @@ describe('webhook delivery lifecycle', () => {
       fetchMock.mockImplementation(async () => new Response('ok', { status: 200 }));
 
       // Replay the delivery via the HTTP route
-      const replayRes = await app.request(
-        `/webhooks/admin/deliveries/${deadDelivery.id}/replay`,
-        { method: 'POST', headers: adminHeaders() },
-      );
+      const replayRes = await app.request(`/webhooks/admin/deliveries/${deadDelivery.id}/replay`, {
+        method: 'POST',
+        headers: adminHeaders(),
+      });
       expect(replayRes.status).toBe(200);
       const replayBody = (await replayRes.json()) as {
         replayed: boolean;
@@ -259,9 +235,7 @@ describe('webhook delivery lifecycle', () => {
       dispatch: dispatchFor(fetchMock),
     });
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), [
-        { event: 'auth:login' },
-      ]);
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-5', tenantId: 'tenant-a' },
@@ -269,11 +243,7 @@ describe('webhook delivery lifecycle', () => {
       );
 
       // Wait for the final dead state (429 is retryable, goes failed → dead)
-      const deadDelivery = await waitForDelivery(
-        runtime,
-        endpointId,
-        d => d.status === 'dead',
-      );
+      const deadDelivery = await waitForDelivery(runtime, endpointId, d => d.status === 'dead');
       expect(deadDelivery.attempts).toBe(2);
       expect(deadDelivery.lastAttempt?.statusCode).toBe(429);
       expect(deadDelivery.lastAttempt?.error).toContain('HTTP 429');

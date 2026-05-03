@@ -4,51 +4,47 @@
  * Composition root that wires together state machine, cancellation,
  * scheduling, and observability modules.
  */
-
 import { Job, Queue } from 'bullmq';
-import type { ConnectionOptions, QueueOptions, QueueEvents, Worker } from 'bullmq';
+import type { ConnectionOptions, QueueEvents, QueueOptions, Worker } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
-  type OrchestrationAdapter,
   type ObservabilityCapability,
-  type ScheduleCapability,
-  type RunHandle,
+  type OrchestrationAdapter,
   OrchestrationError,
   type OrchestrationEventSink,
+  type RunHandle,
+  type ScheduleCapability,
   createCachedRunHandle,
   createIdempotencyScope,
   generateRunId,
 } from '@lastshotlabs/slingshot-orchestration';
 import {
-  createStateMachine,
-  type StartStopState,
-  type StateMachineConfig,
-  OrchestrationAdapterDisposedError,
-  DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
-} from './lib/stateMachine';
-import {
-  createCancellationFns,
   type CancellationState,
-  matchesTags,
+  createCancellationFns,
   mapStatuses,
+  matchesTags,
 } from './lib/cancellation';
-import { createSchedulingFns, type SchedulingState } from './lib/scheduling';
 import {
-  createObservabilityFns,
-  type ObservabilityState,
-  createProgressListener,
   type BullMQOrchestrationAdapterMetrics,
+  type BullMQOrchestrationHealthCapability,
   type BullMQOrchestrationMetricsCapability,
   type BullMQOrchestrationResetCapability,
-  type BullMQOrchestrationHealthCapability,
+  type ObservabilityState,
+  createObservabilityFns,
+  createProgressListener,
 } from './lib/observability';
+import { type SchedulingState, createSchedulingFns } from './lib/scheduling';
 import {
-  createJobRetryOptions,
-  resolveTaskRuntimeConfig,
-} from './taskRuntime';
+  DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  OrchestrationAdapterDisposedError,
+  type StartStopState,
+  type StateMachineConfig,
+  createStateMachine,
+} from './lib/stateMachine';
+import { createJobRetryOptions, resolveTaskRuntimeConfig } from './taskRuntime';
 import {
   type BullMQOrchestrationAdapterOptions,
   bullmqOrchestrationAdapterOptionsSchema,
@@ -207,10 +203,7 @@ export function createBullMQOrchestrationAdapter(
   const cancelledRunsIndexKey = `${prefix}:cancelled:runs`;
 
   // -- Shared state object (satisfies all module interfaces) --
-  const sharedState: StartStopState &
-    CancellationState &
-    ObservabilityState &
-    SchedulingState = {
+  const sharedState: StartStopState & CancellationState & ObservabilityState & SchedulingState = {
     // StartStopState
     disposed: false,
     startState: 'idle',
@@ -302,9 +295,7 @@ export function createBullMQOrchestrationAdapter(
       let job = await Job.fromId(queue, jobId);
       if (job) {
         const existingRunId =
-          typeof job.data['runId'] === 'string'
-            ? (job.data['runId'] as string)
-            : String(job.id);
+          typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : String(job.id);
         cacheRunId(existingRunId, String(job.id));
         return createResultHandle(existingRunId, () =>
           cancellation.waitForRunResult(
@@ -356,9 +347,7 @@ export function createBullMQOrchestrationAdapter(
       let job = await Job.fromId(workflowQueue, jobId);
       if (job) {
         const existingRunId =
-          typeof job.data['runId'] === 'string'
-            ? (job.data['runId'] as string)
-            : String(job.id);
+          typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : String(job.id);
         cacheRunId(existingRunId, String(job.id));
         return createResultHandle(existingRunId, () => {
           if (!sharedState.workflowQueueEvents) {
@@ -440,8 +429,7 @@ export function createBullMQOrchestrationAdapter(
       return degraded
         ? {
             cancelStatus: 'best-effort' as const,
-            message:
-              outcome.message ?? 'one or more child jobs could not be confirmed cancelled',
+            message: outcome.message ?? 'one or more child jobs could not be confirmed cancelled',
           }
         : { cancelStatus: 'confirmed' as const };
     },
@@ -460,9 +448,7 @@ export function createBullMQOrchestrationAdapter(
       const taskQueues = [defaultTaskQueue, ...namedQueues.values()];
       const [workflowJobs, ...taskJobGroups] = await Promise.all([
         filter?.type === 'task' ? Promise.resolve([]) : workflowQueue.getJobs(states),
-        ...(filter?.type === 'workflow'
-          ? []
-          : taskQueues.map(queue => queue.getJobs(states))),
+        ...(filter?.type === 'workflow' ? [] : taskQueues.map(queue => queue.getJobs(states))),
       ]);
       const merged = await Promise.all(
         [
@@ -486,10 +472,14 @@ export function createBullMQOrchestrationAdapter(
         }
       }
       const filtered: Array<
-        import('@lastshotlabs/slingshot-orchestration').Run | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
-      > = ([...visibleRuns.values()] as Array<
-        import('@lastshotlabs/slingshot-orchestration').Run | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
-      >)
+        | import('@lastshotlabs/slingshot-orchestration').Run
+        | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
+      > = (
+        [...visibleRuns.values()] as Array<
+          | import('@lastshotlabs/slingshot-orchestration').Run
+          | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
+        >
+      )
         .filter(run => {
           const r = run as import('@lastshotlabs/slingshot-orchestration').Run;
           if (filter?.name && r.name !== filter.name) return false;

@@ -40,8 +40,8 @@ export default defineApp({
 Then mount the middleware on routes that should reject unsigned traffic:
 
 ```typescript title="src/partners/package.ts"
-import { definePackage, domain, requireSignedRequest, route } from '@lastshotlabs/slingshot';
 import { z } from 'zod';
+import { definePackage, domain, requireSignedRequest, route } from '@lastshotlabs/slingshot';
 
 export const partnersPackage = definePackage({
   name: 'partners',
@@ -104,9 +104,9 @@ export const webhooksPackage = definePackage({
 `secret` can be a function `(c) => string | Promise<string>` for per-tenant secret lookup.
 
 <Aside type="caution">
-  The middleware reads the body via `c.req.text()`. Hono caches the body, so downstream handlers
-  can still call `c.req.json()` — but a custom middleware that consumes the raw stream would
-  starve the verifier.
+  The middleware reads the body via `c.req.text()`. Hono caches the body, so downstream handlers can
+  still call `c.req.json()` — but a custom middleware that consumes the raw stream would starve the
+  verifier.
 </Aside>
 
 ## Cryptographic primitives

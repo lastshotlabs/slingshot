@@ -393,8 +393,7 @@ export function createTemporalOrchestrationAdapter(
         details.connection = 'ok';
       } catch (err) {
         details.connection = 'error';
-        details.connectionError =
-          err instanceof Error ? err.message : String(err);
+        details.connectionError = err instanceof Error ? err.message : String(err);
         return { status: 'unhealthy', details };
       }
 
@@ -690,7 +689,8 @@ export function createTemporalOrchestrationAdapter(
                 // If the caller's callback throws, log it and stop polling
                 // to prevent the timer from accumulating unhandled errors.
                 logger.error('onProgress callback threw; stopping poll', {
-                  err: callbackError instanceof Error ? callbackError.message : String(callbackError),
+                  err:
+                    callbackError instanceof Error ? callbackError.message : String(callbackError),
                 });
                 stop();
                 return;

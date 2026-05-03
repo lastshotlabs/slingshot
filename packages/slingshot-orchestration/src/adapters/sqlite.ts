@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
-import { logger } from '../internal/logger';
 import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
 import { createIdempotencyScope } from '../idempotency';
+import { logger } from '../internal/logger';
 import { resolveMaxPayloadBytes, serializeWithLimit } from '../serialization';
 import type {
   AnyResolvedTask,
@@ -143,9 +143,10 @@ export function createSqliteAdapter(options: {
   logger?: import('@lastshotlabs/slingshot-core').Logger;
   /** Pre-built `HookServices` for in-process workflow hooks and task contexts. See `createMemoryAdapter` for the same field. */
   hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
-}): OrchestrationAdapter & ObservabilityCapability & {
-  health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
-} {
+}): OrchestrationAdapter &
+  ObservabilityCapability & {
+    health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
+  } {
   const parsed = sqliteAdapterOptionsSchema.parse(options);
   const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'sqlite adapter');
   let db: Database.Database;
@@ -1006,8 +1007,7 @@ export function createSqliteAdapter(options: {
         details.dbCheck = 'ok';
       } catch (err) {
         details.dbCheck = 'error';
-        details.dbError =
-          err instanceof Error ? err.message : String(err);
+        details.dbError = err instanceof Error ? err.message : String(err);
         return { status: 'degraded', details };
       }
       return { status: 'healthy', details };

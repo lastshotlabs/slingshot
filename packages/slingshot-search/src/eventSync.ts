@@ -798,7 +798,10 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     dlqStore = config.dlqStore;
     isInMemoryDlq = false;
   } else if (hasDlqStoragePath && dlqStoragePath) {
-    fileDlqStore = createFileDlqStore({ storagePath: dlqStoragePath, maxEntries: maxDeadLetterEntries });
+    fileDlqStore = createFileDlqStore({
+      storagePath: dlqStoragePath,
+      maxEntries: maxDeadLetterEntries,
+    });
     dlqStore = fileDlqStore;
     isInMemoryDlq = false;
   } else {

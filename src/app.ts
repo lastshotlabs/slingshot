@@ -530,10 +530,7 @@ async function prepareBootstrap<T extends object>(
   // boot step (plugins, packages, infrastructure) can read them via cfg.get().
   if (config.configs && config.configs.length > 0) {
     const { loadConfigs } = await import('@lastshotlabs/slingshot-core');
-    loadConfigs(
-      config.configs,
-      process.env as Readonly<Record<string, string | undefined>>,
-    );
+    loadConfigs(config.configs, process.env as Readonly<Record<string, string | undefined>>);
   }
 
   const { meta: appConfig = {}, security: securityInput = {}, db = {} } = config;

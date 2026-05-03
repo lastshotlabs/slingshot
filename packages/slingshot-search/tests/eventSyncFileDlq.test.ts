@@ -9,11 +9,11 @@
  *  - integration with `createEventSyncManager` via `dlqStoragePath`
  */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
-import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import {
   type FileDlqStore,
   type FlushDeadLetterEntry,

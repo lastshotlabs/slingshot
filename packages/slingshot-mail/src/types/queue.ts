@@ -1,4 +1,9 @@
-import type { DynamicEventBus, MetricsEmitter, QueueLifecycle } from '@lastshotlabs/slingshot-core';
+import type {
+  DynamicEventBus,
+  HookServices,
+  MetricsEmitter,
+  QueueLifecycle,
+} from '@lastshotlabs/slingshot-core';
 import type { MailMessage } from './provider';
 import type { MailProvider } from './provider';
 
@@ -58,8 +63,16 @@ export interface MailQueueConfig {
   /**
    * Called when a job exceeds `maxAttempts` or encounters a permanent failure.
    * Use this for alerting, logging, or persisting failed deliveries.
+   * The third argument is the framework `HookServices` accessor, populated
+   * when the queue is owned by a plugin that has registered one.
    */
-  onDeadLetter?: (job: MailJob, error: Error) => void;
+  onDeadLetter?: (job: MailJob, error: Error, services?: HookServices) => void;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the queue invokes it just before each
+   * `onDeadLetter` call so callbacks see current framework state.
+   */
+  getHookServices?: () => HookServices | undefined;
   /**
    * Optional unified metrics emitter. Defaults to a no-op. When provided, the
    * queue records:

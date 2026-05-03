@@ -137,9 +137,13 @@ export {
   domain,
   entityRef,
   inspectPackage,
+  PACKAGE_CAPABILITIES_PREFIX,
   provideCapability,
   route,
 } from './packageAuthoring';
+/** Out-of-request hook services contract — typed accessors for callbacks that fire outside Hono request scope. */
+export { buildHookServices } from './hookServices';
+export type { HookServices } from './hookServices';
 export type {
   DefinePackageInput,
   DomainRouteDefinition,

@@ -1,5 +1,6 @@
 import type {
   DynamicEventBus,
+  HookServices,
   Logger,
   MetricsEmitter,
   NotificationBuilder,
@@ -62,11 +63,20 @@ export interface CreateNotificationBuilderOptions {
    * queue). When omitted the builder still logs and emits
    * `notify:publishFailed`. P-NOTIF-7.
    */
-  readonly onPublishError?: (input: {
-    event: string;
-    payload: unknown;
-    error: Error;
-  }) => void | Promise<void>;
+  readonly onPublishError?: (
+    input: {
+      event: string;
+      payload: unknown;
+      error: Error;
+    },
+    services?: HookServices,
+  ) => void | Promise<void>;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the builder invokes it just before each
+   * `onPublishError` call so callbacks see current framework state.
+   */
+  readonly getHookServices?: () => HookServices | undefined;
 }
 
 /**
@@ -122,7 +132,10 @@ export function createNotificationBuilder(
     }
     if (options.onPublishError) {
       try {
-        const result = options.onPublishError({ event, payload, error: err });
+        const result = options.onPublishError(
+          { event, payload, error: err },
+          options.getHookServices?.(),
+        );
         if (result instanceof Promise) {
           result.catch(retryErr => {
             logger.warn('onPublishError callback rejected', {

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-orchestration-temporal",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Temporal-backed orchestration adapter and worker supervisor for Slingshot",
   "license": "MIT",
   "type": "module",

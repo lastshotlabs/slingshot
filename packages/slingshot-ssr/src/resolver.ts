@@ -105,11 +105,16 @@ const routeTreeCache = new Map<string, RouteEntry[]>();
  * Initialise the route tree for a given server routes directory.
  *
  * Scans the directory and caches the result. Safe to call multiple times —
- * returns the cached result if already initialised. Call once during plugin
- * startup (`setupMiddleware`).
+ * returns the cached result if already initialised.
+ *
+ * Called automatically:
+ * - by the SSR plugin's `setupMiddleware` at request time
+ * - by `slingshot-ssg`'s renderer before `resolveRouteChain` at build time
+ *
+ * Tooling that calls `resolveRouteChain` directly (e.g. custom build scripts,
+ * dev tooling, tests) must call this first to populate the cache.
  *
  * @param serverRoutesDir - Absolute path to the server/routes directory.
- * @internal
  */
 export function initRouteTree(serverRoutesDir: string): void {
   if (routeTreeCache.has(serverRoutesDir)) return;
@@ -119,11 +124,12 @@ export function initRouteTree(serverRoutesDir: string): void {
 /**
  * Invalidate the cached route tree for a directory.
  *
- * Called by the dev mode file watcher when files are added, changed, or
+ * Called by the dev-mode file watcher when files are added, changed, or
  * removed. After invalidation, the next call to `initRouteTree` will re-scan.
  *
+ * Test code can call this between cases to ensure a fresh resolution.
+ *
  * @param serverRoutesDir - Absolute path to the server/routes directory.
- * @internal
  */
 export function invalidateRouteTree(serverRoutesDir: string): void {
   routeTreeCache.delete(serverRoutesDir);

@@ -5,7 +5,12 @@
  */
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { z } from 'zod';
-import { type AppEnv, createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
+import {
+  type AppEnv,
+  createRoute,
+  errorResponse,
+  registerSchema,
+} from '@lastshotlabs/slingshot-core';
 import type { SearchManager } from '../searchManager';
 import type { SearchPluginConfig } from '../types/config';
 import type { FederatedSearchQuery, SearchFilter } from '../types/query';
@@ -43,26 +48,32 @@ const SearchFilterValueSchema = z.union([
   z.array(z.union([z.string(), z.number(), z.boolean()])).readonly(),
 ]);
 
-const SearchFilterSchema: z.ZodType<SearchFilter> = z.lazy(() =>
-  z.union([
-    z.object({ field: z.string(), op: SearchFilterOpSchema, value: SearchFilterValueSchema }),
-    z.object({ $and: z.array(SearchFilterSchema).readonly() }),
-    z.object({ $or: z.array(SearchFilterSchema).readonly() }),
-    z.object({ $not: SearchFilterSchema }),
-    z.object({
-      $geoRadius: z.object({
-        lat: z.number(),
-        lng: z.number(),
-        radiusMeters: z.number(),
+// Recursive schema — must be registered as a named OpenAPI component so the
+// generator emits `$ref: '#/components/schemas/SearchFilter'` at use sites
+// instead of attempting to inline-expand the cycle (which blows the stack).
+const SearchFilterSchema: z.ZodType<SearchFilter> = registerSchema(
+  'SearchFilter',
+  z.lazy(() =>
+    z.union([
+      z.object({ field: z.string(), op: SearchFilterOpSchema, value: SearchFilterValueSchema }),
+      z.object({ $and: z.array(SearchFilterSchema).readonly() }),
+      z.object({ $or: z.array(SearchFilterSchema).readonly() }),
+      z.object({ $not: SearchFilterSchema }),
+      z.object({
+        $geoRadius: z.object({
+          lat: z.number(),
+          lng: z.number(),
+          radiusMeters: z.number(),
+        }),
       }),
-    }),
-    z.object({
-      $geoBoundingBox: z.object({
-        topLeft: z.object({ lat: z.number(), lng: z.number() }),
-        bottomRight: z.object({ lat: z.number(), lng: z.number() }),
+      z.object({
+        $geoBoundingBox: z.object({
+          topLeft: z.object({ lat: z.number(), lng: z.number() }),
+          bottomRight: z.object({ lat: z.number(), lng: z.number() }),
+        }),
       }),
-    }),
-  ]),
+    ]),
+  ),
 );
 
 const FederatedSearchEntrySchema = z.object({

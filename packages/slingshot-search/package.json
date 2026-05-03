@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-search",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "Enterprise search plugin for Slingshot — per-entity search with Meilisearch, Typesense, Elasticsearch, Algolia, or DB-native providers",
   "license": "MIT",
   "type": "module",

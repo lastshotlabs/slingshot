@@ -6,7 +6,7 @@ import type {
 } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import type { Logger } from '@lastshotlabs/slingshot-core';
+import type { HookServices, Logger } from '@lastshotlabs/slingshot-core';
 import { WebhookConfigError, WebhookStateError } from '../errors/webhookErrors';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from '../types/public';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
@@ -52,9 +52,21 @@ interface BullMQWebhookQueueConfig {
   retryBaseDelayMs?: number;
   /**
    * Callback invoked when a job is permanently failed (exhausted retries or non-retryable error).
-   * Receives the final `WebhookJob` snapshot and the last `Error`.
+   * Receives the final `WebhookJob` snapshot, the last `Error`, and (when the
+   * queue is owned by a plugin that has registered one) the framework
+   * `HookServices` accessor.
    */
-  onDeadLetter?: (job: WebhookJob, err: Error) => void | Promise<void>;
+  onDeadLetter?: (
+    job: WebhookJob,
+    err: Error,
+    services?: HookServices,
+  ) => void | Promise<void>;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the worker invokes it just before each
+   * `onDeadLetter` call so the callback sees current framework state.
+   */
+  getHookServices?: () => HookServices | undefined;
 }
 
 /**
@@ -289,7 +301,9 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
               createdAt: new Date(bullJob.timestamp),
             };
             if (config.onDeadLetter) {
-              void Promise.resolve(config.onDeadLetter(webhookJob, err)).catch(callbackErr => {
+              void Promise.resolve(
+                config.onDeadLetter(webhookJob, err, config.getHookServices?.()),
+              ).catch(callbackErr => {
                 logger.error('[slingshot-webhooks] onDeadLetter handler failed', callbackErr);
               });
             }

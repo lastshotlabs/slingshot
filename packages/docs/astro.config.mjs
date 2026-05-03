@@ -80,6 +80,7 @@ export default defineConfig({
             { label: 'Capabilities and entityRef', slug: 'package-first/capabilities-and-entity-ref' },
             { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'Events and the Event Bus', slug: 'app-authoring/events-and-the-event-bus' },
+            { label: 'HookServices', slug: 'app-authoring/hook-services' },
             { label: 'Lower-level Seams', slug: 'package-first/escape-hatches' },
           ],
         },

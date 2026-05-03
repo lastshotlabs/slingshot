@@ -16,6 +16,7 @@ import {
 import type { AuthRateLimitConfig, HookContext } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
+import { authHookServices } from '../services/auth';
 
 export interface PasswordResetRouterOptions {
   rateLimit?: AuthRateLimitConfig;
@@ -261,7 +262,10 @@ export const createPasswordResetRouter = (
 
       const hooks = getConfig().hooks;
       const ctx = hookCtx(c);
-      if (hooks.prePasswordChange) await hooks.prePasswordChange({ userId: entry.userId, ...ctx });
+      const services = authHookServices(runtime);
+      if (hooks.prePasswordChange) {
+        await hooks.prePasswordChange({ userId: entry.userId, ...ctx, services });
+      }
 
       await adapter.setPassword(entry.userId, passwordHash);
       if (preventReuseReset > 0)
@@ -277,7 +281,7 @@ export const createPasswordResetRouter = (
       if (hooks.postPasswordChange) {
         const postPwHook = hooks.postPasswordChange;
         Promise.resolve()
-          .then(() => postPwHook({ userId: entry.userId, ...ctx }))
+          .then(() => postPwHook({ userId: entry.userId, ...ctx, services }))
           .catch((e: unknown) =>
             console.error(
               '[lifecycle] postPasswordChange hook error:',

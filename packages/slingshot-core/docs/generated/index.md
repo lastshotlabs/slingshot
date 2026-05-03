@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-core
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-core`
-- Version: `0.0.2`
+- Version: `0.0.3`
 - Kind: Workspace package
 - Role: contracts package
 - Description: Core plugin contract, context, event bus, and shared types for Slingshot

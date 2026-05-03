@@ -52,6 +52,13 @@ export function createBullMQTaskProcessor(options: {
   taskRegistry: Map<string, AnyResolvedTask>;
   eventSink?: OrchestrationEventSink;
   logger?: Logger;
+  /**
+   * Optional `HookServices` to thread into every task's `TaskContext.services`.
+   * Provided by the bullmq adapter when the task worker shares a process with
+   * the main app. When the worker runs in a separate process (services
+   * unreachable), this is omitted and tasks see `services: undefined`.
+   */
+  hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
 }) {
   const logger =
     options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
@@ -119,6 +126,7 @@ export function createBullMQTaskProcessor(options: {
         signal: controller.signal,
         log: console,
         tenantId,
+        services: options.hookServices,
         reportProgress: data => {
           job.updateProgress(data).catch((err: unknown) => {
             logger.error('Failed to update job progress', { runId, err: String(err) });

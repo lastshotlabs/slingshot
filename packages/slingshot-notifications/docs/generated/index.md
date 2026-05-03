@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-notifica
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-notifications`
-- Version: `0.0.2`
+- Version: `0.0.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Shared notification storage, scheduling, and delivery events for slingshot

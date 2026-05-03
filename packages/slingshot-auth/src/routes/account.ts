@@ -13,6 +13,7 @@ import {
 import { ErrorResponse } from '@auth/schemas/error';
 import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
+import { authHookServices } from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import {
@@ -422,7 +423,8 @@ export const createAccountRouter = (
 
       const hooks = getConfig().hooks;
       if (hooks.preDeleteAccount) {
-        await hooks.preDeleteAccount({ userId: userId, ...hookCtx(c) });
+        const services = authHookServices(runtime);
+        await hooks.preDeleteAccount({ userId: userId, ...hookCtx(c), services });
       }
 
       // Queued deletion via BullMQ
@@ -519,8 +521,9 @@ export const createAccountRouter = (
       }
       if (hooks.postDeleteAccount) {
         const postDeleteHook = hooks.postDeleteAccount;
+        const services = authHookServices(runtime);
         Promise.resolve()
-          .then(() => postDeleteHook({ userId: userId, ...hookCtx(c) }))
+          .then(() => postDeleteHook({ userId: userId, ...hookCtx(c), services }))
           .catch((e: unknown) =>
             console.error(
               '[lifecycle] postDeleteAccount hook error:',
@@ -649,7 +652,10 @@ export const createAccountRouter = (
       }
 
       const hooks = getConfig().hooks;
-      if (hooks.prePasswordChange) await hooks.prePasswordChange({ userId: userId });
+      if (hooks.prePasswordChange) {
+        const services = authHookServices(runtime);
+        await hooks.prePasswordChange({ userId: userId, services });
+      }
 
       const passwordHash = await runtime.password.hash(password);
 
@@ -676,8 +682,9 @@ export const createAccountRouter = (
       eventBus.emit('security.auth.password.change', { userId: userId });
       if (hooks.postPasswordChange) {
         const postPwHook = hooks.postPasswordChange;
+        const services = authHookServices(runtime);
         Promise.resolve()
-          .then(() => postPwHook({ userId: userId }))
+          .then(() => postPwHook({ userId: userId, services }))
           .catch((e: unknown) =>
             console.error(
               '[lifecycle] postPasswordChange hook error:',

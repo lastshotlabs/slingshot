@@ -92,6 +92,22 @@ export interface AuthRuntimeContext {
     readonly resetToken: ResetTokenRepository;
     readonly session: SessionRepository;
   };
+  /**
+   * The Hono app instance this runtime was attached to, captured during
+   * `setupMiddleware`. Used by lifecycle hook call sites to construct
+   * `HookServices` for out-of-request callbacks (`postLogin`, `postRegister`,
+   * etc.).
+   *
+   * Optional because some test fixtures construct an `AuthRuntimeContext`
+   * without going through the full plugin bootstrap. Hook call sites that need
+   * the value handle the `undefined` case by passing `services: undefined`,
+   * which user hook code must tolerate (typed as `services?: HookServices`).
+   *
+   * Typed as `object` to avoid pinning a Hono version in `slingshot-auth`.
+   */
+  readonly app?: object;
+  /** Plugin-state map for the app instance. Captured during `setupMiddleware` for the same reason as `app`. */
+  readonly pluginState?: import('@lastshotlabs/slingshot-core').PluginStateMap;
 }
 
 /**

@@ -7,6 +7,7 @@
  */
 import type {
   GeoSearchConfig,
+  HookServices,
   Logger,
   MetricsEmitter,
   ResolvedEntityConfig,
@@ -308,11 +309,14 @@ export type TenantIndexEvictionReason = 'lru-capacity';
  * Callback fired when a tenant index entry is evicted from the in-memory LRU
  * cache. Useful for emitting metrics, audit logs, or warming alerts.
  */
-export type TenantIndexEvictedHandler = (event: {
-  readonly tenantId: string;
-  readonly indexName: string;
-  readonly reason: TenantIndexEvictionReason;
-}) => void;
+export type TenantIndexEvictedHandler = (
+  event: {
+    readonly tenantId: string;
+    readonly indexName: string;
+    readonly reason: TenantIndexEvictionReason;
+  },
+  services?: HookServices,
+) => void;
 
 /** Counter metrics exposed by the search manager. */
 export interface SearchManagerMetrics {
@@ -337,6 +341,12 @@ export interface SearchManagerConfig {
    * re-issue `createOrUpdateIndex` the next time that tenant is touched.
    */
   readonly onTenantIndexEvicted?: TenantIndexEvictedHandler;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the manager invokes it just before each
+   * `onTenantIndexEvicted` call so callbacks see current framework state.
+   */
+  readonly getHookServices?: () => HookServices | undefined;
   /**
    * Optional unified metrics emitter. When provided, the manager records
    * counters/gauges/timings on hot paths (`search.query.count`,
@@ -402,7 +412,7 @@ export interface SearchManagerConfig {
  * ```
  */
 export function createSearchManager(config: SearchManagerConfig): SearchManager {
-  const { pluginConfig, transformRegistry, onTenantIndexEvicted } = config;
+  const { pluginConfig, transformRegistry, onTenantIndexEvicted, getHookServices } = config;
   const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
   const logger: Logger = config.logger ?? noopLogger;
 
@@ -714,11 +724,14 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             });
             if (onTenantIndexEvicted) {
               try {
-                onTenantIndexEvicted({
-                  tenantId: evictedTenantId,
-                  indexName: evictedIndexName,
-                  reason: 'lru-capacity',
-                });
+                onTenantIndexEvicted(
+                  {
+                    tenantId: evictedTenantId,
+                    indexName: evictedIndexName,
+                    reason: 'lru-capacity',
+                  },
+                  getHookServices?.(),
+                );
               } catch (err) {
                 logger.error('[slingshot-search] onTenantIndexEvicted callback threw', {
                   error: err instanceof Error ? err.message : String(err),

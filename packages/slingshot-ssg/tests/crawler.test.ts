@@ -244,6 +244,35 @@ export async function load() { return { data: {}, revalidate: false } }
     expect(paths).toContain('/players/99');
   });
 
+  it('detects generateStaticParams via destructured const export (defineRoute pattern)', async () => {
+    writeRoute(
+      'destructured-route/[slug].ts',
+      `
+const route = {
+  load: async () => ({ data: {}, revalidate: false }),
+  generateStaticParams: async () => [{ slug: 'a' }, { slug: 'b' }],
+};
+export const { load, generateStaticParams } = route;
+`,
+    );
+    const paths = await collectSsgRoutes(makeConfig());
+    expect(paths).toContain('/destructured-route/a');
+    expect(paths).toContain('/destructured-route/b');
+  });
+
+  it('detects generateStaticParams via named re-export', async () => {
+    writeRoute(
+      'reexport-route/[name].ts',
+      `
+const generateStaticParamsImpl = async () => [{ name: 'react' }];
+const loadImpl = async () => ({ data: {}, revalidate: false });
+export { generateStaticParamsImpl as generateStaticParams, loadImpl as load };
+`,
+    );
+    const paths = await collectSsgRoutes(makeConfig());
+    expect(paths).toContain('/reexport-route/react');
+  });
+
   it('prefers the callable generateStaticParams export when staticPaths is present but not callable', async () => {
     writeRoute(
       'authors/[id].ts',

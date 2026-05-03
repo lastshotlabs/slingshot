@@ -141,6 +141,8 @@ export function createSqliteAdapter(options: {
   eventSink?: OrchestrationEventSink;
   maxPayloadBytes?: number;
   logger?: import('@lastshotlabs/slingshot-core').Logger;
+  /** Pre-built `HookServices` for in-process workflow hooks and task contexts. See `createMemoryAdapter` for the same field. */
+  hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
 }): OrchestrationAdapter & ObservabilityCapability & {
   health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
 } {
@@ -335,6 +337,7 @@ export function createSqliteAdapter(options: {
     concurrency: parsed.concurrency ?? 10,
     eventSink: options.eventSink,
     logger: options.logger,
+    services: options.hookServices,
     callbacks: {
       onStarted(runId) {
         updateRunStatus.run({
@@ -472,6 +475,7 @@ export function createSqliteAdapter(options: {
       tenantId: row.tenant_id ?? undefined,
       signal: controller.signal,
       taskRunner,
+      services: options.hookServices,
       taskRegistry,
       eventSink: options.eventSink,
       persistedState: { results, steps },
@@ -750,6 +754,7 @@ export function createSqliteAdapter(options: {
             taskRunner,
             taskRegistry,
             eventSink: options.eventSink,
+            services: options.hookServices,
             onChildRun(childRunId) {
               workflowChildren.get(runId)?.add(childRunId);
             },

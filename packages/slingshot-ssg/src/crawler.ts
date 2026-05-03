@@ -276,13 +276,23 @@ function hasDynamicSegments(filePath: string, routesDir: string): boolean {
  * - `export async function generateStaticParams(`
  * - `export function generateStaticParams(`
  * - `export const generateStaticParams`
+ * - `export { generateStaticParams }` / `export { staticPaths }` (named re-exports,
+ *   including aliased and multi-name forms)
+ * - `export const { generateStaticParams } = ...` (destructured const exports —
+ *   the canonical pattern shown in `defineRoute`'s JSDoc)
  */
 function sourceHasStaticPaths(source: string): boolean {
   return (
     /export\s+(async\s+)?function\s+staticPaths\b/.test(source) ||
     /export\s+const\s+staticPaths\b/.test(source) ||
     /export\s+(async\s+)?function\s+generateStaticParams\b/.test(source) ||
-    /export\s+const\s+generateStaticParams\b/.test(source)
+    /export\s+const\s+generateStaticParams\b/.test(source) ||
+    // Destructured const export: `export const { generateStaticParams } = route`
+    // — the form recommended by `defineRoute`'s JSDoc. The name may appear with
+    // surrounding identifiers in any order, optionally aliased.
+    /export\s+const\s+\{[^}]*\b(staticPaths|generateStaticParams)\b[^}]*\}\s*=/.test(source) ||
+    // Named re-export: `export { generateStaticParams }` or `export { x as generateStaticParams }`
+    /export\s*\{[^}]*\b(staticPaths|generateStaticParams)\b[^}]*\}/.test(source)
   );
 }
 

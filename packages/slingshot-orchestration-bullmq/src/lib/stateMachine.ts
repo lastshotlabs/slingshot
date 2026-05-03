@@ -103,6 +103,7 @@ export function createStateMachine(
   workflowRegistry: Map<string, AnyResolvedWorkflow>,
   structuredLogger: Logger,
   eventSink: OrchestrationEventSink | undefined,
+  hookServices?: import('@lastshotlabs/slingshot-core').HookServices,
 ) {
   const {
     taskQueueName,
@@ -170,6 +171,7 @@ export function createStateMachine(
         taskRegistry,
         eventSink,
         logger: structuredLogger,
+        hookServices,
       }),
       {
         connection,
@@ -261,6 +263,7 @@ export function createStateMachine(
             },
             eventSink,
             logger: structuredLogger,
+            hookServices,
           }),
           {
             connection,

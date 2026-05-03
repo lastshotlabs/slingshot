@@ -58,10 +58,23 @@ export { SSR_ISR_INVALIDATORS_STATE_KEY } from './isr/revalidate';
 export {
   resolveGlobalMiddlewarePath,
   resolveRouteChain,
+  initRouteTree,
+  invalidateRouteTree,
   RouteParamTooLargeError,
   isRouteParamTooLargeError,
   DEFAULT_MAX_ROUTE_PARAM_BYTES,
 } from './resolver';
+/**
+ * Execute a file-based route module — the canonical helper for renderers.
+ * Handles the dynamic import, `load()`, and `meta()` dance so individual
+ * `SlingshotSsrRenderer` implementations don't have to.
+ */
+export {
+  executeRouteModule,
+  loadRouteModule,
+  clearRouteModuleCache,
+  type RouteExecution,
+} from './routeExecution';
 /** Build page-route lookup tables and resolved page chains for file-based SSR apps. */
 export { buildPageRouteTable, buildPageChain, resolvePageDeclaration } from './pageResolver';
 /** Expand `generateStaticParams` exports into concrete route entries at build time. */

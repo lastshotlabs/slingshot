@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-orchestr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-orchestration`
-- Version: `0.0.2`
+- Version: `0.0.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot

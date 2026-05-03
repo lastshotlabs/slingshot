@@ -705,6 +705,15 @@ export interface SlingshotContext {
   /** Email templates registered by plugins for this app instance. */
   readonly emailTemplates: ReadonlyMap<string, EmailTemplate>;
 
+  /**
+   * Capability-name → providing-package-name map. Populated during app assembly from
+   * the `capabilities.provides` arrays of every registered package. Out-of-request
+   * callbacks use this to resolve typed capability lookups via `buildHookServices()`.
+   *
+   * Empty map for apps that don't use packages or don't publish capabilities.
+   */
+  readonly capabilityProviders: ReadonlyMap<string, string>;
+
   /** Trusted proxy configuration for IP extraction. */
   readonly trustProxy: false | number;
 

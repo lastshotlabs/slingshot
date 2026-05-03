@@ -102,8 +102,11 @@ export async function load() { return { data: {} }; }
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     },
-    async renderChain(): Promise<Response> {
-      return new Response('<html><body>chain</body></html>', {
+    async renderChain(chain): Promise<Response> {
+      // File-based routes resolve through the chain pipeline (the canonical
+      // path); embed the URL pathname so per-route assertions can verify
+      // each output is distinct.
+      return new Response(`<html><body>chain ${chain.page.url.pathname}</body></html>`, {
         status: 200,
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
@@ -295,27 +298,19 @@ export async function generateStaticParams() {
     writeFileSync(config.assetsManifest, '{}', 'utf8');
 
     const renderer: SlingshotSsrRenderer = {
-      async resolve(url: URL): Promise<SsrRouteMatch | null> {
-        if (url.pathname === '/bad') return null;
-        return {
-          filePath: `/virtual${url.pathname}.ts`,
-          metaFilePath: null,
-          params: {},
-          query: {},
-          url,
-          loadingFilePath: null,
-          errorFilePath: null,
-          notFoundFilePath: null,
-          forbiddenFilePath: null,
-          unauthorizedFilePath: null,
-          templateFilePath: null,
-        };
+      async resolve(): Promise<SsrRouteMatch | null> {
+        // Both routes exist on disk so the chain pipeline fires; resolve()
+        // is only consulted when no chain is found.
+        return null;
       },
-      async render(match: SsrRouteMatch): Promise<Response> {
-        return new Response(`<html>${match.url.pathname}</html>`, { status: 200 });
+      async render(): Promise<Response> {
+        throw new Error('render() should not be reached when chain pipeline matches');
       },
-      async renderChain(): Promise<Response> {
-        return new Response('<html>chain</html>', { status: 200 });
+      async renderChain(chain): Promise<Response> {
+        if (chain.page.url.pathname === '/bad') {
+          throw new Error('simulated render failure');
+        }
+        return new Response(`<html>${chain.page.url.pathname}</html>`, { status: 200 });
       },
     };
 
@@ -331,6 +326,6 @@ export async function generateStaticParams() {
     expect(failedPages[0].path).toBe('/bad');
     expect(failedPages[0].errorDetail).toBeDefined();
     expect(failedPages[0].errorDetail?.route).toBe('/bad');
-    expect(failedPages[0].errorDetail?.message).toContain('No route matched');
+    expect(failedPages[0].errorDetail?.message).toContain('simulated render failure');
   });
 });

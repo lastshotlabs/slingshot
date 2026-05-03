@@ -25,6 +25,7 @@ import {
   getPolicyResolverKey,
   hmacSign,
   inspectPackage,
+  PACKAGE_CAPABILITIES_PREFIX,
   publishPluginState,
   requireEntityAdapter,
   resolveRepo,
@@ -52,7 +53,7 @@ import {
 } from '@lastshotlabs/slingshot-entity';
 import { rateLimit } from './middleware/rateLimit';
 
-const PACKAGE_CAPABILITIES_PREFIX = 'slingshot:package:capabilities:';
+// Re-import from core so framework root and hook builder share the exact same key.
 const PACKAGE_INSPECTION_PREFIX = 'slingshot:package:inspection:';
 
 type OpenApiRouteDefinition = ReturnType<typeof createRoute>;
@@ -65,6 +66,8 @@ type OpenApiRegistrar = OpenAPIHono<AppEnv> & {
 
 type CompiledPackages = {
   plugins: SlingshotPlugin[];
+  /** Capability-name → providing-package-name. Populated into `SlingshotContext.capabilityProviders` so out-of-request hooks can resolve typed capabilities. */
+  capabilityProviders: ReadonlyMap<string, string>;
 };
 
 type CapabilityProviderMap = ReadonlyMap<string, string>;
@@ -1040,5 +1043,6 @@ export function compilePackages(packages: readonly SlingshotPackageDefinition[])
 
   return {
     plugins: packages.map(pkg => createPackagePlugin(pkg, capabilityProviders)),
+    capabilityProviders,
   };
 }

@@ -66,6 +66,15 @@ export interface AuthRuntimeInfra {
   sqlite?: { open(path: string): import('@lastshotlabs/slingshot-core').RuntimeSqliteDatabase };
   /** Returns the Postgres bundle. Present when the framework wires postgres. */
   getPostgres?: () => import('@lastshotlabs/slingshot-core').PostgresBundle;
+  /**
+   * The Hono app instance. Captured here so the resulting `AuthRuntimeContext.app`
+   * is available to hook call sites that need to construct `HookServices` for
+   * out-of-request callbacks (`postLogin`, `postRegister`, etc.). Optional because
+   * standalone test rigs may bootstrap without an app reference.
+   */
+  app?: object;
+  /** Plugin-state map for the app instance. Captured for the same reason as `app`. */
+  pluginState?: import('@lastshotlabs/slingshot-core').PluginStateMap;
 }
 
 const REDIS_STORE_UNAVAILABLE_MESSAGE =
@@ -752,6 +761,8 @@ export async function bootstrapAuth(
         resetToken: resetTokenRepo,
         session: sessionRepo,
       },
+      app: runtimeInfra?.app,
+      pluginState: runtimeInfra?.pluginState,
     },
     configuredOAuthProviders: configuredOAuth,
     bearerAuthBypassPaths,

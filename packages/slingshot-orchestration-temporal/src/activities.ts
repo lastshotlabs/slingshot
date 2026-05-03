@@ -111,6 +111,13 @@ export function createTemporalActivities(options: {
           if (logger.debug) logger.debug(msg);
         },
       };
+      // NOTE: `services` is intentionally omitted here. Temporal worker activities
+      // run in a separate Node.js process from the main Slingshot app — there is
+      // no Hono `app` reference, no `pluginState`, and no way to resolve typed
+      // entity adapters or capabilities from inside an activity. Tasks that need
+      // framework state should be expressed at the workflow level, where hooks
+      // run in-process; the workflow can then thread the resolved data into the
+      // activity's input.
       const taskContext: TaskContext = {
         attempt: activityContext.info.attempt,
         runId: args.runId,

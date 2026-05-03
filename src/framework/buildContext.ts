@@ -226,6 +226,14 @@ export interface BuildContextParams {
   events: SlingshotEvents;
   kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
+  /**
+   * Capability-name → providing-package-name. Built by `compilePackages()` from the
+   * `capabilities.provides` arrays of every registered package. Out-of-request callbacks
+   * use this via `buildHookServices()` to resolve typed capability lookups.
+   *
+   * Defaults to an empty map when the app has no packages.
+   */
+  capabilityProviders?: ReadonlyMap<string, string>;
 }
 
 type ShutdownSignal = 'SIGTERM' | 'SIGINT';
@@ -424,6 +432,9 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     emailTemplates: createReadonlyMapView(
       emailTemplatesBacking,
     ) as SlingshotContext['emailTemplates'],
+    // Populated by the caller from `compilePackages().capabilityProviders`. Empty when
+    // the app has no packages (or the caller didn't pass it through).
+    capabilityProviders: params.capabilityProviders ?? new Map<string, string>(),
     trustProxy: infra.frameworkConfig.trustProxy,
     upload: upload
       ? {

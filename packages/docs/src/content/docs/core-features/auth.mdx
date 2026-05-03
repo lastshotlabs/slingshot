@@ -161,6 +161,74 @@ const Post = defineEntity('Post', {
 });
 ```
 
+## Lifecycle hooks
+
+Auth fires lifecycle hooks at well-defined moments:
+
+| Hook                  | When it fires                                            | Return value used for                  |
+| --------------------- | -------------------------------------------------------- | -------------------------------------- |
+| `preLogin`            | Before credential verification                           | Side effects only                      |
+| `postLogin`           | After session is persisted, **before** the JWT is signed | `{ customClaims }` merged into the JWT |
+| `preRegister`         | Before account creation                                  | Side effects only                      |
+| `postRegister`        | After account creation                                   | Side effects only                      |
+| `prePasswordChange`   | Before password is rotated                               | Side effects only                      |
+| `postPasswordChange`  | After password is rotated                                | Side effects only                      |
+| `preDeleteAccount`    | Before account row is removed                            | Side effects only                      |
+| `postDeleteAccount`   | After account row is removed                             | Side effects only                      |
+
+Each hook receives the relevant identifiers plus a `HookContext` that carries
+request metadata (`ip`, `userAgent`, `requestId`) and a `services?: HookServices`
+accessor for reading entities, resolving capabilities, and emitting events. See
+[HookServices](/slingshot/app-authoring/hook-services/) for the full contract.
+
+```typescript
+// @skip-typecheck
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+interface ProfileAdapter {
+  findByUserId(id: string): Promise<{ plan: 'free' | 'pro' } | null>;
+}
+
+createAuthPlugin({
+  auth: {
+    primaryField: 'email',
+    roles: ['user'],
+    defaultRole: 'user',
+    hooks: {
+      // postLogin can return { customClaims } — those keys are merged into the
+      // signed JWT (after reserved JOSE claims are stripped).
+      postLogin: async ({ userId, services }) => {
+        if (!services) return undefined;
+        const profiles = services.entities.get<ProfileAdapter>({ entity: 'Profile' });
+        const profile = await profiles.findByUserId(userId);
+        if (!profile) return undefined;
+        return { customClaims: { plan: profile.plan } };
+      },
+
+      // The other hooks are for side effects — emit events, write audit rows, etc.
+      postRegister: async ({ userId, services }) => {
+        services?.bus.emit('app:user.registered', { userId });
+      },
+    },
+  },
+});
+```
+
+The `postLogin` hook is the only one whose return value is read; reserved JOSE
+claims (`exp`, `iat`, `nbf`, `iss`, `aud`, `jti`, `sub`, `sid`) are always
+stripped from `customClaims` before signing, so a hook cannot override the
+identity claims auth itself sets.
+
+**Error semantics differ by phase:**
+
+- **`pre*` hooks** are awaited inline. Throwing from one aborts the operation —
+  the login, registration, password change, or delete fails and the error
+  surfaces to the caller. Use this when you need to veto an operation.
+- **`post*` hooks** are fire-and-forget. Errors are caught and logged via
+  `console.error`; they never abort the operation that triggered them. Use
+  these for side effects (audit rows, downstream events, custom claims) where
+  failure should not roll back the primary operation.
+
 ## Bring your own auth
 
 You don't need `slingshot-auth`. If you already have auth upstream (API gateway, reverse proxy,

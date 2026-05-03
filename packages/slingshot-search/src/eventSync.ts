@@ -15,6 +15,7 @@ import type {
   GeoSearchConfig,
   HealthCheck,
   HealthReport,
+  HookServices,
   Logger,
   MetricsEmitter,
   ResolvedEntityConfig,
@@ -436,7 +437,13 @@ export interface EventSyncManagerConfig {
    * external alerting or persistent DLQ storage. Errors thrown by the callback
    * are caught and logged — the dead-letter promotion is not aborted.
    */
-  readonly onFlushDeadLetter?: (entry: FlushDeadLetterEntry) => void;
+  readonly onFlushDeadLetter?: (entry: FlushDeadLetterEntry, services?: HookServices) => void;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the sync manager invokes it just before
+   * each `onFlushDeadLetter` call so callbacks see current framework state.
+   */
+  readonly getHookServices?: () => HookServices | undefined;
 
   /**
    * Maximum number of dead-letter entries to retain in memory. When the count
@@ -755,6 +762,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     flushThreshold = 100,
     maxFlushAttempts = 10,
     onFlushDeadLetter,
+    getHookServices,
     maxDeadLetterEntries = 10_000,
     maxIndexOpsPerSecond = 1000,
     indexOverflowMode = 'queue',
@@ -1273,7 +1281,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
 
     if (onFlushDeadLetter) {
       try {
-        onFlushDeadLetter(entry);
+        onFlushDeadLetter(entry, getHookServices?.());
       } catch (cbErr) {
         logger.error('event-sync onFlushDeadLetter callback error', {
           component: 'slingshot-search.eventSync',

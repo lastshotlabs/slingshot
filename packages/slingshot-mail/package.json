@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-mail",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Transactional mail with provider drivers, queues, and renderer integration for Slingshot",
   "license": "MIT",
   "type": "module",

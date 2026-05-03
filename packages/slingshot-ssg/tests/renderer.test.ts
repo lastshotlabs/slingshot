@@ -1,5 +1,5 @@
 // packages/slingshot-ssg/tests/renderer.test.ts
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import type {
@@ -8,6 +8,7 @@ import type {
   SsrRouteMatch,
   SsrShell,
 } from '@lastshotlabs/slingshot-ssr';
+import { invalidateRouteTree } from '@lastshotlabs/slingshot-ssr';
 import { renderSsgPage, renderSsgPages } from '../src/renderer';
 import type { SsgConfig } from '../src/types';
 
@@ -169,6 +170,65 @@ describe('renderSsgPage — success path', () => {
     const config = makeConfig();
     const result = await renderSsgPage('/faq', makeOkRenderer(), config);
     expect(result.filePath).toBe(join(config.outDir, 'faq', 'index.html'));
+  });
+
+  it('auto-initialises the SSR route tree so renderChain() fires for file-based routes', async () => {
+    // Regression: previously the renderer called resolveRouteChain() but did not
+    // call initRouteTree() first. The route tree cache stayed empty, the chain
+    // resolver returned null, and the renderer silently fell back to the
+    // resolve()/render() path — meaning file-based routes never went through
+    // renderChain(). Build scripts had to call initRouteTree() manually.
+    const routesDir = join(TMP, 'auto-init-routes');
+    mkdirSync(routesDir, { recursive: true });
+    writeFileSync(
+      join(routesDir, 'about.ts'),
+      `export async function load() { return { data: {}, revalidate: false } }
+       export default function Page() { return null }`,
+    );
+    invalidateRouteTree(routesDir);
+
+    let chainCalls = 0;
+    let resolveCalls = 0;
+    const renderer: SlingshotSsrRenderer = {
+      async resolve(url): Promise<SsrRouteMatch | null> {
+        resolveCalls += 1;
+        return {
+          filePath: '/fake/route.ts',
+          metaFilePath: null,
+          params: {},
+          query: {},
+          url,
+          loadingFilePath: null,
+          errorFilePath: null,
+          notFoundFilePath: null,
+          forbiddenFilePath: null,
+          unauthorizedFilePath: null,
+          templateFilePath: null,
+        };
+      },
+      async render(): Promise<Response> {
+        return new Response('<html>fallback</html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      },
+      async renderChain(_chain: SsrRouteChain): Promise<Response> {
+        chainCalls += 1;
+        return new Response('<html>chain</html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      },
+    };
+
+    const config = makeConfig({ serverRoutesDir: routesDir });
+    const result = await renderSsgPage('/about', renderer, config);
+
+    expect(result.error).toBeUndefined();
+    expect(chainCalls).toBe(1);
+    expect(resolveCalls).toBe(0);
+    const content = readFileSync(join(config.outDir, 'about', 'index.html'), 'utf8');
+    expect(content).toContain('<html>chain</html>');
   });
 });
 

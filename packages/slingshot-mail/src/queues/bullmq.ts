@@ -232,7 +232,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
           };
           // Restore original MailSendError context when available
           const cause = nonRetryableOrigins.get(err) ?? err;
-          config.onDeadLetter?.(mailJob, cause);
+          config.onDeadLetter?.(mailJob, cause, config.getHookServices?.());
         }
       });
     },

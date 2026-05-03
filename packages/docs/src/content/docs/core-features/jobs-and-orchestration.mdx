@@ -113,6 +113,49 @@ createOrchestrationPlugin({
 
 Your task and workflow definitions stay the same. Only the adapter changes.
 
+## Reading framework state from hooks and tasks
+
+Workflow lifecycle hooks (`onStart`, `onComplete`, `onFail`) and `TaskContext`
+both carry an optional `services?: HookServices` accessor. It exposes the same
+typed entity reader, capability resolver, plugin-state map, event bus, and
+logger that route handlers see — so background work can fan out into the rest
+of the framework without capturing the `app` reference manually.
+
+```typescript
+// @skip-typecheck
+import { defineTask, defineWorkflow } from '@lastshotlabs/slingshot-orchestration';
+
+interface UserAdapter {
+  markOnboarded(id: string): Promise<void>;
+}
+
+const finalize = defineTask({
+  name: 'finalize-onboarding',
+  handler: async (input: { userId: string }, ctx) => {
+    // ctx.services is undefined for adapters that run in worker isolates
+    // (notably the Temporal adapter). Guard before use.
+    if (!ctx.services) return;
+    const users = ctx.services.entities.get<UserAdapter>({ entity: 'User' });
+    await users.markOnboarded(input.userId);
+  },
+});
+
+const onboardUser = defineWorkflow({
+  name: 'onboard-user',
+  steps: [{ task: finalize }],
+  onComplete: async ({ runId, services }) => {
+    services?.bus.emit('app:user.onboarded', { runId });
+  },
+});
+```
+
+The Temporal adapter explicitly sets `services: undefined` because activities
+run in a separate Node.js process from the Slingshot app — the framework
+references aren't reachable there. If a task needs framework state under
+Temporal, do the read at the workflow level (where hooks run in-process) and
+thread the data into the task's typed input. See
+[HookServices](/slingshot/app-authoring/hook-services/) for the full contract.
+
 ## Common use cases
 
 - **Emails**: send welcome emails, password resets, notifications

@@ -83,6 +83,13 @@ export function createBullMQWorkflowProcessor(options: {
   getTaskQueueEvents(taskName: string): QueueEvents;
   eventSink?: OrchestrationEventSink;
   logger?: Logger;
+  /**
+   * Optional `HookServices` for workflow `onStart`/`onComplete`/`onFail` hooks.
+   * Provided by the bullmq adapter when the worker process is also the main app
+   * process (services accessible). When the worker runs in a separate process
+   * (no app reference), services is `undefined`.
+   */
+  hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
 }) {
   const logger =
     options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
@@ -145,6 +152,7 @@ export function createBullMQWorkflowProcessor(options: {
           runId,
           input: workflowInput,
           tenantId,
+          services: options.hookServices,
         });
       } catch (error) {
         reportWorkflowHookError({
@@ -357,6 +365,7 @@ export function createBullMQWorkflowProcessor(options: {
             output,
             durationMs: Date.now() - startedAt,
             tenantId,
+            services: options.hookServices,
           });
         } catch (hookError) {
           reportWorkflowHookError({
@@ -387,6 +396,7 @@ export function createBullMQWorkflowProcessor(options: {
             error: error instanceof Error ? error : new Error(String(error)),
             failedStep,
             tenantId,
+            services: options.hookServices,
           });
         } catch (hookError) {
           reportWorkflowHookError({

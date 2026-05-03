@@ -38,6 +38,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   logger.warn('[slingshot-mail] Memory queue is not durable — for development/testing only');
   const maxAttempts = config?.maxAttempts ?? 3;
   const onDeadLetter = config?.onDeadLetter ?? null;
+  const getHookServices = config?.getHookServices;
   const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
   const sendTimeoutMs = config?.sendTimeoutMs ?? 30_000;
   const maxEntries = config?.maxEntries ?? DEFAULT_MAX_ENTRIES;
@@ -79,7 +80,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
         error: { message: err.message, name: err.name },
       });
     }
-    onDeadLetter?.(job, err);
+    onDeadLetter?.(job, err, getHookServices?.());
   }
 
   function scheduleRetry(job: MailJob, delayMs: number): void {
@@ -195,6 +196,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
             onDeadLetter?.(
               oldestJob,
               new Error('[slingshot-mail] Memory queue at capacity — job evicted'),
+              getHookServices?.(),
             );
           }
         }

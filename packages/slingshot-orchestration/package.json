@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-orchestration",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot",
   "license": "MIT",
   "type": "module",

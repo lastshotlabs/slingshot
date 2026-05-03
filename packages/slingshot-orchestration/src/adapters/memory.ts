@@ -78,6 +78,18 @@ export function createMemoryAdapter(
     eventSink?: OrchestrationEventSink;
     maxPayloadBytes?: number;
     logger?: import('@lastshotlabs/slingshot-core').Logger;
+    /**
+     * Pre-built `HookServices` instance. When provided, the adapter threads it into
+     * workflow `onStart`/`onComplete`/`onFail` hooks and `TaskContext.services`.
+     * Construct via `buildHookServices()` from `@lastshotlabs/slingshot-core` at the
+     * adapter's call site (typically inside the orchestration plugin's
+     * `setupMiddleware`, where `app`/`pluginState`/`bus` are all in scope).
+     *
+     * Omitting this field means hooks see `services: undefined` — appropriate for
+     * tests, standalone scripts, or any setup where the framework state isn't
+     * reachable.
+     */
+    hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
   } = {},
 ): OrchestrationAdapter & ObservabilityCapability & SignalCapability & ScheduleCapability & {
   health(): { status: 'healthy' | 'degraded'; details: Record<string, unknown> };
@@ -87,6 +99,7 @@ export function createMemoryAdapter(
     maxPayloadBytes: options.maxPayloadBytes,
   });
   const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'memory adapter');
+  const hookServices = options.hookServices;
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const runs = new Map<string, Run | WorkflowRun>();
@@ -251,6 +264,7 @@ export function createMemoryAdapter(
     concurrency: parsed.concurrency ?? 10,
     eventSink: options.eventSink,
     logger: options.logger,
+    services: hookServices,
     callbacks: {
       onStarted(runId) {
         const run = runs.get(runId);
@@ -459,6 +473,7 @@ export function createMemoryAdapter(
             taskRunner,
             taskRegistry,
             eventSink: options.eventSink,
+            services: hookServices,
             onChildRun(childRunId) {
               workflowChildren.get(runId)?.add(childRunId);
             },

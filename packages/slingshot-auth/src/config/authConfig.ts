@@ -5,6 +5,7 @@ import type {
   AuthUserAccessDecision,
   AuthUserAccessInput,
   CaptchaConfig,
+  HookServices,
 } from '@lastshotlabs/slingshot-core';
 import { deepFreeze } from '@lastshotlabs/slingshot-core';
 import type { EmailTemplate } from '../lib/emailTemplates';
@@ -649,6 +650,16 @@ export interface HookContext {
   ip?: string;
   userAgent?: string;
   requestId?: string;
+  /**
+   * Typed framework accessors for out-of-request hook code: `entities.get(...)` for
+   * adapters, `capabilities.require(...)` for cross-package services, plus raw
+   * `pluginState` / `bus` / `logger` escape hatches. See {@link HookServices} in
+   * `slingshot-core`.
+   *
+   * Optional because some test rigs construct hook payloads manually without
+   * threading an app reference. Production hook call sites always supply it.
+   */
+  services?: HookServices;
 }
 
 /**

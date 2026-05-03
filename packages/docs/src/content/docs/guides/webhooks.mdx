@@ -112,6 +112,29 @@ Webhook jobs and delivery records preserve the publish-time envelope identity:
 Queues stay transport-focused: they carry the already-projected payload and metadata —
 they do not re-run authorization or rebuild scope from raw payload fragments.
 
+## Dead-letter callbacks
+
+Both the in-memory and BullMQ webhook queues accept an `onDeadLetter` callback
+that fires when a delivery exhausts its retry budget or hits a non-retryable
+error:
+
+```ts
+// @skip-typecheck
+onDeadLetter: (job, err, services) => {
+  // job: WebhookJob — the final snapshot
+  // err: Error — the last failure
+  // services: HookServices | undefined — framework accessor (when wired)
+  services?.bus.emit('app:webhook.dlq', { deliveryId: job.deliveryId });
+}
+```
+
+The third argument is the framework `HookServices` accessor. When the queue is
+constructed inside your own plugin's `setupMiddleware`, build the bag once with
+`buildHookServices()` and pass `getHookServices: () => services` alongside
+`onDeadLetter`. See [HookServices](/slingshot/app-authoring/hook-services/) for
+the late-binding pattern. Callback errors are caught and logged — they never
+abort the queue.
+
 ## Production notes
 
 - Keep management routes fail-closed with an explicit admin guard (`managementRole`).

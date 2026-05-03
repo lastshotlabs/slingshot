@@ -1,5 +1,6 @@
 import type {
   DynamicEventBus,
+  HookServices,
   Logger,
   MetricsEmitter,
   SlingshotEventBus,
@@ -182,7 +183,16 @@ export interface CreateIntervalDispatcherOptions {
    * }
    * ```
    */
-  readonly onDeadLetter?: (event: DeadLetterEvent) => void | Promise<void>;
+  readonly onDeadLetter?: (
+    event: DeadLetterEvent,
+    services?: HookServices,
+  ) => void | Promise<void>;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the dispatcher invokes it just before each
+   * `onDeadLetter` call so callbacks see current framework state.
+   */
+  readonly getHookServices?: () => HookServices | undefined;
 }
 
 interface BreakerState {
@@ -256,6 +266,7 @@ export function createIntervalDispatcher(
     options.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
   const dynamicBus = options.bus as unknown as DynamicEventBus;
   const onDeadLetter = options.onDeadLetter;
+  const getHookServices = options.getHookServices;
 
   // Most-recent observability state. Populated at the start of every tick.
   let lastPendingCount: number | null = null;
@@ -606,11 +617,14 @@ export function createIntervalDispatcher(
             // Fire the dead-letter callback so apps can alert or re-queue.
             if (onDeadLetter && lastErr instanceof Error) {
               try {
-                const result = onDeadLetter({
-                  notification: { id: row.id, userId: row.userId },
-                  error: lastErr,
-                  attempts: maxAttempts,
-                });
+                const result = onDeadLetter(
+                  {
+                    notification: { id: row.id, userId: row.userId },
+                    error: lastErr,
+                    attempts: maxAttempts,
+                  },
+                  getHookServices?.(),
+                );
                 if (result instanceof Promise) {
                   result.catch((dlErr: unknown) => {
                     logger.warn('onDeadLetter callback rejected', {

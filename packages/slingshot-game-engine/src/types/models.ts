@@ -5,6 +5,7 @@
  * consumed by lib/, entities/, operations/, plugin.ts, and exported
  * via the `./types` subpath for client SDK use.
  */
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import type { z } from 'zod';
 
 // ── Session & Player Runtime State ────────────────────────────────
@@ -824,6 +825,14 @@ export interface ProcessHandlerContext {
     warn(message: string, data?: unknown): void;
     error(message: string, data?: unknown): void;
   };
+
+  /**
+   * Optional framework {@link HookServices} accessor for typed entity reads,
+   * capability lookups, plugin state, the event bus, and a logger. Available
+   * when the game engine is running in-process with the framework. May be
+   * undefined in standalone/test harnesses; treat as a soft dependency.
+   */
+  readonly services?: HookServices;
 }
 
 /**

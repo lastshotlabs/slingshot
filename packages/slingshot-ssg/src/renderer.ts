@@ -3,7 +3,7 @@ import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PathTraversalError, createConsoleLogger, deepFreeze, safeJoin } from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
-import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
+import { initRouteTree, resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import {
   type SsgCircuitBreaker,
   SsgCircuitOpenError,
@@ -291,6 +291,13 @@ async function renderSsgPageUnchecked(
   url.searchParams.forEach((v, k) => {
     query[k] = v;
   });
+
+  // Ensure the SSR resolver's route-tree cache is populated for this dir.
+  // At request time the SSR plugin's setupMiddleware() initialises this; at
+  // build time the SSG renderer is the entry point, so we initialise here.
+  // The call is idempotent — initRouteTree() returns immediately when the
+  // directory is already cached.
+  initRouteTree(config.serverRoutesDir);
 
   const rawChain = resolveRouteChain(urlPath, config.serverRoutesDir);
 

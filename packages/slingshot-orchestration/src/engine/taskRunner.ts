@@ -110,6 +110,13 @@ export function createTaskRunner(options: {
   callbacks: TaskRunnerCallbacks;
   eventSink?: OrchestrationEventSink;
   logger?: Logger;
+  /**
+   * Optional `HookServices` instance threaded into every `TaskContext.services`.
+   * Provided by in-process adapters (memory, sqlite, in-process bullmq) when the
+   * adapter was constructed with a `hookServices` reference. Tasks running in
+   * remote isolates (Temporal worker) receive `services: undefined`.
+   */
+  services?: import('@lastshotlabs/slingshot-core').HookServices;
 }): TaskRunner {
   const logger = options.logger ?? noopLogger;
   const pending: PendingTask[] = [];
@@ -254,6 +261,7 @@ export function createTaskRunner(options: {
                 signal: attemptController.signal,
                 log: next.options.log ?? console,
                 tenantId: next.options.tenantId,
+                services: options.services,
                 reportProgress: data => {
                   void options.callbacks.onProgress(next.options.runId, next.def.name, data);
                   safeEmit(

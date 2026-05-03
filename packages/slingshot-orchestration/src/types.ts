@@ -22,6 +22,16 @@ export interface SlingshotLogger {
 
 /**
  * Execution context passed to each task invocation.
+ *
+ * `services` carries typed framework accessors for tasks running in-process
+ * (memory and sqlite adapters, in-process bullmq workers). It is `undefined`
+ * for tasks running in remote isolates (notably the Temporal worker, which
+ * runs in a separate Node.js process where the Hono `app` is unreachable).
+ *
+ * Tasks that need typed entity adapters or capability lookups must either:
+ * 1. Tolerate `services === undefined` and fall back to other inputs, or
+ * 2. Express their work as a workflow whose `onStart`/`onComplete` hooks run
+ *    in-process and pass framework-resolved data into the task input.
  */
 export interface TaskContext {
   attempt: number;
@@ -30,6 +40,7 @@ export interface TaskContext {
   log: SlingshotLogger;
   tenantId?: string;
   reportProgress(data: { percent?: number; message?: string; [key: string]: unknown }): void;
+  services?: import('@lastshotlabs/slingshot-core').HookServices;
 }
 
 type TaskHandler<TInput, TOutput> = {
@@ -49,7 +60,12 @@ type StepDurationMapper<TWorkflowInput> = {
 }['bivarianceHack'];
 
 type WorkflowStartHookFn<TInput> = {
-  bivarianceHack(ctx: { runId: string; input: TInput; tenantId?: string }): Promise<void> | void;
+  bivarianceHack(ctx: {
+    runId: string;
+    input: TInput;
+    tenantId?: string;
+    services?: import('@lastshotlabs/slingshot-core').HookServices;
+  }): Promise<void> | void;
 }['bivarianceHack'];
 
 type WorkflowCompleteHookFn<TOutput> = {
@@ -58,6 +74,7 @@ type WorkflowCompleteHookFn<TOutput> = {
     output: TOutput;
     durationMs: number;
     tenantId?: string;
+    services?: import('@lastshotlabs/slingshot-core').HookServices;
   }): Promise<void> | void;
 }['bivarianceHack'];
 
@@ -67,6 +84,7 @@ type WorkflowFailHookFn = {
     error: Error;
     failedStep?: string;
     tenantId?: string;
+    services?: import('@lastshotlabs/slingshot-core').HookServices;
   }): Promise<void> | void;
 }['bivarianceHack'];
 
@@ -567,4 +585,22 @@ export interface OrchestrationRuntimeOptions {
   tasks: AnyResolvedTask[];
   workflows?: AnyResolvedWorkflow[];
   eventSink?: OrchestrationEventSink;
+  /**
+   * Optional Hono app reference used to construct `HookServices` for in-process
+   * workflow hooks (`onStart`, `onComplete`, `onFail`) and task contexts. When
+   * omitted (e.g. tests, standalone scripts, Temporal worker isolates), hook
+   * payloads receive `services: undefined` rather than fabricated accessors.
+   */
+  app?: object;
+  /**
+   * Optional plugin-state map paired with `app`. Both must be provided together
+   * for `services` to be built; passing only one is a no-op.
+   */
+  pluginState?: import('@lastshotlabs/slingshot-core').PluginStateMap;
+  /**
+   * Plugin name used as the default `plugin:` qualifier when hook code calls
+   * `services.entities.get(entityModule)` without specifying an explicit plugin.
+   * Defaults to `'slingshot-orchestration'`.
+   */
+  pluginName?: string;
 }

@@ -715,6 +715,20 @@ export const route = Object.freeze({
   },
 });
 
+/**
+ * Internal pluginState key prefix under which package-provided capabilities are stored.
+ * Each providing package keeps its `{ [capabilityName]: resolvedValue }` map under
+ * `pluginState.get(`${PACKAGE_CAPABILITIES_PREFIX}${pkg.name}`)`. Out-of-request hook
+ * callers resolve capabilities by looking up the providing package via
+ * `SlingshotContext.capabilityProviders` and reading from this slot.
+ *
+ * Exported as a stable internal contract so `buildHookServices()` and the framework
+ * package compiler stay aligned. Treat as framework-internal — consumer code should
+ * use `ctx.capabilities.maybe()` (request handlers) or `services.capabilities.maybe()`
+ * (out-of-request hooks) instead.
+ */
+export const PACKAGE_CAPABILITIES_PREFIX = 'slingshot:package:capabilities:';
+
 /** Declare a named typed capability that packages can publish and require explicitly. */
 export function defineCapability<TValue>(name: string): PackageCapabilityHandle<TValue> {
   return Object.freeze({

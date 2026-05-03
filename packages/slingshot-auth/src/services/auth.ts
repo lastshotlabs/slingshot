@@ -6,10 +6,13 @@ import { generateEmailOtpCode, generateWebAuthnAuthenticationOptions } from '@au
 import {
   HttpError,
   bestEffort,
+  buildHookServices,
+  createConsoleLogger,
   generateSecureToken,
   sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
 import type { SessionMetadata } from '../lib/session/index.js';
@@ -75,6 +78,30 @@ export interface AuthResult {
 }
 
 /**
+ * Build a `HookServices` instance from the auth runtime when both `app` and
+ * `pluginState` were captured during plugin bootstrap. Returns `undefined` when
+ * the runtime was assembled without an app reference (test fixtures, standalone
+ * usage), so hook payloads carry `services: undefined` rather than fabricated
+ * accessors that would silently return nothing.
+ */
+// Hook authors get a structured logger (the standard `Logger` shape) rather than
+// the auth-internal `AuthLogger` (which is `{ log, authTrace }` for trace-style
+// debugging). Created once and reused across all auth hook invocations on this
+// runtime.
+const hookLogger = createConsoleLogger({ base: { component: 'slingshot-auth' } });
+
+export function authHookServices(runtime: AuthRuntimeContext): HookServices | undefined {
+  if (!runtime.app || !runtime.pluginState) return undefined;
+  return buildHookServices({
+    app: runtime.app,
+    pluginState: runtime.pluginState,
+    bus: runtime.eventBus,
+    logger: hookLogger,
+    pluginName: 'slingshot-auth',
+  });
+}
+
+/**
  * Invokes the `preLogin` lifecycle hook if one is configured, passing the identifier
  * and request context to the hook.
  *
@@ -97,7 +124,10 @@ export const runPreLoginHook = async (
   hookContext?: HookContext,
 ): Promise<void> => {
   const hooks = runtime.config.hooks;
-  if (hooks.preLogin) await hooks.preLogin({ identifier, ...hookContext });
+  if (hooks.preLogin) {
+    const services = authHookServices(runtime);
+    await hooks.preLogin({ identifier, ...hookContext, services });
+  }
 };
 
 /**
@@ -172,7 +202,8 @@ async function createSessionWithRefreshToken(
   let customClaims: Record<string, unknown> | undefined;
   if (hooks.postLogin) {
     try {
-      const result = await hooks.postLogin({ userId, sessionId, ...hookContext });
+      const services = authHookServices(runtime);
+      const result = await hooks.postLogin({ userId, sessionId, ...hookContext, services });
       if (result && typeof result === 'object' && result.customClaims) {
         customClaims = result.customClaims;
       }
@@ -313,7 +344,10 @@ export const register = async (
 
   const { config, adapter, eventBus } = runtime;
   const hooks = config.hooks;
-  if (hooks.preRegister) await hooks.preRegister({ identifier, ...hookContext });
+  if (hooks.preRegister) {
+    const services = authHookServices(runtime);
+    await hooks.preRegister({ identifier, ...hookContext, services });
+  }
 
   try {
     const hashed = await runtime.password.hash(password);
@@ -377,8 +411,9 @@ export const register = async (
     );
     if (hooks.postRegister) {
       const postRegister = hooks.postRegister;
+      const services = authHookServices(runtime);
       Promise.resolve()
-        .then(() => postRegister({ userId: user.id, identifier, ...hookContext }))
+        .then(() => postRegister({ userId: user.id, identifier, ...hookContext, services }))
         .catch((e: unknown) =>
           console.error(
             '[lifecycle] postRegister hook error:',
@@ -713,7 +748,10 @@ export const deleteAccount = async (
 ): Promise<void> => {
   const { adapter, config, eventBus } = runtime;
   const hooks = config.hooks;
-  if (hooks.preDeleteAccount) await hooks.preDeleteAccount({ userId });
+  if (hooks.preDeleteAccount) {
+    const services = authHookServices(runtime);
+    await hooks.preDeleteAccount({ userId, services });
+  }
 
   if (!adapter.deleteUser) {
     throw new HttpError(501, 'Auth adapter does not support deleteUser');
@@ -747,8 +785,9 @@ export const deleteAccount = async (
   publishAuthEvent(runtime.events, 'auth:user.deleted', { userId }, { userId, actorId: userId });
   if (hooks.postDeleteAccount) {
     const postDeleteAccount = hooks.postDeleteAccount;
+    const services = authHookServices(runtime);
     Promise.resolve()
-      .then(() => postDeleteAccount({ userId }))
+      .then(() => postDeleteAccount({ userId, services }))
       .catch((e: unknown) =>
         console.error(
           '[lifecycle] postDeleteAccount hook error:',

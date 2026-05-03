@@ -303,6 +303,12 @@ export async function executeWorkflow(options: {
   eventSink?: OrchestrationEventSink;
   persistedState?: PersistedWorkflowState;
   onChildRun?(runId: string): void;
+  /**
+   * Optional `HookServices` instance passed verbatim to `onStart`/`onComplete`/`onFail`.
+   * Provided by in-process adapters (memory, sqlite, in-process bullmq); `undefined`
+   * for adapters running hooks in remote isolates.
+   */
+  services?: import('@lastshotlabs/slingshot-core').HookServices;
 }): Promise<unknown> {
   const workflowInput = options.def.input.parse(options.input);
   const startedAt = Date.now();
@@ -330,6 +336,7 @@ export async function executeWorkflow(options: {
         runId: options.runId,
         input: workflowInput,
         tenantId: options.tenantId,
+        services: options.services,
       });
     } catch (error) {
       reportWorkflowHookError({
@@ -632,6 +639,7 @@ export async function executeWorkflow(options: {
           output,
           durationMs: Date.now() - startedAt,
           tenantId: options.tenantId,
+          services: options.services,
         });
       } catch (hookError) {
         reportWorkflowHookError({
@@ -703,6 +711,7 @@ export async function executeWorkflow(options: {
           error: error instanceof Error ? error : new Error(String(error)),
           failedStep,
           tenantId: options.tenantId,
+          services: options.services,
         });
       } catch (hookError) {
         reportWorkflowHookError({

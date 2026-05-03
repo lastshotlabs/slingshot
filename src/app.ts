@@ -447,6 +447,8 @@ interface AppBootstrap {
   runtime: SlingshotRuntime;
   tracingConfig: TracingConfig | undefined;
   isProd: boolean;
+  /** Capability-name → providing-package-name map produced by `compilePackages`. */
+  capabilityProviders: ReadonlyMap<string, string>;
 }
 
 interface AppAssembly extends AppBootstrap {
@@ -654,6 +656,7 @@ async function prepareBootstrap<T extends object>(
     runtime,
     tracingConfig,
     isProd,
+    capabilityProviders: compiledPackages?.capabilityProviders ?? new Map<string, string>(),
   };
 }
 
@@ -692,6 +695,7 @@ async function assembleApp<T extends object>(
       events,
       kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,
+      capabilityProviders: bootstrap.capabilityProviders,
     });
     onContextCreated?.(slingshotCtx);
     attachContext(app, slingshotCtx);

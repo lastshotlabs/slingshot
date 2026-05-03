@@ -3,7 +3,7 @@ import {
   createConsoleLogger,
   evictOldestArray,
 } from '@lastshotlabs/slingshot-core';
-import type { Logger } from '@lastshotlabs/slingshot-core';
+import type { HookServices, Logger } from '@lastshotlabs/slingshot-core';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
 import * as fs from 'fs';
@@ -27,10 +27,22 @@ export interface MemoryQueueConfig {
   maxAttempts?: number;
   /**
    * Callback invoked when a job is moved to the dead-letter state.
-   * Receives the final `WebhookJob` snapshot and the last `Error`.
+   * Receives the final `WebhookJob` snapshot, the last `Error`, and the
+   * framework `HookServices` accessor (when the queue is owned by a plugin
+   * that has registered one; otherwise `undefined`).
    * May be async; callback failures are caught and logged.
    */
-  onDeadLetter?: (job: WebhookJob, err: Error) => void | Promise<void>;
+  onDeadLetter?: (
+    job: WebhookJob,
+    err: Error,
+    services?: HookServices,
+  ) => void | Promise<void>;
+  /**
+   * Late-bound accessor for framework {@link HookServices}. The plugin sets
+   * this during `setupMiddleware`; the queue invokes it just before each
+   * `onDeadLetter` call so the callback sees current framework state.
+   */
+  getHookServices?: () => HookServices | undefined;
   /**
    * When set, dead-lettered jobs are also persisted to a JSON-lines file at
    * this path. The file survives process restarts and can be re-processed
@@ -137,6 +149,7 @@ export async function replayWebhookDlq(
 export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQueue {
   const maxAttempts = config?.maxAttempts ?? 5;
   const onDeadLetter = config?.onDeadLetter ?? null;
+  const getHookServices = config?.getHookServices;
   const dlqStoragePath = config?.dlqStoragePath;
   const jobs: WebhookJob[] = [];
   const activeJobs = new Set<Promise<void>>();
@@ -216,7 +229,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
     // Then call the callback
     if (onDeadLetter) {
       try {
-        await onDeadLetter(job, err);
+        await onDeadLetter(job, err, getHookServices?.());
       } catch (err) {
         logger.error('[slingshot-webhooks] onDeadLetter handler failed', {
           error: err instanceof Error ? err.message : String(err),

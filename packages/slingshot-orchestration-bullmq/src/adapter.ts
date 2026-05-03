@@ -96,6 +96,13 @@ export function createBullMQOrchestrationAdapter(
     eventSink?: OrchestrationEventSink;
     workflowConcurrency?: number;
     structuredLogger?: Logger;
+    /**
+     * Optional `HookServices` for in-process workflow hooks and task contexts.
+     * Provided by the orchestration plugin when the bullmq worker is colocated
+     * with the main app process. When the worker runs in a separate process
+     * (no app reference), omit this and tasks/hooks see `services: undefined`.
+     */
+    hookServices?: import('@lastshotlabs/slingshot-core').HookServices;
   },
 ): OrchestrationAdapter &
   ObservabilityCapability &
@@ -108,6 +115,7 @@ export function createBullMQOrchestrationAdapter(
     eventSink,
     workflowConcurrency,
     structuredLogger: rawStructuredLogger,
+    hookServices,
     ...parsedInput
   } = rawOptions;
   const options = bullmqOrchestrationAdapterOptionsSchema.parse(parsedInput);
@@ -252,6 +260,7 @@ export function createBullMQOrchestrationAdapter(
     workflowRegistry,
     structuredLogger,
     eventSink,
+    hookServices,
   );
   const cancellation = createCancellationFns(sharedState);
   const observability = createObservabilityFns(sharedState, structuredLogger);

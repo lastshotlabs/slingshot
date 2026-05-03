@@ -63,6 +63,34 @@ const mail = createMailPlugin({
 });
 ```
 
+## Dead-letter callbacks
+
+Both queue backends accept an `onDeadLetter` option for jobs that exhaust their
+retry budget or hit a permanent failure. The callback's third argument is an
+optional `HookServices` accessor — use it to read framework state (entities,
+capabilities), emit observability events, or write to a DLQ entity:
+
+```ts
+// @skip-typecheck
+import { createMailPlugin } from '@lastshotlabs/slingshot-mail';
+
+createMailPlugin({
+  provider: /* ... */,
+  renderer: /* ... */,
+  from: 'noreply@example.com',
+  subscriptions: [],
+  onDeadLetter: (job, error, services) => {
+    services?.bus.emit('app:mail.dlq', { jobId: job.id, error: error.message });
+  },
+});
+```
+
+`services` is `undefined` when the queue is invoked outside an app context (most
+unit tests). When the queue is plugin-owned, the plugin sets `getHookServices`
+during `setupMiddleware` so production paths always supply it. See
+[HookServices](/slingshot/app-authoring/hook-services/) for the contract and the
+late-binding pattern.
+
 ## Production notes
 
 - Use a durable queue for production delivery if you cannot tolerate job loss on restart.

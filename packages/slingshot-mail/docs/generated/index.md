@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-mail
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-mail`
-- Version: `0.0.2`
+- Version: `0.0.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Transactional mail with provider drivers, queues, and renderer integration for Slingshot

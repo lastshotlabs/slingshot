@@ -1,0 +1,294 @@
+---
+title: HookServices
+description: The typed accessor bag that lets out-of-request callbacks — auth lifecycle hooks, workflow hooks, dead-letter callbacks, game lifecycle hooks — read entities, capabilities, plugin state, and emit events
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Some callbacks fire *outside* a request:
+
+- `slingshot-auth` `postLogin` runs after a session row is persisted, before the JWT is signed.
+- An orchestration workflow's `onComplete` runs from a worker tick.
+- A webhook's `onDeadLetter` fires from a queue processor after retries are exhausted.
+
+There is no Hono `c`, no actor on the request, no `c.get('actor')`. Without a shared
+contract, each plugin invented its own escape hatch — capture the `app` reference in
+`setupPost` and close over it, mutate plugin state by string key, or just give up and
+require the consumer to wire the dependency themselves.
+
+`HookServices` is that shared contract. Whenever a callback fires in-process, it carries
+a `services` argument with the same typed readers a request-time package context already
+exposes. One shape, one mental model, across auth, orchestration, dead-letter callbacks,
+and game engine lifecycle.
+
+## The shape
+
+```ts
+// @skip-typecheck
+interface HookServices {
+  // Resolve typed entity adapters: from a defineEntity module, an entityRef,
+  // or the { plugin, entity } escape-hatch shape.
+  readonly entities: PackageEntityReader;
+
+  // Resolve cross-package capabilities — require() or maybe() against a typed handle.
+  readonly capabilities: PackageCapabilityReader;
+
+  // Raw plugin-state map. Use only for slots that don't have a typed reader yet.
+  readonly pluginState: PluginStateMap;
+
+  // Instance-scoped event bus. Hooks can publish, or subscribe lazily.
+  readonly bus: SlingshotEventBus;
+
+  // Plugin-scoped structured logger. Prefer over console.* so log lines carry
+  // consistent component metadata.
+  readonly logger: Logger;
+}
+```
+
+`entities` and `capabilities` mirror the shape on `PackageDomainRouteContext` that
+package-authored route handlers use. The same adapter-resolution code works in either
+place — request-time or hook-time.
+
+## What it explicitly does *not* carry
+
+`HookServices` deliberately omits anything request-scoped:
+
+- No `Hono` context (`c`), no actor, no request id, no headers.
+- No request-scoped DB transaction. Hooks run in their own scope; if they need
+  transactional reads/writes they manage that themselves through the entity adapter.
+- No middleware-derived data (rate-limit counters, idempotency state, etc.).
+
+If you find yourself wanting these in a hook, it's a sign the work belongs *back* on the
+request — emit an event the request handler subscribes to, or do the work synchronously
+and return its data to the caller.
+
+## Where you receive it
+
+| Surface                                                | Where `services` lives                          |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| `slingshot-auth` lifecycle hooks (`preLogin`, `postLogin`, `preRegister`, `postRegister`, `prePasswordChange`, `postPasswordChange`, `preDeleteAccount`, `postDeleteAccount`) | `services?` on the data argument (via `HookContext`) |
+| Orchestration workflow hooks (`onStart`, `onComplete`, `onFail`) | `services?` on the single hook context argument |
+| Orchestration `TaskContext` (in-process adapters)     | `ctx.services?`                                 |
+| Webhook queue `onDeadLetter`                           | third positional argument: `(job, err, services?)` |
+| Notifications dispatcher `onDeadLetter`                | second positional argument: `(event, services?)` |
+| Notifications builder `onPublishError`                 | second positional argument: `(input, services?)` |
+| Mail queue `onDeadLetter`                              | third positional argument: `(job, error, services?)` |
+| Search sync `onFlushDeadLetter`                        | second positional argument: `(entry, services?)` |
+| Search manager `onTenantIndexEvicted`                  | second positional argument: `(event, services?)` |
+| Game engine `ProcessHandlerContext`                    | `ctx.services?`                                 |
+
+The shape of the surrounding payload differs, but `services` is always the same type and
+always optional.
+
+## Worked example: postLogin
+
+A common pattern: when a user logs in, look up app-specific state (a profile row, a
+billing plan, a tenant flag) and inject it as a custom JWT claim. The hook needs the
+user id (provided), and it needs to read an entity (provided via `services`).
+
+```ts
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+interface ProfileAdapter {
+  findByUserId(userId: string): Promise<{ plan: 'free' | 'pro' } | null>;
+}
+
+createAuthPlugin({
+  auth: {
+    primaryField: 'email',
+    roles: ['user'],
+    defaultRole: 'user',
+    hooks: {
+      // Returns a {customClaims} object; those claims are merged into the
+      // JWT after reserved JOSE claims (exp, iat, sub, sid, ...) are stripped.
+      postLogin: async ({ userId, services }) => {
+        if (!services) return undefined;
+        const profiles = services.entities.get<ProfileAdapter>({ entity: 'Profile' });
+        const profile = await profiles.findByUserId(userId);
+        if (!profile) return undefined;
+        return { customClaims: { plan: profile.plan } };
+      },
+    },
+  },
+});
+```
+
+`services` is `undefined` only when the hook is invoked outside an app — e.g. a unit
+test that constructs the hook payload by hand. In production code paths, the framework
+always supplies it.
+
+## Resolving entities — three shapes
+
+`services.entities.get(...)` accepts whichever form is most natural at the callsite:
+
+```ts
+// @skip-typecheck
+import { GuestIdentity } from '@plugins/matches/entities/guestIdentity';
+
+// 1. A defineEntity module — adapter type is inferred from the module's phantom generic.
+const guests = services.entities.get(GuestIdentity);
+
+// 2. A typed entityRef from another package's public API.
+const profiles = services.entities.get(profilesPackage.entityRef.Profile);
+
+// 3. The escape hatch: { plugin?, entity } by name. Use when the typed handle isn't
+//    available — for example reading another plugin's entity from inside a generic
+//    callback. `plugin` defaults to the firing plugin's own name.
+const profilesByName = services.entities.get<ProfileAdapter>({
+  plugin: 'matches',
+  entity: 'Profile',
+});
+```
+
+Prefer the typed forms (1 and 2) so the adapter type flows automatically. Reach for the
+by-name form only when the handle isn't reachable from the callsite.
+
+## Resolving capabilities
+
+Capabilities are the framework's way for plugin A to expose a typed value (a mailer, a
+billing service, an evaluator) that plugin B consumes without an import dependency.
+Hooks resolve them the same way request handlers do.
+
+```ts
+// @skip-typecheck
+const mailer = services.capabilities.require(MailerCapability);
+await mailer.send({ to: user.email, template: 'welcome' });
+
+// `maybe` returns undefined instead of throwing — for optional integrations.
+const billing = services.capabilities.maybe(BillingCapability);
+billing?.recordSignIn(user.id);
+```
+
+`require` throws if no plugin provides the capability or the provider hasn't initialized
+yet. Use it when the capability is a declared dependency of your plugin. Use `maybe` when
+the integration is optional.
+
+## When `services` is `undefined`
+
+`services` is optional, never required. It is `undefined` when:
+
+**1. The hook fires across a process boundary.** The clearest case is the **Temporal
+worker** — orchestration activities run in a separate Node.js process from the main
+Slingshot app. There is no `app` reference there, no `pluginState`, no way to resolve
+entity adapters. Rather than fabricate broken accessors, the Temporal adapter sets
+`TaskContext.services = undefined`. If your task needs framework state, restructure:
+read the data at the workflow level (where hooks run in-process and `services` is
+available) and thread it through the activity's typed input.
+
+**2. A test or standalone harness invokes the callback directly.** The game engine's
+`TestGameHarness` exercises lifecycle hooks without spinning up a Slingshot app —
+`ProcessHandlerContext.services` is `undefined` there. The same applies to any unit
+test that calls a hook function with a hand-built payload.
+
+Treat `services` as a soft dependency: guard before use, and design the hook so its
+non-services path is a sensible no-op rather than a failure.
+
+```ts
+// @skip-typecheck
+postLogin: async ({ userId, services }) => {
+  if (!services) return undefined;          // Test path: no claims to add.
+  // ... real work using services ...
+}
+```
+
+## Late-binding for queue and dispatcher callbacks
+
+Auth, workflow, and game-engine hooks fire from code paths the framework controls
+end-to-end, so the framework supplies `services` directly at the call site.
+
+Queue and dispatcher callbacks are different: the queue or dispatcher is constructed
+during plugin setup (sometimes by the user themselves), and the callback is invoked
+much later, from a worker tick or processor loop. To bridge that gap, every dead-letter
+and publish-error callback option is paired with a **late-bound provider**:
+
+```ts
+// @skip-typecheck
+interface QueueOptions {
+  onDeadLetter?: (job: Job, err: Error, services?: HookServices) => void;
+  getHookServices?: () => HookServices | undefined;
+}
+```
+
+The plugin sets `getHookServices` during `setupMiddleware` (the first lifecycle phase
+where `app`, `pluginState`, and `bus` are all available together). The queue invokes
+the provider just before each callback, so the bound `services` reflects current
+framework state.
+
+If you construct one of these queues *yourself* — rather than letting a Slingshot
+plugin auto-construct it — build the services bag with `buildHookServices()` and pass
+the provider:
+
+```ts
+import {
+  buildHookServices,
+  createConsoleLogger,
+  getContext,
+  type HookServices,
+  type PluginSetupContext,
+  type SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
+
+// Stand-in for whichever queue/dispatcher you're constructing — webhook bullmq queue,
+// notifications dispatcher, mail queue, etc. The shape is the same across all of them.
+interface MyQueueOptions {
+  onDeadLetter?: (job: { id: string }, err: Error, services?: HookServices) => void;
+  getHookServices?: () => HookServices | undefined;
+}
+declare function createMyQueue(opts: MyQueueOptions): { drain(): Promise<void> };
+
+export function createMyPlugin(): SlingshotPlugin {
+  let services: HookServices | undefined;
+
+  return {
+    name: 'my-plugin',
+    async setupMiddleware({ app, bus }: PluginSetupContext) {
+      // Build once during setup — `app`, `pluginState`, and `bus` are stable for the
+      // lifetime of the app, so there is no need to rebuild per callback firing.
+      services = buildHookServices({
+        app,
+        pluginState: getContext(app).pluginState,
+        bus,
+        logger: createConsoleLogger({ base: { plugin: 'my-plugin' } }),
+        pluginName: 'my-plugin',
+      });
+
+      createMyQueue({
+        onDeadLetter: (job, err, services) => {
+          services?.entities.get({ entity: 'FailedDelivery' });
+          services?.bus.emit('my-plugin:dlq', { jobId: job.id });
+        },
+        getHookServices: () => services,
+      });
+    },
+  };
+}
+```
+
+`pluginName` should be your plugin's own name. It becomes the default `plugin:`
+qualifier when a hook calls `services.entities.get(entityModule)` without specifying
+one — so hooks reading their own plugin's entities don't need redundant
+`{ plugin: '...' }` boilerplate.
+
+## Why `services` is optional, not required
+
+Two reasons:
+
+**Test ergonomics.** Hook callbacks are pure functions — useful to call directly from
+tests. Making `services` required would force every test to construct a synthetic
+`HookServices` (with stubbed entity adapters, stubbed capabilities, stubbed bus) just
+to satisfy the type. Optional means tests pass `{ userId }` and that's it.
+
+**Honest boundaries.** Out-of-process adapters (Temporal worker today, future RPC-based
+runners) genuinely cannot supply a working `services`. Allowing `undefined` lets those
+adapters say so explicitly. The alternative — a "broken" services object that throws
+on every property access — would be worse.
+
+The cost is a guard at every callsite. The shape stays uniform across the framework, so
+that single guard is the only check you need.
+
+## Related
+
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — lifecycle phases that decide where you can build `services`
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — the typed handles `entities.get()` and `capabilities.require()` accept
+- [Auth](/slingshot/core-features/auth/) — auth lifecycle hooks that receive `services` on `HookContext`
+- [Background Jobs](/slingshot/core-features/jobs-and-orchestration/) — workflow hooks and `TaskContext.services`

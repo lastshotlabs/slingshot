@@ -182,6 +182,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         const redis = frameworkConfig.redis as FrameworkRedisClient | null | undefined;
         const mongo = frameworkConfig.mongo as FrameworkMongoConn | undefined;
         const resolvedPassword = frameworkConfig.password;
+        const ctx = getContextOrNull(app);
         const result = await bootstrapAuth(config, bus, events, resolved, {
           signing: frameworkConfig.signing ?? config.security?.signing ?? null,
           logging: {
@@ -198,11 +199,14 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
             : undefined,
           password: resolvedPassword,
           sqlite: frameworkConfig.sqlite ?? config.runtime?.sqlite,
+          // Captured so AuthRuntimeContext can build HookServices for lifecycle
+          // hooks (postLogin, postRegister, etc.) without a closure-from-setupPost dance.
+          app,
+          pluginState: ctx?.pluginState,
         });
         bootstrapCompleted = true;
         resolveBootstrap(result);
 
-        const ctx = getContextOrNull(app);
         if (ctx) {
           publishPluginState(ctx.pluginState, AUTH_RUNTIME_KEY, result.runtime);
         }

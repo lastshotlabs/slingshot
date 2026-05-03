@@ -10,6 +10,7 @@
  *
  * See spec §12.3 for the full ProcessHandlerContext contract.
  */
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import type {
   BufferedInput,
   ChannelRuntimeState,
@@ -115,6 +116,13 @@ export interface HandlerContextDeps {
     warn(message: string, data?: unknown): void;
     error(message: string, data?: unknown): void;
   };
+
+  /**
+   * Optional accessor for framework {@link HookServices}. Set by the plugin
+   * during `setupMiddleware`; left undefined in the standalone test harness
+   * where there is no surrounding Slingshot app.
+   */
+  getHookServices?: () => HookServices | undefined;
 }
 
 /**
@@ -147,6 +155,7 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
     createChildSession,
     getChildSessionResult,
     log,
+    getHookServices,
   } = deps;
 
   const getPlayersArray = (): readonly Readonly<GamePlayerState>[] => [...players.values()];
@@ -456,6 +465,11 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
 
     // Logging
     log,
+
+    // Framework services (late-bound; undefined in standalone harnesses)
+    get services(): HookServices | undefined {
+      return getHookServices?.();
+    },
   };
 
   return ctx;

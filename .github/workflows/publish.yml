@@ -35,9 +35,14 @@ jobs:
         run: bun run build
 
       - name: Configure npm for GitHub Packages
+        # Write to $HOME/.npmrc so the auth token is picked up regardless of
+        # the cwd npm publish runs from. The publish script invokes
+        # `npm publish` from per-package staging dirs (`.tmp/publish/...`),
+        # and a project-local `.npmrc` at repo root is unreliably resolved by
+        # npm's config walk in some setups — $HOME is unambiguous.
         run: |
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          echo "@lastshotlabs:registry=https://npm.pkg.github.com" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > $HOME/.npmrc
+          echo "@lastshotlabs:registry=https://npm.pkg.github.com" >> $HOME/.npmrc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,7 +53,7 @@ jobs:
 
       - name: Configure npm for npmjs
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > $HOME/.npmrc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -41,7 +41,7 @@ export default class Dev extends Command {
     const here = dirname(fileURLToPath(import.meta.url));
     const runner = resolve(here, '..', 'dev-runner');
 
-    const env: Record<string, string> = { ...process.env } as Record<string, string>;
+    const env: Record<string, string> = { ...(process.env as Record<string, string>) };
     if (flags.config) {
       env.SLINGSHOT_DEV_CONFIG = resolve(cwd, flags.config);
     }

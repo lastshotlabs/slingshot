@@ -3,12 +3,17 @@ import type { AppEnv } from './context';
 import { getContext, getContextOrNull } from './context/index';
 import type { PolicyResolver } from './entityRouteConfig';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
-import { publishPluginState, resolvePluginState } from './pluginState';
+import { definePluginStateKey, publishPluginState, readPluginState, resolvePluginState } from './pluginState';
 
 /**
  * Plugin-state key owned by `slingshot-entity`.
  */
 export const SLINGSHOT_ENTITY_PLUGIN_STATE_KEY = 'slingshot-entity' as const;
+
+/** Typed plugin-state key for the slingshot-entity runtime slot. */
+export const SLINGSHOT_ENTITY_RUNTIME_KEY = definePluginStateKey<SlingshotEntityPluginState>(
+  SLINGSHOT_ENTITY_PLUGIN_STATE_KEY,
+);
 
 /**
  * Sub-slot inside the `slingshot-entity` plugin state object that stores
@@ -41,7 +46,7 @@ function ensureMutableEntityPluginState(
 ): SlingshotEntityPluginState {
   if (!state) {
     const nextState: SlingshotEntityPluginState = {};
-    publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+    publishPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY, nextState);
     return nextState;
   }
 
@@ -50,7 +55,7 @@ function ensureMutableEntityPluginState(
   }
 
   const nextState: SlingshotEntityPluginState = { ...state };
-  publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+  publishPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY, nextState);
   return nextState;
 }
 
@@ -65,9 +70,7 @@ export function getOrCreateEntityPolicyRegistry(
     throw new Error('[slingshot-entity] pluginState is not available for policy registry access');
   }
 
-  const existingState = pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
-    | SlingshotEntityPluginState
-    | undefined;
+  const existingState = readPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY);
   const state = ensureMutableEntityPluginState(pluginState, existingState);
 
   if (!state[POLICY_REGISTRY_SLOT]) {

@@ -39,6 +39,7 @@ import {
   createRouter,
   defineEvent,
   getContextOrNull,
+  getPolicyResolverKey,
   publishEntityAdaptersState,
   publishPluginState,
   requireEntityAdapter,
@@ -938,7 +939,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           // for the post-fetch pass on get/update/delete).
           const defaultsPolicyConfig = routeConfig.defaults?.permission?.policy ?? undefined;
           const defaultsPolicyResolver = defaultsPolicyConfig
-            ? policyResolvers.get(defaultsPolicyConfig.resolver)
+            ? policyResolvers.get(getPolicyResolverKey(defaultsPolicyConfig.resolver))
             : undefined;
 
           if (supportsOpenApiRegistration(app)) {
@@ -1436,25 +1437,25 @@ function resolvePolicyResolversForEntity(
   const keys = new Set<string>();
 
   if (routeConfig.defaults?.permission?.policy) {
-    keys.add(routeConfig.defaults.permission.policy.resolver);
+    keys.add(getPolicyResolverKey(routeConfig.defaults.permission.policy.resolver));
   }
 
   for (const opName of ['create', 'get', 'list', 'update', 'delete'] as const) {
     const opConfig = routeConfig[opName];
     if (opConfig?.permission?.policy) {
-      keys.add(opConfig.permission.policy.resolver);
+      keys.add(getPolicyResolverKey(opConfig.permission.policy.resolver));
     }
   }
 
   for (const opConfig of Object.values(routeConfig.operations ?? {})) {
     if (opConfig.permission?.policy) {
-      keys.add(opConfig.permission.policy.resolver);
+      keys.add(getPolicyResolverKey(opConfig.permission.policy.resolver));
     }
   }
 
   for (const route of extraRoutes ?? []) {
     if (route.permission?.policy) {
-      keys.add(route.permission.policy.resolver);
+      keys.add(getPolicyResolverKey(route.permission.policy.resolver));
     }
   }
 

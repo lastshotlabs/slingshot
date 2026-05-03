@@ -181,8 +181,29 @@ describe('orchestration routes', () => {
       },
     });
 
+    // The memory adapter now implements `signal()`, so the test uses a
+    // minimal adapter that explicitly omits the capability to exercise the
+    // 501 path on the signal route.
+    const minimalAdapter = {
+      registerTask() {},
+      registerWorkflow() {},
+      async runTask() {
+        return { id: 'r', result: async () => ({}) };
+      },
+      async runWorkflow() {
+        return { id: 'r', result: async () => ({}) };
+      },
+      async getRun() {
+        return null;
+      },
+      async cancelRun() {
+        return { cancelStatus: 'pending' as const };
+      },
+      async shutdown() {},
+    };
+
     const runtime = createOrchestrationRuntime({
-      adapter: createMemoryAdapter({ concurrency: 1 }),
+      adapter: minimalAdapter as never,
       tasks: [task],
     });
 

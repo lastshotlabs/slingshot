@@ -103,16 +103,19 @@ export function createTemporalActivities(options: {
         tenantId: args.tenantId,
       });
 
+      const log: TaskContext['log'] = {
+        info: (msg: string) => logger.info(msg),
+        warn: (msg: string) => logger.warn(msg),
+        error: (msg: string) => logger.error(msg),
+        debug: (msg: string) => {
+          if (logger.debug) logger.debug(msg);
+        },
+      };
       const taskContext: TaskContext = {
         attempt: activityContext.info.attempt,
         runId: args.runId,
         signal: activityContext.cancellationSignal,
-        log: {
-          info: (msg: string) => logger.info(msg),
-          warn: (msg: string) => logger.warn(msg),
-          error: (msg: string) => logger.error(msg),
-          debug: (msg: string) => logger.debug ? logger.debug(msg) : undefined,
-        } as Console,
+        log,
         tenantId: args.tenantId,
         reportProgress(data) {
           void handle.signal('slingshot-progress', {

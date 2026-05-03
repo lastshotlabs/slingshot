@@ -1,12 +1,16 @@
 import type { Hono } from 'hono';
 import { getContext, getContextOrNull } from '@lastshotlabs/slingshot-core';
-import type { AppEnv, PolicyResolver } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, PolicyResolver, PolicyToken } from '@lastshotlabs/slingshot-core';
 import { getOrCreateEntityPolicyRegistry } from './entityPolicyRegistry';
 
 /**
  * Register a policy resolver under a named key. Consumers call this from
  * their plugin's `setupMiddleware` phase, **before** any `slingshot-entity`
  * `setupRoutes` runs for entities that reference the key.
+ *
+ * Two call shapes are supported:
+ *   - `registerEntityPolicy(app, key, resolver)` — legacy, key passed as a string
+ *   - `registerEntityPolicy(app, token)` — typed token from `definePolicy(...)`
  *
  * Registration after the registry has been frozen (which happens at the
  * end of `slingshot-entity.setupRoutes`) throws. This prevents late
@@ -17,17 +21,38 @@ import { getOrCreateEntityPolicyRegistry } from './entityPolicyRegistry';
  *
  * @example
  * ```ts
+ * // Token form — preferred:
+ * const PollSourcePolicy = definePolicy('polls:sourcePolicy', async (input) => {
+ *   return await checkMembership(input.record?.scopeId, input.userId);
+ * });
+ * registerEntityPolicy(app, PollSourcePolicy);
+ *
+ * // Legacy string form:
  * registerEntityPolicy(app, 'polls:sourcePolicy', async (input) => {
- *   const isMember = await checkMembership(input.record?.scopeId, input.userId);
- *   return isMember;
+ *   return await checkMembership(input.record?.scopeId, input.userId);
  * });
  * ```
  */
 export function registerEntityPolicy<TRecord = unknown, TInput = unknown>(
   app: Hono<AppEnv>,
+  token: PolicyToken<TRecord, TInput>,
+): void;
+export function registerEntityPolicy<TRecord = unknown, TInput = unknown>(
+  app: Hono<AppEnv>,
   key: string,
   resolver: PolicyResolver<TRecord, TInput>,
+): void;
+export function registerEntityPolicy(
+  app: Hono<AppEnv>,
+  keyOrToken: string | PolicyToken<unknown, unknown>,
+  maybeResolver?: PolicyResolver<unknown, unknown>,
 ): void {
+  const key = typeof keyOrToken === 'string' ? keyOrToken : keyOrToken.key;
+  const resolver: PolicyResolver =
+    typeof keyOrToken === 'string'
+      ? (maybeResolver as PolicyResolver)
+      : (keyOrToken.resolver as PolicyResolver);
+
   const ctx = getContext(app);
   const registry = getOrCreateEntityPolicyRegistry(ctx.pluginState);
   if (registry.frozen) {
@@ -42,7 +67,7 @@ export function registerEntityPolicy<TRecord = unknown, TInput = unknown>(
         'Duplicate registration is not supported — compose explicitly via definePolicyDispatch.',
     );
   }
-  registry.resolvers.set(key, resolver as PolicyResolver);
+  registry.resolvers.set(key, resolver);
 }
 
 /**

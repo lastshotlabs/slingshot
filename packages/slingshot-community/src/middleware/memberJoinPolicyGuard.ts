@@ -24,7 +24,7 @@ export function createMemberJoinPolicyGuardMiddleware(deps: {
   containerAdapter: ContainerAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
-    let containerId = '';
+    let containerId: string;
     try {
       const body = (await c.req.json()) as unknown;
       if (!isRecord(body)) return c.json({ error: 'Invalid JSON body' }, 400);

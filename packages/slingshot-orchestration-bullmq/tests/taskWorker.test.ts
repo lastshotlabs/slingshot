@@ -8,6 +8,40 @@ import type {
 } from '@lastshotlabs/slingshot-orchestration';
 import { createBullMQTaskProcessor } from '../src/taskWorker';
 
+/**
+ * Assert a console.error spy received a structured-logger line whose decoded
+ * `msg` matches the given substring. Optionally check that all the expected
+ * key/value pairs appear in the JSON record.
+ *
+ * The default logger writes one JSON line per call; tests that previously
+ * matched on `(message, fields)` argument pairs need to decode the line.
+ */
+function expectStructuredErrorLogged(
+  spy: { mock: { calls: unknown[][] } },
+  msgIncludes: string,
+  fields?: Record<string, unknown>,
+): void {
+  const lines = spy.mock.calls
+    .map(args => (typeof args[0] === 'string' ? args[0] : ''))
+    .filter(Boolean);
+  const matched = lines.some(line => {
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      const msg = String(record['msg'] ?? '');
+      if (!msg.includes(msgIncludes)) return false;
+      if (fields) {
+        for (const [k, v] of Object.entries(fields)) {
+          if (record[k] !== v) return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  expect(matched).toBe(true);
+}
+
 function createFakeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
   const partial = {
     name: String(data['taskName'] ?? 'fake-task'),
@@ -61,10 +95,19 @@ describe('bullmq task processor error handling', () => {
     // Give the rejected promise a chance to settle and call .catch
     await Promise.resolve();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[slingshot-orchestration-bullmq] Failed to update job progress:',
-      expect.any(Error),
+    // The default logger emits a JSON line per call. Match by msg field.
+    const calls = consoleErrorSpy.mock.calls.map(args =>
+      typeof args[0] === 'string' ? args[0] : '',
     );
+    const matched = calls.some(line => {
+      try {
+        const record = JSON.parse(line) as { msg?: string };
+        return record.msg === 'Failed to update job progress';
+      } catch {
+        return false;
+      }
+    });
+    expect(matched).toBe(true);
   });
 });
 
@@ -161,10 +204,7 @@ describe('bullmq task processor', () => {
       ).resolves.toEqual({ value: 'ok' });
       await Promise.resolve();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[slingshot-orchestration-bullmq] Failed to emit progress event:',
-        expect.any(Error),
-      );
+      expectStructuredErrorLogged(consoleErrorSpy, 'Failed to emit progress event');
     } finally {
       consoleErrorSpy.mockRestore();
     }
@@ -296,10 +336,7 @@ describe('bullmq task processor – job data corruption', () => {
       /BullMQ job .* has invalid data: missing 'taskName' field/,
     );
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("missing 'taskName' field"),
-      expect.anything(),
-    );
+    expectStructuredErrorLogged(consoleErrorSpy, 'taskName');
   });
 
   test('missing input field throws a clear error without logging payload data', async () => {
@@ -320,14 +357,11 @@ describe('bullmq task processor – job data corruption', () => {
       processor(createFakeJob({ taskName: task.name, runId: 'run_missing_input' })),
     ).rejects.toThrow(/BullMQ job .* has invalid data: missing 'input' field/);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("missing 'input' field"),
-      expect.objectContaining({
-        runId: 'run_missing_input',
-        taskName: task.name,
-        errorCode: 'TASK_DATA_MISSING_INPUT',
-      }),
-    );
+    expectStructuredErrorLogged(consoleErrorSpy, 'input', {
+      runId: 'run_missing_input',
+      taskName: task.name,
+      errorCode: 'TASK_DATA_MISSING_INPUT',
+    } as unknown as Record<string, unknown>);
   });
 
   test('unknown task names fail with TASK_NOT_FOUND', async () => {

@@ -100,7 +100,7 @@ function fieldToEnvKey(field: string): string {
 }
 
 function namespaceToPrefix(namespace: string): string {
-  return namespace.replace(/[.\-]/g, '_').toUpperCase() + '_';
+  return namespace.replace(/[.-]/g, '_').toUpperCase() + '_';
 }
 
 /**

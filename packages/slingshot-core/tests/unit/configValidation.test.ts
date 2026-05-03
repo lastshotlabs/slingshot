@@ -6,6 +6,19 @@ import {
   validatePluginConfig,
   warnUnknownPluginKeys,
 } from '../../src/configValidation';
+import type { Logger } from '../../src/observability/logger';
+
+function makeLogger() {
+  const warn = mock((_msg: string, _fields?: Record<string, unknown>) => {});
+  const logger: Logger = {
+    debug: () => {},
+    info: () => {},
+    warn,
+    error: () => {},
+    child: () => logger,
+  };
+  return { logger, warn };
+}
 
 describe('disableRoutesSchema', () => {
   test('creates an optional array schema of route enums', () => {
@@ -23,28 +36,21 @@ describe('disableRoutesSchema', () => {
 
 describe('warnUnknownPluginKeys', () => {
   test('warns for unknown keys', () => {
-    const warnSpy = mock(() => {});
-    const originalWarn = console.warn;
-    console.warn = warnSpy;
-
+    const { logger, warn } = makeLogger();
     const schema = z.object({ maxRetries: z.number() });
-    warnUnknownPluginKeys('test-plugin', { maxRetries: 3, maxRtries: 5 }, schema as never);
+    warnUnknownPluginKeys('test-plugin', { maxRetries: 3, maxRtries: 5 }, schema as never, logger);
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect((warnSpy.mock.calls as unknown[][])[0]?.[0]).toContain('maxRtries');
-    console.warn = originalWarn;
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [msg] = warn.mock.calls[0] as [string];
+    expect(msg).toContain('maxRtries');
   });
 
   test('does not warn for known keys', () => {
-    const warnSpy = mock(() => {});
-    const originalWarn = console.warn;
-    console.warn = warnSpy;
-
+    const { logger, warn } = makeLogger();
     const schema = z.object({ maxRetries: z.number() });
-    warnUnknownPluginKeys('test-plugin', { maxRetries: 3 }, schema as never);
+    warnUnknownPluginKeys('test-plugin', { maxRetries: 3 }, schema as never, logger);
 
-    expect(warnSpy).not.toHaveBeenCalled();
-    console.warn = originalWarn;
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
@@ -92,15 +98,11 @@ describe('validatePluginConfig', () => {
   });
 
   test('warns about unknown keys for object configs', () => {
-    const warnSpy = mock(() => {});
-    const originalWarn = console.warn;
-    console.warn = warnSpy;
-
+    const { logger, warn } = makeLogger();
     const schema = z.object({ maxRetries: z.number().default(3) });
-    validatePluginConfig('test', { maxRetries: 5, typo: true }, schema as never);
+    validatePluginConfig('test', { maxRetries: 5, typo: true }, schema as never, logger);
 
-    expect(warnSpy).toHaveBeenCalled();
-    console.warn = originalWarn;
+    expect(warn).toHaveBeenCalled();
   });
 
   test('skips unknown key check for non-object rawConfig', () => {

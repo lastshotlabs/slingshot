@@ -34,6 +34,7 @@ import {
   type AssetsHealth,
   type AssetsHealthDetails,
   type AssetsPluginConfig,
+  ASSETS_RUNTIME_KEY,
   type AssetsPluginState,
   type OrphanedKeyRecord,
   type StorageAdapterRef,
@@ -275,7 +276,7 @@ export function createAssetsPlugin(
           storage,
           config,
         });
-        publishPluginState(getPluginState(app), ASSETS_PLUGIN_STATE_KEY, state);
+        publishPluginState(getPluginState(app), ASSETS_RUNTIME_KEY, state);
       }
     },
 

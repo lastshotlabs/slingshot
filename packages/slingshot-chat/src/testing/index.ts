@@ -30,7 +30,7 @@ import type {
 import {
   InProcessAdapter,
   NOTIFICATIONS_PLUGIN_STATE_KEY,
-  PERMISSIONS_STATE_KEY,
+  PERMISSIONS_RUNTIME_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
@@ -38,6 +38,7 @@ import {
   createPluginStateMap,
   deepFreeze,
   publishPluginState,
+  readPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -56,7 +57,7 @@ import {
 } from '../entities/factories';
 import { uuid } from '../lib/utils';
 import { createChatPlugin } from '../plugin';
-import { CHAT_PLUGIN_STATE_KEY } from '../state';
+import { CHAT_RUNTIME_KEY } from '../state';
 import type {
   ChatPluginConfig,
   ChatPluginState,
@@ -392,7 +393,7 @@ export async function createChatTestApp(
       publishPluginState(pluginState, key, value);
     }
   }
-  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permsState);
+  publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, permsState);
   publishPluginState(pluginState, NOTIFICATIONS_PLUGIN_STATE_KEY, {
     config: deepFreeze({
       mountPath: '/notifications',
@@ -504,7 +505,7 @@ export async function createChatTestApp(
   });
 
   // Read the plugin's resolved state
-  const state = pluginState.get(CHAT_PLUGIN_STATE_KEY) as ChatPluginState | undefined;
+  const state = readPluginState(pluginState, CHAT_RUNTIME_KEY);
   if (!state) throw new Error('Chat plugin did not register state — lifecycle failed');
 
   // Wire the lazy evaluator to the actual adapters

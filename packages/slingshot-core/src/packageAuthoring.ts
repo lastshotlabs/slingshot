@@ -15,7 +15,7 @@ type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema ex
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type EmptyServices = Readonly<Record<never, never>>;
-type AnyEntityModule = SlingshotPackageEntityModuleLike<unknown>;
+type AnyEntityModule = SlingshotPackageEntityModuleLike<unknown, string>;
 type AnyDomainRouteDefinition = DomainRouteDefinition<unknown, TypedRouteRequestSpec>;
 type AnyDomainModule = SlingshotPackageDomainModule<
   AnyDomainRouteDefinition,
@@ -202,7 +202,10 @@ export interface PackageEntityRef<TAdapter = unknown> {
 }
 
 /** Minimal entity module contract shared between `slingshot-core` and `slingshot-entity`. */
-export interface SlingshotPackageEntityModuleLike<TAdapter = unknown> {
+export interface SlingshotPackageEntityModuleLike<
+  TAdapter = unknown,
+  TMwName extends string = string,
+> {
   /** Internal discriminator for package entity modules. */
   readonly kind: 'entity';
   /** Module name used for diagnostics and inspection. */
@@ -213,6 +216,8 @@ export interface SlingshotPackageEntityModuleLike<TAdapter = unknown> {
   readonly path?: string;
   /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
   readonly __adapter: TAdapter | undefined;
+  /** Phantom marker carrying the entity's declared middleware-name union for `definePackage`. */
+  readonly __mwNames?: TMwName;
   /** Implementation details supplied by `slingshot-entity`. */
   readonly implementation: unknown;
 }

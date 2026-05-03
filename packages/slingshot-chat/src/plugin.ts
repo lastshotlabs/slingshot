@@ -38,7 +38,7 @@ import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate'
 import { createRoomCreatorGrantMiddleware } from './middleware/roomCreatorGrant';
 import { probeEmbedsPeer } from './peers/embeds';
 import { probePushFormatterRegistry } from './peers/push';
-import { CHAT_PLUGIN_STATE_KEY } from './state';
+import { CHAT_PLUGIN_STATE_KEY, CHAT_RUNTIME_KEY } from './state';
 import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from './types';
 import { buildIncomingDispatch } from './ws/incoming';
 
@@ -465,7 +465,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           },
           evaluator: permissionsRef.evaluator,
         };
-        publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, chatState);
+        publishPluginState(getPluginState(app), CHAT_RUNTIME_KEY, chatState);
         app.route(`${mountPath}/encryption`, buildEncryptionRouter(chatState));
       }
     },

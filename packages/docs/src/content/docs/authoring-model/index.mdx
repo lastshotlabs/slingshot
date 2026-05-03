@@ -97,6 +97,22 @@ its code.
 | A feature boundary                          | Package                    |
 | Cross-package contracts                     | Capabilities and entityRef |
 | App-wide config (db, auth, security)        | App root                   |
+| Framework infra (auth, persistence, queues) | `SlingshotPlugin`          |
+
+## Two authoring tiers
+
+`definePackage` and `SlingshotPlugin` are **parallel first-class authoring tiers**, not
+levels of a hierarchy. Pick by what you are building:
+
+- **`definePackage`** — your app's features (blog, billing, chat). Declarative: entities,
+  domain routes, capabilities. Most application code.
+- **`SlingshotPlugin`** — framework-level plugins (auth, postgres, bullmq, custom
+  middleware). Imperative lifecycle hooks for async bootstrap, registrar registrations, and
+  conditional middleware. Almost every plugin you import is one.
+
+Neither is a workaround for the other. See
+[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the full decision
+guide.
 
 ## Learn each layer
 
@@ -112,18 +128,22 @@ its code.
     description="definePackage, domains, routes, capabilities, and entityRef."
   />
   <LinkCard
+    title="Plugin Interface"
+    href="/slingshot/authoring/plugin-interface/"
+    description="SlingshotPlugin contract for framework-level plugins — lifecycle hooks, registrar, async bootstrap."
+  />
+  <LinkCard
     title="Entity System"
     href="/slingshot/entity-system/"
     description="defineEntity, operations, route policy, storage backends, and generated routes."
   />
 </CardGrid>
 
-## Escape hatches
+## Lower-level seams
 
-The normal path handles most apps. When it does not fit:
+When generated package or entity behavior needs tweaking:
 
 - [Route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize one generated route
 - [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated ones
 - [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — bring your own storage
-- [Raw plugins](/slingshot/authoring/plugin-interface/) — lower-level lifecycle control
-- [Full escape hatch guide](/slingshot/package-first/escape-hatches/) — decision guide for when to drop lower
+- [Lower-level seams guide](/slingshot/package-first/escape-hatches/) — decision guide for what to override

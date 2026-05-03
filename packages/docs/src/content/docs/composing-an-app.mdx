@@ -11,13 +11,34 @@ in order and you'll know how the framework fits together.
 | Piece | What it is | Declared with |
 | --- | --- | --- |
 | **App** | The root. Lists the packages and plugins it composes. | `defineApp(...)` |
-| **Package** | A self-contained feature module. Owns its entities, routes, middleware. | `definePackage(...)` |
+| **Package** | A self-contained feature module — your blog, your notifications, your saas modules. Owns its entities, routes, middleware. | `definePackage(...)` |
+| **Plugin** | A framework-level plugin — auth, postgres, bullmq, search. Provides infrastructure your packages depend on. | `SlingshotPlugin` |
 | **Entity** | A typed data model. Generates CRUD routes, DTOs, OpenAPI. | `defineEntity(...)` |
 | **Domain + Route** | A typed custom route inside a package, for things that don't map to CRUD. | `domain(...)`, `route.*()` |
 | **Capability** | A typed cross-package service contract. | `defineCapability(...)` |
 | **entityRef** | A typed reference to another package's entity adapter. | `entityRef(...)` |
 | **Event** | A typed message published by one piece, subscribed by another. | `defineEvent(...)` + the event bus |
-| **Escape hatch** | A raw plugin or executor override when the package model doesn't fit. | `SlingshotPlugin`, `defineEntityExecutor` |
+
+## Two tiers: packages and plugins
+
+Slingshot has two first-class authoring tiers. They are not the same thing and one is not the
+"escape hatch" version of the other:
+
+- **`definePackage(...)`** — for **app-side feature composition**. You write packages to model
+  your app's features (a blog, a notifications module, a saas billing surface). Packages are
+  declarative: they describe entities, domain routes, middleware bindings, and the
+  capabilities they publish or consume. Most application code lives here.
+
+- **`SlingshotPlugin`** — for **framework-level plugin authoring**. Plugins implement
+  infrastructure: auth, persistence, queues, search, mail. They use lifecycle hooks
+  (`setupMiddleware`, `setupRoutes`, `setupPost`, `teardown`) to do async bootstrap, register
+  framework boundary contracts (route auth, actor resolver, rate limiter), and mount
+  conditional middleware. Almost every plugin you import (`slingshot-auth`, `slingshot-postgres`,
+  `slingshot-bullmq`, …) is one of these.
+
+You compose both at the app root: `defineApp({ packages: [...], plugins: [...] })`. Packages
+typically depend on plugins (`dependencies: ['slingshot-auth']`); plugins do not depend on
+packages. See [When to use which](#when-to-use-which) below.
 
 ## How they fit together
 
@@ -33,12 +54,98 @@ defineApp({ packages, plugins })
   │     ├── entityRef to Post        (cross-package read)
   │     └── subscribes               'blog:post.published' ← via event bus
   │
-  └── plugin "metrics"               (raw lifecycle hook, escape hatch)
+  └── plugin "slingshot-auth"        (framework-level plugin: lifecycle, infra)
 ```
 
 The app reads like a table of contents. Each package owns its slice. Cross-package wiring
 happens through capabilities (services), entityRef (data access), and events (decoupled side
 effects) — never through direct imports between packages.
+
+## When to use which
+
+There are three authoring tiers, not two. Each owns a different concern, and middleware
+can live at any of them.
+
+| Tier                | What it is                                                                                              | Middleware story                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`defineApp`**     | Root config: lists plugins and packages, configures framework subsystems (auth, db, security, etc.).    | `middleware: MiddlewareHandler[]` — **static global**, runs after plugin middleware and before route matching. No lifecycle hooks needed.                   |
+| **`definePackage`** | App-side feature composition: declarative entities, domain routes, named middleware, capabilities, mount path. | `middleware: Record<string, MiddlewareHandler>` — **named registry**, attached to specific package routes by reference (e.g. `route.post({ middleware: ['rateLimit'] })`). Scoped to the package. |
+| **`SlingshotPlugin`** | Framework-side plugin authoring: lifecycle hooks, async bootstrap, registrar registrations.            | Imperative `app.use('*', ...)` from inside `setupMiddleware`. Required when middleware needs **dynamic, conditional, or async setup**.                     |
+
+Under the hood, packages compile into framework plugins — there is one runtime concept
+(plugins) and two authoring surfaces (`definePackage` declarative, `SlingshotPlugin`
+imperative), with `defineApp` as the assembly root. Pick by what you're modeling:
+
+| If you are building...                                                                                  | Use                                          |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| App-level static cross-cutting middleware (tracing, request-id, custom logging)                         | `defineApp({ middleware: [...] })`           |
+| A feature with its own routes/entities (blog, billing, chat)                                            | `definePackage(...)`                         |
+| Per-package middleware that some of the package's routes opt into                                       | `definePackage.middleware` (named registry)  |
+| Auth, persistence, queues, search, mail (anything needing async bootstrap)                              | `SlingshotPlugin`                            |
+| Anything that registers with the framework registrar (route auth, request actor resolver, rate limit adapter) | `SlingshotPlugin`                            |
+| Conditional mounting based on resolved config                                                           | `SlingshotPlugin`                            |
+
+### The actual rule
+
+**Reach for `SlingshotPlugin` only when you need lifecycle hooks.** If your middleware is
+a plain function and doesn't need bootstrap, `defineApp.middleware` (global) or
+`definePackage.middleware` (scoped) is enough. Plugins are for the things that need to do
+something at boot — registering framework boundaries, opening connections, building
+runtimes, mounting middleware that depends on resolved config — not just attaching
+behavior.
+
+### What only `SlingshotPlugin` provides
+
+- **Async bootstrap with handoff between lifecycle phases.** Auth opens DB connections,
+  validates JWT secrets, builds adapters in `setupMiddleware`, then registers boundary
+  contracts in `setupPost` based on the bootstrap result. There is no way to express a
+  bootstrap-completion handoff from a static module description.
+- **Registrar boundary registrations.** `registrar.setRouteAuth(...)`,
+  `setRequestActorResolver(...)`, `setRateLimitAdapter(...)`, `addCacheAdapter(...)`,
+  `addEmailTemplates(...)` — framework-level singleton contracts.
+- **Imperative `app.use('*', ...)` middleware that runs before package middleware.**
+  CSRF protection, MFA enforcement, identify middleware. Plugin `setupMiddleware` runs
+  before `setupRoutes`; package middleware mounts during route registration.
+- **Conditional mounting based on resolved config.** Auth conditionally mounts ten
+  different routers (MFA, passkey, magic-link, password-reset, SAML, …) based on
+  whether each feature is enabled in config.
+- **Lifecycle hooks beyond bootstrap.** `seed()` for initial data, `teardown()` for
+  cleanup, `setupPost(...)` for post-startup health checks or OpenAPI inspection.
+
+### Where each layer of middleware lives
+
+| Layer                                | Mounted by                              | Scope                                                       | Use for                                                                |
+| ------------------------------------ | --------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Framework defaults                   | The framework, from `defineApp` config  | All routes (CORS, secure headers, rate limiting baseline)    | Things every app needs that are config-driven, not code                |
+| App-level static middleware          | `defineApp({ middleware: [...] })`      | All routes, after plugin middleware, before route matching   | Tracing, request-id, custom logging — anything static you'd otherwise have to wrap in a plugin |
+| Plugin imperative middleware         | `SlingshotPlugin.setupMiddleware`       | All routes (or a path prefix), runs earliest                | Auth, CSRF, identify, MFA enforcement — anything needing async/conditional setup |
+| Package-named middleware             | `definePackage({ middleware: { ... } })`| Only the package's routes that reference the name           | Per-feature middleware: ownership checks, package-scoped rate limits   |
+| Per-route middleware                 | `route.*({ middleware: ['name', ...] })` | One route                                                   | Endpoint-specific constraints                                          |
+| Entity hooks                         | `defineEntity` `afterHooks`, etc.       | Generated routes for one entity                              | Cross-cutting on an entity's lifecycle (audit, denormalization, downstream events) |
+
+For "cross-cutting metrics" specifically — pick by scope:
+
+- Every request including framework routes, no async setup → `defineApp.middleware`.
+- Every request, requires registering a metrics adapter at boot → `SlingshotPlugin.setupMiddleware`.
+- Only a specific package's routes → `definePackage.middleware` referenced from each route.
+- Only one entity's generated routes → an entity hook.
+
+Picking the right layer minimizes blast radius — package-scoped middleware doesn't run on
+unrelated routes, and an entity hook doesn't run on unrelated entities.
+
+### Quick checks
+
+- "I want to add a feature with its own routes and data" → `definePackage`.
+- "I want my package's routes to use auth" → `definePackage` with `dependencies: ['slingshot-auth']`.
+- "I want a static piece of middleware on every request" → `defineApp({ middleware: [...] })`.
+- "I want async setup that other things wait for" → `SlingshotPlugin`.
+- "I want to provide a framework boundary contract (route auth, actor resolver)" → `SlingshotPlugin`.
+- "I want middleware that mounts based on config" → `SlingshotPlugin`.
+- "I want to teach the entity system a new operation pattern" → entity executor override, not a plugin (see [Lower-level Seams](/slingshot/package-first/escape-hatches/)).
+
+If you find yourself reaching for `SlingshotPlugin` to model a feature module, the package
+shape probably fits better. If you find yourself trying to express async bootstrap or
+conditional middleware in `definePackage`, you want a plugin instead.
 
 ## Reading order
 
@@ -55,15 +162,17 @@ order:
    how packages talk to each other without importing each other's internals.
 5. **[Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)** — the
    shared transport for cross-package side effects, SSE, and webhook delivery.
-6. **[Escape Hatches](/slingshot/package-first/escape-hatches/)** — when you need to drop
-   below the package surface.
+6. **[Plugin Interface](/slingshot/authoring/plugin-interface/)** — the `SlingshotPlugin`
+   contract for framework-level plugin authoring (auth, infra, custom middleware).
+7. **[Lower-level Seams](/slingshot/package-first/escape-hatches/)** — overrides and manual
+   wiring inside the package model when generated behavior needs tweaking.
 
 ## Where the rest of the docs go
 
 This section answers "how do I compose an app." Two adjacent sections answer the natural
 follow-up questions:
 
-- **[Authoring Routes](/slingshot/app-authoring/authoring-routes/)** — every concern that
+- **[Authoring Routes](/slingshot/authoring-routes/)** — every concern that
   applies to a single route: validation, DTO mapping, auth/permissions, idempotency,
   OpenAPI, exception handling.
 - **[Working with Data](/slingshot/core-features/data-and-entities/)** — the entity system

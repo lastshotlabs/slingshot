@@ -132,7 +132,7 @@ export function defineEntity<
     onUpdate: config.conventions?.onUpdate,
   };
 
-  const resolved = {
+  const built = {
     name,
     ...config,
     _pkField: pkField,
@@ -140,7 +140,8 @@ export function defineEntity<
     _systemFields,
     _storageFields,
     _conventions,
-  } as ResolvedEntityConfig<F, D>;
+  };
+  const resolved = built as unknown as ResolvedEntityConfig<F, D>;
   deepFreezeEntity(resolved);
   return resolved;
 }

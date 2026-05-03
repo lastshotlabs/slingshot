@@ -183,7 +183,9 @@ describe('ws incoming dispatch', () => {
     await findHandler('game:unsubscribe')(rooms.ctx as any);
 
     expect(rooms.subscriptions.length).toBe(1);
-    expect(rooms.unsubscriptions.length).toBe(3);
+    // game:stream.unsubscribe → 1 unsubscribe (the stream channel room).
+    // game:unsubscribe → 3 unsubscribes (session room, player room, all-streams room).
+    expect(rooms.unsubscriptions.length).toBe(4);
   });
 
   test('returns structured errors for invalid subscribe payloads and missing sessions', async () => {

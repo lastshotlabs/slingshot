@@ -352,7 +352,7 @@ describe('KV ISR stress tests', () => {
       });
 
       // The put should time out due to the heartbeat
-      await expect(c.set('/hb', makeEntry('/hb', ['t']))).rejects.toThrow('timed out');
+      await expect(c.set('/hb', makeEntry('/hb', ['t']))).rejects.toThrow(/timed out/i);
     });
 
     it('heartbeatTimeoutMs=0 disables the heartbeat', async () => {

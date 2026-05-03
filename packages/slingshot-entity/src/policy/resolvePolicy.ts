@@ -7,7 +7,7 @@ import type {
   PolicyResolver,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
-import { getActor } from '@lastshotlabs/slingshot-core';
+import { getActor, getPolicyResolverKey } from '@lastshotlabs/slingshot-core';
 
 /**
  * Arguments for `resolvePolicy`.
@@ -67,7 +67,7 @@ export async function resolvePolicy<TRecord, TInput>(
     // Resolver threw — surface as 500. Throwing is a programmer/config
     // error, not a deny decision.
     throw new HTTPException(500, {
-      message: `policy resolver '${config.resolver}' threw: ${err instanceof Error ? err.message : String(err)}`,
+      message: `policy resolver '${getPolicyResolverKey(config.resolver)}' threw: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 
@@ -80,7 +80,7 @@ export async function resolvePolicy<TRecord, TInput>(
   // Emit denial event for audit — not awaited.
   if (bus) {
     (bus as unknown as { emit(key: string, payload: unknown): void }).emit('entity:policy.denied', {
-      resolverKey: config.resolver,
+      resolverKey: getPolicyResolverKey(config.resolver),
       action,
       userId: actor.id,
       reason: decision.reason,

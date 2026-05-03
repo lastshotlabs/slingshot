@@ -1,6 +1,6 @@
 ---
 title: Advanced
-description: Customization, escape hatches, and lower-level framework seams after the normal path stops fitting
+description: Lower-level seams, plugin authoring, and framework internals after the normal path stops fitting
 ---
 
 Once the normal package-first and entity-first paths stop fitting, this is where to go next.
@@ -10,7 +10,7 @@ This section is intentionally not the starting point.
 Use it when:
 
 - you need manual adapter wiring
-- you need a raw plugin instead of a package
+- you need a framework-level plugin (auth, persistence, queues, custom middleware)
 - you need to override generated entity behavior
 - you need a supported alternate path like manifests
 - you are debugging framework seams instead of using the normal surfaces
@@ -24,6 +24,6 @@ Use it when:
 
 ## Start here
 
-- [Escape Hatches](/slingshot/advanced/escape-hatches/)
-- [Plugin Interface](/slingshot/authoring/plugin-interface/)
+- [Lower-level Seams](/slingshot/advanced/escape-hatches/) — overrides and manual wiring inside the package model
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — the `SlingshotPlugin` contract for framework-level plugins
 - [Internals](/slingshot/internals/)

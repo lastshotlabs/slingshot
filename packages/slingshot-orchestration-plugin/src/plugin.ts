@@ -5,7 +5,7 @@ import {
   type OrchestrationRuntime,
   createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY } from './context';
+import { ORCHESTRATION_PLUGIN_KEY, ORCHESTRATION_RUNTIME_KEY } from './context';
 import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
@@ -109,7 +109,7 @@ export function createOrchestrationPlugin(
         });
       }
 
-      publishPluginState(getContext(app).pluginState, ORCHESTRATION_PLUGIN_KEY, runtime);
+      publishPluginState(getContext(app).pluginState, ORCHESTRATION_RUNTIME_KEY, runtime);
 
       if (!routes) return;
       if (routeMiddleware.length === 0) {

@@ -94,7 +94,7 @@ export function planMigration(args: {
   for (const [entityName, config] of sortedEntries) {
     const snapshot = loadSnapshot(snapshotDir, config);
 
-    let sql = '';
+    let sql: string;
     if (!snapshot) {
       // First migration for this entity.
       sql =

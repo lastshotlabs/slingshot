@@ -8,7 +8,7 @@
 import { Job, Queue } from 'bullmq';
 import type { ConnectionOptions, QueueOptions, QueueEvents, Worker } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -111,7 +111,8 @@ export function createBullMQOrchestrationAdapter(
     ...parsedInput
   } = rawOptions;
   const options = bullmqOrchestrationAdapterOptionsSchema.parse(parsedInput);
-  const structuredLogger: Logger = rawStructuredLogger ?? noopLogger;
+  const structuredLogger: Logger =
+    rawStructuredLogger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
 
   // -- Registries --
   const taskRegistry = new Map<string, AnyResolvedTask>();

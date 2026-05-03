@@ -577,7 +577,19 @@ async function prepareBootstrap<T extends object>(
   const drain = () => coreReg.drain();
   // Auto-synthesize permissions plugin when config.permissions is set
   // but no explicit permissions plugin is registered.
-  if (config.permissions && !plugins.some(p => p.name === 'slingshot-permissions')) {
+  //
+  // If both are present, fail loudly. Silently using one and discarding the
+  // other has bitten us before — config.permissions provides an adapter that
+  // a separately-registered permissions plugin will not be wired with.
+  const hasPermissionsPlugin = plugins.some(p => p.name === 'slingshot-permissions');
+  if (config.permissions && hasPermissionsPlugin) {
+    throw new Error(
+      '[slingshot] both config.permissions and a slingshot-permissions plugin were provided. ' +
+        'Pick one: either remove config.permissions and configure the plugin directly, ' +
+        'or remove the plugin and let the framework auto-synthesize it from config.permissions.',
+    );
+  }
+  if (config.permissions && !hasPermissionsPlugin) {
     const { createPermissionsPlugin } = await import('@lastshotlabs/slingshot-permissions');
     plugins = [createPermissionsPlugin({ adapter: config.permissions.adapter }), ...plugins];
   }

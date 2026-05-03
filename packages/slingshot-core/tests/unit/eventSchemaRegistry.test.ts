@@ -44,17 +44,20 @@ describe('eventSchemaRegistry', () => {
     const registry = createEventSchemaRegistry();
     registry.register('auth:login', z.object({ userId: z.string(), sessionId: z.string() }));
 
-    const warn = mock(() => {});
-    const originalWarn = console.warn;
-    console.warn = warn;
+    const warn = mock((_msg: string, _fields?: Record<string, unknown>) => {});
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn,
+      error: () => {},
+      child: () => logger,
+    };
 
-    try {
-      const payload = { userId: 'u-1' };
-      expect(validateEventPayload('auth:login', payload, registry, 'warn')).toBe(payload);
-      expect(warn).toHaveBeenCalledTimes(1);
-    } finally {
-      console.warn = originalWarn;
-    }
+    const payload = { userId: 'u-1' };
+    expect(validateEventPayload('auth:login', payload, registry, 'warn', logger as never)).toBe(
+      payload,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 

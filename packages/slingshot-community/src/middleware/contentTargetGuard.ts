@@ -51,13 +51,13 @@ export function createContentTargetGuardMiddleware(
       return c.json({ error: 'targetType and targetId are required' }, 400);
     }
 
-    let containerId = '';
     if (targetType === 'user') {
       if (!options.allowUserTarget) return c.json({ error: 'Unsupported targetType' }, 400);
       await next();
       return;
     }
 
+    let containerId: string;
     if (targetType === 'thread') {
       const thread = await deps.threadAdapter.getById(targetId);
       if (!thread || thread.status !== 'published') {

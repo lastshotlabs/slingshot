@@ -78,8 +78,9 @@ export default defineConfig({
             { label: 'Packages', slug: 'package-first/define-package' },
             { label: 'Domains and Routes', slug: 'package-first/domain-and-route' },
             { label: 'Capabilities and entityRef', slug: 'package-first/capabilities-and-entity-ref' },
+            { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'Events and the Event Bus', slug: 'app-authoring/events-and-the-event-bus' },
-            { label: 'Escape Hatches', slug: 'package-first/escape-hatches' },
+            { label: 'Lower-level Seams', slug: 'package-first/escape-hatches' },
           ],
         },
         {
@@ -242,7 +243,7 @@ export default defineConfig({
             { label: 'Package-First Overview', slug: 'package-first' },
             { label: 'Entity System Overview', slug: 'entity-system' },
             { label: 'Advanced Overview', slug: 'advanced' },
-            { label: 'Advanced Escape Hatches', slug: 'advanced/escape-hatches' },
+            { label: 'Advanced: Lower-level Seams', slug: 'advanced/escape-hatches' },
           ],
         },
         {

@@ -22,6 +22,7 @@ import {
   getPermissionsStateOrNull,
   getRequestTenantId,
   getSlingshotCtx,
+  getPolicyResolverKey,
   hmacSign,
   inspectPackage,
   publishPluginState,
@@ -494,7 +495,7 @@ function collectPackagePolicyResolvers(
   for (const domain of pkg.domains) {
     for (const routeDefinition of domain.routes) {
       if (routeDefinition.permission?.policy) {
-        keys.add(routeDefinition.permission.policy.resolver);
+        keys.add(getPolicyResolverKey(routeDefinition.permission.policy.resolver));
       }
     }
   }
@@ -842,7 +843,7 @@ function createPackagePlugin(
           );
           const policyConfig = routeDefinition.permission?.policy;
           const policyResolver = policyConfig
-            ? policyResolvers.get(policyConfig.resolver)
+            ? policyResolvers.get(getPolicyResolverKey(policyConfig.resolver))
             : undefined;
 
           if (routeDefinition.rateLimit) {

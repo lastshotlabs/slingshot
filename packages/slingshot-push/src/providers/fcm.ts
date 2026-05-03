@@ -1,5 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
-import { TimeoutError, createConsoleLogger, withTimeout } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, withTimeout } from '@lastshotlabs/slingshot-core';
 import type { FirebaseServiceAccount } from '../types/config';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider } from './provider';

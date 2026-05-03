@@ -155,6 +155,7 @@ export function deserializeRunSnapshot(
     }
     return base;
   } catch (err) {
+    if (reportError) reportError(err);
     if (logger) {
       logger.error('Failed to deserialize run snapshot', { err: errInfo(err) });
     } else {

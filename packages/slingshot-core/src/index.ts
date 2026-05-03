@@ -93,6 +93,7 @@ export {
   validateGrant,
   SUPER_ADMIN_ROLE,
   PERMISSIONS_STATE_KEY,
+  PERMISSIONS_RUNTIME_KEY,
   getPermissionsState,
   getPermissionsStateOrNull,
 } from './permissions';
@@ -413,10 +414,16 @@ export type { PublishedInteractionsPeer } from './publishedInteractionsPeer';
 export { getPublishedInteractionsPeerOrNull } from './publishedInteractionsPeer';
 
 // --- pluginState ---
-export type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginState';
+export type {
+  EntityAdapterLookup,
+  PluginStateCarrier,
+  PluginStateKey,
+  PluginStateMap,
+} from './pluginState';
 /** Shared `pluginState` helpers for cross-plugin runtime access without full context coupling. */
 export {
   createPluginStateMap,
+  definePluginStateKey,
   getPluginState,
   getPluginStateOrNull,
   getPluginStateFromRequest,
@@ -425,7 +432,9 @@ export {
   maybeEntityAdapter,
   publishEntityAdaptersState,
   publishPluginState,
+  readPluginState,
   requireEntityAdapter,
+  requirePluginState,
   resolvePluginState,
   sealPluginState,
 } from './pluginState';
@@ -641,10 +650,17 @@ export type {
   PolicyInput,
   PolicyDecision,
   PolicyResolver,
+  PolicyToken,
+  PolicyTokenRef,
   EntityRoutePolicyConfig,
 } from './entityRouteConfig';
 /** Resolve and validate config-driven entity route declarations. */
-export { resolveOpConfig } from './entityRouteConfig';
+export {
+  definePolicy,
+  getPolicyResolverKey,
+  isPolicyToken,
+  resolveOpConfig,
+} from './entityRouteConfig';
 export { entityRouteConfigSchema, validateEntityRouteConfig } from './entityRouteConfigSchema';
 export type { EntityRouteConfigInput } from './entityRouteConfigSchema';
 

@@ -1,4 +1,7 @@
-import { POLLS_PLUGIN_STATE_KEY as CORE_POLLS_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
+import {
+  POLLS_PLUGIN_STATE_KEY as CORE_POLLS_PLUGIN_STATE_KEY,
+  definePluginStateKey,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Public types for `@lastshotlabs/slingshot-polls`.
@@ -234,7 +237,7 @@ export interface PollsPluginConfig {
 
 // --- Plugin state ---
 
-/** Runtime state stored in `ctx.pluginState.get(POLLS_PLUGIN_STATE_KEY)`. */
+/** Runtime state stored under `POLLS_RUNTIME_KEY`. */
 export interface PollsPluginState {
   readonly config: Readonly<PollsPluginConfig>;
   readonly pollAdapter: unknown;
@@ -247,6 +250,9 @@ export interface PollsPluginState {
     entity?: 'poll' | 'vote',
   ) => void;
 }
+
+/** Typed plugin-state key for the polls runtime slot. */
+export const POLLS_RUNTIME_KEY = definePluginStateKey<PollsPluginState>(POLLS_PLUGIN_STATE_KEY);
 
 // --- Vote guard error codes ---
 

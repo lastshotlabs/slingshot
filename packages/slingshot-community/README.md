@@ -23,7 +23,7 @@ When `authBridge` is `"auto"`, the plugin registers middleware that reads `actor
 This eliminates the most common handler file pattern. Use `"none"` (default) to wire the
 bridge yourself.
 
-**Code-first equivalent:**
+**Example:**
 
 ```typescript
 createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' });

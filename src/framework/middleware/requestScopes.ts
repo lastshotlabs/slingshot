@@ -11,10 +11,10 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import {
+  type AppEnv,
   type RequestScope,
   setRequestScopeStore,
 } from '@lastshotlabs/slingshot-core';
-import type { AppEnv } from '../../types';
 
 export function createRequestScopesMiddleware(
   scopes: readonly RequestScope[],

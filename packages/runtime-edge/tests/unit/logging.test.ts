@@ -200,6 +200,8 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
     configureKvIsrLogger(null);
   });
 
+  // The default kv-isr logger is built from `createConsoleLogger({ base: { component: 'runtime-edge' } })`,
+  // which emits a single JSON-serialized log line per call. Tests parse the line and assert on its fields.
   it('default logger calls console.error with event and no fields', () => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -208,7 +210,14 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
 
       // Invoke the default logger directly
       prev.error('test-event');
-      expect(errorSpy).toHaveBeenCalledWith('[runtime-edge] test-event');
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [line] = errorSpy.mock.calls[0] as [string];
+      const record = JSON.parse(line) as Record<string, unknown>;
+      expect(record).toMatchObject({
+        level: 'error',
+        msg: 'test-event',
+        component: 'runtime-edge',
+      });
 
       configureKvIsrLogger(prev);
     } finally {
@@ -223,7 +232,13 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
       const prev = configureKvIsrLogger(custom);
 
       prev.error('test-event', { key: 'value', count: 42 });
-      expect(errorSpy).toHaveBeenCalledWith('[runtime-edge] test-event', {
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [line] = errorSpy.mock.calls[0] as [string];
+      const record = JSON.parse(line) as Record<string, unknown>;
+      expect(record).toMatchObject({
+        level: 'error',
+        msg: 'test-event',
+        component: 'runtime-edge',
         key: 'value',
         count: 42,
       });
@@ -234,16 +249,21 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
     }
   });
 
-  it('default logger treats empty fields object as "no fields" (else branch)', () => {
+  it('default logger emits a structured record even when fields are empty', () => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     try {
       const custom = { error() {} };
       const prev = configureKvIsrLogger(custom);
 
-      // Empty fields object: Object.keys({}).length === 0, so the "no fields"
-      // branch fires — console.error is called with just the event string.
       prev.error('empty-fields', {});
-      expect(errorSpy).toHaveBeenCalledWith('[runtime-edge] empty-fields');
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [line] = errorSpy.mock.calls[0] as [string];
+      const record = JSON.parse(line) as Record<string, unknown>;
+      expect(record).toMatchObject({
+        level: 'error',
+        msg: 'empty-fields',
+        component: 'runtime-edge',
+      });
 
       configureKvIsrLogger(prev);
     } finally {

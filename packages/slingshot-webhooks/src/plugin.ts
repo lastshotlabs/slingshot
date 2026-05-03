@@ -34,7 +34,7 @@ import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { webhookPluginConfigSchema } from './types/config';
 import type { InboundProvider } from './types/inbound';
-import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
+import { WEBHOOKS_PLUGIN_STATE_KEY, WEBHOOKS_RUNTIME_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 import type { RateLimiter } from './lib/rateLimit';
@@ -619,7 +619,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           events.definitions,
         );
       }
-      publishPluginState(getPluginState(app), WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
+      publishPluginState(getPluginState(app), WEBHOOKS_RUNTIME_KEY, runtimeAdapter);
       // Resolve the framework-owned metrics emitter so the dispatcher
       // pipeline publishes counters/gauges/timings on hot paths.
       const ctx = getContextOrNull(app);

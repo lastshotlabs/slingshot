@@ -147,13 +147,94 @@ export type PolicyResolver<TRecord = unknown, TInput = unknown> = (
 ) => Promise<boolean | PolicyDecision>;
 
 /**
+ * Brand-only reference to a policy token. Used at the route-config field type so the
+ * framework can detect tokens without forcing the route config to know the resolver's
+ * record/input types.
+ */
+export interface PolicyTokenRef {
+  readonly key: string;
+  readonly __kind: 'policy-token';
+}
+
+/**
+ * Typed bundle of `(key, resolver)` produced by `definePolicy(...)`.
+ *
+ * Pass the token directly to `registerEntityPolicy(...)` and reference the same token
+ * value in `EntityRoutePolicyConfig.resolver` to get compile-time consistency between
+ * registration and use — typos in the policy key become compile errors instead of
+ * startup errors.
+ *
+ * @example
+ * ```ts
+ * import { definePolicy } from '@lastshotlabs/slingshot-core';
+ *
+ * export const PollSourcePolicy = definePolicy<PollRecord, PollInput>(
+ *   'polls:sourcePolicy',
+ *   async ({ record, userId }) => {
+ *     return record?.ownerId === userId;
+ *   },
+ * );
+ *
+ * // Register once in your plugin's setupMiddleware:
+ * registerEntityPolicy(app, PollSourcePolicy);
+ *
+ * // Reference in an entity route policy config:
+ * routes: {
+ *   defaults: {
+ *     permission: {
+ *       requires: 'polls:read',
+ *       policy: { resolver: PollSourcePolicy },  // typed reference, not a string
+ *     },
+ *   },
+ * }
+ * ```
+ */
+export interface PolicyToken<TRecord = unknown, TInput = unknown> extends PolicyTokenRef {
+  readonly resolver: PolicyResolver<TRecord, TInput>;
+}
+
+/**
+ * Define a typed `(key, resolver)` policy token.
+ *
+ * The returned token can be passed directly to `registerEntityPolicy(...)` and referenced
+ * in `EntityRoutePolicyConfig.resolver` — the framework uses `token.key` for the lookup
+ * and registration, so the same value in both places guarantees consistency.
+ */
+export function definePolicy<TRecord = unknown, TInput = unknown>(
+  key: string,
+  resolver: PolicyResolver<TRecord, TInput>,
+): PolicyToken<TRecord, TInput> {
+  return Object.freeze({ key, resolver, __kind: 'policy-token' as const });
+}
+
+/**
+ * Type guard used by the framework to detect a typed policy token at runtime.
+ */
+export function isPolicyToken(value: unknown): value is PolicyTokenRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as PolicyTokenRef).__kind === 'policy-token' &&
+    typeof (value as PolicyTokenRef).key === 'string'
+  );
+}
+
+/**
+ * Extract the registry lookup key from an `EntityRoutePolicyConfig.resolver` value.
+ *
+ * Accepts the legacy string form or a typed `PolicyToken` and returns the canonical
+ * string key used by the policy registry.
+ */
+export function getPolicyResolverKey(resolver: string | PolicyTokenRef): string {
+  return typeof resolver === 'string' ? resolver : resolver.key;
+}
+
+/**
  * Declarative reference to a policy resolver.
  *
- * The `resolver` field is an opaque string key looked up against the
- * policy registry on the `SlingshotContext` at `setupRoutes` time.
- * Registering a resolver under this key is the consumer package's
- * responsibility; failing to register is a **startup error**, not a
- * request-time error.
+ * The `resolver` field accepts either an opaque string key (legacy) or a typed
+ * `PolicyToken` from `definePolicy(...)`. Tokens give compile-time guarantees that
+ * the registered resolver and the route reference name the same key.
  *
  * @example
  * ```jsonc
@@ -167,11 +248,12 @@ export type PolicyResolver<TRecord = unknown, TInput = unknown> = (
  */
 export interface EntityRoutePolicyConfig {
   /**
-   * Resolver key. Opaque to the framework. Must be registered via
-   * `registerEntityPolicy(app, key, resolver)` during the consumer
-   * plugin's `setupMiddleware` phase.
+   * Resolver key (string) or typed `PolicyToken` from `definePolicy(...)`. When a token
+   * is passed, `token.key` is used for the registry lookup. Either form requires the
+   * resolver to have been registered via `registerEntityPolicy(...)` during the
+   * consumer plugin's `setupMiddleware` phase.
    */
-  resolver: string;
+  resolver: string | PolicyTokenRef;
   /**
    * Restrict the policy to a subset of operations. Each entry is either
    * a CRUD action (`'create' | 'list' | 'get' | 'update' | 'delete'`) or
@@ -558,6 +640,7 @@ export interface RouteEventScopeConfig {
 export interface RouteOperationConfig<
   TDtoVariant extends string = string,
   TInputVariant extends string = string,
+  TMwName extends string = string,
 > {
   /**
    * Auth strategy for this operation. Overrides `defaults.auth` when set.
@@ -605,11 +688,14 @@ export interface RouteOperationConfig<
    *
    * @remarks
    * Keys must exist in `EntityRouteConfig.middleware` — referencing an unknown name is a
-   * startup-time error. Middleware runs after auth/permission but before the operation
-   * handler. Each factory is resolved from the entity plugin config's `middleware` map at
-   * startup, not at request time.
+   * compile-time error when the route config narrows `TMwName` (i.e., when the entity
+   * declared its middleware map inline so const inference can capture the names). When
+   * the type is widened to plain `string`, the check falls back to startup-time.
+   * Middleware runs after auth/permission but before the operation handler. Each factory
+   * is resolved from the entity plugin config's `middleware` map at startup, not at
+   * request time.
    */
-  middleware?: string[];
+  middleware?: readonly TMwName[];
 
   /**
    * Idempotency handling for retried requests to this operation.
@@ -724,7 +810,8 @@ export type NamedOpHttpMethod = 'get' | 'head' | 'post' | 'put' | 'patch' | 'del
 export interface RouteNamedOperationConfig<
   TDtoVariant extends string = string,
   TInputVariant extends string = string,
-> extends RouteOperationConfig<TDtoVariant, TInputVariant> {
+  TMwName extends string = string,
+> extends RouteOperationConfig<TDtoVariant, TInputVariant, TMwName> {
   /**
    * HTTP method for this named operation. When omitted, the runtime infers a default
    * from the operation kind (`lookup` → `'get'`, `exists` → `'head'`, otherwise `'post'`
@@ -1012,9 +1099,9 @@ export interface EntityRouteDataScopeConfig {
  * };
  * ```
  */
-export interface RouteMiddlewareConfig {
-  [name: string]: true;
-}
+export type RouteMiddlewareConfig<TName extends string = string> = Readonly<{
+  [K in TName]: true;
+}>;
 
 // --- Cascade Event Handlers ---
 /**
@@ -1096,6 +1183,7 @@ export interface RouteCascadeConfig {
 export interface EntityRouteConfig<
   TDtoVariant extends string = string,
   TInputVariant extends string = string,
+  TMwName extends string = string,
 > {
   /**
    * Config for the `POST /entity` create route.
@@ -1104,7 +1192,7 @@ export interface EntityRouteConfig<
    * Merged on top of `defaults`. Auth, permission, rate-limit, events, and middleware
    * defined here override the corresponding keys in `defaults`.
    */
-  create?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  create?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Config for the `GET /entity/:id` get-by-ID route.
@@ -1113,7 +1201,7 @@ export interface EntityRouteConfig<
    * Merged on top of `defaults`. Override `auth` to `'none'` for public entity reads
    * while keeping other operations protected.
    */
-  get?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  get?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Config for the `GET /entity` list route.
@@ -1122,7 +1210,7 @@ export interface EntityRouteConfig<
    * Merged on top of `defaults`. Commonly set to `{ auth: 'none' }` when entities are
    * publicly browsable but writes require authentication.
    */
-  list?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  list?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Config for the `PATCH /entity/:id` partial-update route.
@@ -1131,7 +1219,7 @@ export interface EntityRouteConfig<
    * Merged on top of `defaults`. Use `ownerField` in `permission` to allow the resource
    * owner to update their own record without an explicit permission grant.
    */
-  update?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  update?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Config for the `DELETE /entity/:id` delete route.
@@ -1140,7 +1228,7 @@ export interface EntityRouteConfig<
    * Merged on top of `defaults`. Set a tighter `rateLimit` here than on `create` since
    * deletes are typically lower-frequency but higher-impact operations.
    */
-  delete?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  delete?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Named custom operations beyond the standard CRUD set.
@@ -1151,7 +1239,7 @@ export interface EntityRouteConfig<
    * same precedence rules as CRUD operations. Use `resolveOpConfig(routes, opName)` to get
    * the merged config for a given operation name at route-registration time.
    */
-  operations?: Record<string, RouteNamedOperationConfig<TDtoVariant, TInputVariant>>;
+  operations?: Record<string, RouteNamedOperationConfig<TDtoVariant, TInputVariant, TMwName>>;
 
   /**
    * Default config applied to all operations (merged, specific ops override).
@@ -1162,7 +1250,7 @@ export interface EntityRouteConfig<
    * repeating it on every operation, then selectively override individual operations
    * (e.g. `list: { auth: 'none' }`) as needed.
    */
-  defaults?: RouteOperationConfig<TDtoVariant, TInputVariant>;
+  defaults?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
    * Route keys to exclude from generation.
@@ -1203,7 +1291,7 @@ export interface EntityRouteConfig<
    * keeping this config serialisable and free of function references. The concrete factories
    * are resolved by name from the plugin config's `middleware` map at startup.
    */
-  middleware?: RouteMiddlewareConfig;
+  middleware?: RouteMiddlewareConfig<TMwName>;
 
   /** Cascade handlers that react to bus events and batch-modify related data. */
   cascades?: RouteCascadeConfig[];

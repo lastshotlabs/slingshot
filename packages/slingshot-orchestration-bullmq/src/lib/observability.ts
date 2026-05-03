@@ -6,7 +6,7 @@
 import type { Queue } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { QueueEvents } from 'bullmq';
-import type { Run, WorkflowRun } from '@lastshotlabs/slingshot-orchestration';
+import type { Run } from '@lastshotlabs/slingshot-orchestration';
 
 // ---------------------------------------------------------------------------
 // Metrics types
@@ -73,10 +73,8 @@ export interface ObservabilityState {
 // Factory
 // ---------------------------------------------------------------------------
 
-export function createObservabilityFns(
-  state: ObservabilityState,
-  structuredLogger: Logger,
-) {
+export function createObservabilityFns(state: ObservabilityState, structuredLogger: Logger) {
+  void structuredLogger;
   function getMetrics(): BullMQOrchestrationAdapterMetrics {
     return { ...state.metrics };
   }

@@ -3,7 +3,12 @@ import type {
   PluginStateMap,
   PolicyResolver,
 } from '@lastshotlabs/slingshot-core';
-import { publishPluginState, resolvePluginState } from '@lastshotlabs/slingshot-core';
+import {
+  definePluginStateKey,
+  publishPluginState,
+  readPluginState,
+  resolvePluginState,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Plugin state key under which the policy registry lives on
@@ -38,13 +43,17 @@ interface SlingshotEntityPluginState {
   [POLICY_REGISTRY_SLOT]?: EntityPolicyRegistry;
 }
 
+const SLINGSHOT_ENTITY_RUNTIME_KEY = definePluginStateKey<SlingshotEntityPluginState>(
+  SLINGSHOT_ENTITY_PLUGIN_STATE_KEY,
+);
+
 function ensureMutableEntityPluginState(
   pluginState: PluginStateMap,
   state: SlingshotEntityPluginState | undefined,
 ): SlingshotEntityPluginState {
   if (!state) {
     const nextState: SlingshotEntityPluginState = {};
-    publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+    publishPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY, nextState);
     return nextState;
   }
 
@@ -53,7 +62,7 @@ function ensureMutableEntityPluginState(
   }
 
   const nextState: SlingshotEntityPluginState = { ...state };
-  publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+  publishPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY, nextState);
   return nextState;
 }
 
@@ -69,9 +78,7 @@ export function getOrCreateEntityPolicyRegistry(
     throw new Error('[slingshot-entity] pluginState is not available for policy registry access');
   }
 
-  const existingState = pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
-    | SlingshotEntityPluginState
-    | undefined;
+  const existingState = readPluginState(pluginState, SLINGSHOT_ENTITY_RUNTIME_KEY);
   const state = ensureMutableEntityPluginState(pluginState, existingState);
   if (!state[POLICY_REGISTRY_SLOT]) {
     state[POLICY_REGISTRY_SLOT] = createEntityPolicyRegistry();

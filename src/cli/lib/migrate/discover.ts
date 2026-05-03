@@ -65,8 +65,7 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
   try {
     mod = (await import(resolvedPath)) as { default?: unknown };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to load app config at ${resolvedPath}: ${msg}`);
+    throw new Error(`Failed to load app config at ${resolvedPath}`, { cause: err });
   }
 
   if (!mod.default || typeof mod.default !== 'object') {

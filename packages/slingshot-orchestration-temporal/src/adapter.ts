@@ -7,7 +7,7 @@ import {
 } from '@temporalio/client';
 import { TimeoutError, withTimeout } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -252,7 +252,8 @@ export function createTemporalOrchestrationAdapter(
 ): OrchestrationAdapter & TemporalOrchestrationHealthCapability {
   const { structuredLogger: rawLogger, ...parsedInput } = rawOptions;
   const options = temporalAdapterOptionsSchema.parse(parsedInput);
-  const logger: Logger = rawLogger ?? noopLogger;
+  const logger: Logger =
+    rawLogger ?? createConsoleLogger({ base: { component: 'slingshot-temporal' } });
   const client = options.client as Client;
   const connection = options.connection as Connection | undefined;
   const tasks = new Map<string, AnyResolvedTask>();

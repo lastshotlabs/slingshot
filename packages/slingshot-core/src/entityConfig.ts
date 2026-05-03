@@ -807,7 +807,10 @@ export interface EntitySearchConfig {
  *
  * @template F - The fields record type, inferred from the `fields` object you pass.
  */
-export interface EntityConfig<F extends Record<string, FieldDef> = Record<string, FieldDef>> {
+export interface EntityConfig<
+  F extends Record<string, FieldDef> = Record<string, FieldDef>,
+  TMwName extends string = string,
+> {
   /** Entity name (PascalCase). */
   readonly name: string;
   /** Plugin namespace — prefixes table/collection names (e.g., 'chat'). */
@@ -836,7 +839,7 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
   readonly search?: EntitySearchConfig;
   /** Declarative route configuration. When set, route generation includes auth,
    *  permissions, rate limits, events, and middleware. */
-  readonly routes?: import('./entityRouteConfig').EntityRouteConfig;
+  readonly routes?: import('./entityRouteConfig').EntityRouteConfig<string, string, TMwName>;
   /** Consumer-configurable system field name overrides. */
   readonly systemFields?: EntitySystemFields;
   /** Storage-level field name overrides for backend adapters. */
@@ -1355,7 +1358,8 @@ export interface ResolvedEntityStorageConventions {
  */
 export interface ResolvedEntityConfig<
   F extends Record<string, FieldDef> = Record<string, FieldDef>,
-> extends EntityConfig<F> {
+  TMwName extends string = string,
+> extends EntityConfig<F, TMwName> {
   /** The primary key field name, extracted at definition time. */
   readonly _pkField: string;
   /** Table/collection name with namespace prefix applied. */
@@ -1428,10 +1432,13 @@ export interface ResolvedEntityConfig<
  * });
  * ```
  */
-export function defineEntity<F extends Record<string, FieldDef>>(
+export function defineEntity<
+  F extends Record<string, FieldDef>,
+  const TMwName extends string = string,
+>(
   name: string,
-  config: Omit<EntityConfig<F>, 'name'>,
-): ResolvedEntityConfig<F> {
+  config: Omit<EntityConfig<F, TMwName>, 'name'>,
+): ResolvedEntityConfig<F, TMwName> {
   const fields = config.fields;
 
   // Find primary key
@@ -1603,7 +1610,7 @@ export function defineEntity<F extends Record<string, FieldDef>>(
     onUpdate: config.conventions?.onUpdate,
   };
 
-  const resolved: ResolvedEntityConfig<F> = {
+  const resolved: ResolvedEntityConfig<F, TMwName> = {
     name,
     ...config,
     _pkField: pkField,

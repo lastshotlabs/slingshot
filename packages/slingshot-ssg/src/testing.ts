@@ -11,12 +11,12 @@ export { SsgExitCode, resolveExitCode } from './cli';
 /** Create a minimal valid SSG config for testing. */
 export function createTestSsgConfig(overrides?: {
   outDir?: string;
-  serverRoutesDir?: string;
-  assetsManifest?: string;
+  baseUrl?: string;
+  routes?: readonly string[];
 }) {
   return {
     outDir: overrides?.outDir ?? '/tmp/ssg-test-out',
-    serverRoutesDir: overrides?.serverRoutesDir ?? '/tmp/ssg-test-routes',
-    assetsManifest: overrides?.assetsManifest ?? '/tmp/ssg-test-manifest.json',
+    baseUrl: overrides?.baseUrl ?? 'https://example.test',
+    routes: overrides?.routes ?? ['/'],
   };
 }

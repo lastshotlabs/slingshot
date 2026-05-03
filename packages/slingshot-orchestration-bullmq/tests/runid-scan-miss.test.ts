@@ -228,7 +228,7 @@ describe('bullmq adapter runId scan miss', () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
       prefix: 'scan-miss',
-      logger,
+      structuredLogger: logger,
     });
 
     // Force the scan path: no jobs exist with the given runId, so Job.fromId returns
@@ -244,28 +244,23 @@ describe('bullmq adapter runId scan miss', () => {
     // so we expect at least 2 scan misses (one per queue) and no matches.
     expect(metrics.runIdScanMisses).toBeGreaterThanOrEqual(2);
 
+    // The structured logger receives `(message, fields)` for each call.
+    // We match the warning by message and read the structured fields.
     const missWarnings = warnings.filter(entry => {
-      const first = entry.args[0];
-      return (
-        typeof first === 'object' &&
-        first !== null &&
-        (first as { event?: unknown }).event === 'orchestration.bullmq.runIdScanMiss'
-      );
+      return typeof entry.args[0] === 'string' && entry.args[0] === 'Run ID scan miss';
     });
     expect(missWarnings.length).toBeGreaterThanOrEqual(2);
 
     for (const entry of missWarnings) {
-      const payload = entry.args[0] as {
-        event: string;
+      const fields = entry.args[1] as {
         runId: string;
         scannedCount: number;
         maxScan: number;
       };
-      expect(payload.event).toBe('orchestration.bullmq.runIdScanMiss');
-      expect(payload.runId).toBe('nonexistent-run-id');
-      expect(payload.maxScan).toBe(500);
-      expect(typeof payload.scannedCount).toBe('number');
-      expect(payload.scannedCount).toBeGreaterThanOrEqual(0);
+      expect(fields.runId).toBe('nonexistent-run-id');
+      expect(fields.maxScan).toBe(500);
+      expect(typeof fields.scannedCount).toBe('number');
+      expect(fields.scannedCount).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -283,7 +278,7 @@ describe('bullmq adapter runId scan miss', () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
       prefix: 'scan-hit',
-      logger,
+      structuredLogger: logger,
     });
 
     // Seed a job in the default task queue keyed by runId. Job.fromId returns it
@@ -307,12 +302,7 @@ describe('bullmq adapter runId scan miss', () => {
     expect(adapter.getMetrics().runIdScanMisses).toBe(0);
 
     const missWarnings = warnings.filter(entry => {
-      const first = entry.args[0];
-      return (
-        typeof first === 'object' &&
-        first !== null &&
-        (first as { event?: unknown }).event === 'orchestration.bullmq.runIdScanMiss'
-      );
+      return typeof entry.args[0] === 'string' && entry.args[0] === 'Run ID scan miss';
     });
     expect(missWarnings.length).toBe(0);
   });
@@ -331,7 +321,7 @@ describe('bullmq adapter runId scan miss', () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
       prefix: 'evicted-scan-miss',
-      logger,
+      structuredLogger: logger,
     });
 
     await adapter.start();
@@ -348,12 +338,12 @@ describe('bullmq adapter runId scan miss', () => {
 
     expect(adapter.getMetrics().runIdScanMisses).toBeGreaterThan(0);
     const missWarnings = warnings.filter(entry => {
-      const first = entry.args[0];
       return (
-        typeof first === 'object' &&
-        first !== null &&
-        (first as { event?: unknown }).event === 'orchestration.bullmq.runIdScanMiss' &&
-        (first as { runId?: unknown }).runId === evictedRunId
+        typeof entry.args[0] === 'string' &&
+        entry.args[0] === 'Run ID scan miss' &&
+        typeof entry.args[1] === 'object' &&
+        entry.args[1] !== null &&
+        (entry.args[1] as { runId?: unknown }).runId === evictedRunId
       );
     });
     expect(missWarnings.length).toBeGreaterThan(0);

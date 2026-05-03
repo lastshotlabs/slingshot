@@ -1,4 +1,7 @@
-import { ASSETS_PLUGIN_STATE_KEY as CORE_ASSETS_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
+import {
+  ASSETS_PLUGIN_STATE_KEY as CORE_ASSETS_PLUGIN_STATE_KEY,
+  definePluginStateKey,
+} from '@lastshotlabs/slingshot-core';
 import type { PaginatedResult, StorageAdapter } from '@lastshotlabs/slingshot-core';
 
 /** Stable plugin-state key published by `slingshot-assets`. */
@@ -276,7 +279,7 @@ export interface AssetAdapter {
 }
 
 /**
- * Runtime state stored in `SlingshotContext.pluginState` under `ASSETS_PLUGIN_STATE_KEY`.
+ * Runtime state stored in `SlingshotContext.pluginState` under `ASSETS_RUNTIME_KEY`.
  */
 export interface AssetsPluginState {
   /** Resolved asset adapter for the active store backend. */
@@ -286,6 +289,9 @@ export interface AssetsPluginState {
   /** Frozen plugin configuration. */
   readonly config: Readonly<AssetsPluginConfig>;
 }
+
+/** Typed plugin-state key for the assets runtime slot. */
+export const ASSETS_RUNTIME_KEY = definePluginStateKey<AssetsPluginState>(ASSETS_PLUGIN_STATE_KEY);
 
 /**
  * Domain-specific details for the assets plugin health snapshot.

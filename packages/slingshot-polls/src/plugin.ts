@@ -55,6 +55,7 @@ import {
 import type { PollAdapter, PollVoteAdapter } from './types/adapters';
 import {
   POLLS_PLUGIN_STATE_KEY,
+  POLLS_RUNTIME_KEY,
   type PollRecord,
   type PollVoteRecord,
   type PollsPluginConfig,
@@ -276,7 +277,7 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
         sweepHandle,
         registerSourceHandler,
       });
-      publishPluginState(getPluginState(app), POLLS_PLUGIN_STATE_KEY, state);
+      publishPluginState(getPluginState(app), POLLS_RUNTIME_KEY, state);
     },
 
     teardown() {

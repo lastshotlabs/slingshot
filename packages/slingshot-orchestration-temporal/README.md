@@ -86,7 +86,7 @@ void worker.run();
 - `createTemporalOrchestrationWorker()` for Node worker bootstrap
 - generated workflow-module support for handlers-directory and manifest worker bootstraps
 - deterministic run ID derivation and Temporal search-attribute helpers
-- adapter and worker validation schemas for manifest/code-first setup
+- adapter and worker validation schemas for plugin config
 
 ## Enterprise fit
 

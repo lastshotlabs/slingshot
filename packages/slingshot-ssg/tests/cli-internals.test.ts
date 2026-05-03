@@ -263,13 +263,27 @@ export const renderer = {
     const routesDir = join(tempDir, 'routes');
     await mkdir(routesDir, { recursive: true });
     const log = spyOn(console, 'log').mockImplementation(() => {});
+    const info = spyOn(console, 'info').mockImplementation(() => {});
 
     await expect(
       runCli(['--routes-dir', routesDir, '--renderer', join(tempDir, 'missing-renderer.ts')]),
     ).resolves.toBeUndefined();
-    expect(
-      log.mock.calls.some(([message]) => String(message).includes('No SSG routes found')),
-    ).toBe(true);
+    // The CLI emits info-level "No SSG routes found" through the structured
+    // logger. The default sink writes a JSON-encoded line to console.info, so
+    // we match against either the raw substring or the decoded msg field on
+    // either spy.
+    const matches = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.some(([message]) => {
+        const arg = String(message ?? '');
+        if (arg.includes('No SSG routes found')) return true;
+        try {
+          const record = JSON.parse(arg) as { msg?: unknown };
+          return typeof record.msg === 'string' && record.msg.includes('No SSG routes found');
+        } catch {
+          return false;
+        }
+      });
+    expect(matches(log) || matches(info)).toBe(true);
   });
 
   test('runCli renders routes in process and configures RSC when the renderer supports it', async () => {
@@ -337,6 +351,7 @@ export default {
       `export async function load() { return { data: {}, revalidate: false }; }\n`,
     );
     const log = spyOn(console, 'log').mockImplementation(() => {});
+    const info = spyOn(console, 'info').mockImplementation(() => {});
 
     await runCli([
       '--routes-dir',
@@ -358,9 +373,20 @@ export default {
     expect(JSON.parse(await readFile(configuredPath, 'utf8'))).toEqual({
       modules: { 'src/App.tsx': { id: 'app' } },
     });
-    expect(log.mock.calls.some(([message]) => String(message).includes('Done. 1 succeeded'))).toBe(
-      true,
-    );
+    // The completion message goes through the structured logger (info-level →
+    // console.info as a JSON line) so we match against either spy and decode.
+    const containsDone = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.some(([message]) => {
+        const arg = String(message ?? '');
+        if (arg.includes('Done. 1 succeeded')) return true;
+        try {
+          const record = JSON.parse(arg) as { msg?: unknown };
+          return typeof record.msg === 'string' && record.msg.includes('Done. 1 succeeded');
+        } catch {
+          return false;
+        }
+      });
+    expect(containsDone(log) || containsDone(info)).toBe(true);
   });
 
   test('runCli reports failed pages and exits with code 1', async () => {

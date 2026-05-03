@@ -1,21 +1,26 @@
 ---
-title: Escape Hatches
-description: When to drop below the package surface — raw plugins, executor overrides, manual wiring
+title: Lower-level Seams
+description: Overrides, extra routes, and manual wiring inside the package model — the seams beneath generated behavior
 ---
 
-Package-first authoring covers most apps. When it does not fit, the framework has escape
-hatches at every level.
+`definePackage` and the entity system cover most app code. When generated behavior needs
+tweaking, the framework exposes seams at every level so you can override one piece without
+abandoning the rest.
+
+For framework-level plugin authoring (auth, persistence, queues, custom middleware), see the
+[Plugin Interface](/slingshot/authoring/plugin-interface/) — that is a parallel first-class
+authoring tier, not a seam below packages.
 
 ## Decision guide
 
-| You need...                                          | Escape hatch                 |
+| You need...                                          | Reach for                    |
 | ---------------------------------------------------- | ---------------------------- |
 | Custom logic in a generated CRUD route               | Executor override            |
 | A new route inside the entity shell                  | Extra route                  |
 | Full control over entity storage construction        | Manual adapter wiring        |
-| Direct lifecycle control (middleware, teardown)      | Raw plugin                   |
 | Custom system field names for an existing database   | Entity `systemFields` config |
 | Custom storage conventions (Redis keys, table names) | Entity `conventions` config  |
+| Direct lifecycle control (async bootstrap, teardown) | `SlingshotPlugin` ([Plugin Interface](/slingshot/authoring/plugin-interface/)) |
 
 ## Executor overrides
 
@@ -115,9 +120,15 @@ entity({
 
 See [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) for the factories and manual wiring modes.
 
-## Raw plugins
+## Framework-level plugins
 
-Use a raw plugin when you need direct lifecycle control:
+`SlingshotPlugin` is the contract for framework-level plugins — auth, persistence, queues,
+custom middleware. It is a **parallel authoring tier** to `definePackage`, not a seam
+beneath it. If you find yourself needing async bootstrap, conditional middleware, or
+registrar registrations to model a feature, you are writing a plugin and should consult the
+full [Plugin Interface](/slingshot/authoring/plugin-interface/) reference.
+
+A short example for context:
 
 ```typescript
 // @skip-typecheck
@@ -129,41 +140,15 @@ const metricsPlugin: SlingshotPlugin = {
     app.use('*', async (c, next) => {
       const start = Date.now();
       await next();
-      const ms = Date.now() - start;
-      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - start}ms`);
     });
-  },
-  setupPost({ ctx }) {
-    console.log(`Metrics plugin ready. ${ctx.plugins.length} plugins loaded.`);
-  },
-  teardown() {
-    console.log('Metrics plugin shutting down');
   },
 };
 ```
 
-Register it in the app root:
-
-```typescript title="app.config.ts"
-// @skip-typecheck
-import { defineApp } from '@lastshotlabs/slingshot';
-
-export default defineApp({
-  port: 3000,
-  plugins: [metricsPlugin],
-  packages: [blogPackage],
-});
-```
-
-### Plugin lifecycle hooks
-
-| Hook              | When it runs                                   |
-| ----------------- | ---------------------------------------------- |
-| `setupMiddleware` | During middleware registration (before routes) |
-| `setupRoutes`     | During route registration                      |
-| `setupPost`       | After all routes are registered                |
-| `seed`            | During seed phase (for initial data setup)     |
-| `teardown`        | During graceful shutdown                       |
+See [Plugin Interface](/slingshot/authoring/plugin-interface/) for the full lifecycle and
+[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the package vs plugin
+decision guide.
 
 ## Entity system field conventions
 
@@ -195,18 +180,21 @@ const LegacyPost = defineEntity('LegacyPost', {
 
 ## The rule
 
-Stay on the package surface until you have a concrete reason to leave it. The escape hatches
-exist so you never hit a wall — not so you start at the lowest level.
+Stay on the package surface until you have a concrete reason to leave it. These seams exist
+so you never hit a wall — not so you start at the lowest level.
 
-Typical progression:
+Typical progression for app-side feature work:
 
-1. **Start with packages, entities, and route policy** — covers 90% of apps
+1. **Start with packages, entities, and route policy** — covers most app code
 2. **Add overrides or extra routes** — when generated behavior needs tweaking
 3. **Use capabilities and entityRef** — when packages need to talk to each other
-4. **Drop to raw plugins** — only for infrastructure concerns like metrics, tracing, or custom middleware registration
+
+For framework-level work — auth, persistence, queues, custom middleware — start at the
+[Plugin Interface](/slingshot/authoring/plugin-interface/) instead. That's a different tier,
+not a later step in the same progression.
 
 ## Next
 
-- [Plugin Interface](/slingshot/authoring/plugin-interface/) — full reference for raw plugin authoring
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — `SlingshotPlugin` contract for framework-level plugins
 - [Entity System](/slingshot/entity-system/) — the entity authoring and customization story
 - [Examples](/slingshot/examples/) — complete apps that combine packages, entities, and custom routes

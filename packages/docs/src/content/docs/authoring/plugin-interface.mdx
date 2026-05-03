@@ -5,7 +5,14 @@ description: The SlingshotPlugin contract - lifecycle phases, dependency orderin
 
 import { Aside } from '@astrojs/starlight/components';
 
-`SlingshotPlugin` is the integration contract between the framework and feature packages. It lives in `@lastshotlabs/slingshot-core`.
+`SlingshotPlugin` is the framework-level plugin authoring contract. Use it for auth,
+persistence, queues, search, and other infrastructure that needs async bootstrap, registrar
+registrations, or conditional middleware. It's a parallel first-class authoring tier to
+[`definePackage`](/slingshot/package-first/define-package/) — pick by the shape of what
+you're building, not by perceived level. See
+[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the decision guide.
+
+The type lives in `@lastshotlabs/slingshot-core`.
 
 ## The interface
 

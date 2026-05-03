@@ -258,11 +258,16 @@ describe('createKvIsrCache()', () => {
         // Yield to the microtask queue so the .catch() log handler on tagLocks fires
         await Promise.resolve();
 
-        // Error was logged by the catch handler on the tag lock chain
-        expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('tag-index-update-failed'),
-          expect.objectContaining({ message: expect.stringContaining('kv-quota-exceeded') }),
-        );
+        // Error was logged by the catch handler on the tag lock chain. The default logger
+        // emits a single JSON-serialized line; parse it and assert on the structured fields.
+        expect(consoleSpy).toHaveBeenCalledTimes(1);
+        const [line] = consoleSpy.mock.calls[0] as [string];
+        expect(line).toContain('tag-index-update-failed');
+        const record = JSON.parse(line) as Record<string, unknown>;
+        expect(record).toMatchObject({
+          msg: 'tag-index-update-failed',
+          message: expect.stringContaining('kv-quota-exceeded'),
+        });
 
         // The chain is cleared — subsequent calls for the same tag should not be blocked
         await expect(

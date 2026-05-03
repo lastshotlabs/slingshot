@@ -174,11 +174,13 @@ export function createMemoryAdapter(
           })();
           const nextAfter = new Date(Date.now() + 60_000);
           const computed = parseCronNext(sched.cron, nextAfter);
-          schedules.set(id, { ...schedules.get(id)!, nextRunAt: computed ?? undefined });
+          const current = schedules.get(id);
+          if (current) schedules.set(id, { ...current, nextRunAt: computed ?? undefined });
         } else {
           const delay = nextRun.getTime() - now.getTime();
           const timeout = setTimeout(() => {
-            if (schedules.get(id)?._timeout) clearTimeout(schedules.get(id)?._timeout!);
+            const existingTimeout = schedules.get(id)?._timeout;
+            if (existingTimeout) clearTimeout(existingTimeout);
             void (async () => {
               try {
                 if (sched.target.type === 'task') {
@@ -197,9 +199,11 @@ export function createMemoryAdapter(
             })();
             const nextAfter = new Date(Date.now() + 60_000);
             const computed = parseCronNext(sched.cron, nextAfter);
-            schedules.set(id, { ...schedules.get(id)!, nextRunAt: computed ?? undefined, _timeout: undefined });
+            const current = schedules.get(id);
+            if (current) schedules.set(id, { ...current, nextRunAt: computed ?? undefined, _timeout: undefined });
           }, delay);
-          schedules.set(id, { ...schedules.get(id)!, _timeout: timeout });
+          const current = schedules.get(id);
+          if (current) schedules.set(id, { ...current, _timeout: timeout });
         }
       }
     }, 30_000);
@@ -711,7 +715,10 @@ export function createMemoryAdapter(
       schedules.delete(scheduleId);
     },
     async listSchedules() {
-      return [...schedules.values()].map(({ _timeout: _, ...handle }) => handle);
+      return [...schedules.values()].map(({ _timeout, ...handle }) => {
+        void _timeout;
+        return handle;
+      });
     },
     health() {
       const details: Record<string, unknown> = {

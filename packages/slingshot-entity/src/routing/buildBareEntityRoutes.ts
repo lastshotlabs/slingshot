@@ -381,7 +381,7 @@ function applyEntityProjection(
   for (const [name, def] of Object.entries(config.fields)) {
     if (def.private) privateFields.add(name);
   }
-  let value = stripPrivateFields(data, privateFields);
+  const value = stripPrivateFields(data, privateFields);
   const variantKey = variant ?? 'default';
   const mapper = config.dto?.[variantKey];
   if (!mapper) {

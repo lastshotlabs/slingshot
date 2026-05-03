@@ -13,18 +13,20 @@ import type {
   AppEnv,
   CoreRegistrar,
   EntityRegistry,
+  PermissionsState,
   ResolvedEntityConfig,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  PERMISSIONS_STATE_KEY,
+  PERMISSIONS_RUNTIME_KEY,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
   createPluginStateMap,
   publishPluginState,
+  readPluginState,
 } from '@lastshotlabs/slingshot-core';
 import { pollFactories, pollVoteFactories } from './entities/factories';
 import { createPollsPlugin } from './plugin';
@@ -35,7 +37,7 @@ import type {
   PollsPluginConfig,
   PollsPluginState,
 } from './types/public';
-import { POLLS_PLUGIN_STATE_KEY } from './types/public';
+import { POLLS_RUNTIME_KEY } from './types/public';
 
 const memoryInfra = {} as unknown as StoreInfra;
 
@@ -206,8 +208,10 @@ export async function createPollsTestApp(
   // Attach minimal SlingshotContext so getContext(app) works in plugin lifecycle
   const pluginState = createPluginStateMap();
 
-  // Set up allow-all permissions for testing (no slingshot-permissions dependency needed)
-  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, {
+  // Set up allow-all permissions for testing (no slingshot-permissions dependency needed).
+  // The cast is intentional: tests publish a partial PermissionsState that lacks the real
+  // adapter, since these polls tests don't exercise the permissions adapter surface.
+  publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, {
     evaluator: {
       can() {
         return Promise.resolve(true);
@@ -223,7 +227,7 @@ export async function createPollsTestApp(
       },
     },
     adapter: null,
-  });
+  } as unknown as PermissionsState);
   attachContext(app, {
     pluginState,
     ws: null,
@@ -293,7 +297,7 @@ export async function createPollsTestApp(
   await plugin.setupRoutes?.(ctx);
   await plugin.setupPost?.(ctx);
 
-  const state = pluginState.get(POLLS_PLUGIN_STATE_KEY) as PollsPluginState | undefined;
+  const state = readPluginState(pluginState, POLLS_RUNTIME_KEY);
   if (!state) throw new Error('Polls plugin did not register state — lifecycle failed');
 
   return { app, state, bus };

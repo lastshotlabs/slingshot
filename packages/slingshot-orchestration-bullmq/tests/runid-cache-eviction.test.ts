@@ -231,7 +231,7 @@ describe('bullmq adapter runId cache eviction', () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
       prefix: 'cache-evict',
-      logger,
+      structuredLogger: logger,
     });
     const task = defineTask({
       name: 'cache-evict-task',
@@ -257,26 +257,20 @@ describe('bullmq adapter runId cache eviction', () => {
     const metrics = adapter.getMetrics();
     expect(metrics.runIdCacheEvictions).toBe(1);
 
-    // The eviction warning should have been emitted exactly once with the expected payload.
-    const evictionWarnings = warnings.filter(entry => {
-      const first = entry.args[0];
-      return (
-        typeof first === 'object' &&
-        first !== null &&
-        (first as { event?: unknown }).event === 'orchestration.bullmq.runIdCacheEvicted'
-      );
-    });
+    // The eviction warning should have been emitted exactly once. The structured
+    // logger receives `(message, fields)`, so we match on the message and read fields.
+    const evictionWarnings = warnings.filter(
+      entry => typeof entry.args[0] === 'string' && entry.args[0] === 'Run ID cache evicted',
+    );
     expect(evictionWarnings.length).toBe(1);
-    const payload = evictionWarnings[0]!.args[0] as {
-      event: string;
+    const fields = evictionWarnings[0]!.args[1] as {
       evictedRunId: string;
       cacheSize: number;
     };
-    expect(payload.event).toBe('orchestration.bullmq.runIdCacheEvicted');
-    expect(typeof payload.evictedRunId).toBe('string');
-    expect(payload.evictedRunId.length).toBeGreaterThan(0);
+    expect(typeof fields.evictedRunId).toBe('string');
+    expect(fields.evictedRunId.length).toBeGreaterThan(0);
     // After deleting the oldest entry but before inserting the new one, size = limit - 1.
-    expect(payload.cacheSize).toBe(RUN_ID_CACHE_LIMIT - 1);
+    expect(fields.cacheSize).toBe(RUN_ID_CACHE_LIMIT - 1);
   }, 30_000);
 
   test('falls back to console.warn when no logger is configured', async () => {
@@ -306,13 +300,17 @@ describe('bullmq adapter runId cache eviction', () => {
         await adapter.runTask(task.name, { value: `v${i}` });
       }
 
+      // The default logger writes a single JSON line per call to console.error
+      // (warn-level included). Parse each line and match by msg field.
       const evictionCalls = calls.filter(args => {
-        const payload = args[1];
-        return (
-          typeof payload === 'object' &&
-          payload !== null &&
-          (payload as { event?: unknown }).event === 'orchestration.bullmq.runIdCacheEvicted'
-        );
+        const line = args[0];
+        if (typeof line !== 'string') return false;
+        try {
+          const record = JSON.parse(line) as { msg?: unknown };
+          return record.msg === 'Run ID cache evicted';
+        } catch {
+          return false;
+        }
       });
       expect(evictionCalls.length).toBe(1);
       expect(adapter.getMetrics().runIdCacheEvictions).toBe(1);

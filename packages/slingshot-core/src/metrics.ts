@@ -1,4 +1,3 @@
-import { noopLogger } from './observability/logger';
 import type { Logger } from './observability/logger';
 
 /**

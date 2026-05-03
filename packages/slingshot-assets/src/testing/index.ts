@@ -16,13 +16,14 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  PERMISSIONS_STATE_KEY,
+  PERMISSIONS_RUNTIME_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
   createPluginStateMap,
   publishPluginState,
+  readPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -35,7 +36,7 @@ import { memoryStorage } from '../adapters/memory';
 import { createAssetFactories } from '../entities/factories';
 import { createAssetsPlugin } from '../plugin';
 import {
-  ASSETS_PLUGIN_STATE_KEY,
+  ASSETS_RUNTIME_KEY,
   type Asset,
   type AssetAdapter,
   type AssetsPluginConfig,
@@ -165,7 +166,7 @@ export async function createAssetsTestApp(
   });
   const frameworkConfig = createTestFrameworkConfig();
   const pluginState = createPluginStateMap();
-  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, createOwnerOnlyPermissionsState());
+  publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, createOwnerOnlyPermissionsState());
 
   attachContext(app, {
     pluginState,
@@ -214,7 +215,7 @@ export async function createAssetsTestApp(
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
-  const state = pluginState.get(ASSETS_PLUGIN_STATE_KEY) as AssetsPluginState | undefined;
+  const state = readPluginState(pluginState, ASSETS_RUNTIME_KEY);
   if (!state) {
     throw new Error('Assets plugin did not register state');
   }

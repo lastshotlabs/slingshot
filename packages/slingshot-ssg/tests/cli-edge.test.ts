@@ -308,6 +308,31 @@ describe('invalid breaker threshold values', () => {
 // 5. Path validation — non-existent routes directory
 // ---------------------------------------------------------------------------
 
+/**
+ * Match a substring against any console.log/console.info call. The CLI now uses
+ * a structured logger that emits info-level messages to console.info as a
+ * JSON-serialized line; help/usage output still goes to console.log.
+ */
+function consoleSpyMatches(
+  spies: Array<{ mock: { calls: unknown[][] } }>,
+  needle: string,
+): boolean {
+  for (const spy of spies) {
+    for (const call of spy.mock.calls) {
+      const arg = call[0];
+      if (typeof arg !== 'string') continue;
+      if (arg.includes(needle)) return true;
+      try {
+        const record = JSON.parse(arg) as { msg?: unknown };
+        if (typeof record.msg === 'string' && record.msg.includes(needle)) return true;
+      } catch {
+        // not JSON; already checked literal match above
+      }
+    }
+  }
+  return false;
+}
+
 describe('path validation', () => {
   test('runCli with non-existent routes dir returns early', async () => {
     const tempDir = makeTempDir();
@@ -319,6 +344,7 @@ describe('path validation', () => {
     );
 
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
 
     // The crawler returns empty for non-existent dir, so runCli logs
     // "No SSG routes found" and returns.
@@ -326,12 +352,10 @@ describe('path validation', () => {
       runCli(['--routes-dir', missingDir, '--renderer', rendererPath]),
     ).resolves.toBeUndefined();
 
-    const foundNoRoutes = logSpy.mock.calls.some(([msg]) =>
-      String(msg).includes('No SSG routes found'),
-    );
-    expect(foundNoRoutes).toBe(true);
+    expect(consoleSpyMatches([logSpy, infoSpy], 'No SSG routes found')).toBe(true);
 
     logSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 
   test('runCli with empty routes dir returns early with no-routes message', async () => {
@@ -340,17 +364,16 @@ describe('path validation', () => {
     mkdirSync(emptyDir, { recursive: true });
 
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
 
     await expect(
       runCli(['--routes-dir', emptyDir, '--renderer', join(tempDir, 'missing-renderer.ts')]),
     ).resolves.toBeUndefined();
 
-    const foundNoRoutes = logSpy.mock.calls.some(([msg]) =>
-      String(msg).includes('No SSG routes found'),
-    );
-    expect(foundNoRoutes).toBe(true);
+    expect(consoleSpyMatches([logSpy, infoSpy], 'No SSG routes found')).toBe(true);
 
     logSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 });
 

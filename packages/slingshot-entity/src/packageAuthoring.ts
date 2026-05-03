@@ -1,6 +1,7 @@
 import type {
   EntityAdapter,
   EntityChannelConfig,
+  FieldDef,
   InferCreateInput,
   InferEntity,
   InferOperationMethods,
@@ -91,10 +92,21 @@ export interface PackageEntityModuleImplementation {
 /** Package-owned entity module returned by `entity(...)`. */
 export interface PackageEntityModule<
   TAdapter = unknown,
-> extends SlingshotPackageEntityModuleLike<TAdapter> {
+  TMwName extends string = string,
+> extends SlingshotPackageEntityModuleLike<TAdapter, TMwName> {
   /** `slingshot-entity` implementation details consumed by the runtime compiler. */
   readonly implementation: PackageEntityModuleImplementation;
 }
+
+/**
+ * Extract the middleware-name union from a {@link ResolvedEntityConfig}'s second generic.
+ */
+type EntityMiddlewareNamesOf<TConfig> = TConfig extends ResolvedEntityConfig<
+  Record<string, FieldDef>,
+  infer TMwName
+>
+  ? TMwName
+  : never;
 
 type EntityOperationsInput =
   | Record<string, OperationConfig>
@@ -155,7 +167,10 @@ export function entity<
   readonly parentPath?: string;
   /** Adapter wiring override. Defaults to `{ mode: 'standard' }`. */
   readonly wiring?: EntityModuleWiring;
-}): PackageEntityModule<PackageEntityAdapterFor<TConfig, NormalizeOperationsInput<TOperations>>>;
+}): PackageEntityModule<
+  PackageEntityAdapterFor<TConfig, NormalizeOperationsInput<TOperations>>,
+  EntityMiddlewareNamesOf<TConfig>
+>;
 export function entity(config: {
   readonly config: ResolvedEntityConfig;
   readonly operations?: EntityOperationsInput;

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { bestEffort } from '../src/bestEffort';
@@ -29,16 +29,24 @@ afterEach(() => {
 
 describe('slingshot-core utilities', () => {
   test('bestEffort ignores success and logs rejected promises with the optional label', async () => {
-    warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = mock((_msg: string, _fields?: Record<string, unknown>) => {});
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn,
+      error: () => {},
+      child: () => logger,
+    } as unknown as Parameters<typeof bestEffort>[2];
 
-    bestEffort(Promise.resolve('ok'));
-    bestEffort(Promise.reject(new Error('boom')), '[jobs]');
+    bestEffort(Promise.resolve('ok'), undefined, logger);
+    bestEffort(Promise.reject(new Error('boom')), '[jobs]', logger);
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0]?.[0]).toBe('[jobs] best-effort operation failed:');
-    expect((warnSpy.mock.calls[0] ?? [])[1]).toBeInstanceOf(Error);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [msg, fields] = warn.mock.calls[0] as [string, Record<string, unknown>];
+    expect(msg).toBe('[jobs] best-effort operation failed');
+    expect(fields).toMatchObject({ err: expect.stringContaining('boom') });
   });
 
   test('deepFreeze recursively freezes nested objects and arrays', () => {

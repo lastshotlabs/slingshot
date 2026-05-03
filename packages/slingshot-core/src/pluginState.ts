@@ -83,11 +83,93 @@ export function createPluginStateMap(
 }
 
 /**
- * Publish plugin-owned state during framework bootstrap.
+ * Typed handle for a plugin-state slot.
+ *
+ * Created by {@link definePluginStateKey}. Use with {@link publishPluginState} and
+ * {@link readPluginState} to publish and read plugin state without `as Foo` casts at the
+ * read site. The phantom generic `__type` carries the value type through the type system.
  */
-export function publishPluginState(pluginState: PluginStateMap, key: string, value: unknown): void {
-  assertPluginStateWritable(pluginState, 'set', key);
-  pluginState.set(key, value);
+export interface PluginStateKey<T> {
+  readonly name: string;
+  /** Phantom generic — never set at runtime. */
+  readonly __type?: T;
+}
+
+/**
+ * Define a typed plugin-state key.
+ *
+ * @example
+ * ```ts
+ * export const AUTH_RUNTIME_KEY = definePluginStateKey<AuthRuntime>('slingshot-auth');
+ *
+ * // Provider:
+ * publishPluginState(ctx.pluginState, AUTH_RUNTIME_KEY, runtime);
+ *
+ * // Consumer:
+ * const runtime = readPluginState(ctx, AUTH_RUNTIME_KEY);  // typed AuthRuntime | undefined
+ * ```
+ */
+export function definePluginStateKey<T>(name: string): PluginStateKey<T> {
+  return Object.freeze({ name }) as PluginStateKey<T>;
+}
+
+/**
+ * Publish plugin-owned state during framework bootstrap.
+ *
+ * Accepts either a string key (legacy) or a typed {@link PluginStateKey} from
+ * {@link definePluginStateKey}. The typed form gives the value parameter compile-time
+ * type checking against the key's value type.
+ */
+export function publishPluginState(pluginState: PluginStateMap, key: string, value: unknown): void;
+export function publishPluginState<T>(
+  pluginState: PluginStateMap,
+  key: PluginStateKey<T>,
+  value: T,
+): void;
+export function publishPluginState(
+  pluginState: PluginStateMap,
+  key: string | PluginStateKey<unknown>,
+  value: unknown,
+): void {
+  const keyName = typeof key === 'string' ? key : key.name;
+  assertPluginStateWritable(pluginState, 'set', keyName);
+  pluginState.set(keyName, value);
+}
+
+/**
+ * Read a typed plugin-state slot.
+ *
+ * Returns `undefined` when the slot is absent. The return type is inferred from the typed
+ * key, replacing the `pluginState.get(KEY) as Foo | undefined` pattern with a compile-time
+ * checked lookup.
+ */
+export function readPluginState<T>(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+  key: PluginStateKey<T>,
+): T | undefined {
+  const pluginState = getPluginStateOrNull(input);
+  if (!pluginState) return undefined;
+  return pluginState.get(key.name) as T | undefined;
+}
+
+/**
+ * Read a typed plugin-state slot, throwing when absent.
+ *
+ * Use this when the slot is guaranteed to be present at the read site (e.g., the consumer
+ * declares the provider plugin as a dependency). Throws a startup-focused error otherwise.
+ */
+export function requirePluginState<T>(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+  key: PluginStateKey<T>,
+): T {
+  const value = readPluginState(input, key);
+  if (value === undefined) {
+    throw new Error(
+      `[slingshot-core] pluginState slot '${key.name}' is not available. ` +
+        'Ensure the providing plugin runs before this read and is declared as a dependency.',
+    );
+  }
+  return value;
 }
 
 /**

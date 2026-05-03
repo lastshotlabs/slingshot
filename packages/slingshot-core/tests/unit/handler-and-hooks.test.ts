@@ -151,7 +151,7 @@ describe('handler primitives and after hooks', () => {
 
   test('defineHandler logs and swallows after-hook failures', async () => {
     const { ctx } = createTestContext();
-    const consoleError = spyOn(console, 'error').mockImplementation(() => {});
+    const error = mock((_msg: string, _fields?: Record<string, unknown>) => {});
 
     const handler = defineHandler({
       name: 'items.after',
@@ -163,11 +163,15 @@ describe('handler primitives and after hooks', () => {
         },
       ],
       handle: async ({ input }) => ({ id: input.id }),
+      logger: { error },
     });
 
     await expect(handler.invoke({ id: 'item-1' }, { ctx })).resolves.toEqual({
       id: 'item-1',
     });
-    expect(consoleError).toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    const [msg, fields] = error.mock.calls[0] as [string, Record<string, unknown>];
+    expect(msg).toBe('After hook failed');
+    expect(fields).toMatchObject({ handler: 'items.after', error: 'after hook boom' });
   });
 });

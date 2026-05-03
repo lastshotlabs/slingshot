@@ -565,17 +565,22 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
       // Timed out → forced close
       expect(taskWorker!.closedForce).toBe(true);
 
-      // Should have logged the drain-timeout warning with a structured payload
+      // Should have logged the drain-timeout warning. The structured logger
+      // emits a JSON line per call; parse and match on msg + errorCode.
       const warnedDrainTimeout = consoleWarnSpy.mock.calls.some(call => {
-        const [msg, payload] = call;
-        return (
-          typeof msg === 'string' &&
-          msg.includes('force-closed') &&
-          msg.includes('drain timeout') &&
-          payload &&
-          typeof payload === 'object' &&
-          (payload as { errorCode?: string }).errorCode === 'WORKER_DRAIN_TIMEOUT'
-        );
+        const line = call[0];
+        if (typeof line !== 'string') return false;
+        try {
+          const record = JSON.parse(line) as { msg?: string; errorCode?: string };
+          return (
+            record.errorCode === 'WORKER_DRAIN_TIMEOUT' &&
+            typeof record.msg === 'string' &&
+            record.msg.includes('drain') &&
+            record.msg.includes('timeout')
+          );
+        } catch {
+          return false;
+        }
       });
       expect(warnedDrainTimeout).toBe(true);
     } finally {

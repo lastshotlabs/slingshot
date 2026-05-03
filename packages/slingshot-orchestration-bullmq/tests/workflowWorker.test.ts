@@ -13,6 +13,36 @@ import type {
 } from '@lastshotlabs/slingshot-orchestration';
 import { createBullMQWorkflowProcessor } from '../src/workflowWorker';
 
+/**
+ * Assert a console.error spy received a structured-logger line whose decoded
+ * `msg` matches the given substring.
+ */
+function expectStructuredErrorLogged(
+  spy: { mock: { calls: unknown[][] } },
+  msgIncludes: string,
+  fields?: Record<string, unknown>,
+): void {
+  const lines = spy.mock.calls
+    .map(args => (typeof args[0] === 'string' ? args[0] : ''))
+    .filter(Boolean);
+  const matched = lines.some(line => {
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      const msg = String(record['msg'] ?? '');
+      if (!msg.includes(msgIncludes)) return false;
+      if (fields) {
+        for (const [k, v] of Object.entries(fields)) {
+          if (record[k] !== v) return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  expect(matched).toBe(true);
+}
+
 class FakeTaskJob {
   constructor(
     public id: string,
@@ -105,14 +135,10 @@ describe('bullmq workflow processor', () => {
         } as never),
       ).rejects.toThrow(/missing 'workflowName' field/);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("missing 'workflowName' field"),
-        expect.objectContaining({
-          runId: 'workflow-corrupt-1',
-          workflowName: undefined,
-          errorCode: 'WORKFLOW_DATA_MISSING_WORKFLOW_NAME',
-        }),
-      );
+      expectStructuredErrorLogged(consoleErrorSpy, 'workflowName', {
+        runId: 'workflow-corrupt-1',
+        errorCode: 'WORKFLOW_DATA_MISSING_WORKFLOW_NAME',
+      });
     } finally {
       consoleErrorSpy.mockRestore();
     }
@@ -239,10 +265,7 @@ describe('bullmq workflow processor', () => {
       await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).resolves.toEqual({
         'deliver-step': { delivered: true },
       });
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[orchestration] workflow onStart hook failed',
-        expect.any(Error),
-      );
+      expectStructuredErrorLogged(consoleErrorSpy, 'onStart hook');
     } finally {
       consoleErrorSpy.mockRestore();
     }
@@ -507,10 +530,7 @@ describe('bullmq workflow processor', () => {
       await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).rejects.toThrow(
         'hard sequential failure',
       );
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[orchestration] workflow onFail hook failed',
-        expect.any(Error),
-      );
+      expectStructuredErrorLogged(consoleErrorSpy, 'onFail hook');
     } finally {
       consoleErrorSpy.mockRestore();
     }

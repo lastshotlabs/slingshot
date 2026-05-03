@@ -1,32 +1,32 @@
 ---
-title: 'Legacy: Plugin Overview'
-description: Where the canonical package path ends and the lower-level plugin contract begins
+title: Plugin Layer Reference
+description: The framework-level plugin lifecycle contract — when to use it, what it does, and how it relates to packages
 ---
 
 For app builders, start here instead:
 
-- [Escape Hatches: Raw Plugins](/slingshot/package-first/escape-hatches/)
-- [Package-First Authoring](/slingshot/package-first/)
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — the canonical reference for `SlingshotPlugin` authoring
+- [Package-First Authoring](/slingshot/package-first/) — the parallel tier for app-side feature composition
 
-This page is now the lower-level explanation of the plugin layer itself.
+This page is the deep-dive on what the plugin layer does internally.
 
 ## The short version
 
-- `packages` are the canonical app-builder surface
-- `plugins` are the lower-level lifecycle contract the framework still uses underneath
+- **`definePackage`** — declarative app-side feature composition (your blog, your billing module).
+- **`SlingshotPlugin`** — imperative framework-level plugin authoring (auth, persistence, queues, custom middleware).
 
-If you are building an app or authoring product modules, learn packages first.
-
-If you are integrating with lifecycle hooks directly, read on.
+Both are first-class. Pick by the shape of what you are building. See
+[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the decision guide.
 
 ## What the plugin layer is for
 
-The plugin layer exists for:
+`SlingshotPlugin` is the contract for:
 
-- direct lifecycle hooks
-- lower-level framework integrations
-- compatibility with plugin-only packages
-- escape-hatch work that does not fit the package authoring contracts
+- framework-level infrastructure (auth, persistence, queues, search, mail)
+- async bootstrap with lifecycle handoff between phases
+- registrar registrations (route auth, actor resolver, rate limit adapter, fingerprint builder, cache adapters, email templates)
+- conditional middleware that needs to mount based on resolved config
+- cross-cutting concerns like metrics, tracing, custom logging
 
 ## The lifecycle
 
@@ -50,6 +50,6 @@ That is why the docs now separate:
 
 ## Next
 
-- [Escape Hatches: Raw Plugins](/slingshot/package-first/escape-hatches/)
-- [Package-First Authoring](/slingshot/package-first/)
-- [Plugin Interface](/slingshot/authoring/plugin-interface/)
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — full `SlingshotPlugin` reference
+- [Package-First Authoring](/slingshot/package-first/) — the parallel tier for app-side feature composition
+- [Lower-level Seams](/slingshot/package-first/escape-hatches/) — overrides and manual wiring inside the package model

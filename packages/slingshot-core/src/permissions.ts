@@ -1,4 +1,4 @@
-import { getPluginStateOrNull } from './pluginState';
+import { definePluginStateKey, readPluginState } from './pluginState';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 
 // ── Models ──────────────────────────────────────────────────────────────────
@@ -416,14 +416,14 @@ export interface PermissionEvaluator {
 export const SUPER_ADMIN_ROLE = 'super-admin';
 
 /**
- * The key used to store `PermissionsState` in `SlingshotContext.pluginState`.
- * Used by slingshot-permissions to retrieve its runtime state from the context map.
+ * The plugin name for slingshot-permissions. Used for plugin registration, dependency
+ * declarations, and event ownership.
  */
 export const PERMISSIONS_STATE_KEY = 'slingshot-permissions';
 
 /**
- * Runtime state stored in `ctx.pluginState.get(PERMISSIONS_STATE_KEY)` by the
- * slingshot-permissions plugin after it initialises.
+ * Runtime state stored under `PERMISSIONS_RUNTIME_KEY` by the slingshot-permissions plugin
+ * after it initialises.
  */
 export interface PermissionsState {
   /** The high-level evaluator used to answer `can()` queries. */
@@ -435,6 +435,13 @@ export interface PermissionsState {
 }
 
 /**
+ * Typed plugin-state key for the permissions runtime slot.
+ */
+export const PERMISSIONS_RUNTIME_KEY = definePluginStateKey<PermissionsState>(
+  PERMISSIONS_STATE_KEY,
+);
+
+/**
  * Resolve `PermissionsState` from plugin state when the permissions plugin is present.
  *
  * Returns `null` for absent or malformed state so optional integrations can fail
@@ -443,8 +450,7 @@ export interface PermissionsState {
 export function getPermissionsStateOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PermissionsState | null {
-  const pluginState = getPluginStateOrNull(input);
-  const state = pluginState?.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+  const state = readPluginState(input, PERMISSIONS_RUNTIME_KEY);
   if (!state?.adapter || !state.registry || !state.evaluator) {
     return null;
   }

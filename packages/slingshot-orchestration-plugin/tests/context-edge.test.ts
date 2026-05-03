@@ -59,10 +59,18 @@ describe('getOrchestration — error behavior', () => {
     }
   });
 
-  test('throws TypeError when pluginState is missing from context', () => {
-    // getOrchestration accesses ctx.pluginState.get() — if pluginState is
-    // undefined the runtime throws a TypeError, not an OrchestrationError.
-    expect(() => getOrchestration({} as never)).toThrow(TypeError);
+  test('throws OrchestrationError when pluginState is missing from context', () => {
+    // getOrchestration uses readPluginState which gracefully handles a missing
+    // pluginState. The orchestration plugin then surfaces the absence as an
+    // OrchestrationError with an actionable message instead of a raw TypeError.
+    try {
+      getOrchestration({} as never);
+      throw new Error('expected getOrchestration to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OrchestrationError);
+      expect((err as OrchestrationError).code).toBe('ADAPTER_ERROR');
+      expect((err as OrchestrationError).message).toContain('not registered');
+    }
   });
 });
 

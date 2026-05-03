@@ -120,7 +120,11 @@ Dependencies ensure packages boot in the right order and make cross-package cont
 ## When NOT to use a package
 
 - **One-off routes** — if you just need a health check, put it in the app root
-- **Framework-level hooks** — use a raw plugin for lifecycle work like custom middleware registration
+- **Framework-level plugins** — auth, persistence, queues, custom middleware, anything that
+  needs lifecycle hooks or registrar registrations is a `SlingshotPlugin`, not a
+  `definePackage`. See [Plugin Interface](/slingshot/authoring/plugin-interface/). Both are
+  first-class authoring tiers; pick by the shape of what you're building, not by perceived
+  level.
 - **A single entity with no custom routes** — a package with just one entity is fine,
   but do not create package boundaries for complexity's sake
 
@@ -143,11 +147,19 @@ Dependencies ensure packages boot in the right order and make cross-package cont
     description="Cross-package contracts and entity references for loose coupling."
   />
   <LinkCard
-    title="Escape Hatches"
+    title="Lower-level Seams"
     href="/slingshot/package-first/escape-hatches/"
-    description="When to drop to raw plugins or lower-level patterns."
+    description="Overrides and manual wiring beneath generated package and entity behavior."
   />
 </CardGrid>
+
+## Framework-level plugins
+
+For auth, persistence, queues, search, or any infrastructure with async bootstrap and
+registrar registrations, write a `SlingshotPlugin` instead of a package. It's a parallel
+first-class authoring tier — see [Plugin Interface](/slingshot/authoring/plugin-interface/)
+and [Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the full
+distinction.
 
 ## Where entities fit
 

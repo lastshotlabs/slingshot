@@ -37,7 +37,7 @@ export function buildWsHostOnlyGuard(
     let hostCheck: boolean;
     try {
       hostCheck = await deps.isHost(sessionId, userId);
-    } catch (err) {
+    } catch {
       ack({
         type: 'game:error',
         sessionId,

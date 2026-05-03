@@ -8,14 +8,14 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
+  PERMISSIONS_RUNTIME_KEY,
   SUPER_ADMIN_ROLE,
   createConsoleLogger,
   getPluginState,
   publishPluginState,
+  readPluginState,
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
-import type { PermissionsState } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from './factories';
 import {
   type EvaluatorHealth,
@@ -238,10 +238,10 @@ export function createPermissionsPlugin(
     async setupMiddleware({ app, config: frameworkConfig }: PluginSetupContext) {
       const pluginState = getPluginState(app);
       // Idempotent — if another plugin already seeded permissions state, skip.
-      if (pluginState.has(PERMISSIONS_STATE_KEY)) {
+      const existing = readPluginState(pluginState, PERMISSIONS_RUNTIME_KEY);
+      if (existing) {
         // Reflect the externally-seeded state so getHealth() doesn't lie.
-        const existing = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
-        if (existing?.adapter) {
+        if (existing.adapter) {
           adapterAvailable = true;
           adapterNameRef =
             (existing.adapter as { name?: string }).name ??
@@ -295,14 +295,13 @@ export function createPermissionsPlugin(
 
       publishPluginState(
         pluginState,
-        PERMISSIONS_STATE_KEY,
+        PERMISSIONS_RUNTIME_KEY,
         Object.freeze({ evaluator, registry, adapter }),
       );
     },
 
     setupPost({ app, bus }: PluginSetupContext) {
-      const pluginState = getPluginState(app);
-      const permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+      const permsState = readPluginState(getPluginState(app), PERMISSIONS_RUNTIME_KEY);
       if (!permsState?.adapter) return;
       bus.on('auth:user.deleted', async ({ userId }) => {
         try {
@@ -320,8 +319,7 @@ export function createPermissionsPlugin(
     },
 
     async seed({ app, seedState }: PluginSeedContext) {
-      const pluginState = getPluginState(app);
-      const permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+      const permsState = readPluginState(getPluginState(app), PERMISSIONS_RUNTIME_KEY);
       if (!permsState?.adapter) return;
 
       for (const [key, value] of seedState) {

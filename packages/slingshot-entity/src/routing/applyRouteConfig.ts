@@ -24,6 +24,7 @@ import type {
 import {
   HEADER_IDEMPOTENCY_KEY,
   getActor,
+  getPolicyResolverKey,
   getRequestTenantId,
   getSlingshotCtx,
   hmacSign,
@@ -478,7 +479,7 @@ export function applyRouteConfig(
             if (!hasPostFetchPolicyPass) {
               const policyConfig = resolvePolicyConfig(opConfig, routeConfig);
               if (policyConfig && deps.policyResolvers && policyAppliesToOp(policyConfig, opName)) {
-                const policyResolver = deps.policyResolvers.get(policyConfig.resolver);
+                const policyResolver = deps.policyResolvers.get(getPolicyResolverKey(policyConfig.resolver));
                 if (policyResolver) {
                   const input = await safeReadJsonBody(c);
                   await resolvePolicy({
@@ -680,7 +681,7 @@ export function applyRouteConfig(
             if (!hasPostFetchPolicyPass) {
               const policyConfig = resolvePolicyConfig(opConfig, routeConfig);
               if (policyConfig && deps.policyResolvers && policyAppliesToOp(policyConfig, opName)) {
-                const policyResolver = deps.policyResolvers.get(policyConfig.resolver);
+                const policyResolver = deps.policyResolvers.get(getPolicyResolverKey(policyConfig.resolver));
                 if (policyResolver) {
                   const input = await safeReadJsonBody(c);
                   await resolvePolicy({

@@ -786,11 +786,11 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   let dlqStore: DlqStore;
   let isInMemoryDlq: boolean;
 
-  if (hasDlqStoreOverride) {
-    dlqStore = config.dlqStore!;
+  if (hasDlqStoreOverride && config.dlqStore) {
+    dlqStore = config.dlqStore;
     isInMemoryDlq = false;
-  } else if (hasDlqStoragePath) {
-    fileDlqStore = createFileDlqStore({ storagePath: dlqStoragePath!, maxEntries: maxDeadLetterEntries });
+  } else if (hasDlqStoragePath && dlqStoragePath) {
+    fileDlqStore = createFileDlqStore({ storagePath: dlqStoragePath, maxEntries: maxDeadLetterEntries });
     dlqStore = fileDlqStore;
     isInMemoryDlq = false;
   } else {
@@ -1109,7 +1109,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     err: unknown,
   ): void {
     if (!events) return;
-    (events.publish as any)(
+    (events.publish as (key: string, payload: unknown, opts?: unknown) => void)(
       'search:sync.failed',
       {
         indexName,
@@ -1140,7 +1140,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       err: err instanceof Error ? err.message : String(err),
     });
     if (!events) return;
-    (events.publish as any)(
+    (events.publish as (key: string, payload: unknown, opts?: unknown) => void)(
       'search:sync.dead',
       {
         indexName,
@@ -1166,7 +1166,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       err: entry.error,
     });
     if (!events) return;
-    (events.publish as any)(
+    (events.publish as (key: string, payload: unknown, opts?: unknown) => void)(
       'search:dlq.evicted',
       {
         indexName: entry.indexName,
@@ -1198,7 +1198,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       reason,
     });
     if (!events) return;
-    (events.publish as any)(
+    (events.publish as (key: string, payload: unknown, opts?: unknown) => void)(
       'search:geoTransform.skipped',
       {
         indexName,

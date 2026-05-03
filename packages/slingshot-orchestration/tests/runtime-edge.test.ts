@@ -109,20 +109,22 @@ describe('createOrchestrationRuntime — runWorkflow with object ref vs string',
 });
 
 describe('createOrchestrationRuntime — supports()', () => {
-  test('memory adapter does not support signals', () => {
+  test('memory adapter supports signals', () => {
+    // The memory adapter implements signal/schedule/listSchedules so it can
+    // back the same surface as the durable adapters in tests and local dev.
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
     });
-    expect(runtime.supports('signals')).toBe(false);
+    expect(runtime.supports('signals')).toBe(true);
   });
 
-  test('memory adapter does not support scheduling', () => {
+  test('memory adapter supports scheduling', () => {
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
     });
-    expect(runtime.supports('scheduling')).toBe(false);
+    expect(runtime.supports('scheduling')).toBe(true);
   });
 
   test('memory adapter supports observability', () => {
@@ -150,8 +152,11 @@ describe('createOrchestrationRuntime — supports()', () => {
   });
 });
 
-describe('createOrchestrationRuntime — signal, schedule reject when unsupported', () => {
-  test('signal rejects with unsupported error', async () => {
+describe('createOrchestrationRuntime — signal, schedule are wired through to the memory adapter', () => {
+  test('signal rejects when the run does not exist', async () => {
+    // The memory adapter implements signal but rejects unknown runs with
+    // RUN_NOT_FOUND. The runtime should propagate that rather than reporting
+    // an unsupported-capability error.
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
@@ -159,31 +164,26 @@ describe('createOrchestrationRuntime — signal, schedule reject when unsupporte
 
     let caught: unknown;
     try {
-      await runtime.signal('run-1', 'pause', {});
+      await runtime.signal('run-does-not-exist', 'pause', {});
     } catch (err) {
       caught = err;
     }
     expect(caught).toBeInstanceOf(OrchestrationError);
-    expect((caught as OrchestrationError).code).toBe('CAPABILITY_NOT_SUPPORTED');
+    expect((caught as OrchestrationError).code).not.toBe('CAPABILITY_NOT_SUPPORTED');
   });
 
-  test('schedule rejects with unsupported error', async () => {
+  test('schedule and unschedule round-trip through the memory adapter', async () => {
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
     });
 
-    let caught: unknown;
-    try {
-      await runtime.schedule({ type: 'task', name: 'noop-task' }, '* * * * *');
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(OrchestrationError);
-    expect((caught as OrchestrationError).code).toBe('CAPABILITY_NOT_SUPPORTED');
+    const handle = await runtime.schedule({ type: 'task', name: 'noop-task' }, '* * * * *');
+    expect(handle.id).toBeTruthy();
+    await runtime.unschedule(handle.id);
   });
 
-  test('unschedule rejects with unsupported error', async () => {
+  test('unschedule rejects when the schedule does not exist', async () => {
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
@@ -191,26 +191,21 @@ describe('createOrchestrationRuntime — signal, schedule reject when unsupporte
 
     let caught: unknown;
     try {
-      await runtime.unschedule('sched-1');
+      await runtime.unschedule('sched-does-not-exist');
     } catch (err) {
       caught = err;
     }
     expect(caught).toBeInstanceOf(OrchestrationError);
   });
 
-  test('listSchedules rejects with unsupported error', async () => {
+  test('listSchedules returns the empty list on a fresh memory adapter', async () => {
     const runtime = createOrchestrationRuntime({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
     });
 
-    let caught: unknown;
-    try {
-      await runtime.listSchedules();
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(OrchestrationError);
+    const schedules = await runtime.listSchedules();
+    expect(schedules).toEqual([]);
   });
 
   test('listRuns rejects with unsupported error when adapter lacks observability', async () => {

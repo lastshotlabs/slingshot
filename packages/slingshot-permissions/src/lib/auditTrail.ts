@@ -9,13 +9,7 @@
  * adapter with `withAuditTrail()`.
  */
 
-import type {
-  EvaluationScope,
-  Logger,
-  PermissionGrant,
-  PermissionsAdapter,
-  SubjectRef,
-} from '@lastshotlabs/slingshot-core';
+import type { Logger, PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
 
 // ── Public Types ──────────────────────────────────────────────────────────────
@@ -174,11 +168,13 @@ export function createMemoryAuditTrailStore(
       if (filter?.tenantId !== undefined) {
         result = result.filter(e => e.tenantId === filter.tenantId);
       }
-      if (filter?.from !== undefined) {
-        result = result.filter(e => e.timestamp >= filter.from!);
+      const from = filter?.from;
+      if (from !== undefined) {
+        result = result.filter(e => e.timestamp >= from);
       }
-      if (filter?.to !== undefined) {
-        result = result.filter(e => e.timestamp <= filter.to!);
+      const to = filter?.to;
+      if (to !== undefined) {
+        result = result.filter(e => e.timestamp <= to);
       }
 
       // Reverse-chronological (newest first)

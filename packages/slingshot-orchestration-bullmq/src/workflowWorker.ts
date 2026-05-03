@@ -1,6 +1,6 @@
 import type { Job, Queue, QueueEvents } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { OrchestrationError, generateRunId } from '@lastshotlabs/slingshot-orchestration';
 import type {
   AnyResolvedTask,
@@ -84,7 +84,8 @@ export function createBullMQWorkflowProcessor(options: {
   eventSink?: OrchestrationEventSink;
   logger?: Logger;
 }) {
-  const logger = options.logger ?? noopLogger;
+  const logger =
+    options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
   function resolveTask(step: StepEntry): AnyResolvedTask {
     if (step.taskRef) return step.taskRef;
     const task = options.taskRegistry.get(step.task);

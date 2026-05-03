@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   OrchestrationEventSink,
@@ -53,7 +53,8 @@ export function createBullMQTaskProcessor(options: {
   eventSink?: OrchestrationEventSink;
   logger?: Logger;
 }) {
-  const logger = options.logger ?? noopLogger;
+  const logger =
+    options.logger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
   return async function process(job: Job<Record<string, unknown>>) {
     if (job.name === '__slingshot_sleep') {
       return { sleptMs: job.data['durationMs'] };

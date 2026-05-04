@@ -1,0 +1,219 @@
+---
+title: Package Contracts
+description: Provider-owned public surface for capabilities and entity refs, with explicit exposure modes and boot-time validation
+---
+
+A **package contract** is the provider-owned, typed public surface of a package: capabilities first, explicitly narrowed public entity refs second. Contracts make package boundaries explicit and enforce them at compile time and at boot.
+
+This is the recommended path for any package whose public surface is consumed by another package. The lower-level [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) primitives still exist — contracts compose them — but reach for them directly only when a contract is overkill or unavailable.
+
+## What a contract gives you
+
+- **Provider-owned identity.** A capability or public entity ref carries the contract name as metadata, so the framework can validate cross-package wiring at boot.
+- **Explicit publication.** You can't accidentally expose an entity to other packages — every public ref requires an exposure decision (`readonly`, `as`, or `unsafeFullAdapter`).
+- **Narrowed adapter surface.** `readonly([...])` produces a runtime-wrapped adapter that exposes only the named methods. Consumers can't call `delete()` if you only published `getById` and `list`.
+- **Boot-time validation.** Missing dependencies, mismatched contract ownership, and unimplemented capabilities throw with source-located error messages.
+
+## A complete example
+
+```typescript title="src/packages/matches/public.ts"
+// @skip-typecheck
+import { defineEntity, definePackageContract, entity, field } from '@lastshotlabs/slingshot';
+
+export const Matches = definePackageContract('matches');
+
+const Match = defineEntity('Match', {
+  namespace: 'matches',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    homeTeam: field.string(),
+    awayTeam: field.string(),
+  },
+});
+
+const matchModule = entity({ config: Match });
+
+export const MatchRefs = Matches.publicEntities({
+  Match: Matches.publicEntity(matchModule).readonly(['getById', 'list']),
+});
+
+export interface MatchSeatService {
+  approve(args: { matchId: string; userId: string }): Promise<{ seatId: string }>;
+}
+
+export const MatchSeats = Matches.capability<MatchSeatService>('seats');
+```
+
+```typescript title="src/packages/matches/index.ts"
+// @skip-typecheck
+import { provideCapability } from '@lastshotlabs/slingshot';
+import { Matches, MatchSeats } from './public';
+
+export const matchesPackage = Matches.definePackage({
+  mountPath: '/api',
+  entities: [matchModule],
+  domains: [/* ... */],
+  capabilities: {
+    provides: [
+      provideCapability(MatchSeats, () => ({
+        async approve({ matchId, userId }) {
+          return { seatId: `seat-${matchId}-${userId}` };
+        },
+      })),
+    ],
+  },
+});
+```
+
+```typescript title="src/packages/gameplay/index.ts"
+// @skip-typecheck
+import { definePackageContract, domain, route } from '@lastshotlabs/slingshot';
+import { Matches, MatchRefs, MatchSeats } from '../matches/public';
+
+export const Gameplay = definePackageContract('gameplay');
+
+export const gameplayPackage = Gameplay.definePackage({
+  dependencies: [Matches],
+  capabilities: { requires: [MatchSeats] },
+  domains: [
+    domain({
+      name: 'gameplay',
+      basePath: '/gameplay',
+      routes: [
+        route.post({
+          path: '/approve-seat/:matchId',
+          auth: 'userAuth',
+          handler: async ({ params, entities, capabilities, respond }) => {
+            const matches = entities.get(MatchRefs.Match);
+            const match = await matches.getById(params.matchId);
+            if (!match) return respond.notFound();
+
+            const seats = capabilities.require(MatchSeats);
+            const seat = await seats.approve({ matchId: params.matchId, userId: 'me' });
+            return respond.json({ seat });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+A few things to notice:
+
+- The contract is declared in `public.ts` so consumers can import it without pulling the package's implementation.
+- `MatchRefs.Match` is typed as a narrowed adapter — `entities.get(MatchRefs.Match)` returns an object exposing only `getById` and `list`. Any other method is both a TypeScript error and a runtime `undefined`.
+- `Matches.definePackage(...)` injects `name: 'matches'` and converts `dependencies: [Matches]` to the resolved name list.
+- Boot validation refuses to start the app if `gameplay` requires `MatchSeats` without declaring `Matches` as a dependency.
+
+## `publicEntity` exposure modes
+
+Every public entity ref must pick one mode. Raw entity modules are rejected at the type level by `publicEntities(...)` — this is intentional; publishing an entity is always a deliberate decision.
+
+### `readonly([...])` — narrowed and enforced
+
+The recommended default. The framework validates the method names against the underlying adapter at TypeScript compile time, and wraps the adapter at lookup time so other methods aren't reachable.
+
+This enforcement applies everywhere the framework resolves the ref: `ctx.entities.get(...)` in handlers, `services.entities.get(...)` in out-of-request hooks, and route-level `permissionAdapter` / `parentAdapter` lookups used by the permission middleware. The boundary is honest end-to-end. Permission and parent adapters today only call `.getById(id)`, so any contract that publishes `getById` works as a permission adapter.
+
+```typescript
+// @skip-typecheck
+const PostRefs = Posts.publicEntities({
+  Post: Posts.publicEntity(postModule).readonly(['getById', 'list']),
+});
+```
+
+```typescript
+// @skip-typecheck
+const post = entities.get(PostRefs.Post);
+await post.getById('id-1'); // ok
+await post.list({});        // ok
+// @ts-expect-error — `delete` is not part of the public surface
+await post.delete('id-1');
+```
+
+Methods declared in `readonly([...])` become non-optional in the resulting type — declaring a method publicly asserts it exists at runtime. If the underlying adapter doesn't implement it, the framework throws when the ref is resolved with a source-located error.
+
+### `as<T>()` — custom typed shape
+
+Use when you want to project the entity into a hand-rolled adapter type, e.g., to alias method names or map field shapes. The shape must be a structural subset of the underlying adapter — extra keys produce a `never` return.
+
+```typescript
+// @skip-typecheck
+interface PublicPostAdapter {
+  fetch(id: string): Promise<{ id: string; title: string } | null>;
+}
+
+const PostRefs = Posts.publicEntities({
+  Post: Posts.publicEntity(postModule).as<PublicPostAdapter>(),
+});
+```
+
+`as<T>()` is type-only — the runtime returns the full underlying adapter. There is no method-name list for the framework to enforce.
+
+### `unsafeFullAdapter()` — full CRUD exposure
+
+Opts out of narrowing entirely. The full adapter (every CRUD method, every operation) is exposed. Reach for this when the consumer genuinely needs the whole surface and `as<T>()` would be repetitive.
+
+```typescript
+// @skip-typecheck
+const PostRefs = Posts.publicEntities({
+  Post: Posts.publicEntity(postModule).unsafeFullAdapter(),
+});
+```
+
+The verbose name is the friction. Full CRUD exposure should feel exceptional.
+
+## `contract.capability` vs `defineCapability`
+
+`Matches.capability<T>(name)` produces a `PackageCapabilityHandle` that carries `contract: 'matches'` as metadata. The runtime equivalent of free-floating `defineCapability<T>(name)` still works for legacy code, but the contract-bound form gives you:
+
+- Static rejection if the wrong package tries to provide the capability (`contract.definePackage(...)` throws).
+- Boot validation that consumers declare the providing package as a dependency.
+- Source-located error messages when wiring is wrong.
+
+Free-floating capabilities still resolve normally for backward compatibility.
+
+## What `contract.definePackage` validates
+
+When you call `Matches.definePackage({...})`:
+
+1. The `name` field is injected from the contract — passing it explicitly is not allowed.
+2. Each entry in `dependencies` is a contract object (not a string); names are extracted automatically.
+3. Every provided capability with a `contract` field must own that capability — otherwise the call throws with a source-located error.
+4. Every entity that the contract has published via `publicEntities(...)` must appear in `entities`. The contract collects publications across the file, so missing registrations are caught at authoring time, not at boot.
+
+## What boot validation adds
+
+The framework's package compiler runs after every package's `definePackage` and walks the resulting graph:
+
+- **Duplicate package names** are rejected.
+- **Provided capabilities owned by a foreign contract** are rejected (defense-in-depth check, also enforced at authoring).
+- **Contract-bound capabilities** must be required by packages that declare the providing package as a dependency.
+- **Published capabilities** must have an implementation in `provides`.
+- **Published entities** must be registered in `entities`.
+
+Errors include the source location of the offending declaration when available.
+
+## When to use a contract
+
+Use one whenever your package has a public surface that another package consumes. That covers most real packages.
+
+If a package has no consumers — it just owns routes, entities, and middleware for its own use — `definePackage(...)` directly is still fine. Contracts are about boundaries between packages, not boilerplate for every package.
+
+## When NOT to use a contract
+
+- **One package, one app, no cross-package consumers.** A blog package with no other packages reading its data is just `definePackage`.
+- **Framework-level plugins.** Auth, persistence, queues, and other plugins use the `SlingshotPlugin` interface, not packages or contracts.
+
+## Next in your journey
+
+Your packages now publish typed public surfaces. The next steps in composing the app are:
+
+1. **[Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)** — when one package needs to react to another without coupling, fire and subscribe to typed events.
+2. **[Plugin Interface](/slingshot/authoring/plugin-interface/)** — when you need framework-level infrastructure (auth, persistence, queues, search) with lifecycle hooks.
+
+Reference for later:
+
+- [definePackage](/slingshot/package-first/define-package/) — the package authoring surface contracts call into.
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — the lower-level mechanism contracts wrap.

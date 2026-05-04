@@ -15,6 +15,7 @@ import {
   type TypedRouteRequestSpec,
   type TypedRouteResponseSpec,
   type TypedRouteResponses,
+  applyPublicEntityExposure,
   createRoute,
   createRouter,
   defineEvent,
@@ -359,9 +360,14 @@ function buildPackageEntityReader(app: object, packageName: string) {
         }) as TValue;
       }
       if (isPackageEntityRef(target)) {
-        return requireEntityAdapter(app, {
-          plugin: target.plugin ?? packageName,
+        const adapter = requireEntityAdapter(app, {
+          plugin: target.plugin ?? target.contract ?? packageName,
           entity: target.entity,
+        });
+        return applyPublicEntityExposure(adapter, target.exposure, {
+          entity: target.entity,
+          contract: target.contract,
+          source: target.source,
         }) as TValue;
       }
       return requireEntityAdapter(app, {
@@ -484,9 +490,14 @@ function resolvePackageEntityRef(
   ref: PackageEntityRef | undefined,
 ): BareEntityAdapter | undefined {
   if (!ref) return undefined;
-  return requireEntityAdapter(app, {
-    plugin: ref.plugin ?? packageName,
+  const adapter = requireEntityAdapter(app, {
+    plugin: ref.plugin ?? ref.contract ?? packageName,
     entity: ref.entity,
+  });
+  return applyPublicEntityExposure(adapter, ref.exposure, {
+    entity: ref.entity,
+    contract: ref.contract,
+    source: ref.source,
   }) as BareEntityAdapter;
 }
 
@@ -1018,25 +1029,84 @@ function createPackagePlugin(
 }
 
 export function compilePackages(packages: readonly SlingshotPackageDefinition[]): CompiledPackages {
+  const packagesByName = new Map<string, SlingshotPackageDefinition>();
+  for (const pkg of packages) {
+    if (packagesByName.has(pkg.name)) {
+      throw new Error(`Package '${pkg.name}' is registered more than once`);
+    }
+    packagesByName.set(pkg.name, pkg);
+  }
+
   const capabilityProviders = new Map<string, string>();
   for (const pkg of packages) {
-    for (const capability of pkg.capabilities.provides) {
-      const existing = capabilityProviders.get(capability.capability.name);
+    for (const provided of pkg.capabilities.provides) {
+      const handle = provided.capability;
+      const existing = capabilityProviders.get(handle.name);
       if (existing && existing !== pkg.name) {
         throw new Error(
-          `Package capability '${capability.capability.name}' is published by both '${existing}' and '${pkg.name}'`,
+          `Package capability '${handle.name}' is published by both '${existing}' and '${pkg.name}'`,
         );
       }
-      capabilityProviders.set(capability.capability.name, pkg.name);
+      if (handle.contract && handle.contract !== pkg.name) {
+        throw new Error(
+          `Package '${pkg.name}' provides capability '${handle.name}' but it is owned by contract '${handle.contract}'`,
+        );
+      }
+      capabilityProviders.set(handle.name, pkg.name);
     }
   }
 
   for (const pkg of packages) {
-    for (const capability of pkg.capabilities.requires) {
-      if (!capabilityProviders.has(capability.name)) {
+    if (pkg.contract) {
+      if (pkg.contract.name !== pkg.name) {
+        const where = pkg.contract.source ? ` (declared at ${pkg.contract.source})` : '';
         throw new Error(
-          `Package '${pkg.name}' requires capability '${capability.name}' but no package provides it`,
+          `Package '${pkg.name}' carries contract metadata for '${pkg.contract.name}' — contract name must equal package name${where}`,
         );
+      }
+      const entityNames = new Set(pkg.entities.map(entity => entity.entityName));
+      for (const record of pkg.contract.publishedEntities) {
+        if (!entityNames.has(record.entityName)) {
+          const where = record.source ? ` (published at ${record.source})` : '';
+          throw new Error(
+            `Package contract '${pkg.contract.name}' publishes entity '${record.entityName}' but the package does not register it${where}`,
+          );
+        }
+      }
+      const providedNames = new Set(
+        pkg.capabilities.provides.map(provided => provided.capability.name),
+      );
+      for (const record of pkg.contract.publishedCapabilities) {
+        if (!providedNames.has(record.capabilityName)) {
+          const where = record.source ? ` (declared at ${record.source})` : '';
+          throw new Error(
+            `Package contract '${pkg.contract.name}' declares capability '${record.capabilityName}' but the package does not provide an implementation${where}`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const pkg of packages) {
+    for (const required of pkg.capabilities.requires) {
+      const provider = capabilityProviders.get(required.name);
+      if (!provider) {
+        const where = required.source ? ` (required at ${required.source})` : '';
+        throw new Error(
+          `Package '${pkg.name}' requires capability '${required.name}' but no package provides it${where}`,
+        );
+      }
+      if (required.contract) {
+        if (provider !== required.contract) {
+          throw new Error(
+            `Package '${pkg.name}' requires capability '${required.name}' from contract '${required.contract}' but it is provided by package '${provider}'`,
+          );
+        }
+        if (provider !== pkg.name && !(pkg.dependencies ?? []).includes(provider)) {
+          throw new Error(
+            `Package '${pkg.name}' requires capability '${required.name}' from contract '${required.contract}' but does not declare '${provider}' as a dependency`,
+          );
+        }
       }
     }
   }

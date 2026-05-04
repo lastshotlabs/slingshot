@@ -286,9 +286,16 @@ on every property access — would be worse.
 The cost is a guard at every callsite. The shape stays uniform across the framework, so
 that single guard is the only check you need.
 
+## Next in your journey
+
+You can now reach typed entities and capabilities from any out-of-request hook. The canonical journey continues:
+
+- **[Authoring Routes](/slingshot/authoring-routes/)** — apply per-route concerns to the in-request handlers HookServices mirrors.
+
 ## Related
 
-- [Plugin Interface](/slingshot/authoring/plugin-interface/) — lifecycle phases that decide where you can build `services`
-- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — the typed handles `entities.get()` and `capabilities.require()` accept
-- [Auth](/slingshot/core-features/auth/) — auth lifecycle hooks that receive `services` on `HookContext`
-- [Background Jobs](/slingshot/core-features/jobs-and-orchestration/) — workflow hooks and `TaskContext.services`
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — lifecycle phases that decide where you can build `services`.
+- [Package Contracts](/slingshot/package-first/contracts/) — the recommended way to publish typed handles consumed via `entities.get()` and `capabilities.require()`.
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — the underlying mechanism contracts wrap.
+- [Auth](/slingshot/core-features/auth/) — auth lifecycle hooks that receive `services` on `HookContext`.
+- [Background Jobs](/slingshot/core-features/jobs-and-orchestration/) — workflow hooks and `TaskContext.services`.

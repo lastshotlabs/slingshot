@@ -130,6 +130,8 @@ Dependencies ensure packages boot in the right order and make cross-package cont
 
 ## Read in order
 
+### Primary path
+
 <CardGrid>
   <LinkCard
     title="definePackage"
@@ -142,13 +144,25 @@ Dependencies ensure packages boot in the right order and make cross-package cont
     description="Typed custom routes with auth, validation, and OpenAPI — owned by the package."
   />
   <LinkCard
+    title="Package Contracts"
+    href="/slingshot/package-first/contracts/"
+    description="Provider-owned public surface with explicit exposure modes and boot-time validation. Recommended for any package with cross-package consumers."
+  />
+</CardGrid>
+
+### Lower-level surfaces
+
+Reach for these only when the primary path is overkill, when working with legacy code, or when you need a true escape hatch.
+
+<CardGrid>
+  <LinkCard
     title="Capabilities and entityRef"
     href="/slingshot/package-first/capabilities-and-entity-ref/"
-    description="Cross-package contracts and entity references for loose coupling."
+    description="The underlying mechanism that Package Contracts wrap."
   />
   <LinkCard
     title="Lower-level Seams"
-    href="/slingshot/package-first/escape-hatches/"
+    href="/slingshot/package-first/lower-level-seams/"
     description="Overrides and manual wiring beneath generated package and entity behavior."
   />
 </CardGrid>
@@ -166,3 +180,13 @@ distinction.
 If your package owns data (posts, users, orders, comments), define an entity inside it.
 The [Entity System](/slingshot/entity-system/) generates CRUD routes and operations from
 a single definition.
+
+## Next in your journey
+
+The pages in this section build on each other in this order:
+
+1. **[definePackage](/slingshot/package-first/define-package/)** — declare a package and the modules it owns.
+2. **[Domains and Routes](/slingshot/package-first/domain-and-route/)** — typed custom routes inside the package.
+3. **[Package Contracts](/slingshot/package-first/contracts/)** — declare the package's typed public surface so other packages can consume it.
+
+After that, return to **[Composing an App](/slingshot/composing-an-app/)** for the full reading order — events, plugins, and the per-route layer come next.

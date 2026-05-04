@@ -33,6 +33,7 @@ bun add @lastshotlabs/slingshot
 
 - `build`: `bun scripts/build.ts`
 - `build:packages`: `bun scripts/build.ts --packages-only`
+- `check:unsafe-full-adapter`: `bun scripts/check-unsafe-full-adapter.ts`
 - `dev`: `bun --watch src/index.ts`
 - `docs:api`: `bun packages/docs/generate-api.ts`
 - `docs:build`: `bun run docs:generate && bun run docs:install && cd packages/docs && bun run build`

@@ -285,8 +285,13 @@ export const appPackage = definePackage({
 | Proxies to an external API                     | Package route    |
 | Does something that is not data-shaped         | Package route    |
 
-## Next
+## Next in your journey
 
-- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — cross-package service contracts and entity access
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — publish typed events from a route via the `event:` shorthand
-- [Entity System](/slingshot/entity-system/) — when the route should be generated from a data model
+Your package has routes. Most apps grow into multiple packages. The next step turns your package into a good neighbor:
+
+- **[Package Contracts](/slingshot/package-first/contracts/)** — declare your package's typed public surface so other packages can consume capabilities and narrowed entity refs through a provider-owned, boot-validated contract.
+
+After that:
+
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — publish typed events from a route via the `event:` shorthand.
+- [Entity System](/slingshot/entity-system/) — when the route should be generated from a data model rather than handwritten.

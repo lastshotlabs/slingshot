@@ -3,8 +3,9 @@ title: First Steps
 description: The shape of a Slingshot app — one config file, one CLI command, every feature composed in
 ---
 
-In this set of pages you will build a small but real backend: routes, validation, a data
-model, auth, and tests. Everything you need is in `app.config.ts`. The CLI starts it.
+This page covers the concrete shape of a Slingshot app: file layout, the minimal config, and
+what runs at boot. If you want the conceptual map first, read [Introduction](/slingshot/getting-started/).
+If you want to skip straight to a runnable app, jump to [Quick Start](/slingshot/quick-start/).
 
 ## Project structure
 
@@ -104,9 +105,13 @@ You get all of this without writing any of it.
 
 ## What's next
 
-Now build something real:
+You have an app running. Now follow the canonical journey:
 
-- [App Config](/slingshot/app-authoring/app-config/) — every section of `defineApp`, what it does, when to set it
-- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — typed routes, schemas, and the request model
-- [Entities](/slingshot/entity-system/define-entity/) — declare a data model, get CRUD for free
-- [Packages](/slingshot/package-first/define-package/) — group features into typed modules
+1. **[Composing an App](/slingshot/composing-an-app/)** — the mental model for packages, custom routes, contracts, events, and plugins. This is the journey hub; every page below extends it.
+2. **[Packages](/slingshot/package-first/define-package/)** — turn your app into self-contained feature modules.
+3. **[Authoring Routes](/slingshot/authoring-routes/)** — per-route concerns once you have routes worth tightening.
+
+Reference for when you need it:
+
+- [App Config](/slingshot/app-authoring/app-config/) — every section of `defineApp`, what it does, when to set it.
+- [Entities](/slingshot/entity-system/define-entity/) — declare a data model, get CRUD for free.

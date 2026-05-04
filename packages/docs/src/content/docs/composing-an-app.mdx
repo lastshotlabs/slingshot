@@ -8,16 +8,15 @@ in order and you'll know how the framework fits together.
 
 ## The pieces
 
-| Piece              | What it is                                                                                                                 | Declared with                      |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| **App**            | The root. Lists the packages and plugins it composes.                                                                      | `defineApp(...)`                   |
-| **Package**        | A self-contained feature module — your blog, your notifications, your saas modules. Owns its entities, routes, middleware. | `definePackage(...)`               |
-| **Plugin**         | A framework-level plugin — auth, postgres, bullmq, search. Provides infrastructure your packages depend on.                | `SlingshotPlugin`                  |
-| **Entity**         | A typed data model. Generates CRUD routes, DTOs, OpenAPI.                                                                  | `defineEntity(...)`                |
-| **Domain + Route** | A typed custom route inside a package, for things that don't map to CRUD.                                                  | `domain(...)`, `route.*()`         |
-| **Capability**     | A typed cross-package service contract.                                                                                    | `defineCapability(...)`            |
-| **entityRef**      | A typed reference to another package's entity adapter.                                                                     | `entityRef(...)`                   |
-| **Event**          | A typed message published by one piece, subscribed by another.                                                             | `defineEvent(...)` + the event bus |
+| Piece                | What it is                                                                                                                 | Declared with                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| **App**              | The root. Lists the packages and plugins it composes.                                                                      | `defineApp(...)`                   |
+| **Package**          | A self-contained feature module — your blog, your notifications, your saas modules. Owns its entities, routes, middleware. | `definePackage(...)`               |
+| **Plugin**           | A framework-level plugin — auth, postgres, bullmq, search. Provides infrastructure your packages depend on.                | `SlingshotPlugin`                  |
+| **Entity**           | A typed data model. Generates CRUD routes, DTOs, OpenAPI.                                                                  | `defineEntity(...)`                |
+| **Domain + Route**   | A typed custom route inside a package, for things that don't map to CRUD.                                                  | `domain(...)`, `route.*()`         |
+| **Package Contract** | A package's typed public surface — the capabilities and entity refs it publishes for other packages to consume.            | `definePackageContract(...)`       |
+| **Event**            | A typed message published by one piece, subscribed by another.                                                             | `defineEvent(...)` + the event bus |
 
 ## Two tiers: packages and plugins
 
@@ -45,21 +44,24 @@ packages. See [When to use which](#when-to-use-which) below.
 ```
 defineApp({ packages, plugins })
   ├── package "blog"
-  │     ├── entity Post              (defineEntity)        → /posts CRUD
-  │     ├── domain "extras"          (domain + route.*)    → /extras/preview
-  │     └── capability provider      (mailer)
+  │     ├── entity Post                      (defineEntity)              → /posts CRUD
+  │     ├── domain "extras"                  (domain + route.*)          → /extras/preview
+  │     └── public surface                   (definePackageContract)
+  │            ├── publishes capability      (Mailer)
+  │            └── publishes entity ref      (Post, readonly(['list', 'getById']))
   │
   ├── package "notifications"
-  │     ├── requires capability      (mailer)              ← from blog
-  │     ├── entityRef to Post        (cross-package read)
-  │     └── subscribes               'blog:post.published' ← via event bus
+  │     ├── declares dependency              ← contract: blog
+  │     ├── requires capability              (Mailer)                    ← from blog's contract
+  │     ├── reads via published ref          (BlogRefs.Post)             ← from blog's contract
+  │     └── subscribes                       'blog:post.published'       ← via event bus
   │
-  └── plugin "slingshot-auth"        (framework-level plugin: lifecycle, infra)
+  └── plugin "slingshot-auth"                (framework-level plugin: lifecycle, infra)
 ```
 
 The app reads like a table of contents. Each package owns its slice. Cross-package wiring
-happens through capabilities (services), entityRef (data access), and events (decoupled side
-effects) — never through direct imports between packages.
+happens through Package Contracts (capabilities + narrowed entity refs) and events (decoupled
+side effects) — never through direct imports between packages.
 
 ## When to use which
 
@@ -141,7 +143,7 @@ unrelated routes, and an entity hook doesn't run on unrelated entities.
 - "I want async setup that other things wait for" → `SlingshotPlugin`.
 - "I want to provide a framework boundary contract (route auth, actor resolver)" → `SlingshotPlugin`.
 - "I want middleware that mounts based on config" → `SlingshotPlugin`.
-- "I want to teach the entity system a new operation pattern" → entity executor override, not a plugin (see [Lower-level Seams](/slingshot/package-first/escape-hatches/)).
+- "I want to teach the entity system a new operation pattern" → entity executor override, not a plugin (see [Lower-level Seams](/slingshot/package-first/lower-level-seams/)).
 
 If you find yourself reaching for `SlingshotPlugin` to model a feature module, the package
 shape probably fits better. If you find yourself trying to express async bootstrap or
@@ -158,25 +160,32 @@ order:
    its own entities, routes, middleware, and dependencies.
 3. **[Domains and Routes](/slingshot/package-first/domain-and-route/)** — typed custom routes
    inside a package, for endpoints that don't map to entity CRUD.
-4. **[Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)** —
-   how packages talk to each other without importing each other's internals.
+4. **[Package Contracts](/slingshot/package-first/contracts/)** — declare a package's typed
+   public surface so other packages can consume its capabilities and entities through a
+   provider-owned, boot-validated contract.
 5. **[Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)** — the
    shared transport for cross-package side effects, SSE, and webhook delivery.
 6. **[Plugin Interface](/slingshot/authoring/plugin-interface/)** — the `SlingshotPlugin`
    contract for framework-level plugin authoring (auth, infra, custom middleware).
-7. **[Lower-level Seams](/slingshot/package-first/escape-hatches/)** — overrides and manual
-   wiring inside the package model when generated behavior needs tweaking.
+
+Once you have an app composed, follow the journey into per-route concerns
+([Authoring Routes](/slingshot/authoring-routes/)), data deep dives, security, realtime,
+operations, and production. Two reference pages live at the end of the journey for when
+you need to step beneath the primary path:
+
+- **[Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)** — the underlying mechanism that Package Contracts wrap. Reach for it directly only when a contract is overkill or unavailable.
+- **[Lower-level Seams](/slingshot/package-first/lower-level-seams/)** — overrides and manual wiring inside the package model when generated behavior needs tweaking.
 
 ## Where the rest of the docs go
 
-This section answers "how do I compose an app." Two adjacent sections answer the natural
-follow-up questions:
+This section answers "how do I compose an app." From here, the canonical journey continues
+through the rest of the sidebar in order:
 
-- **[Authoring Routes](/slingshot/authoring-routes/)** — every concern that
-  applies to a single route: validation, DTO mapping, auth/permissions, idempotency,
-  OpenAPI, exception handling.
-- **[Working with Data](/slingshot/core-features/data-and-entities/)** — the entity system
-  in depth: `defineEntity`, operations, storage adapters, generated routes.
+1. **[Authoring Routes](/slingshot/authoring-routes/)** — every concern that applies to a single route: validation, DTO mapping, auth/permissions, idempotency, OpenAPI, exception handling.
+2. **[Working with Data](/slingshot/core-features/data-and-entities/)** — the entity system in depth: `defineEntity`, operations, storage adapters, generated routes.
+3. **[Security](/slingshot/core-features/auth/)** — actor identity, sessions, then permissions on top.
+4. **[Realtime](/slingshot/core-features/realtime/)** — Server-Sent Events and WebSockets.
+5. **[Operations](/slingshot/core-features/jobs-and-orchestration/)** — durable background work and multi-step workflows.
+6. **[Production](/slingshot/guides/production-readiness/)** — deployment, runtime selection, secrets, scaling.
 
-The rest of the sidebar (Security, Realtime, Operations, Production) is feature-specific
-deep dives — reach for them as needed.
+Walk the sidebar in order and you'll have seen every layer of the framework.

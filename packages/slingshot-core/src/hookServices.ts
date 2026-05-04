@@ -41,6 +41,7 @@ import {
   type PackageEntityReader,
   type PackageEntityRef,
   type SlingshotPackageEntityModuleLike,
+  applyPublicEntityExposure,
 } from './packageAuthoring';
 import { requireEntityAdapter } from './pluginState';
 import type { PluginStateMap } from './pluginStateTypes';
@@ -157,9 +158,14 @@ export function buildHookServices(args: {
         (target as PackageEntityRef).kind === 'entity-ref'
       ) {
         const ref = target as PackageEntityRef;
-        return requireEntityAdapter(app, {
-          plugin: ref.plugin ?? pluginName,
+        const adapter = requireEntityAdapter(app, {
+          plugin: ref.plugin ?? ref.contract ?? pluginName,
           entity: ref.entity,
+        });
+        return applyPublicEntityExposure(adapter, ref.exposure, {
+          entity: ref.entity,
+          contract: ref.contract,
+          source: ref.source,
         }) as TValue;
       }
       // Escape hatch — `{ plugin?, entity }` lookup by name.

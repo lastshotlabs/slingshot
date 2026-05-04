@@ -12,6 +12,9 @@ import type { Actor } from './identity';
 type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema extends ZodTypeAny
   ? z.infer<TSchema>
   : TFallback;
+type InferBody<TSchema extends ZodTypeAny | undefined> = TSchema extends ZodTypeAny
+  ? z.infer<TSchema>
+  : Record<string, unknown> | null;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type EmptyServices = Readonly<Record<never, never>>;
@@ -35,6 +38,13 @@ export interface PackageCapabilityHandle<TValue> {
   readonly kind: 'capability';
   /** Stable capability name used for publication, lookup, and diagnostics. */
   readonly name: string;
+  /**
+   * Owning package contract name when the handle was created via `definePackageContract`.
+   * Free-floating capabilities created through `defineCapability(...)` leave this undefined.
+   */
+  readonly contract?: string;
+  /** Source location (`file:line:col`) where the capability was declared, when available. */
+  readonly source?: string;
   /** Phantom generic marker so the capability's value type flows through IntelliSense. */
   readonly __value: TValue | undefined;
 }
@@ -119,7 +129,7 @@ export interface TypedRouteValidation<
   /** Parsed query values, validated against `request.query` when provided. */
   readonly query: InferSchema<TRequest['query'], Record<string, unknown>>;
   /** Parsed JSON body, validated against `request.body` when provided. */
-  readonly body: InferSchema<TRequest['body'], Record<string, unknown> | null> | null;
+  readonly body: InferBody<TRequest['body']>;
 }
 
 /**
@@ -189,15 +199,109 @@ export interface PackageCapabilityReader {
   require<TValue>(capability: PackageCapabilityHandle<TValue>): TValue;
 }
 
+/**
+ * Default entity adapter surface returned by string-based `entityRef(...)`.
+ *
+ * Entity-module refs still carry precise generated adapter types. String refs cannot
+ * infer a concrete record shape at compile time, but they should still expose the
+ * framework-owned CRUD method surface instead of forcing every package to hand-write
+ * ad hoc adapter types.
+ */
+export interface PackageEntityAdapter<
+  TEntity extends Record<string, unknown> = Record<string, unknown> & {
+    id: string | number;
+  },
+  TCreateInput extends Record<string, unknown> = Record<string, unknown>,
+  TUpdateInput extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /** Allow generated operation methods to exist alongside CRUD. */
+  readonly [operation: string]: unknown;
+  create?(input: TCreateInput): Promise<TEntity>;
+  getById?(id: string | number, filter?: Record<string, unknown>): Promise<TEntity | null>;
+  find?(filter: Record<string, unknown>): Promise<PackageEntityCollection<TEntity>>;
+  list?(opts?: Record<string, unknown>): Promise<PackageEntityCollection<TEntity>>;
+  update?(
+    id: string | number,
+    input: TUpdateInput,
+    filter?: Record<string, unknown>,
+  ): Promise<TEntity | null>;
+  delete?(id: string | number, filter?: Record<string, unknown>): Promise<boolean>;
+  clear?(): Promise<void>;
+}
+
+/**
+ * Collection shape exposed by the generic entity adapter. Generated adapters normally return
+ * arrays from ad hoc `find(...)` helpers and paginated envelopes from `list(...)`; this shape keeps
+ * package-domain code ergonomic for both defensive styles while preserving item typing.
+ */
+export interface PackageEntityCollection<
+  TEntity extends Record<string, unknown>,
+> extends Iterable<TEntity> {
+  readonly length: number;
+  readonly [index: number]: TEntity;
+  readonly items?: TEntity[];
+  readonly cursor?: string;
+  readonly nextCursor?: string;
+  readonly hasMore?: boolean;
+}
+
+/** Exposure mode declared by a package contract for a public entity ref. */
+export type PublicEntityExposureMode = 'readonly' | 'as' | 'unsafeFullAdapter';
+
+/**
+ * Metadata captured when a package contract publishes an entity ref. `runtimeEnforced`
+ * is `true` for `readonly` mode (the framework wraps the adapter to expose only the
+ * declared methods) and `false` for `as` and `unsafeFullAdapter` modes, where the
+ * runtime returns the full underlying adapter.
+ */
+export interface PublicEntityExposureMetadata {
+  /** Exposure mode chosen when the entity was published. */
+  readonly mode: PublicEntityExposureMode;
+  /** Method names declared on `readonly([...])` exposure mode. */
+  readonly methods?: readonly string[];
+  /** Whether the framework restricts the adapter surface at lookup time. */
+  readonly runtimeEnforced: boolean;
+}
+
 /** Lightweight typed entity handle used for package-local and cross-package adapter lookups. */
-export interface PackageEntityRef<TAdapter = unknown> {
+export interface PackageEntityRef<TAdapter = PackageEntityAdapter> {
   /** Internal discriminator for typed entity lookup tokens. */
   readonly kind: 'entity-ref';
   /** Optional plugin/package owner when the entity is not local to the current package. */
   readonly plugin?: string;
   /** Entity name as registered with the framework. */
   readonly entity: string;
+  /**
+   * Owning package contract name when the ref was published via `Matches.publicEntities(...)`.
+   * Refs created through the legacy `entityRef(...)` factory leave this undefined.
+   */
+  readonly contract?: string;
+  /** Public adapter exposure metadata when the ref was published via a contract. */
+  readonly exposure?: PublicEntityExposureMetadata;
+  /** Source location (`file:line:col`) where this ref was authored, when available. */
+  readonly source?: string;
   /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
+  readonly __adapter: TAdapter | undefined;
+}
+
+/**
+ * Output of a public entity exposure decision. Only valid input to
+ * `Matches.publicEntities(...)`. Raw entity modules are deliberately rejected at the
+ * type level: publishing an entity must be an explicit decision paired with an
+ * exposure mode (`readonly`, `as`, or `unsafeFullAdapter`).
+ */
+export interface PublicEntityCandidate<TContract extends string = string, TAdapter = unknown> {
+  /** Internal discriminator that distinguishes candidates from raw entity modules. */
+  readonly kind: 'public-entity-candidate';
+  /** Owning contract name. */
+  readonly contract: TContract;
+  /** Registered entity name carried over from the source module. */
+  readonly entityName: string;
+  /** Exposure metadata captured at publication time. */
+  readonly exposure: PublicEntityExposureMetadata;
+  /** Source location (`file:line:col`) where the exposure decision was authored. */
+  readonly source?: string;
+  /** Phantom generic marker so the narrowed adapter shape flows through IntelliSense. */
   readonly __adapter: TAdapter | undefined;
 }
 
@@ -310,6 +414,35 @@ export interface SlingshotPackageDomainModule<
 /** Any module that can be owned by a package definition. */
 export type SlingshotPackageModule = AnyEntityModule | AnyDomainModule;
 
+/** Single published entity record carried by a contract metadata snapshot. */
+export interface PublishedEntityRecord {
+  readonly entityName: string;
+  readonly source?: string;
+  /** Exposure decision recorded at publication. Tooling can use this to scope generated clients. */
+  readonly exposure?: PublicEntityExposureMetadata;
+}
+
+/** Single published capability record carried by a contract metadata snapshot. */
+export interface PublishedCapabilityRecord {
+  readonly capabilityName: string;
+  readonly source?: string;
+}
+
+/**
+ * Snapshot of contract metadata attached to packages produced by `Matches.definePackage(...)`.
+ * Boot validation reads these to verify cross-package wiring.
+ */
+export interface PackageContractMetadata {
+  /** Contract/package name. */
+  readonly name: string;
+  /** Source location where the contract was declared, when available. */
+  readonly source?: string;
+  /** Entity records published as public refs through this contract. */
+  readonly publishedEntities: readonly PublishedEntityRecord[];
+  /** Capability records declared by this contract. */
+  readonly publishedCapabilities: readonly PublishedCapabilityRecord[];
+}
+
 /** Immutable package definition consumed by `createApp({ packages })`. */
 export interface SlingshotPackageDefinition {
   /** Internal discriminator for package definitions. */
@@ -339,6 +472,8 @@ export interface SlingshotPackageDefinition {
   readonly csrfExemptPaths?: readonly string[];
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
+  /** Contract metadata when the package was produced through `definePackageContract`. */
+  readonly contract?: PackageContractMetadata;
 }
 
 /** Input contract for `definePackage(...)`. */
@@ -368,6 +503,122 @@ export interface DefinePackageInput {
   readonly csrfExemptPaths?: readonly string[];
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
+  /**
+   * Contract metadata, populated automatically when the package is produced through
+   * `definePackageContract`. Direct callers of `definePackage` should leave this
+   * undefined.
+   */
+  readonly contract?: PackageContractMetadata;
+}
+
+type AdapterOf<TModule extends SlingshotPackageEntityModuleLike<unknown>> = Exclude<
+  TModule['__adapter'],
+  undefined
+>;
+
+type ReadonlyAdapterView<TAdapter, TKey extends keyof TAdapter> = {
+  readonly [P in TKey]-?: TAdapter[P];
+};
+
+type StrictSubsetCheck<TShape, TBase> = {
+  [K in keyof TShape]: K extends keyof TBase
+    ? TShape[K] extends TBase[K]
+      ? TShape[K]
+      : never
+    : never;
+};
+
+/**
+ * Fluent builder returned by `contract.publicEntity(module)`. Consumers must pick an
+ * exposure mode — `readonly([...])`, `as<TShape>()`, or `unsafeFullAdapter()` — before
+ * the candidate can be passed to `contract.publicEntities({...})`.
+ */
+export interface PublicEntityBuilder<
+  TContract extends string,
+  TModule extends SlingshotPackageEntityModuleLike<unknown>,
+> {
+  /** Owning contract name (matches the contract that produced this builder). */
+  readonly contract: TContract;
+  /** Registered entity name carried over from the source module. */
+  readonly entityName: string;
+  /**
+   * Narrow the public surface to the named methods. Each picked method becomes
+   * non-optional in the resulting adapter type — declaring a method publicly
+   * asserts it must be present at runtime.
+   */
+  readonly<TKey extends keyof AdapterOf<TModule> & string>(
+    methods: readonly TKey[],
+  ): PublicEntityCandidate<TContract, ReadonlyAdapterView<AdapterOf<TModule>, TKey>>;
+  /**
+   * Declare a custom public adapter shape. The shape must be a structural subset of
+   * the underlying adapter — every key must exist on the adapter and every value
+   * type must be assignable to the corresponding adapter slot. Excess keys produce
+   * a `never` return.
+   */
+  as<TShape>(): TShape extends StrictSubsetCheck<TShape, AdapterOf<TModule>>
+    ? PublicEntityCandidate<TContract, TShape>
+    : never;
+  /**
+   * Expose the full underlying adapter without narrowing. Intentionally verbose —
+   * full CRUD exposure should feel exceptional. Prefer `readonly([...])` or `as<T>()`.
+   */
+  unsafeFullAdapter(): PublicEntityCandidate<TContract, AdapterOf<TModule>>;
+}
+
+/**
+ * Input contract for `Matches.definePackage(...)`. The contract supplies the package
+ * name and accepts contract objects in `dependencies`; everything else mirrors the
+ * module-level `DefinePackageInput`.
+ */
+export type ContractDefinePackageInput = Omit<DefinePackageInput, 'name' | 'dependencies'> & {
+  /**
+   * Other package contracts or framework plugins/packages that must be installed before this one.
+   *
+   * Package contracts are normalized to their contract names. String dependencies remain valid
+   * for framework-level plugins such as `slingshot-auth` that are not package contracts.
+   */
+  readonly dependencies?: readonly (PackageContract<string> | string)[];
+};
+
+/**
+ * Provider-owned package public contract. Binds capabilities and public entity refs to
+ * a single package, validates capability ownership at `definePackage(...)` time, and
+ * carries identity metadata on every ref/capability it produces so the framework can
+ * validate the cross-package graph at boot.
+ */
+export interface PackageContract<TName extends string = string> {
+  /** Internal discriminator for contract objects. */
+  readonly kind: 'package-contract';
+  /** Stable contract/package name. */
+  readonly name: TName;
+  /**
+   * Begin a public entity exposure decision. The returned builder must be narrowed via
+   * `readonly([...])`, `as<T>()`, or `unsafeFullAdapter()` before it can be passed to
+   * `publicEntities({...})`.
+   */
+  publicEntity<TModule extends SlingshotPackageEntityModuleLike<unknown>>(
+    module: TModule,
+  ): PublicEntityBuilder<TName, TModule>;
+  /**
+   * Publish a typed map of public entity refs. Accepts only `PublicEntityCandidate`
+   * outputs from this contract — raw entity modules and candidates from other
+   * contracts are rejected at the type level.
+   */
+  publicEntities<TMap extends Readonly<Record<string, PublicEntityCandidate<TName, unknown>>>>(
+    map: TMap,
+  ): {
+    readonly [K in keyof TMap]: TMap[K] extends PublicEntityCandidate<TName, infer TAdapter>
+      ? PackageEntityRef<TAdapter>
+      : never;
+  };
+  /** Declare a typed capability owned by this contract. */
+  capability<TValue>(name: string): PackageCapabilityHandle<TValue>;
+  /**
+   * Define the package owned by this contract. The package name is taken from the
+   * contract; capabilities provided here must belong to this contract; dependencies
+   * are supplied as contract objects rather than name strings.
+   */
+  definePackage(input: ContractDefinePackageInput): SlingshotPackageDefinition;
 }
 
 /** Static inspection output for a package's effective modules and capability graph. */
@@ -428,6 +679,82 @@ export interface PackageInspection {
     /** Capability names required by the package. */
     readonly requires: readonly string[];
   };
+  /**
+   * Contract metadata snapshot when the package was produced through `definePackageContract`.
+   * Tooling consumers (codegen, OpenAPI client builders, doc generators) read this to
+   * narrow public surfaces, list contract-published capabilities, and skip private internals.
+   */
+  readonly contract?: {
+    readonly name: string;
+    readonly source?: string;
+    readonly publishedEntities: ReadonlyArray<{
+      readonly entityName: string;
+      readonly source?: string;
+      readonly exposure?: PublicEntityExposureMetadata;
+    }>;
+    readonly publishedCapabilities: ReadonlyArray<{
+      readonly capabilityName: string;
+      readonly source?: string;
+    }>;
+  };
+}
+
+/**
+ * Capture the user-code call site that triggered a contract authoring helper. Skips
+ * frames inside `packageAuthoring.ts` (slingshot-core and the framework variant) so
+ * the returned location lands on the caller, not on framework internals. Returns
+ * `undefined` when the platform doesn't expose a stack — callers should treat it
+ * as best-effort metadata.
+ */
+function captureCallerSite(): string | undefined {
+  const stack = new Error().stack;
+  if (!stack) return undefined;
+  const lines = stack.split('\n').slice(1);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/packageAuthoring\.[tj]s/.test(line)) continue;
+    if (/captureCallerSite/.test(line)) continue;
+    const parenMatch = line.match(/\(([^)]+)\)\s*$/);
+    if (parenMatch) return parenMatch[1];
+    const directMatch = line.match(/^at\s+(.+)$/);
+    if (directMatch) return directMatch[1];
+  }
+  return undefined;
+}
+
+/**
+ * Apply a public entity exposure to an underlying adapter. For `readonly` mode the
+ * adapter is wrapped to expose only the declared methods (with `this` rebound on
+ * function values). `as` and `unsafeFullAdapter` modes are type-only — the original
+ * adapter is returned unchanged. Throws when a declared method is missing on the
+ * underlying adapter so contract authors learn about drift fast.
+ */
+export function applyPublicEntityExposure<TValue>(
+  adapter: TValue,
+  exposure: PublicEntityExposureMetadata | undefined,
+  context: { readonly entity: string; readonly contract?: string; readonly source?: string },
+): TValue {
+  if (!exposure || !exposure.runtimeEnforced) return adapter;
+  if (exposure.mode !== 'readonly') return adapter;
+  const methods = exposure.methods;
+  if (!methods || methods.length === 0) return adapter;
+  if (typeof adapter !== 'object' || adapter === null) return adapter;
+
+  const adapterRecord = adapter as Record<string, unknown>;
+  const restricted: Record<string, unknown> = {};
+  for (const method of methods) {
+    const value = adapterRecord[method];
+    if (value === undefined) {
+      const where = context.source ? ` (declared at ${context.source})` : '';
+      const owner = context.contract ? `contract '${context.contract}' ` : '';
+      throw new Error(
+        `${owner}public adapter for entity '${context.entity}' declares method '${method}' but the underlying adapter does not implement it${where}`,
+      );
+    }
+    restricted[method] = typeof value === 'function' ? value.bind(adapter) : value;
+  }
+  return Object.freeze(restricted) as TValue;
 }
 
 function freezeReadonlyArray<T>(items: readonly T[] | undefined): readonly T[] {
@@ -494,12 +821,20 @@ export function entityRef<TAdapter>(
   entity: SlingshotPackageEntityModuleLike<TAdapter>,
   options?: { plugin?: string },
 ): PackageEntityRef<TAdapter>;
-/** Create a typed entity ref directly from a package/entity name pair. */
-export function entityRef<TAdapter>(args: {
+/**
+ * Create a typed entity ref directly from a package/entity name pair.
+ *
+ * @deprecated For cross-package entity access, prefer publishing a typed ref through a
+ *   package contract: `Matches.publicEntities({ Match: Matches.publicEntity(matchModule).readonly([...]) })`.
+ *   Contract refs carry exposure metadata, are validated at boot, and produce a narrowed
+ *   adapter at lookup time. The string-based form bypasses all of that and is retained
+ *   only for legacy / true-escape-hatch code where the entity module isn't importable.
+ */
+export function entityRef<TAdapter = PackageEntityAdapter>(args: {
   entity: string;
   plugin?: string;
 }): PackageEntityRef<TAdapter>;
-export function entityRef<TAdapter>(
+export function entityRef<TAdapter = PackageEntityAdapter>(
   input: SlingshotPackageEntityModuleLike<TAdapter> | { entity: string; plugin?: string },
   options?: { plugin?: string },
 ): PackageEntityRef<TAdapter> {
@@ -512,12 +847,27 @@ export function entityRef<TAdapter>(
     }) as PackageEntityRef<TAdapter>;
   }
   const args = input as { entity: string; plugin?: string };
+  warnLegacyEntityRefOnce(args);
   return Object.freeze({
     kind: 'entity-ref' as const,
     plugin: args.plugin,
     entity: args.entity,
     __adapter: undefined,
   }) as PackageEntityRef<TAdapter>;
+}
+
+const warnedLegacyEntityRef = new Set<string>();
+function warnLegacyEntityRefOnce(args: { entity: string; plugin?: string }): void {
+  const key = `${args.plugin ?? '*'}:${args.entity}`;
+  if (warnedLegacyEntityRef.has(key)) return;
+  warnedLegacyEntityRef.add(key);
+  if (process.env.SLINGSHOT_SUPPRESS_LEGACY_ENTITY_REF_WARNING === '1') return;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[slingshot] entityRef({ plugin: '${args.plugin ?? '?'}', entity: '${args.entity}' }) is deprecated for cross-package access. ` +
+      `Publish a typed ref through a package contract (definePackageContract) and import it from the provider's public.ts. ` +
+      `Set SLINGSHOT_SUPPRESS_LEGACY_ENTITY_REF_WARNING=1 to silence.`,
+  );
 }
 
 function defineDomainRoute<
@@ -545,87 +895,99 @@ function defineDomainRoute<
 }
 
 type PackageRouteBuilder = {
-  get<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
-  post<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
-  put<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
-  patch<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
-  delete<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
-  head<
-    const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-    TContext = PackageDomainRouteContext<TRequest>,
-  >(
-    config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
-  ): DomainRouteDefinition<TContext, TRequest>;
+  get<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
+  post<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
+  put<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
+  patch<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
+  delete<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
+  head<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+    config: Omit<
+      DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+      'kind' | 'method'
+    >,
+  ): DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>;
 };
 
 function createRouteBuilder(): PackageRouteBuilder {
   return {
     /** Declare a package-owned `GET` route. */
-    get<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('get', config);
+    get<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('get', config);
     },
     /** Declare a package-owned `POST` route. */
-    post<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('post', config);
+    post<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('post', config);
     },
     /** Declare a package-owned `PUT` route. */
-    put<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('put', config);
+    put<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('put', config);
     },
     /** Declare a package-owned `PATCH` route. */
-    patch<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('patch', config);
+    patch<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('patch', config);
     },
     /** Declare a package-owned `DELETE` route. */
-    delete<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('delete', config);
+    delete<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('delete', config);
     },
     /** Declare a package-owned `HEAD` route. */
-    head<
-      const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-      TContext = PackageDomainRouteContext<TRequest>,
-    >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
-      return defineDomainRoute<TContext, TRequest>('head', config);
+    head<const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec>(
+      config: Omit<
+        DomainRouteDefinition<PackageDomainRouteContext<TRequest>, TRequest>,
+        'kind' | 'method'
+      >,
+    ) {
+      return defineDomainRoute<PackageDomainRouteContext<TRequest>, TRequest>('head', config);
     },
   };
 }
@@ -783,7 +1145,184 @@ export function definePackage(input: DefinePackageInput): SlingshotPackageDefini
     tenantExemptPaths: freezeReadonlyArray(input.tenantExemptPaths),
     csrfExemptPaths: freezeReadonlyArray(input.csrfExemptPaths),
     publicPaths: freezeReadonlyArray(input.publicPaths),
+    contract: input.contract,
   });
+}
+
+/**
+ * Internal factory for the fluent public-entity builder. The returned object is cast
+ * to `PublicEntityBuilder` at the boundary; consumers see the typed interface (with
+ * full JSDoc) at every call site.
+ */
+function createPublicEntityBuilder<
+  TContract extends string,
+  TModule extends SlingshotPackageEntityModuleLike<unknown>,
+>(contract: TContract, module: TModule): PublicEntityBuilder<TContract, TModule> {
+  const entityName = module.entityName;
+  const builder = {
+    contract,
+    entityName,
+    /** Implements `PublicEntityBuilder.readonly` — narrows to the named methods with runtime enforcement. */
+    readonly(methods: readonly string[]) {
+      const source = captureCallerSite();
+      return Object.freeze({
+        kind: 'public-entity-candidate' as const,
+        contract,
+        entityName,
+        exposure: Object.freeze({
+          mode: 'readonly' as const,
+          methods: Object.freeze([...methods]),
+          runtimeEnforced: true,
+        }),
+        source,
+        __adapter: undefined,
+      });
+    },
+    /** Implements `PublicEntityBuilder.as` — type-only narrowing, no runtime enforcement. */
+    as() {
+      const source = captureCallerSite();
+      return Object.freeze({
+        kind: 'public-entity-candidate' as const,
+        contract,
+        entityName,
+        exposure: Object.freeze({
+          mode: 'as' as const,
+          runtimeEnforced: false,
+        }),
+        source,
+        __adapter: undefined,
+      });
+    },
+    /** Implements `PublicEntityBuilder.unsafeFullAdapter` — opts out of narrowing entirely. */
+    unsafeFullAdapter() {
+      const source = captureCallerSite();
+      return Object.freeze({
+        kind: 'public-entity-candidate' as const,
+        contract,
+        entityName,
+        exposure: Object.freeze({
+          mode: 'unsafeFullAdapter' as const,
+          runtimeEnforced: false,
+        }),
+        source,
+        __adapter: undefined,
+      });
+    },
+  };
+  return Object.freeze(builder) as unknown as PublicEntityBuilder<TContract, TModule>;
+}
+
+/**
+ * Declare a provider-owned package public contract. The returned object owns the
+ * package's typed public surface — capabilities and public entity refs — and gates
+ * `definePackage(...)` so capability ownership and dependency wiring can be validated
+ * at authoring time.
+ */
+export function definePackageContract<const TName extends string>(
+  contractName: TName,
+): PackageContract<TName> {
+  const contractSource = captureCallerSite();
+  const publishedEntities = new Map<string, PublishedEntityRecord>();
+  const publishedCapabilities = new Map<string, PublishedCapabilityRecord>();
+
+  const contract: PackageContract<TName> = Object.freeze({
+    kind: 'package-contract' as const,
+    name: contractName,
+    /** Implements `PackageContract.publicEntity` — produces a fluent exposure builder. */
+    publicEntity<TModule extends SlingshotPackageEntityModuleLike<unknown>>(module: TModule) {
+      return createPublicEntityBuilder<TName, TModule>(contractName, module);
+    },
+    /** Implements `PackageContract.publicEntities` — turns candidates into refs and remembers them for boot validation. */
+    publicEntities<TMap extends Readonly<Record<string, PublicEntityCandidate<TName, unknown>>>>(
+      map: TMap,
+    ) {
+      const entries = Object.entries(map).map(([key, candidate]) => {
+        const ref: PackageEntityRef = Object.freeze({
+          kind: 'entity-ref' as const,
+          plugin: candidate.contract,
+          entity: candidate.entityName,
+          contract: candidate.contract,
+          exposure: candidate.exposure,
+          source: candidate.source,
+          __adapter: undefined,
+        });
+        if (!publishedEntities.has(candidate.entityName)) {
+          publishedEntities.set(
+            candidate.entityName,
+            Object.freeze({
+              entityName: candidate.entityName,
+              source: candidate.source,
+              exposure: candidate.exposure,
+            }),
+          );
+        }
+        return [key, ref] as const;
+      });
+      return Object.freeze(Object.fromEntries(entries)) as {
+        readonly [K in keyof TMap]: TMap[K] extends PublicEntityCandidate<TName, infer TAdapter>
+          ? PackageEntityRef<TAdapter>
+          : never;
+      };
+    },
+    /** Implements `PackageContract.capability` — stamps contract identity and remembers the declaration for boot validation. */
+    capability<TValue>(capabilityName: string) {
+      const source = captureCallerSite();
+      if (!publishedCapabilities.has(capabilityName)) {
+        publishedCapabilities.set(capabilityName, Object.freeze({ capabilityName, source }));
+      }
+      return Object.freeze({
+        kind: 'capability' as const,
+        name: capabilityName,
+        contract: contractName,
+        source,
+        __value: undefined,
+      }) as PackageCapabilityHandle<TValue>;
+    },
+    /** Implements `PackageContract.definePackage` — name-injection, capability/entity validation, contract metadata snapshot. */
+    definePackage(input: ContractDefinePackageInput): SlingshotPackageDefinition {
+      const provided = input.capabilities?.provides;
+      if (provided) {
+        for (const entry of provided) {
+          const owner = entry.capability.contract;
+          if (owner && owner !== contractName) {
+            const where = entry.capability.source
+              ? ` (declared at ${entry.capability.source})`
+              : '';
+            throw new Error(
+              `Package contract "${contractName}" cannot provide capability "${entry.capability.name}" because it is owned by contract "${owner}"${where}.`,
+            );
+          }
+        }
+      }
+      const registeredEntityNames = new Set(
+        (input.entities ?? []).map(entityModule => entityModule.entityName),
+      );
+      for (const record of publishedEntities.values()) {
+        if (!registeredEntityNames.has(record.entityName)) {
+          const where = record.source ? ` (published at ${record.source})` : '';
+          throw new Error(
+            `Package contract "${contractName}" publishes entity "${record.entityName}" but the package does not register it${where}. Add it to definePackage({ entities: [...] }).`,
+          );
+        }
+      }
+      const dependencyNames = input.dependencies?.map(dep =>
+        typeof dep === 'string' ? dep : dep.name,
+      );
+      const { dependencies: _ignored, ...rest } = input;
+      return definePackage({
+        ...rest,
+        name: contractName,
+        dependencies: dependencyNames,
+        contract: Object.freeze({
+          name: contractName,
+          source: contractSource,
+          publishedEntities: Object.freeze([...publishedEntities.values()]),
+          publishedCapabilities: Object.freeze([...publishedCapabilities.values()]),
+        }),
+      });
+    },
+  });
+  return contract;
 }
 
 /** Inspect the effective module graph of a package without reading framework internals. */
@@ -845,5 +1384,28 @@ export function inspectPackage(pkg: SlingshotPackageDefinition): PackageInspecti
       provides: Object.freeze(pkg.capabilities.provides.map(entry => entry.capability.name)),
       requires: Object.freeze(pkg.capabilities.requires.map(entry => entry.name)),
     }),
+    contract: pkg.contract
+      ? Object.freeze({
+          name: pkg.contract.name,
+          source: pkg.contract.source,
+          publishedEntities: Object.freeze(
+            pkg.contract.publishedEntities.map(record =>
+              Object.freeze({
+                entityName: record.entityName,
+                source: record.source,
+                exposure: record.exposure,
+              }),
+            ),
+          ),
+          publishedCapabilities: Object.freeze(
+            pkg.contract.publishedCapabilities.map(record =>
+              Object.freeze({
+                capabilityName: record.capabilityName,
+                source: record.source,
+              }),
+            ),
+          ),
+        })
+      : undefined,
   });
 }

@@ -262,8 +262,14 @@ This is useful for:
 - Docs tooling that generates route maps
 - Debugging boot issues in large apps
 
-## Next
+## Next in your journey
 
-- [Domains and Routes](/slingshot/package-first/domain-and-route/) — typed custom routes inside packages
-- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — cross-package service and data contracts
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — decouple packages by publishing typed events
+You have a package. The next two steps shape its surface area:
+
+1. **[Domains and Routes](/slingshot/package-first/domain-and-route/)** — typed custom routes inside the package, for endpoints that don't map to entity CRUD.
+2. **[Package Contracts](/slingshot/package-first/contracts/)** — when another package needs to consume yours, declare a typed public surface so the boundary is explicit and validated at boot.
+
+After that:
+
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — decouple packages by publishing typed events.
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — when you need framework-level infrastructure with lifecycle hooks.

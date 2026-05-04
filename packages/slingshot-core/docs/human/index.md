@@ -32,7 +32,7 @@ This package is intentionally broad in surface area but narrow in behavior. It s
 
 - Type contracts shared by more than one package.
 - Registry and context helpers that support cross-package discovery.
-- Package-first authoring contracts such as `definePackage(...)`, `defineCapability(...)`, `domain(...)`, and typed route metadata.
+- Package-first authoring contracts such as `definePackage(...)`, `definePackageContract(...)`, `defineCapability(...)`, `domain(...)`, and typed route metadata.
 - Framework-agnostic defaults such as in-process event transport and memory adapters.
 - Config schemas and type families that multiple packages must agree on.
 - Runtime interfaces that abstract Bun-specific or Node-specific capabilities.

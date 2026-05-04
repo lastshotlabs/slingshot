@@ -306,9 +306,14 @@ Entity routes with `auth: 'userAuth'` will call your `userAuth` middleware. `get
 `getActorId(c)`, and all actor-based features (permissions, data scoping, audit) work
 automatically because they read from `c.get('actor')`.
 
-## Go deeper
+## Next in your journey
+
+Auth tells you *who* the actor is. The next step is *what* they're allowed to do:
+
+- **[Permissions](/slingshot/core-features/permissions/)** — resource-level access control built on top of the actor model.
+
+## Go deeper into auth
 
 - [Auth Setup Example](/slingshot/examples/with-auth/) — end-to-end auth walkthrough with OAuth, MFA, and passkeys
-- [Permissions](/slingshot/core-features/permissions/) — add resource-level access control on top of auth
 - [SaaS Foundations](/slingshot/examples/saas-foundations/) — auth + organizations + permissions for multi-tenant
 - [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/) — current package stability expectations

@@ -12,26 +12,9 @@ Define a data model — you get CRUD routes, validation, OpenAPI docs, and stora
 Write custom routes where you need them. Organize everything into typed packages that compose
 cleanly as your app grows.
 
-```typescript title="app.config.ts"
-import { defineApp, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
-
-const Task = defineEntity('Task', {
-  namespace: 'app',
-  fields: {
-    id: field.string({ primary: true, default: 'uuid' }),
-    title: field.string(),
-    done: field.boolean({ default: false }),
-  },
-});
-
-export default defineApp({
-  port: 3000,
-  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
-});
-```
-
-That is a working API with five routes, request validation, and OpenAPI docs. No boilerplate.
-You declare it in `app.config.ts`. You run `slingshot start`. The framework does the rest.
+For a working code example, see the [splash page](/slingshot/) or jump straight to the
+[Quick Start](/slingshot/quick-start/). This page is the conceptual map; the next page after this
+one ([First Steps](/slingshot/first-steps/)) walks the project shape and boot lifecycle.
 
 ## What you get
 
@@ -63,6 +46,15 @@ app.config.ts (defineApp)
 4. **Core features** — events, realtime, auth, permissions, and jobs plug into the same model.
 
 ## Where to start
+
+**The canonical journey** (recommended for most readers):
+
+1. [Quick Start](/slingshot/quick-start/) — get a running app in three steps
+2. [Composing an App](/slingshot/composing-an-app/) — packages, routes, contracts, events, plugins
+3. [Authoring Routes](/slingshot/authoring-routes/) — per-route concerns: validation, DTO, idempotency
+4. [Working with Data](/slingshot/core-features/data-and-entities/) → Security → Realtime → Operations → Production
+
+The sidebar follows this order. Walk down it once and you'll have seen every layer of the framework.
 
 If you learn best by doing:
 

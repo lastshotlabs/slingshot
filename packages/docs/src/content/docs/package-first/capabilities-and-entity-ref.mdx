@@ -1,7 +1,13 @@
 ---
 title: Capabilities and entityRef
-description: Cross-package contracts for services and entity access without hard coupling
+description: The underlying mechanism that Package Contracts wrap — useful for legacy code, escape hatches, and understanding what contracts compose
 ---
+
+:::caution[Prefer Package Contracts for cross-package surfaces]
+For any package consumed by another package, the recommended pattern is a **[Package Contract](/slingshot/package-first/contracts/)** — a provider-owned object that bundles capabilities and explicitly narrowed entity refs together with boot-time validation, exposure enforcement, and source-located errors.
+
+This page documents the underlying mechanism that contracts wrap. Read it when you're working with legacy code, when a contract is overkill (e.g., a single in-app capability), or when you want to understand what `definePackageContract` is actually composing.
+:::
 
 Packages should not import each other's internals. When one package needs something from
 another, use a **capability** (for services) or an **entityRef** (for entity data access).
@@ -278,6 +284,8 @@ const orderPackage = definePackage({
 
 ## When to use which
 
+When a package contract exists, prefer the contract-bound forms (`Matches.capability(...)`, `Matches.publicEntities({...})`) over free-floating `defineCapability(...)` and `entityRef(...)`. The table below applies to the underlying choice itself; the recommended way to organize that choice is a [Package Contract](/slingshot/package-first/contracts/).
+
 | Dependency is...                         | Use        |
 | ---------------------------------------- | ---------- |
 | A service (send email, charge card, log) | Capability |
@@ -286,6 +294,7 @@ const orderPackage = definePackage({
 
 ## Next
 
+- [Package Contracts](/slingshot/package-first/contracts/) — the recommended way to organize capabilities and entity refs once a package has a public surface
 - [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — the other way to decouple packages
-- [Lower-level Seams](/slingshot/package-first/escape-hatches/) — overrides and manual wiring when capabilities and entityRef aren't enough
+- [Lower-level Seams](/slingshot/package-first/lower-level-seams/) — overrides and manual wiring when capabilities and entityRef aren't enough
 - [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — how entity adapters resolve across backends

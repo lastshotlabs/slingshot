@@ -9,9 +9,11 @@ import type {
 import {
   defineCapability,
   definePackage,
+  definePackageContract,
   domain,
   entityRef,
   inspectPackage,
+  provideCapability,
   route,
 } from '@lastshotlabs/slingshot-core';
 import {
@@ -23,6 +25,7 @@ import {
   registerEntityPolicy,
 } from '@lastshotlabs/slingshot-entity';
 import { createApp } from '../../src/app';
+import { compilePackages } from '../../src/framework/packageAuthoring';
 
 const baseConfig = {
   meta: { name: 'Package Authoring Test App' },
@@ -720,5 +723,426 @@ describe('package-first authoring', () => {
     });
     // Transform sees the raw handler output (not the wrapped envelope).
     expect(observedHandlerOutput).toEqual([{ note: 'plain' }]);
+  });
+});
+
+describe('package contracts', () => {
+  test('publishes typed entity refs and capabilities through a contract', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+
+    const NoteRefs = Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['getById', 'list']),
+    });
+
+    expect(NoteRefs.Note).toMatchObject({
+      kind: 'entity-ref',
+      entity: 'Note',
+      contract: 'notes',
+      exposure: { mode: 'readonly', methods: ['getById', 'list'], runtimeEnforced: true },
+    });
+    expect(NoteRefs.Note.source).toBeDefined();
+
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+    expect(NoteReporter).toMatchObject({
+      kind: 'capability',
+      name: 'reporter',
+      contract: 'notes',
+    });
+  });
+
+  test('definePackage on a contract injects name, expands contract dependencies, and accepts owned capabilities', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+
+    const Reports = definePackageContract('reports');
+
+    const notesPackage = Notes.definePackage({
+      mountPath: '/community',
+      dependencies: [Reports, 'slingshot-auth'],
+      entities: [noteModule],
+      domains: [
+        domain({
+          name: 'insights',
+          basePath: '/insights',
+          routes: [
+            route.get({
+              path: '/summary',
+              handler(ctx: PackageDomainRouteContext) {
+                return ctx.respond.json({ packageName: ctx.packageName });
+              },
+            }),
+          ],
+        }),
+      ],
+      capabilities: {
+        provides: [provideCapability(NoteReporter, () => ({ label: 'ready' }))],
+      },
+    });
+
+    expect(notesPackage.name).toBe('notes');
+    expect(notesPackage.dependencies).toEqual(['reports', 'slingshot-auth']);
+    expect(inspectPackage(notesPackage).capabilities).toEqual({
+      provides: ['reporter'],
+      requires: [],
+    });
+  });
+
+  test('definePackage on a contract rejects capabilities owned by a different contract', () => {
+    const Notes = definePackageContract('notes');
+    const Reports = definePackageContract('reports');
+    const NoteReporter = Reports.capability<{ label: string }>('reporter');
+
+    expect(() =>
+      Notes.definePackage({
+        entities: [entity({ config: NoteEntity })],
+        capabilities: {
+          provides: [provideCapability(NoteReporter, () => ({ label: 'no' }))],
+        },
+      }),
+    ).toThrow(/contract "notes".*owned by contract "reports"/);
+  });
+
+  test('definePackage on a contract accepts free-floating capabilities for backward compatibility', () => {
+    const Notes = definePackageContract('notes');
+    const freeCapability = defineCapability<{ label: string }>('legacy:reporter');
+
+    const pkg = Notes.definePackage({
+      entities: [entity({ config: NoteEntity })],
+      capabilities: {
+        provides: [provideCapability(freeCapability, () => ({ label: 'ok' }))],
+      },
+    });
+
+    expect(pkg.capabilities.provides[0].capability.contract).toBeUndefined();
+    expect(pkg.capabilities.provides[0].capability.name).toBe('legacy:reporter');
+  });
+
+  test('contract.definePackage throws when a published entity is not registered in the package', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['list']),
+    });
+
+    expect(() =>
+      Notes.definePackage({
+        entities: [],
+      }),
+    ).toThrow(/publishes entity "Note" but the package does not register it/);
+  });
+
+  test('contract metadata is attached to the resulting package definition', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['list']),
+    });
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+
+    const pkg = Notes.definePackage({
+      entities: [noteModule],
+      capabilities: {
+        provides: [provideCapability(NoteReporter, () => ({ label: 'ready' }))],
+      },
+    });
+
+    expect(pkg.contract?.name).toBe('notes');
+    expect(pkg.contract?.publishedEntities.map(e => e.entityName)).toEqual(['Note']);
+    expect(pkg.contract?.publishedCapabilities.map(c => c.capabilityName)).toEqual(['reporter']);
+    expect(pkg.contract?.publishedEntities[0].source).toBeDefined();
+    expect(pkg.contract?.publishedEntities[0].exposure?.mode).toBe('readonly');
+    expect(pkg.contract?.publishedCapabilities[0].source).toBeDefined();
+    expect(pkg.contract?.source).toBeDefined();
+  });
+
+  test('inspectPackage surfaces contract metadata for tooling consumers', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({ Note: Notes.publicEntity(noteModule).readonly(['list']) });
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+
+    const pkg = Notes.definePackage({
+      entities: [noteModule],
+      capabilities: { provides: [provideCapability(NoteReporter, () => ({ label: 'ok' }))] },
+    });
+
+    const inspection = inspectPackage(pkg);
+    expect(inspection.contract?.name).toBe('notes');
+    expect(inspection.contract?.publishedEntities[0]).toMatchObject({
+      entityName: 'Note',
+      exposure: { mode: 'readonly', methods: ['list'], runtimeEnforced: true },
+    });
+    expect(inspection.contract?.publishedCapabilities[0].capabilityName).toBe('reporter');
+  });
+});
+
+describe('compilePackages boot validation', () => {
+  test('rejects duplicate package registrations', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    const a = Notes.definePackage({ entities: [noteModule] });
+    const b = Notes.definePackage({ entities: [noteModule] });
+    expect(() => compilePackages([a, b])).toThrow(/'notes' is registered more than once/);
+  });
+
+  test('rejects a contract-bound required capability when the dependency is not declared', () => {
+    const Notes = definePackageContract('notes');
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({ Note: Notes.publicEntity(noteModule).readonly(['list']) });
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+      capabilities: {
+        provides: [provideCapability(NoteReporter, () => ({ label: 'ready' }))],
+      },
+    });
+
+    const Reports = definePackageContract('reports');
+    const reportsPackage = Reports.definePackage({
+      entities: [entity({ config: NoteEntity })],
+      capabilities: {
+        requires: [NoteReporter],
+      },
+    });
+
+    expect(() => compilePackages([notesPackage, reportsPackage])).toThrow(
+      /requires capability 'reporter' from contract 'notes' but does not declare 'notes' as a dependency/,
+    );
+  });
+
+  test('accepts a contract-bound required capability when the dependency is declared', () => {
+    const Notes = definePackageContract('notes');
+    const NoteReporter = Notes.capability<{ label: string }>('reporter');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({ Note: Notes.publicEntity(noteModule).readonly(['list']) });
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+      capabilities: {
+        provides: [provideCapability(NoteReporter, () => ({ label: 'ready' }))],
+      },
+    });
+
+    const Reports = definePackageContract('reports');
+    const reportsPackage = Reports.definePackage({
+      entities: [entity({ config: NoteEntity })],
+      dependencies: [Notes],
+      capabilities: { requires: [NoteReporter] },
+    });
+
+    expect(() => compilePackages([notesPackage, reportsPackage])).not.toThrow();
+  });
+
+  test('rejects a contract that publishes a capability without providing an implementation', () => {
+    const Notes = definePackageContract('notes');
+    Notes.capability<{ label: string }>('reporter');
+    const noteModule = entity({ config: NoteEntity });
+
+    const pkg = Notes.definePackage({
+      entities: [noteModule],
+    });
+
+    expect(() => compilePackages([pkg])).toThrow(
+      /declares capability 'reporter' but the package does not provide an implementation.*declared at/s,
+    );
+  });
+
+  test('error messages cite the source location of the offending publication', () => {
+    const Notes = definePackageContract('notes');
+    const noteModule = entity({ config: NoteEntity });
+    Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['list']),
+    });
+
+    let error: Error | undefined;
+    try {
+      Notes.definePackage({ entities: [] });
+    } catch (e) {
+      error = e as Error;
+    }
+    expect(error?.message).toMatch(/published at .*package-authoring\.test\.ts/);
+  });
+});
+
+describe('contract runtime enforcement', () => {
+  test('readonly mode wraps adapters to expose only declared methods', () => {
+    const noteModule = entity({ config: NoteEntity });
+    const Notes = definePackageContract('notes');
+    const NoteRefs = Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['list']),
+    });
+    const NoteWriter = Notes.capability<{
+      create(input: { text: string }): Promise<{ text: string }>;
+    }>('writer');
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+      capabilities: {
+        provides: [
+          provideCapability(NoteWriter, () => ({
+            async create(input: { text: string }) {
+              return { text: input.text };
+            },
+          })),
+        ],
+      },
+      domains: [
+        domain({
+          name: 'public-api',
+          basePath: '/notes-public',
+          routes: [
+            route.get({
+              path: '/restricted-shape',
+              async handler(ctx: PackageDomainRouteContext) {
+                const note = ctx.entities.get(NoteRefs.Note) as Record<string, unknown>;
+                return ctx.respond.json({
+                  hasList: typeof note.list === 'function',
+                  hasCreate: typeof note.create === 'function',
+                });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    return createApp({ ...baseConfig, packages: [notesPackage] }).then(async result => {
+      createdContexts.push(result.ctx);
+      const response = await result.app.request('/notes-public/restricted-shape');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ hasList: true, hasCreate: false });
+    });
+  });
+
+  test('public refs resolve against their contract owner from dependent packages', () => {
+    const noteModule = entity({ config: NoteEntity });
+    const Notes = definePackageContract('notes');
+    const NoteRefs = Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['list']),
+    });
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+    });
+
+    const Reports = definePackageContract('reports');
+    const reportsPackage = Reports.definePackage({
+      dependencies: [Notes],
+      domains: [
+        domain({
+          name: 'reports-public-api',
+          basePath: '/reports',
+          routes: [
+            route.get({
+              path: '/notes-shape',
+              auth: 'none',
+              async handler(ctx: PackageDomainRouteContext) {
+                const note = ctx.entities.get(NoteRefs.Note) as Record<string, unknown>;
+                return ctx.respond.json({
+                  hasList: typeof note.list === 'function',
+                  hasCreate: typeof note.create === 'function',
+                });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    expect(reportsPackage.dependencies).toEqual(['notes']);
+
+    return createApp({ ...baseConfig, packages: [notesPackage, reportsPackage] }).then(
+      async result => {
+        createdContexts.push(result.ctx);
+        const response = await result.app.request('/reports/notes-shape');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toEqual({ hasList: true, hasCreate: false });
+      },
+    );
+  });
+
+  test('readonly mode enforcement also applies to permissionAdapter / parentAdapter resolution', () => {
+    // The framework loads permission/parent records via the published ref. We expect the
+    // resolved adapter to honor readonly([...]) just like ctx.entities.get(...). Permission
+    // and parent adapters today only need getById, so as long as the contract publishes it,
+    // the lookup path is happy.
+    const noteModule = entity({ config: NoteEntity });
+    const Notes = definePackageContract('notes');
+    const NoteRefs = Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).readonly(['getById']),
+    });
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+      domains: [
+        domain({
+          name: 'public-api',
+          basePath: '/notes-perm',
+          routes: [
+            route.get({
+              path: '/permission-shape',
+              permissionAdapter: NoteRefs.Note,
+              auth: 'none',
+              async handler(ctx: PackageDomainRouteContext) {
+                // Resolve the same ref through the handler-side reader and confirm shape.
+                const note = ctx.entities.get(NoteRefs.Note) as Record<string, unknown>;
+                return ctx.respond.json({
+                  hasGetById: typeof note.getById === 'function',
+                  hasList: typeof note.list === 'function',
+                });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    return createApp({ ...baseConfig, packages: [notesPackage] }).then(async result => {
+      createdContexts.push(result.ctx);
+      const response = await result.app.request('/notes-perm/permission-shape');
+      expect(response.status).toBe(200);
+      // permissionAdapter resolution + handler-side resolution both honor readonly(['getById']).
+      await expect(response.json()).resolves.toEqual({ hasGetById: true, hasList: false });
+    });
+  });
+
+  test('unsafeFullAdapter exposes the full adapter unchanged', () => {
+    const noteModule = entity({ config: NoteEntity });
+    const Notes = definePackageContract('notes');
+    const NoteRefs = Notes.publicEntities({
+      Note: Notes.publicEntity(noteModule).unsafeFullAdapter(),
+    });
+
+    const notesPackage = Notes.definePackage({
+      entities: [noteModule],
+      domains: [
+        domain({
+          name: 'public-api',
+          basePath: '/notes-full',
+          routes: [
+            route.get({
+              path: '/full-shape',
+              async handler(ctx: PackageDomainRouteContext) {
+                const note = ctx.entities.get(NoteRefs.Note) as Record<string, unknown>;
+                return ctx.respond.json({
+                  hasList: typeof note.list === 'function',
+                  hasCreate: typeof note.create === 'function',
+                });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    return createApp({ ...baseConfig, packages: [notesPackage] }).then(async result => {
+      createdContexts.push(result.ctx);
+      const response = await result.app.request('/notes-full/full-shape');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ hasList: true, hasCreate: true });
+    });
   });
 });

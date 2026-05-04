@@ -136,8 +136,10 @@ export {
 } from './createRoute';
 /** Package-first authoring contracts for capabilities, domains, and typed route builders. */
 export {
+  applyPublicEntityExposure,
   defineCapability,
   definePackage,
+  definePackageContract,
   domain,
   entityRef,
   inspectPackage,
@@ -149,16 +151,25 @@ export {
 export { buildHookServices } from './hookServices';
 export type { HookServices } from './hookServices';
 export type {
+  ContractDefinePackageInput,
   DefinePackageInput,
   DomainRouteDefinition,
   PackageCapabilityHandle,
   PackageCapabilityProviderContext,
   PackageCapabilityReader,
+  PackageContract,
+  PackageContractMetadata,
   PackageDomainRouteContext,
   PackageEntityRef,
   PackageEntityReader,
   PackageInspection,
   PackageRouteRequestContext,
+  PublicEntityBuilder,
+  PublicEntityCandidate,
+  PublicEntityExposureMetadata,
+  PublicEntityExposureMode,
+  PublishedCapabilityRecord,
+  PublishedEntityRecord,
   PublishedPackageCapability,
   SlingshotPackageDefinition,
   SlingshotPackageDomainModule,

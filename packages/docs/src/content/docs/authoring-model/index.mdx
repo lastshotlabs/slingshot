@@ -95,7 +95,7 @@ its code.
 | Domain actions (publish, archive, complete) | Entity operations          |
 | A custom endpoint                           | Package route              |
 | A feature boundary                          | Package                    |
-| Cross-package contracts                     | Capabilities and entityRef |
+| Cross-package contracts                     | Package Contract (`definePackageContract`) |
 | App-wide config (db, auth, security)        | App root                   |
 | Framework infra (auth, persistence, queues) | `SlingshotPlugin`          |
 
@@ -125,7 +125,7 @@ guide.
   <LinkCard
     title="Package-First Authoring"
     href="/slingshot/package-first/"
-    description="definePackage, domains, routes, capabilities, and entityRef."
+    description="definePackage, domains, routes, and Package Contracts (the recommended cross-package surface)."
   />
   <LinkCard
     title="Plugin Interface"
@@ -146,4 +146,4 @@ When generated package or entity behavior needs tweaking:
 - [Route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize one generated route
 - [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated ones
 - [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — bring your own storage
-- [Lower-level seams guide](/slingshot/package-first/escape-hatches/) — decision guide for what to override
+- [Lower-level seams guide](/slingshot/package-first/lower-level-seams/) — decision guide for what to override

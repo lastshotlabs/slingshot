@@ -77,14 +77,10 @@ export default defineConfig({
             { label: 'App Config', slug: 'app-authoring/app-config' },
             { label: 'Packages', slug: 'package-first/define-package' },
             { label: 'Domains and Routes', slug: 'package-first/domain-and-route' },
-            {
-              label: 'Capabilities and entityRef',
-              slug: 'package-first/capabilities-and-entity-ref',
-            },
-            { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
+            { label: 'Package Contracts', slug: 'package-first/contracts' },
             { label: 'Events and the Event Bus', slug: 'app-authoring/events-and-the-event-bus' },
+            { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'HookServices', slug: 'app-authoring/hook-services' },
-            { label: 'Lower-level Seams', slug: 'package-first/escape-hatches' },
           ],
         },
         {
@@ -110,7 +106,7 @@ export default defineConfig({
           label: 'Working with Data',
           items: [
             { label: 'Data and Entities', slug: 'core-features/data-and-entities' },
-            { label: 'defineEntity', slug: 'entity-system/define-entity' },
+            { label: 'Defining Entities', slug: 'entity-system/define-entity' },
             { label: 'Operations', slug: 'entity-system/operations' },
             { label: 'Storage and Adapters', slug: 'entity-system/storage-and-adapter-wiring' },
             {
@@ -192,6 +188,17 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Lower-level Surfaces',
+          collapsed: true,
+          items: [
+            {
+              label: 'Capabilities and entityRef',
+              slug: 'package-first/capabilities-and-entity-ref',
+            },
+            { label: 'Lower-level Seams', slug: 'package-first/lower-level-seams' },
+          ],
+        },
+        {
           label: 'Examples',
           items: [
             { label: 'Overview', slug: 'examples' },
@@ -227,7 +234,6 @@ export default defineConfig({
           label: 'Plugin and Authoring Reference',
           collapsed: true,
           items: [
-            { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'SlingshotContext', slug: 'authoring/context' },
             { label: 'CoreRegistrar', slug: 'authoring/registrar' },
             { label: 'Event Bus', slug: 'authoring/event-bus' },
@@ -251,12 +257,6 @@ export default defineConfig({
               label: 'Maturity and Package Status',
               slug: 'core-features/maturity-and-package-status',
             },
-            { label: 'Authoring Model Overview', slug: 'authoring-model' },
-            { label: 'App Roots and Runtime Overview', slug: 'app-authoring' },
-            { label: 'Package-First Overview', slug: 'package-first' },
-            { label: 'Entity System Overview', slug: 'entity-system' },
-            { label: 'Advanced Overview', slug: 'advanced' },
-            { label: 'Advanced: Lower-level Seams', slug: 'advanced/escape-hatches' },
           ],
         },
         {

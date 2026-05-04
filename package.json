@@ -66,6 +66,7 @@
     "examples:typecheck": "tsc -p tsconfig.examples.json --pretty false",
     "examples:coverage": "bun scripts/examples-coverage.ts",
     "examples:smoke": "bun scripts/examples-smoke.ts",
+    "check:unsafe-full-adapter": "bun scripts/check-unsafe-full-adapter.ts",
     "build": "bun scripts/build.ts",
     "build:packages": "bun scripts/build.ts --packages-only",
     "prepublishOnly": "bun run hardening:full",

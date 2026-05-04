@@ -11,8 +11,8 @@ import {
   deepFreeze,
   defineEvent,
   getContextOrNull,
-  getPluginState,
-  publishPluginState,
+  provideCapability,
+  registerPluginCapabilities,
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -26,10 +26,9 @@ import type { DispatcherAdapter, DispatcherHealth } from './dispatcher';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
 import { Notification, notificationOperations } from './entities/notification';
 import { NotificationPreference, notificationPreferenceOperations } from './entities/preference';
+import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from './public';
 import { resolveRateLimitBackend } from './rateLimit';
 import { createNotificationSseRoute } from './sse';
-import { NOTIFICATIONS_PLUGIN_STATE_KEY } from './state';
-import type { NotificationsPluginState } from './state';
 import type {
   DeliveryAdapter,
   NotificationAdapter,
@@ -39,6 +38,10 @@ import type {
 } from './types';
 import type { NotificationsPluginConfig } from './types/config';
 import { notificationsPluginConfigSchema } from './types/config';
+
+// Stable identifier for this plugin. Used both as the inner entity-plugin name and as
+// the contract owner name when registering capabilities.
+const NOTIFICATIONS_PLUGIN_NAME = 'slingshot-notifications' as const;
 
 const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
 
@@ -276,20 +279,20 @@ export function createNotificationsPlugin(
   ];
 
   const innerPlugin = createEntityPlugin({
-    name: NOTIFICATIONS_PLUGIN_STATE_KEY,
+    name: NOTIFICATIONS_PLUGIN_NAME,
     mountPath: config.mountPath,
     entities,
   });
 
   return {
-    name: NOTIFICATIONS_PLUGIN_STATE_KEY,
+    name: NOTIFICATIONS_PLUGIN_NAME,
     dependencies: ['slingshot-auth'],
 
     async setupMiddleware(ctx: PluginSetupContext) {
       if (!ctx.events.get('notifications:notification.created')) {
         ctx.events.register(
           defineEvent('notifications:notification.created', {
-            ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+            ownerPlugin: NOTIFICATIONS_PLUGIN_NAME,
             exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
             resolveScope(payload, publishContext) {
               // Notification's own tenantId comes from the notification record (in payload).
@@ -394,32 +397,41 @@ export function createNotificationsPlugin(
 
       bus.on('notifications:notification.created', createdListener);
 
-      const state: NotificationsPluginState = deepFreeze({
-        config,
-        notifications,
-        preferences,
-        dispatcher,
-        createBuilder: ({ source }) =>
-          createNotificationBuilder({
-            source,
-            notifications,
-            preferences,
-            bus,
-            events,
-            rateLimitBackend,
-            defaultPreferences: config.defaultPreferences,
-            rateLimit: {
-              limit: config.rateLimit.perSourcePerUserPerWindow,
-              windowMs: config.rateLimit.windowMs,
-            },
-            metrics: metricsProxy,
-          }),
-        registerDeliveryAdapter(adapter: DeliveryAdapter) {
+      const builderFactory = ({ source }: { source: string }) =>
+        createNotificationBuilder({
+          source,
+          notifications,
+          preferences,
+          bus,
+          events,
+          rateLimitBackend,
+          defaultPreferences: config.defaultPreferences,
+          rateLimit: {
+            limit: config.rateLimit.perSourcePerUserPerWindow,
+            windowMs: config.rateLimit.windowMs,
+          },
+          metrics: metricsProxy,
+        });
+
+      const deliveryRegistry = {
+        register(adapter: DeliveryAdapter) {
           deliveryAdapters.add(adapter);
         },
-      });
+      };
 
-      publishPluginState(getPluginState(app), NOTIFICATIONS_PLUGIN_STATE_KEY, state);
+      // Contract-bound capability publish — cross-package consumers resolve
+      // `NotificationsBuilderFactory` and `NotificationsDeliveryRegistry` through
+      // `ctx.capabilities.require(...)`. The plugin's own runtime state lives in
+      // closure variables (`notificationsAdapter`, `dispatcher`, `deliveryAdapters`,
+      // etc.) referenced by `getHealth()`.
+      const slingshotCtx = getContextOrNull(app);
+      if (slingshotCtx) {
+        await registerPluginCapabilities(slingshotCtx, NOTIFICATIONS_PLUGIN_NAME, [
+          provideCapability(NotificationsBuilderFactory, () => builderFactory),
+          provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
+        ]);
+      }
+
       dispatcher.start();
 
       // P-NOTIF-8: optional periodic sweep that deletes expired notifications.

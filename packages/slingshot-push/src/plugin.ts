@@ -12,11 +12,12 @@ import {
   getActorId,
   getActorTenantId,
   getContextOrNull,
-  getNotificationsStateOrNull,
   getPluginState,
   publishPluginState,
+  resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -460,9 +461,15 @@ export function createPushPlugin(
       const pluginState = getPluginState(app);
       publishPluginState(pluginState, PUSH_PLUGIN_STATE_KEY, state);
 
-      const notificationsState = getNotificationsStateOrNull(pluginState);
-      if (notificationsState) {
-        notificationsState.registerDeliveryAdapter(state.createDeliveryAdapter());
+      // Consume the slingshot-notifications contract: register our delivery adapter
+      // through the typed `NotificationsDeliveryRegistry` capability when notifications
+      // is loaded. No-op when notifications isn't installed at all.
+      const slingshotCtx = getContextOrNull(app);
+      const deliveryRegistry = slingshotCtx
+        ? resolveCapabilityValue(slingshotCtx, NotificationsDeliveryRegistry)
+        : undefined;
+      if (deliveryRegistry) {
+        deliveryRegistry.register(state.createDeliveryAdapter());
       }
     },
     teardown(): void {

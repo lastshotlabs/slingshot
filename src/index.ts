@@ -33,6 +33,7 @@ export {
   getActorId,
   getActorTenantId,
   getRequestTenantId,
+  getSlingshotCtx,
 } from '@lastshotlabs/slingshot-core';
 export { getContext, getContextOrNull } from '@lastshotlabs/slingshot-core';
 export { getRedisFromApp } from './lib/redis';
@@ -117,6 +118,7 @@ export {
   HEADER_TIMESTAMP,
 } from '@lastshotlabs/slingshot-core';
 export { createRouter } from '@lastshotlabs/slingshot-core';
+export { maybeEntityAdapter } from '@lastshotlabs/slingshot-core';
 export {
   createRoute,
   withSecurity,
@@ -315,6 +317,7 @@ export {
   definePackage,
   domain,
   entityRef,
+  definePackageContract,
   inspectPackage,
   provideCapability,
   route,
@@ -324,6 +327,7 @@ export type {
   DomainRouteDefinition,
   PackageCapabilityHandle,
   PackageCapabilityReader,
+  PackageContract,
   PackageDomainRouteContext,
   PackageEntityRef,
   PackageEntityReader,
@@ -337,5 +341,10 @@ export type {
   TypedRouteResponseSpec,
   TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
+export type { HookServices } from '@lastshotlabs/slingshot-core';
 export { entity } from '@lastshotlabs/slingshot-entity';
-export type { EntityModuleWiring, PackageEntityModule } from '@lastshotlabs/slingshot-entity';
+export type {
+  EntityModuleWiring,
+  PackageEntityAdapterFor,
+  PackageEntityModule,
+} from '@lastshotlabs/slingshot-entity';

@@ -19,7 +19,6 @@ import type {
   AppEnv,
   CoreRegistrar,
   EntityRegistry,
-  NotificationsPeerState,
   PermissionEvaluator,
   PermissionsState,
   ResolvedEntityConfig,
@@ -29,7 +28,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
+  PACKAGE_CAPABILITIES_PREFIX,
   PERMISSIONS_RUNTIME_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
@@ -41,6 +40,10 @@ import {
   readPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
+import {
+  NotificationsBuilderFactory,
+  NotificationsDeliveryRegistry,
+} from '@lastshotlabs/slingshot-notifications';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
@@ -394,39 +397,14 @@ export async function createChatTestApp(
     }
   }
   publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, permsState);
-  publishPluginState(pluginState, NOTIFICATIONS_PLUGIN_STATE_KEY, {
-    config: deepFreeze({
-      mountPath: '/notifications',
-      sseEnabled: true,
-      ssePath: '/notifications/sse',
-      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-      rateLimit: {
-        perSourcePerUserPerWindow: 100,
-        windowMs: 3_600_000,
-        backend: 'memory',
-      },
-      defaultPreferences: {
-        pushEnabled: true,
-        emailEnabled: true,
-        inAppEnabled: true,
-      },
-    }),
-    notifications: notificationState.notifications,
-    preferences: notificationState.preferences,
-    dispatcher: {
-      start() {},
-      stop() {},
-      tick() {
-        return Promise.resolve(0);
-      },
-    },
-    createBuilder: ({ source }: { source: string }) => notificationState.createBuilder(source),
-    registerDeliveryAdapter() {},
-  } satisfies NotificationsPeerState & {
-    config: unknown;
-    notifications: unknown;
-    preferences: unknown;
-    dispatcher: unknown;
+  // Publish the slingshot-notifications contract capabilities directly into the
+  // pluginState slot the framework reads from. This mirrors what
+  // `registerPluginCapabilities` does at runtime, sized for test fixtures that don't
+  // build a full SlingshotContext.
+  publishPluginState(pluginState, `${PACKAGE_CAPABILITIES_PREFIX}slingshot-notifications`, {
+    [NotificationsBuilderFactory.name]: ({ source }: { source: string }) =>
+      notificationState.createBuilder(source),
+    [NotificationsDeliveryRegistry.name]: { register() {} },
   });
 
   attachContext(app, {
@@ -436,6 +414,10 @@ export async function createChatTestApp(
     wsPublish: null,
     bus,
     events,
+    capabilityProviders: new Map<string, string>([
+      [NotificationsBuilderFactory.name, 'slingshot-notifications'],
+      [NotificationsDeliveryRegistry.name, 'slingshot-notifications'],
+    ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 
   // Per-request slingshotCtx for entity route auth (applyRouteConfig reads routeAuth)

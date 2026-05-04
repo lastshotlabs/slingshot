@@ -145,6 +145,8 @@ export {
   inspectPackage,
   PACKAGE_CAPABILITIES_PREFIX,
   provideCapability,
+  registerPluginCapabilities,
+  resolveCapabilityValue,
   route,
 } from './packageAuthoring';
 /** Out-of-request hook services contract — typed accessors for callbacks that fire outside Hono request scope. */
@@ -408,22 +410,21 @@ export type { EmailTemplate } from './emailTemplates';
 /** Access email templates registered by auth or other plugins. */
 export { getEmailTemplates, getEmailTemplate } from './emailTemplates';
 
-/** Neutral cross-plugin notifications contracts published via `ctx.pluginState`. */
+/**
+ * Shared notification record / adapter / builder types. The runtime surface that uses
+ * these (cross-package builder factory, delivery adapter registry) is published as a
+ * typed contract by `@lastshotlabs/slingshot-notifications` — consumers resolve it
+ * through `ctx.capabilities.require(NotificationsBuilderFactory)` etc.
+ */
 export type {
   DeliveryAdapter,
   NotificationBuilder,
   NotificationCreatedEventPayload,
   NotificationPriority,
   NotificationRecord,
-  NotificationsPeerState,
   NotifyInput,
   NotifyManyInput,
   ResolvedPreference,
-} from './notificationsPeer';
-export {
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
-  getNotificationsState,
-  getNotificationsStateOrNull,
 } from './notificationsPeer';
 export type { EmbedsPeer } from './embedsPeer';
 export { getEmbedsPeer, getEmbedsPeerOrNull } from './embedsPeer';

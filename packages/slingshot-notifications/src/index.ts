@@ -5,13 +5,14 @@ import './events';
  */
 export { createNotificationsPlugin } from './plugin';
 /**
- * Plugin state key used to retrieve the notifications runtime state from app context.
+ * Provider-owned package contract. Cross-package consumers import the contract object
+ * and the published capability handles instead of reaching into plugin state directly.
  */
-export { NOTIFICATIONS_PLUGIN_STATE_KEY } from './state';
-/**
- * Runtime state exposed by the notifications plugin.
- */
-export type { NotificationsPluginState } from './state';
+export {
+  Notifications,
+  NotificationsBuilderFactory,
+  NotificationsDeliveryRegistry,
+} from './public';
 /**
  * Zod schema used to validate notifications plugin configuration.
  */

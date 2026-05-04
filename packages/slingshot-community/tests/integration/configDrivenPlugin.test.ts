@@ -274,35 +274,10 @@ async function createCommunityHarness(opts?: {
   const pluginStateEntries: Array<readonly [string, unknown]> = [
     [PERMISSIONS_STATE_KEY, { evaluator, registry, adapter: permAdapter }] as const,
     [
-      'slingshot-notifications',
+      'slingshot:package:capabilities:slingshot-notifications',
       {
-        config: Object.freeze({
-          mountPath: '/notifications',
-          sseEnabled: true,
-          ssePath: '/notifications/sse',
-          dispatcher: { enabled: true, intervalMs: 30_000, maxPerTick: 500 },
-          rateLimit: {
-            perSourcePerUserPerWindow: 100,
-            windowMs: 3_600_000,
-            backend: 'memory',
-          },
-          defaultPreferences: {
-            pushEnabled: true,
-            emailEnabled: true,
-            inAppEnabled: true,
-          },
-        }),
-        notifications: notifications.notifications,
-        preferences: notifications.preferences,
-        dispatcher: {
-          start() {},
-          stop() {},
-          async tick() {
-            return 0;
-          },
-        },
-        createBuilder: ({ source }: { source: string }) => notifications.createBuilder(source),
-        registerDeliveryAdapter() {},
+        builderFactory: ({ source }: { source: string }) => notifications.createBuilder(source),
+        deliveryRegistry: { register() {} },
       },
     ],
   ];
@@ -316,6 +291,10 @@ async function createCommunityHarness(opts?: {
     wsEndpoints: {},
     wsPublish: null,
     bus,
+    capabilityProviders: new Map<string, string>([
+      ['builderFactory', 'slingshot-notifications'],
+      ['deliveryRegistry', 'slingshot-notifications'],
+    ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 
   // Install a tiny slingshotCtx middleware so applyRouteConfig's userAuth

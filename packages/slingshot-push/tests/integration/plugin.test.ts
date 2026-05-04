@@ -725,30 +725,14 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
     const runtime = createRuntime();
     const fc = createFrameworkConfig();
     const pluginState = new Map<string, unknown>();
-    const mockNotificationsState = {
-      config: Object.freeze({
-        mountPath: '/notifications',
-        sseEnabled: false,
-        ssePath: '/notifications/sse',
-        dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-        rateLimit: { perSourcePerUserPerWindow: 100, windowMs: 3_600_000, backend: 'memory' },
-        defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
-      }),
-      notifications: null,
-      preferences: null,
-      dispatcher: {
-        start() {},
-        stop() {},
-        async tick() {
-          return 0;
+    pluginState.set('slingshot:package:capabilities:slingshot-notifications', {
+      builderFactory: () => null,
+      deliveryRegistry: {
+        register(adapter: unknown) {
+          registeredAdapter = adapter;
         },
       },
-      createBuilder: () => null,
-      registerDeliveryAdapter: (adapter: unknown) => {
-        registeredAdapter = adapter;
-      },
-    };
-    pluginState.set('slingshot-notifications', mockNotificationsState);
+    });
 
     const app = new Hono();
     const routeAuth: RouteAuthRegistry = {
@@ -765,6 +749,10 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       wsPublish: null,
       bus: runtime.bus,
       events: runtime.events,
+      capabilityProviders: new Map<string, string>([
+        ['builderFactory', 'slingshot-notifications'],
+        ['deliveryRegistry', 'slingshot-notifications'],
+      ]),
     } as unknown as Parameters<typeof attachContext>[1]);
     app.use('*', async (c, next) => {
       (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', { routeAuth });

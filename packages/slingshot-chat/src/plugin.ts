@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
 import type {
-  NotificationsPeerState,
   PermissionsState,
   PluginSetupContext,
   SlingshotPlugin,
@@ -10,12 +9,13 @@ import {
   deepFreeze,
   defineEvent,
   getContext,
-  getNotificationsState,
   getPermissionsState,
   getPluginState,
   publishPluginState,
+  resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
@@ -94,7 +94,9 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
   let scheduledTimer: ReturnType<typeof setInterval> | undefined;
   let innerPlugin: EntityPlugin | undefined;
   let permissionsRef: PermissionsState | undefined;
-  let notificationsStateRef: NotificationsPeerState | undefined;
+  let notificationsBuilderFactoryRef:
+    | ((opts: { source: string }) => import('@lastshotlabs/slingshot-core').NotificationBuilder)
+    | undefined;
 
   return {
     name: CHAT_PLUGIN_STATE_KEY,
@@ -151,7 +153,17 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
       }
 
       const permissions = getPermissionsState(app) as PermissionsState;
-      notificationsStateRef = getNotificationsState(app) as NotificationsPeerState;
+      const slingshotCtx = getContext(app);
+      const notificationsBuilderFactory = resolveCapabilityValue(
+        slingshotCtx,
+        NotificationsBuilderFactory,
+      );
+      if (!notificationsBuilderFactory) {
+        throw new Error(
+          '[slingshot-chat] requires slingshot-notifications to be loaded before slingshot-chat',
+        );
+      }
+      notificationsBuilderFactoryRef = notificationsBuilderFactory;
       permissionsRef = permissions;
 
       publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, {
@@ -246,8 +258,8 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
         },
         permissions,
         setupPost: ({ bus: postBus }) => {
-          if (notificationsStateRef && roomAdapterRef && memberAdapterRef && messageAdapterRef) {
-            const notificationBuilder = notificationsStateRef.createBuilder({ source: 'chat' });
+          if (notificationsBuilderFactoryRef && roomAdapterRef && memberAdapterRef && messageAdapterRef) {
+            const notificationBuilder = notificationsBuilderFactoryRef({ source: 'chat' });
             messageNotifyRef.handler = createMessageNotifyMiddleware({
               builder: notificationBuilder,
               roomAdapter: roomAdapterRef,

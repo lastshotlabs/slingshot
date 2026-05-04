@@ -8,6 +8,8 @@ import type {
   RouteRateLimitConfig,
 } from './entityRouteConfig';
 import type { Actor } from './identity';
+import type { PluginStateMap } from './pluginState';
+import { publishPluginState } from './pluginState';
 
 type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema extends ZodTypeAny
   ? z.infer<TSchema>
@@ -386,6 +388,8 @@ export interface DomainRouteDefinition<
   readonly summary?: string;
   /** Longer OpenAPI description shown in generated docs. */
   readonly description?: string;
+  /** Additional OpenAPI tags merged with auto-derived package + domain tags. */
+  readonly tags?: string[];
   /** Optional typed request specification for validation and OpenAPI generation. */
   readonly request?: TRequest;
   /** Optional typed response metadata for OpenAPI generation. */
@@ -1109,6 +1113,91 @@ export function provideCapability<TValue>(
     capability,
     resolve,
   });
+}
+
+/**
+ * Resolve a typed package capability from outside the request scope.
+ *
+ * Plugins use this from `setupPost` (or other lifecycle phases) to consume capabilities
+ * published by other plugins/packages — when the consumer doesn't have a Hono context
+ * but does have the SlingshotContext + pluginState. Returns `undefined` when the capability
+ * isn't provided. Mirrors the resolution `ctx.capabilities.maybe(...)` performs at request
+ * time, but works in plugin lifecycle code.
+ */
+export function resolveCapabilityValue<TValue>(
+  ctx: {
+    readonly capabilityProviders?: ReadonlyMap<string, string>;
+    readonly pluginState: PluginStateMap;
+  },
+  capability: PackageCapabilityHandle<TValue>,
+): TValue | undefined {
+  const providerName = ctx.capabilityProviders?.get(capability.name);
+  if (!providerName) return undefined;
+  const slot = ctx.pluginState.get(`${PACKAGE_CAPABILITIES_PREFIX}${providerName}`) as
+    | Record<string, unknown>
+    | undefined;
+  return slot?.[capability.name] as TValue | undefined;
+}
+
+/**
+ * Register plugin-tier capability providers so consumers can resolve them through the
+ * standard `ctx.capabilities.require(...)` / `services.capabilities.require(...)` APIs.
+ *
+ * Packages declared with `definePackage(...)` register their capabilities automatically
+ * through `compilePackages(...)`. Plugins are framework-tier and don't go through that
+ * pipeline, so they call this helper from `setupPost` to publish their capabilities.
+ *
+ * Every published handle's `contract` (when set) must equal `pluginName` — that's the
+ * same ownership rule the package-tier path enforces. Duplicate providers across
+ * packages or plugins throw with a clear conflict message.
+ */
+export async function registerPluginCapabilities(
+  ctx: {
+    readonly capabilityProviders?: ReadonlyMap<string, string>;
+    readonly pluginState: PluginStateMap;
+  },
+  pluginName: string,
+  provided: ReadonlyArray<PublishedPackageCapability<unknown>>,
+): Promise<void> {
+  for (const entry of provided) {
+    const owner = entry.capability.contract;
+    if (owner && owner !== pluginName) {
+      throw new Error(
+        `Plugin '${pluginName}' cannot provide capability '${entry.capability.name}' because it is owned by contract '${owner}'`,
+      );
+    }
+  }
+
+  // Test fixtures may not include `capabilityProviders` on the context — typed contracts
+  // are only resolvable when the framework wired the providers map. Silently noop in that
+  // case; legacy state-key publishes still flow through `pluginState` for back-compat.
+  if (!ctx.capabilityProviders) return;
+
+  const providersMap = ctx.capabilityProviders as Map<string, string>;
+  for (const entry of provided) {
+    const existing = providersMap.get(entry.capability.name);
+    if (existing && existing !== pluginName) {
+      throw new Error(
+        `Capability '${entry.capability.name}' is already provided by '${existing}' — cannot register from plugin '${pluginName}'`,
+      );
+    }
+  }
+
+  const resolved = await Promise.all(
+    provided.map(async entry => {
+      const value = await entry.resolve({ packageName: pluginName });
+      return [entry.capability.name, value] as const;
+    }),
+  );
+
+  for (const entry of provided) {
+    providersMap.set(entry.capability.name, pluginName);
+  }
+  publishPluginState(
+    ctx.pluginState,
+    `${PACKAGE_CAPABILITIES_PREFIX}${pluginName}`,
+    Object.freeze(Object.fromEntries(resolved)),
+  );
 }
 
 /** Declare a package-owned non-entity route group and optional domain-local services. */

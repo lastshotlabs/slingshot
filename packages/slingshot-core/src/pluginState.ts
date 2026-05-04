@@ -1,7 +1,32 @@
 import { getContextOrNull } from './context/contextStore';
+import {
+  type PackageEntityRef,
+  type PublicEntityExposureMetadata,
+  applyPublicEntityExposure,
+} from './packageAuthoring';
 import type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginStateTypes';
 
 export type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginStateTypes';
+
+type EntityAdapterLookupInput<TAdapter = object> = EntityAdapterLookup | PackageEntityRef<TAdapter>;
+
+function normalizeEntityAdapterLookup(lookup: EntityAdapterLookupInput): {
+  readonly plugin: string;
+  readonly entity: string;
+  readonly contract?: string;
+  readonly source?: string;
+  readonly exposure?: PublicEntityExposureMetadata;
+} | null {
+  const plugin = lookup.plugin ?? ('contract' in lookup ? lookup.contract : undefined);
+  if (!plugin) return null;
+  return {
+    plugin,
+    entity: lookup.entity,
+    contract: 'contract' in lookup ? lookup.contract : undefined,
+    source: 'source' in lookup ? lookup.source : undefined,
+    exposure: 'exposure' in lookup ? lookup.exposure : undefined,
+  };
+}
 
 const sealedPluginStates = new WeakSet<ReadonlyMap<string, unknown>>();
 
@@ -387,20 +412,27 @@ export function publishEntityAdaptersState<TAdapter extends object>(
  */
 export function maybeEntityAdapter<TAdapter extends object = object>(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
-  lookup: EntityAdapterLookup,
+  lookup: EntityAdapterLookupInput<TAdapter>,
 ): TAdapter | null {
   const pluginState = getPluginStateOrNull(input);
   if (!pluginState) {
     return null;
   }
 
-  const state = resolveEntityAdaptersState(pluginState, lookup.plugin);
-  const adapter = state?.entityAdapters?.[lookup.entity];
+  const resolved = normalizeEntityAdapterLookup(lookup);
+  if (!resolved) return null;
+
+  const state = resolveEntityAdaptersState(pluginState, resolved.plugin);
+  const adapter = state?.entityAdapters?.[resolved.entity];
   if (typeof adapter !== 'object' || adapter === null) {
     return null;
   }
 
-  return adapter as TAdapter;
+  return applyPublicEntityExposure(adapter as TAdapter, resolved.exposure, {
+    entity: resolved.entity,
+    contract: resolved.contract,
+    source: resolved.source,
+  });
 }
 
 /**
@@ -411,12 +443,13 @@ export function maybeEntityAdapter<TAdapter extends object = object>(
  */
 export function requireEntityAdapter<TAdapter extends object = object>(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
-  lookup: EntityAdapterLookup,
+  lookup: EntityAdapterLookupInput<TAdapter>,
 ): TAdapter {
+  const resolved = normalizeEntityAdapterLookup(lookup);
   const adapter = maybeEntityAdapter<TAdapter>(input, lookup);
   if (!adapter) {
     throw new Error(
-      `[slingshot-core] Entity adapter '${lookup.entity}' from plugin '${lookup.plugin}' ` +
+      `[slingshot-core] Entity adapter '${resolved?.entity ?? lookup.entity}' from plugin '${resolved?.plugin ?? 'unknown'}' ` +
         'is not available in pluginState. Ensure the provider publishes it during setupRoutes ' +
         'and declare a plugin dependency before reading it.',
     );

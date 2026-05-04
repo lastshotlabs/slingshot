@@ -952,7 +952,7 @@ function createPackagePlugin(
             createRoute({
               method: routeDefinition.method,
               path: routePath,
-              tags: [pkg.name, domain.name],
+              tags: [pkg.name, domain.name, ...(routeDefinition.tags ?? [])],
               summary: routeDefinition.summary ?? `${domain.name}:${routeDefinition.path}`,
               ...(routeDefinition.description ? { description: routeDefinition.description } : {}),
               ...(routeDefinition.request

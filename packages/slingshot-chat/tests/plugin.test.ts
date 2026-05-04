@@ -5,13 +5,12 @@ import type { Pool } from 'pg';
 import type {
   AppEnv,
   CoreRegistrar,
-  NotificationsPeerState,
   PermissionsState,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
+  PACKAGE_CAPABILITIES_PREFIX,
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
@@ -100,13 +99,11 @@ function createPermissionsState(): PermissionsState {
   };
 }
 
-function createNotificationsPeerState(): NotificationsPeerState {
+function createNotificationsCapabilitiesSlot(): Record<string, unknown> {
   const adapters = createNotificationsTestAdapters();
   return {
-    createBuilder({ source }) {
-      return adapters.createBuilder(source);
-    },
-    registerDeliveryAdapter() {},
+    builderFactory: ({ source }: { source: string }) => adapters.createBuilder(source),
+    deliveryRegistry: { register() {} },
   };
 }
 
@@ -173,12 +170,19 @@ describe('createChatPlugin', () => {
     attachContext(app, {
       pluginState: new Map<string, unknown>([
         [PERMISSIONS_STATE_KEY, createPermissionsState()],
-        [NOTIFICATIONS_PLUGIN_STATE_KEY, createNotificationsPeerState()],
+        [
+          `${PACKAGE_CAPABILITIES_PREFIX}slingshot-notifications`,
+          createNotificationsCapabilitiesSlot(),
+        ],
       ]),
       ws: null,
       wsEndpoints: {},
       wsPublish: null,
       bus,
+      capabilityProviders: new Map<string, string>([
+        ['builderFactory', 'slingshot-notifications'],
+        ['deliveryRegistry', 'slingshot-notifications'],
+      ]),
     } as unknown as Parameters<typeof attachContext>[1]);
 
     await plugin.setupMiddleware?.({

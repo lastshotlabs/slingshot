@@ -1,7 +1,6 @@
 import type {
   ChannelIncomingEventDeclaration,
   NotificationRecord,
-  NotificationsPeerState,
   PermissionsState,
   PluginSetupContext,
   SlingshotPlugin,
@@ -12,12 +11,13 @@ import {
   defineEvent,
   getActor,
   getContextOrNull,
-  getNotificationsStateOrNull,
   getPermissionsStateOrNull,
   getPluginStateOrNull,
   publishPluginState,
+  resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { ChannelConfigDeps, EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
@@ -249,7 +249,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
   let threadAdapterRef: AdapterResult | undefined;
   let replyAdapterRef: AdapterResult | undefined;
   let memberAdapterRef: AdapterResult | undefined;
-  let notificationsStateRef: NotificationsPeerState | undefined;
+  let notificationsBuilderFactoryRef:
+    | ((opts: { source: string }) => import('@lastshotlabs/slingshot-core').NotificationBuilder)
+    | undefined;
 
   // Inner entity plugin — created in setupMiddleware after permissions are resolved.
   let innerPlugin: EntityPlugin | undefined;
@@ -481,7 +483,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         permissions,
 
         setupPost: ({ bus: postBus }) => {
-          const notificationBuilder = notificationsStateRef?.createBuilder({ source: 'community' });
+          const notificationBuilder = notificationsBuilderFactoryRef?.({ source: 'community' });
           if (!notificationBuilder) return;
           const builder = notificationBuilder;
 
@@ -572,8 +574,10 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const appCtx = getContextOrNull(app);
       const pluginState = getPluginStateOrNull(app);
-      notificationsStateRef ??= getNotificationsStateOrNull(pluginState) ?? undefined;
-      if (!notificationsStateRef) {
+      if (!notificationsBuilderFactoryRef && appCtx) {
+        notificationsBuilderFactoryRef = resolveCapabilityValue(appCtx, NotificationsBuilderFactory);
+      }
+      if (!notificationsBuilderFactoryRef) {
         throw new Error(
           '[slingshot-community] slingshot-notifications is a required dependency. ' +
             'Register createNotificationsPlugin() before this plugin.',

@@ -1,20 +1,17 @@
-import type { PluginStateCarrier, PluginStateMap } from './pluginState';
-import { getPluginStateOrNull } from './pluginState';
-
 /**
- * Stable plugin-state key published by `slingshot-notifications`.
+ * Shared notification record / adapter / builder types used across packages.
  *
- * Plugins coordinate with notifications through
- * `ctx.pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY)`, not via direct
- * package imports or hidden symbol hooks.
+ * These types form the typed surface that `slingshot-notifications` publishes through
+ * its `Notifications` package contract (`@lastshotlabs/slingshot-notifications/public.ts`).
+ * Cross-package consumers resolve the contract handles via `ctx.capabilities.require(...)`
+ * — the legacy `NOTIFICATIONS_PLUGIN_STATE_KEY` peer-state publish has been removed.
  */
-export const NOTIFICATIONS_PLUGIN_STATE_KEY = 'slingshot-notifications' as const;
 
 /** Notification priority persisted by the notifications plugin. */
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 /**
- * Normalized notification record shape shared across peer plugins.
+ * Normalized notification record shape shared across packages.
  *
  * This is the neutral contract feature plugins use for formatter registration,
  * delivery adapters, and source-scoped notification creation.
@@ -88,51 +85,4 @@ export interface NotificationBuilder {
   notifyMany(input: NotifyManyInput): Promise<NotificationRecord[]>;
   schedule(input: NotifyInput & { deliverAt: Date }): Promise<NotificationRecord>;
   cancel(notificationId: string): Promise<void>;
-}
-
-/**
- * Minimal peer-facing notifications runtime published through `ctx.pluginState`.
- *
- * The full notifications plugin can own additional private state, but peer
- * plugins should depend only on this neutral contract.
- */
-export interface NotificationsPeerState {
-  readonly createBuilder: (opts: { source: string }) => NotificationBuilder;
-  readonly registerDeliveryAdapter: (adapter: DeliveryAdapter) => void;
-}
-
-/**
- * Retrieve the notifications peer state from plugin state.
- */
-export function getNotificationsState(
-  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
-): NotificationsPeerState {
-  const state = getNotificationsStateOrNull(input);
-  if (!state) {
-    throw new Error(
-      '[slingshot-notifications] notifications peer state is not available in pluginState',
-    );
-  }
-  return state;
-}
-
-/**
- * Retrieve the notifications peer state from plugin state when present.
- */
-export function getNotificationsStateOrNull(
-  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
-): NotificationsPeerState | null {
-  const pluginState = getPluginStateOrNull(input);
-  const state = pluginState?.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
-    | NotificationsPeerState
-    | null
-    | undefined;
-  if (
-    !state ||
-    typeof state.createBuilder !== 'function' ||
-    typeof state.registerDeliveryAdapter !== 'function'
-  ) {
-    return null;
-  }
-  return state;
 }

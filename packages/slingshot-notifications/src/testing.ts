@@ -12,7 +12,10 @@ import { createNotificationBuilder } from './builder';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS } from './preferences';
 import { createNoopRateLimitBackend } from './rateLimit';
-import { NOTIFICATIONS_PLUGIN_STATE_KEY } from './state';
+import {
+  NotificationsBuilderFactory,
+  NotificationsDeliveryRegistry,
+} from './public';
 import type {
   NotificationAdapter,
   NotificationPreferenceAdapter,
@@ -289,7 +292,7 @@ function registerNotificationsTestDefinitions(events: SlingshotEvents): void {
   if (!events.get('notifications:notification.created')) {
     events.register(
       defineEvent('notifications:notification.created', {
-        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        ownerPlugin: 'slingshot-notifications',
         exposure,
         resolveScope(payload) {
           return {
@@ -305,7 +308,7 @@ function registerNotificationsTestDefinitions(events: SlingshotEvents): void {
   if (!events.get('notifications:notification.updated')) {
     events.register(
       defineEvent('notifications:notification.updated', {
-        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        ownerPlugin: 'slingshot-notifications',
         exposure,
         resolveScope(payload) {
           return {
@@ -321,7 +324,7 @@ function registerNotificationsTestDefinitions(events: SlingshotEvents): void {
   if (!events.get('notifications:notification.read')) {
     events.register(
       defineEvent('notifications:notification.read', {
-        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        ownerPlugin: 'slingshot-notifications',
         exposure,
         resolveScope(payload) {
           return {
@@ -396,33 +399,17 @@ export function createNotificationsTestBootstrap() {
     app,
     pluginState: createPluginStateMap([
       [
-        NOTIFICATIONS_PLUGIN_STATE_KEY,
+        'slingshot:package:capabilities:slingshot-notifications',
         {
-          notifications: adapters.notifications,
-          preferences: adapters.preferences,
-          createBuilder: ({ source }: { source: string }) => adapters.createBuilder(source),
-          dispatcher: {
-            start() {},
-            stop() {},
-            tick() {
-              return Promise.resolve(0);
-            },
-          },
-          registerDeliveryAdapter() {},
-          config: Object.freeze({
-            mountPath: '/notifications',
-            sseEnabled: true,
-            ssePath: '/notifications/sse',
-            dispatcher: { enabled: true, intervalMs: 30_000, maxPerTick: 500 },
-            rateLimit: {
-              perSourcePerUserPerWindow: 100,
-              windowMs: 3_600_000,
-              backend: 'memory',
-            },
-            defaultPreferences: DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS,
-          }),
+          [NotificationsBuilderFactory.name]: ({ source }: { source: string }) =>
+            adapters.createBuilder(source),
+          [NotificationsDeliveryRegistry.name]: { register() {} },
         },
       ],
+    ]),
+    capabilityProviders: new Map<string, string>([
+      [NotificationsBuilderFactory.name, 'slingshot-notifications'],
+      [NotificationsDeliveryRegistry.name, 'slingshot-notifications'],
     ]),
     ws: null,
     wsEndpoints: {},

@@ -32,9 +32,11 @@ one ([First Steps](/slingshot/first-steps/)) walks the project shape and boot li
 ```
 app.config.ts (defineApp)
   └── Packages (definePackage)
-        ├── Entities (defineEntity) → generated CRUD, operations, storage
-        ├── Domain routes (route.*) → custom endpoints
-        └── Capabilities → typed cross-package contracts
+        ├── Entities (defineEntity)         → generated CRUD, operations, storage
+        ├── Domain routes (route.*)         → custom endpoints
+        └── Public surface (definePackageContract)
+              ├── publishes capabilities    → typed cross-package services
+              └── publishes entity refs     → narrowed adapters for other packages
 ```
 
 1. **App config** — `app.config.ts` exports `defineApp({...})` as default. The CLI
@@ -43,7 +45,9 @@ app.config.ts (defineApp)
 2. **Packages** — each feature area is a package with its own routes, middleware, and entities.
 3. **Entities** — define a model, get generated routes, operations, and storage that works
    across backends.
-4. **Core features** — events, realtime, auth, permissions, and jobs plug into the same model.
+4. **Package Contracts** — when another package consumes yours, declare a typed public
+   surface so the boundary is explicit and validated at boot.
+5. **Core features** — events, realtime, auth, permissions, and jobs plug into the same model.
 
 ## Where to start
 

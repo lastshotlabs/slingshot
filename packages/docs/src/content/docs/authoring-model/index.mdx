@@ -10,11 +10,12 @@ Every Slingshot app follows the same structure. Understanding it makes everythin
 ## The three layers
 
 ```
-defineApp()                       ← app root: assembly, config, security
-  └── definePackage()             ← packages: feature boundaries
-        ├── entity()              ← entities: generated CRUD + operations
-        ├── domain() + route.*()  ← routes: custom endpoints
-        └── capabilities          ← contracts: cross-package dependencies
+defineApp()                          ← app root: assembly, config, security
+  └── definePackage()                ← packages: feature boundaries
+        ├── entity()                 ← entities: generated CRUD + operations
+        ├── domain() + route.*()     ← routes: custom endpoints
+        └── definePackageContract()  ← public surface: typed capabilities + entity refs
+                                       consumed by other packages
 ```
 
 **App root** — one file that assembles your app. Config covers ports, security, databases,
@@ -27,6 +28,10 @@ dependencies and compose without coupling.
 **Entities** — when a package owns data (posts, tasks, users, orders), define an entity.
 Slingshot generates CRUD routes, validation, OpenAPI docs, and storage wiring. Add operations
 for domain actions like `publish` or `archive`.
+
+**Package Contracts** — when another package needs to consume yours, declare a typed public
+surface (`definePackageContract`). The contract bundles the capabilities and narrowed entity
+refs you publish, validates them at boot, and keeps the boundary explicit.
 
 ## A real example
 

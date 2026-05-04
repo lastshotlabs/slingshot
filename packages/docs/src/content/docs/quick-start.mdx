@@ -67,7 +67,7 @@ can be tested with `curl`.
 
 Instead of writing five route handlers by hand, define one entity:
 
-```typescript title="src/entities/task.ts"
+```typescript title="src/packages/app/task.entity.ts"
 import { defineEntity, field } from '@lastshotlabs/slingshot';
 
 export const Task = defineEntity('Task', {
@@ -84,7 +84,7 @@ Wire it into your config:
 
 ```typescript title="app.config.ts"
 import { defineApp, definePackage, entity } from '@lastshotlabs/slingshot';
-import { Task } from './src/entities/task';
+import { Task } from './src/packages/app/task.entity';
 
 const appPackage = definePackage({
   name: 'app',
@@ -130,7 +130,7 @@ bun add @lastshotlabs/slingshot-auth
 
 Update your entity to require login:
 
-```typescript title="src/entities/task.ts"
+```typescript title="src/packages/app/task.entity.ts"
 import { defineEntity, field } from '@lastshotlabs/slingshot';
 
 export const Task = defineEntity('Task', {
@@ -151,7 +151,7 @@ Then add the auth plugin to your config:
 ```typescript title="app.config.ts"
 import { defineApp, definePackage, entity } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { Task } from './src/entities/task';
+import { Task } from './src/packages/app/task.entity';
 
 const appPackage = definePackage({
   name: 'app',

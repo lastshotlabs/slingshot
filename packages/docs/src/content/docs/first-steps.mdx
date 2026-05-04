@@ -9,21 +9,34 @@ If you want to skip straight to a runnable app, jump to [Quick Start](/slingshot
 
 ## Project structure
 
-A Slingshot app is conventional but small. There is one required file:
+The framework requires exactly one file: `app.config.ts`. Everything else is convention.
+Most apps end up looking something like this:
 
 ```
 my-app/
-├── app.config.ts        ← required — declares your app
+├── app.config.ts                     ← required — declares your app
 ├── package.json
-└── src/                 ← your code (anywhere you like)
-    ├── packages/
-    ├── entities/
-    └── routes/
+└── src/
+    └── packages/
+        ├── blog/
+        │   ├── index.ts              ← exports the blogPackage definition
+        │   ├── post.entity.ts        ← Post entity
+        │   ├── post.operations.ts    ← publish, archive, etc.
+        │   ├── routes.ts             ← custom domain routes (preview, feed)
+        │   └── public.ts             ← Package Contract (capabilities, public refs)
+        └── notifications/
+            ├── index.ts
+            └── public.ts
 ```
 
-`app.config.ts` exports `defineApp({...})` as default. It is the source of truth for what
-your app is: which packages it loads, which database it talks to, what middleware runs,
-which port it binds.
+This is **one common shape, not required.** Each package owns its own entities, routes,
+and public contract — they don't live in top-level `entities/` or `routes/` folders. If
+your project is tiny or you prefer a flat layout, the framework won't stop you. The only
+hard rule is: `app.config.ts` exists at the project root and exports `defineApp({...})` as
+default.
+
+`app.config.ts` is the source of truth for what your app is: which packages it loads,
+which database it talks to, what middleware runs, which port it binds.
 
 ## The minimal app
 

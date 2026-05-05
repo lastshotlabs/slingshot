@@ -68,7 +68,7 @@ const ErrorResponseSchema = z.object({
 
 const entitySearchRoute = createRoute({
   method: 'get',
-  path: '/:entity',
+  path: '/{entity}',
   tags,
   summary: 'Search an entity',
   request: { query: SearchQueryParams },

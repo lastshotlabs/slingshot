@@ -527,7 +527,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/users/:userId',
+      path: '/users/{userId}',
       summary: 'Get a user',
       description: 'Returns a single user record by ID.',
       tags,
@@ -580,7 +580,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'patch',
-      path: '/users/:userId',
+      path: '/users/{userId}',
       summary: 'Update user profile',
       description: 'Updates display name, first/last name, or external ID for a user.',
       tags,
@@ -694,7 +694,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'post',
-      path: '/users/:userId/suspend',
+      path: '/users/{userId}/suspend',
       summary: 'Suspend a user',
       description: 'Suspends a user account. Suspended users cannot log in.',
       tags,
@@ -831,7 +831,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'post',
-      path: '/users/:userId/unsuspend',
+      path: '/users/{userId}/unsuspend',
       summary: 'Unsuspend a user',
       description: 'Restores a suspended user account.',
       tags,
@@ -947,7 +947,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/users/:userId/roles',
+      path: '/users/{userId}/roles',
       summary: 'Get user roles',
       description: 'Returns the app-wide roles assigned to a user.',
       tags,
@@ -995,7 +995,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'put',
-      path: '/users/:userId/roles',
+      path: '/users/{userId}/roles',
       summary: 'Set user roles',
       description: 'Replaces all app-wide roles for a user.',
       tags,
@@ -1121,7 +1121,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'delete',
-      path: '/users/:userId',
+      path: '/users/{userId}',
       summary: 'Delete a user',
       description: 'Permanently deletes a user account and revokes all sessions.',
       tags,
@@ -1241,7 +1241,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/users/:userId/sessions',
+      path: '/users/{userId}/sessions',
       summary: 'List user sessions',
       description: 'Returns all active sessions for a user.',
       tags,
@@ -1289,7 +1289,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'delete',
-      path: '/users/:userId/sessions',
+      path: '/users/{userId}/sessions',
       summary: 'Revoke all user sessions',
       description: 'Revokes all active sessions for a user, forcing them to re-authenticate.',
       tags,
@@ -1390,7 +1390,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'delete',
-      path: '/users/:userId/sessions/:sessionId',
+      path: '/users/{userId}/sessions/{sessionId}',
       summary: 'Revoke a specific session',
       description: 'Revokes a single session for a user by session ID.',
       tags,
@@ -1605,7 +1605,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/users/:userId/audit-log',
+      path: '/users/{userId}/audit-log',
       summary: 'Get user audit log',
       description: 'Returns paginated audit log entries for a specific user.',
       tags,

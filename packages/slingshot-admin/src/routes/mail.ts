@@ -122,7 +122,7 @@ export function createMailRouter(config: MailRouterConfig) {
     router,
     createRoute({
       method: 'post',
-      path: '/mail/templates/:name/preview',
+      path: '/mail/templates/{name}/preview',
       summary: 'Preview a mail template',
       description:
         'Renders a mail template with the supplied data and returns subject, html, and text.',

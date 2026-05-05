@@ -40,7 +40,7 @@ const EntityHealthResponseSchema = z.object({
 
 const entityHealthRoute = createRoute({
   method: 'get',
-  path: '/admin/indexes/:entity/health',
+  path: '/admin/indexes/{entity}/health',
   tags,
   summary: 'Health check for a specific entity index',
   responses: {
@@ -73,7 +73,7 @@ const RebuildResponseSchema = z.object({
 
 const rebuildRoute = createRoute({
   method: 'post',
-  path: '/admin/indexes/:entity/rebuild',
+  path: '/admin/indexes/{entity}/rebuild',
   tags,
   summary: 'Rebuild the search index for a specific entity',
   responses: {

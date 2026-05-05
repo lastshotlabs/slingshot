@@ -234,7 +234,7 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
     router,
     createRoute({
       method: 'delete',
-      path: '/grants/:grantId',
+      path: '/grants/{grantId}',
       summary: 'Revoke a permission grant',
       tags,
       request: {
@@ -303,7 +303,7 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/subjects/:subjectType/:subjectId/grants',
+      path: '/subjects/{subjectType}/{subjectId}/grants',
       summary: 'List grants for a subject',
       tags,
       request: {
@@ -360,7 +360,7 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
     router,
     createRoute({
       method: 'get',
-      path: '/resources/:type/:id/grants',
+      path: '/resources/{type}/{id}/grants',
       summary: 'List grants on a resource',
       tags,
       request: {

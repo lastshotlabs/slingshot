@@ -39,7 +39,7 @@ const ErrorResponseSchema = z.object({
 
 const suggestRoute = createRoute({
   method: 'get',
-  path: '/:entity/suggest',
+  path: '/{entity}/suggest',
   tags,
   summary: 'Autocomplete suggestions for an entity',
   request: { query: SuggestQueryParams },

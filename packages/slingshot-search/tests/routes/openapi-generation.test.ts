@@ -52,4 +52,51 @@ describe('search OpenAPI generation', () => {
     const components = doc.components?.schemas ?? {};
     expect(components['SearchFilter']).toBeDefined();
   });
+
+  it('emits brace-form OpenAPI paths for parameterized search routes', async () => {
+    // The federated, suggest, and admin search routes use `:entity` segments
+    // internally. After the source migration to brace literals, the OpenAPI doc
+    // must emit `/search/{entity}` (and matching admin/suggest paths) rather
+    // than `/search/:entity`. Snapshot codegen depends on the brace form.
+    const config: SearchPluginConfig = { providers: { default: { provider: 'db-native' } } };
+    const manager = createSearchManager({
+      pluginConfig: config,
+      transformRegistry: createSearchTransformRegistry(),
+    });
+    await manager.initialize([
+      {
+        name: 'Article',
+        _pkField: 'id',
+        _storageName: 'articles',
+        fields: { id: { type: 'string', optional: false, primary: true, immutable: true } },
+        search: { fields: {} },
+      } as unknown as ResolvedEntityConfig,
+    ]);
+
+    const { createSearchRouter } = await import('../../src/routes/search');
+    const { createSuggestRouter } = await import('../../src/routes/suggest');
+    const { createAdminRouter } = await import('../../src/routes/admin');
+
+    const app = new OpenAPIHono<AppEnv>();
+    app.route('/search', createSearchRouter(manager, config, false));
+    app.route('/search', createSuggestRouter(manager, config, false));
+    app.route('/', createAdminRouter(manager, config));
+
+    const doc = app.getOpenAPIDocument({
+      openapi: '3.0.0',
+      info: { title: 'test', version: '0.0.0' },
+    });
+    const paths = Object.keys(doc.paths ?? {});
+
+    // Brace form must be present.
+    expect(paths).toContain('/search/{entity}');
+    expect(paths).toContain('/search/{entity}/suggest');
+    expect(paths).toContain('/admin/indexes/{entity}/health');
+    expect(paths).toContain('/admin/indexes/{entity}/rebuild');
+
+    // Colon form must not leak.
+    for (const path of paths) {
+      expect(path).not.toContain(':');
+    }
+  });
 });

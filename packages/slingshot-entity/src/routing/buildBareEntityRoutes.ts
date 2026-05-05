@@ -25,7 +25,7 @@ import type {
   TypedRouteResponseSpec,
   TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
-import { createRoute, getActor } from '@lastshotlabs/slingshot-core';
+import { createRoute, getActor, toOpenApiPath } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
@@ -90,6 +90,7 @@ function registerRoute(
   router: BareEntityRouteRegistrar,
   route: RouteDefinition,
   handler: Handler,
+  honoPath: string,
 ): void {
   if (route.method === 'head') {
     const headOnlyHandler: Handler = async c => {
@@ -101,7 +102,7 @@ function registerRoute(
     if (supportsOpenApi(router)) {
       router.openapi(route, headOnlyHandler);
     }
-    router.get(route.path, headOnlyHandler);
+    router.get(honoPath, headOnlyHandler);
     return;
   }
   if (supportsOpenApi(router)) {
@@ -110,19 +111,19 @@ function registerRoute(
   }
   switch (route.method) {
     case 'get':
-      router.get(route.path, handler);
+      router.get(honoPath, handler);
       return;
     case 'post':
-      router.post(route.path, handler);
+      router.post(honoPath, handler);
       return;
     case 'put':
-      router.put(route.path, handler);
+      router.put(honoPath, handler);
       return;
     case 'patch':
-      router.patch(route.path, handler);
+      router.patch(honoPath, handler);
       return;
     case 'delete':
-      router.delete(route.path, handler);
+      router.delete(honoPath, handler);
       return;
     default:
       throw new Error(`Unsupported bare entity route method: ${route.method}`);
@@ -830,7 +831,7 @@ function createPlannedRouteDefinition(
     const request = buildTypedRouteRequest(route.request);
     return createRoute({
       method: route.method,
-      path: route.path,
+      path: toOpenApiPath(route.path),
       tags: [tag],
       summary: route.summary ?? route.opName,
       ...(route.description ? { description: route.description } : {}),
@@ -851,7 +852,7 @@ function createPlannedRouteDefinition(
       };
       return createRoute({
         method: 'post',
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? `Create ${config.name}`,
         ...(route.description ? { description: route.description } : {}),
@@ -868,7 +869,7 @@ function createPlannedRouteDefinition(
       const request = buildTypedRouteRequest(route.request) ?? { query: schemas.listOptions };
       return createRoute({
         method: 'get',
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? `List ${config.name}`,
         ...(route.description ? { description: route.description } : {}),
@@ -886,7 +887,7 @@ function createPlannedRouteDefinition(
         } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'get',
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? `Get ${config.name} by ID`,
         ...(route.description ? { description: route.description } : {}),
@@ -907,7 +908,7 @@ function createPlannedRouteDefinition(
       };
       return createRoute({
         method: 'patch',
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? `Update ${config.name}`,
         ...(route.description ? { description: route.description } : {}),
@@ -929,7 +930,7 @@ function createPlannedRouteDefinition(
         } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'delete',
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? `Delete ${config.name}`,
         ...(route.description ? { description: route.description } : {}),
@@ -983,7 +984,7 @@ function createPlannedRouteDefinition(
 
       return createRoute({
         method: route.method,
-        path: route.path,
+        path: toOpenApiPath(route.path),
         tags: [tag],
         summary: route.summary ?? route.opName,
         ...(route.description ? { description: route.description } : {}),
@@ -1139,8 +1140,11 @@ export function buildBareEntityRoutes<
         route.buildExecutor?.(executorBuilderContext) ?? defaultGeneratedExecutor(route, adapter);
       const routeDef = createPlannedRouteDefinition(route, config, schemas, tag);
 
-      registerRoute(router, routeDef, async c => {
-        c.set('__routeKey' as never, route.routeKey as never);
+      registerRoute(
+        router,
+        routeDef,
+        async c => {
+          c.set('__routeKey' as never, route.routeKey as never);
         const prep = await preparePlannedExecution(route, c, adapter, schemas, dataScopes);
         if (prep instanceof Response) {
           return prep;
@@ -1182,7 +1186,9 @@ export function buildBareEntityRoutes<
         };
 
         return executor(execContext);
-      });
+      },
+        route.path,
+      );
     }
 
     return router;
@@ -1249,7 +1255,7 @@ export function buildBareEntityRoutes<
             };
     const opRoute = createRoute({
       method: route.method,
-      path: opPath,
+      path: toOpenApiPath(opPath),
       tags: [tag],
       summary: opName,
       ...(request ? { request } : {}),
@@ -1305,17 +1311,20 @@ export function buildBareEntityRoutes<
         return result ? c.body(null, 200) : c.body(null, 404);
       }
       return c.json(projectAndTransform(result), 200);
-    });
+    },
+      opPath,
+    );
   }
 
   // POST /{segment} — create
   if (!routeDisabled(disabled, 'create', 'POST', `/${segment}`)) {
     const createSchemas = schemasForVariant(config.routes?.create?.input);
+    const createPath = `/${segment}`;
     registerRoute(
       router,
       createRoute({
         method: 'post',
-        path: `/${segment}`,
+        path: toOpenApiPath(createPath),
         tags: [tag],
         summary: `Create ${config.name}`,
         request: { body: { content: { 'application/json': { schema: createSchemas.create } } } },
@@ -1362,16 +1371,18 @@ export function buildBareEntityRoutes<
         const transform = config.routes?.create?.transform;
         return c.json(transform ? transform(projected) : projected, 201);
       },
+      createPath,
     );
   }
 
   // GET /{segment} — list
   if (!routeDisabled(disabled, 'list', 'GET', `/${segment}`)) {
+    const listPath = `/${segment}`;
     registerRoute(
       router,
       createRoute({
         method: 'get',
-        path: `/${segment}`,
+        path: toOpenApiPath(listPath),
         tags: [tag],
         summary: `List ${config.name}`,
         request: { query: schemas.listOptions },
@@ -1431,16 +1442,18 @@ export function buildBareEntityRoutes<
         const transform = config.routes?.list?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },
+      listPath,
     );
   }
 
   // GET /{segment}/:id — get
   if (!routeDisabled(disabled, 'get', 'GET', `/${segment}/:id`)) {
+    const getPath = `/${segment}/:id`;
     registerRoute(
       router,
       createRoute({
         method: 'get',
-        path: `/${segment}/:id`,
+        path: toOpenApiPath(getPath),
         tags: [tag],
         summary: `Get ${config.name} by ID`,
         responses: {
@@ -1488,17 +1501,19 @@ export function buildBareEntityRoutes<
         const transform = config.routes?.get?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },
+      getPath,
     );
   }
 
   // PATCH /{segment}/:id — update (using PATCH to match generated routes.ts)
   if (!routeDisabled(disabled, 'update', 'PATCH', `/${segment}/:id`)) {
     const updateSchemas = schemasForVariant(config.routes?.update?.input);
+    const updatePath = `/${segment}/:id`;
     registerRoute(
       router,
       createRoute({
         method: 'patch',
-        path: `/${segment}/:id`,
+        path: toOpenApiPath(updatePath),
         tags: [tag],
         summary: `Update ${config.name}`,
         request: { body: { content: { 'application/json': { schema: updateSchemas.update } } } },
@@ -1570,16 +1585,18 @@ export function buildBareEntityRoutes<
         const transform = config.routes?.update?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },
+      updatePath,
     );
   }
 
   // DELETE /{segment}/:id — delete
   if (!routeDisabled(disabled, 'delete', 'DELETE', `/${segment}/:id`)) {
+    const deletePath = `/${segment}/:id`;
     registerRoute(
       router,
       createRoute({
         method: 'delete',
-        path: `/${segment}/:id`,
+        path: toOpenApiPath(deletePath),
         tags: [tag],
         summary: `Delete ${config.name}`,
         responses: { 204: { description: 'Deleted' } },
@@ -1619,6 +1636,7 @@ export function buildBareEntityRoutes<
         c.set('__opName' as never, 'delete' as never);
         return c.body(null, 204);
       },
+      deletePath,
     );
   }
 

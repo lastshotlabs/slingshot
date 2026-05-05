@@ -7,10 +7,14 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   getContext,
-  getPermissionsStateOrNull,
-  getPluginState,
+  resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import {
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
+} from '@lastshotlabs/slingshot-permissions';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { emojiManifest } from './emoji';
 import type { EmojiPluginConfig } from './types';
@@ -95,16 +99,21 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
         : ['slingshot-auth', 'slingshot-permissions'],
 
     async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      // Resolve permissions — explicit config wins, pluginState fallback.
-      const permissions: PermissionsState | undefined =
-        explicitPermissions ??
-        getPermissionsStateOrNull(getPluginState(app)) ??
-        (() => {
+      // Resolve permissions — explicit config wins, contract resolution as fallback.
+      let permissions: PermissionsState | undefined = explicitPermissions;
+      if (!permissions) {
+        const ctx = getContext(app);
+        const evaluator = resolveCapabilityValue(ctx, PermissionsEvaluatorCap);
+        const registry = resolveCapabilityValue(ctx, PermissionsRegistryCap);
+        const adapter = resolveCapabilityValue(ctx, PermissionsAdapterCap);
+        if (!evaluator || !registry || !adapter) {
           throw new Error(
             '[slingshot-emoji] No permissions available. Either pass `permissions` ' +
               'in the plugin config or register createPermissionsPlugin() before this plugin.',
           );
-        })();
+        }
+        permissions = { evaluator, registry, adapter };
+      }
 
       const mountPath = frozenConfig.mountPath ?? '/emoji';
 

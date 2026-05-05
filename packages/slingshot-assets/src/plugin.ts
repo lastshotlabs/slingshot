@@ -8,12 +8,15 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   defineEvent,
+  getContext,
   getPermissionsStateOrNull,
   getPluginState,
   noopLogger,
-  publishPluginState,
+  provideCapability,
+  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { AssetsRuntimeCap } from './public';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { resolveStorageAdapter } from './adapters/index';
@@ -30,7 +33,6 @@ import {
 } from './middleware/deleteStorageFile';
 import {
   ASSETS_PLUGIN_STATE_KEY,
-  ASSETS_RUNTIME_KEY,
   type AssetAdapter,
   type AssetsHealth,
   type AssetsHealthDetails,
@@ -276,7 +278,9 @@ export function createAssetsPlugin(
           storage,
           config,
         });
-        publishPluginState(getPluginState(app), ASSETS_RUNTIME_KEY, state);
+        await registerPluginCapabilities(getContext(app), 'slingshot-assets', [
+          provideCapability(AssetsRuntimeCap, () => state),
+        ]);
       }
     },
 

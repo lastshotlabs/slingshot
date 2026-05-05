@@ -1,7 +1,8 @@
-import { definePluginStateKey, readPluginState } from '@lastshotlabs/slingshot-core';
+import { resolveCapabilityValue } from '@lastshotlabs/slingshot-core';
 import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
 import type { OrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationRuntimeCap } from './public';
 
 /**
  * Plugin name used for registration, dependency declarations, and event ownership.
@@ -9,18 +10,17 @@ import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration';
 
 /**
- * Typed plugin-state key for the orchestration runtime slot.
- */
-export const ORCHESTRATION_RUNTIME_KEY =
-  definePluginStateKey<OrchestrationRuntime>(ORCHESTRATION_PLUGIN_KEY);
-
-/**
  * Read the orchestration runtime published by `createOrchestrationPlugin()`.
  *
- * Throws when the plugin has not been registered for the current app instance.
+ * Resolves through the typed `OrchestrationRuntimeCap` contract capability. Throws
+ * when the plugin has not been registered for the current app instance.
+ *
+ * Equivalent to `ctx.capabilities.require(OrchestrationRuntimeCap)` — the contract
+ * handle is the canonical way to consume this surface; this helper exists for
+ * call-site ergonomics and back-compat with documented examples.
  */
 export function getOrchestration(ctx: SlingshotContext): OrchestrationRuntime {
-  const runtime = readPluginState(ctx, ORCHESTRATION_RUNTIME_KEY);
+  const runtime = resolveCapabilityValue(ctx, OrchestrationRuntimeCap);
   if (!runtime) {
     throw new OrchestrationError(
       'ADAPTER_ERROR',
@@ -31,9 +31,9 @@ export function getOrchestration(ctx: SlingshotContext): OrchestrationRuntime {
 }
 
 /**
- * Read the orchestration runtime from plugin state, returning `null` when the plugin
- * is not present.
+ * Read the orchestration runtime through the typed contract, returning `null` when the
+ * plugin is not present.
  */
 export function getOrchestrationOrNull(ctx: SlingshotContext): OrchestrationRuntime | null {
-  return readPluginState(ctx, ORCHESTRATION_RUNTIME_KEY) ?? null;
+  return resolveCapabilityValue(ctx, OrchestrationRuntimeCap) ?? null;
 }

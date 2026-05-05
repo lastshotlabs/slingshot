@@ -56,7 +56,8 @@ function makeSetupContext(app: Hono) {
 
 function attachMinimalContext(app: Hono) {
   const pluginState = new Map<unknown, unknown>();
-  attachContext(app, { app, pluginState } as never);
+  const capabilityProviders = new Map<string, string>();
+  attachContext(app, { app, pluginState, capabilityProviders } as never);
   return pluginState;
 }
 
@@ -82,7 +83,7 @@ describe('adminAuth — edge cases', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     const response = await app.request('/orchestration/health');
     expect(response.status).toBe(403);
@@ -111,7 +112,7 @@ describe('adminAuth — edge cases', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     const response = await app.request('/orchestration/health');
     expect(response.status).toBe(500);
@@ -139,7 +140,7 @@ describe('adminAuth — edge cases', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     const response = await app.request('/orchestration/health');
     expect(response.status).toBe(200);
@@ -173,7 +174,7 @@ describe('routeMiddleware — ordering and execution', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     await app.request('/orchestration/tasks/noop-task/runs', {
       method: 'POST',
@@ -201,7 +202,7 @@ describe('routeMiddleware — ordering and execution', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     const response = await app.request('/orchestration/tasks/noop-task/runs', {
       method: 'POST',
@@ -232,7 +233,7 @@ describe('plugin — routePrefix customization', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     const response = await app.request('/jobs/tasks');
     expect(response.status).toBe(200);
@@ -255,7 +256,7 @@ describe('plugin — routePrefix customization', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     // Default prefix should NOT be mounted
     const response = await app.request('/orchestration/tasks');
@@ -275,12 +276,17 @@ describe('plugin — event sink integration with bus', () => {
     const app = new Hono();
     const pluginState = attachMinimalContext(app);
 
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
-    // After setupRoutes, the runtime was stored in pluginState
-    const runtime = pluginState.get(ORCHESTRATION_PLUGIN_KEY);
+    // After setupRoutes, the runtime is published as a contract capability under the
+    // PACKAGE_CAPABILITIES_PREFIX slot for slingshot-orchestration.
+    const slot = pluginState.get(
+      'slingshot:package:capabilities:slingshot-orchestration',
+    ) as Record<string, unknown> | undefined;
+    expect(slot).toBeDefined();
+    const runtime = slot?.runtime as Record<string, unknown> | undefined;
     expect(runtime).toBeDefined();
-    expect(typeof (runtime as Record<string, unknown>).runTask).toBe('function');
+    expect(typeof runtime?.runTask).toBe('function');
 
     await realAdapter.shutdown();
   });
@@ -296,9 +302,12 @@ describe('plugin — event sink integration with bus', () => {
     const app = new Hono();
     const pluginState = attachMinimalContext(app);
 
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
-    const runtime = pluginState.get(ORCHESTRATION_PLUGIN_KEY) as {
+    const slot = pluginState.get(
+      'slingshot:package:capabilities:slingshot-orchestration',
+    ) as Record<string, unknown>;
+    const runtime = slot.runtime as {
       runTask: (task: unknown, input: unknown) => Promise<{ result: () => Promise<unknown> }>;
     };
 
@@ -320,7 +329,7 @@ describe('plugin — event sink integration with bus', () => {
 
     const app = new Hono();
     attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
     // After teardown, the event sink is disposed. Teardown must not throw.
     await expect(plugin.teardown?.()).resolves.toBeUndefined();

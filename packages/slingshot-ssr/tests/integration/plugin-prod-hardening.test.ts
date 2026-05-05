@@ -216,7 +216,7 @@ describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => 
       app,
       pluginState: new Map(),
     });
-    plugin.setupMiddleware!({
+    await plugin.setupMiddleware!({
       app,
       bus: mockBus,
       events: mockBus,
@@ -291,7 +291,7 @@ describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => 
     });
     const app = new Hono() as unknown as import('hono').Hono<AppEnv>;
     (attachContext as (...args: unknown[]) => void)(app, { app, pluginState: new Map() });
-    plugin.setupMiddleware!({ app, bus: mockBus, events: mockBus, config: {} as never });
+    await plugin.setupMiddleware!({ app, bus: mockBus, events: mockBus, config: {} as never });
 
     const honoApp = app as unknown as { request: (path: string) => Promise<Response> };
     const res = await honoApp.request('/route-x');

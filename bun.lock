@@ -266,6 +266,7 @@
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
         "@lastshotlabs/slingshot-notifications": "workspace:*",
+        "@lastshotlabs/slingshot-permissions": "workspace:*",
       },
       "peerDependencies": {
         "@lastshotlabs/slingshot-permissions": "workspace:*",
@@ -336,6 +337,7 @@
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
+        "@lastshotlabs/slingshot-permissions": "workspace:*",
       },
       "peerDependencies": {
         "@hono/zod-openapi": ">=0.18",

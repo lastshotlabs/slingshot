@@ -8,6 +8,10 @@ import './events';
  */
 export { createWebhookPlugin } from './plugin';
 /**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Webhooks, WebhookAdapterCap } from './public';
+/**
  * Route identifiers mounted by the webhooks plugin.
  */
 export { WEBHOOK_ROUTES } from './routes/index';

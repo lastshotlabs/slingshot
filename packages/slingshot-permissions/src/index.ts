@@ -93,6 +93,15 @@ export { createPermissionsPlugin } from './plugin';
  */
 export type { PermissionsPluginConfig } from './plugin';
 /**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export {
+  Permissions,
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
+} from './public';
+/**
  * Permissions error classes with machine-readable codes.
  */
 export { PermissionsError, PermissionsConfigError, PermissionsAdapterError } from './errors';

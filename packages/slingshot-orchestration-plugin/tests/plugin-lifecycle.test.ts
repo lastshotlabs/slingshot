@@ -6,6 +6,7 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   createInProcessAdapter,
+  getContext,
 } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
@@ -31,8 +32,14 @@ function makeSetupContext(app: Hono) {
 
 function attachMinimalContext(app: Hono) {
   const pluginState = new Map<unknown, unknown>();
-  attachContext(app, { app, pluginState } as never);
+  const capabilityProviders = new Map<string, string>();
+  attachContext(app, { app, pluginState, capabilityProviders } as never);
   return pluginState;
+}
+
+function getCapabilityProviders(app: Hono): Map<string, string> {
+  const ctx = getContext(app as never) as { capabilityProviders?: Map<string, string> };
+  return ctx.capabilityProviders ?? new Map();
 }
 
 const noopTask = defineTask({
@@ -77,7 +84,7 @@ describe('createOrchestrationPlugin — metadata', () => {
 });
 
 describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
-  test('throws INVALID_CONFIG when routeMiddleware is empty', () => {
+  test('throws INVALID_CONFIG when routeMiddleware is empty', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -92,7 +99,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
 
     let caught: unknown;
     try {
-      plugin.setupRoutes?.(ctx);
+      await plugin.setupRoutes?.(ctx);
     } catch (err) {
       caught = err;
     }
@@ -100,7 +107,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
     expect((caught as OrchestrationError).code).toBe('INVALID_CONFIG');
   });
 
-  test('throws with correct message about routeMiddleware requirement', () => {
+  test('throws with correct message about routeMiddleware requirement', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -115,7 +122,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
 
     let caught: unknown;
     try {
-      plugin.setupRoutes?.(ctx);
+      await plugin.setupRoutes?.(ctx);
     } catch (err) {
       caught = err;
     }
@@ -142,10 +149,10 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
     attachMinimalContext(app);
     const ctx = makeSetupContext(app);
 
-    expect(() => plugin.setupRoutes?.(ctx)).not.toThrow();
+    await expect(plugin.setupRoutes?.(ctx)).resolves.toBeUndefined();
   });
 
-  test('publishes runtime on pluginState after setupRoutes', () => {
+  test('publishes runtime on pluginState after setupRoutes', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -157,14 +164,14 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
     const pluginState = attachMinimalContext(app);
     const ctx = makeSetupContext(app);
 
-    plugin.setupRoutes?.(ctx);
+    await plugin.setupRoutes?.(ctx);
 
-    expect(pluginState.has(ORCHESTRATION_PLUGIN_KEY)).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
   });
 });
 
 describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
-  test('does not throw when routes: false and routeMiddleware is empty', () => {
+  test('does not throw when routes: false and routeMiddleware is empty', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -176,10 +183,10 @@ describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
     attachMinimalContext(app);
     const ctx = makeSetupContext(app);
 
-    expect(() => plugin.setupRoutes?.(ctx)).not.toThrow();
+    await expect(plugin.setupRoutes?.(ctx)).resolves.toBeUndefined();
   });
 
-  test('still publishes runtime on pluginState when routes: false', () => {
+  test('still publishes runtime on pluginState when routes: false', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -191,9 +198,9 @@ describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
     const pluginState = attachMinimalContext(app);
     const ctx = makeSetupContext(app);
 
-    plugin.setupRoutes?.(ctx);
+    await plugin.setupRoutes?.(ctx);
 
-    expect(pluginState.has(ORCHESTRATION_PLUGIN_KEY)).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
   });
 });
 
@@ -356,7 +363,7 @@ describe('getOrchestration / getOrchestrationOrNull', () => {
     expect((caught as OrchestrationError).code).toBe('ADAPTER_ERROR');
   });
 
-  test('getOrchestration returns runtime published by setupRoutes', () => {
+  test('getOrchestration returns runtime published by setupRoutes', async () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPlugin({
       adapter,
@@ -366,9 +373,9 @@ describe('getOrchestration / getOrchestrationOrNull', () => {
 
     const app = new Hono();
     const pluginState = attachMinimalContext(app);
-    plugin.setupRoutes?.(makeSetupContext(app));
+    await plugin.setupRoutes?.(makeSetupContext(app));
 
-    const ctx = { pluginState } as never;
+    const ctx = { pluginState, capabilityProviders: getCapabilityProviders(app) } as never;
     const runtime = getOrchestration(ctx);
     expect(runtime).toBeDefined();
     expect(typeof runtime.runTask).toBe('function');

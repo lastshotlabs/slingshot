@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test';
-import { SSR_ISR_INVALIDATORS_STATE_KEY, createIsrInvalidators } from '../../src/isr/revalidate';
+import { createIsrInvalidators } from '../../src/isr/revalidate';
 import type { IsrCacheAdapter } from '../../src/isr/types';
 
 function makeAdapter(): { adapter: IsrCacheAdapter; calls: string[] } {
@@ -16,12 +16,6 @@ function makeAdapter(): { adapter: IsrCacheAdapter; calls: string[] } {
   };
   return { adapter, calls };
 }
-
-describe('SSR_ISR_INVALIDATORS_STATE_KEY', () => {
-  it('is the expected literal string', () => {
-    expect(SSR_ISR_INVALIDATORS_STATE_KEY).toBe('slingshot-ssr:isr');
-  });
-});
 
 describe('createIsrInvalidators', () => {
   it('revalidatePath delegates to cache.invalidatePath', async () => {

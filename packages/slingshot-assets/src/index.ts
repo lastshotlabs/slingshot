@@ -11,6 +11,10 @@ import './events';
  */
 export { createAssetsPlugin } from './plugin';
 /**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Assets, AssetsRuntimeCap } from './public';
+/**
  * Entity manifest describing the asset resources owned by the assets plugin.
  */
 export { assetManifest } from './manifest/assetManifest';

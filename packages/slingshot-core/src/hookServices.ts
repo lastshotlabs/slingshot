@@ -42,6 +42,7 @@ import {
   type PackageEntityRef,
   type SlingshotPackageEntityModuleLike,
   applyPublicEntityExposure,
+  capabilityProviderKey,
 } from './packageAuthoring';
 import { requireEntityAdapter } from './pluginState';
 import type { PluginStateMap } from './pluginStateTypes';

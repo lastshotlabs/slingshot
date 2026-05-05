@@ -9,7 +9,6 @@ import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import {
   InProcessAdapter,
-  PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
@@ -248,7 +247,7 @@ export async function createHarness(opts?: {
   attachContext(app, {
     app,
     pluginState: new Map<string, unknown>([
-      [PERMISSIONS_STATE_KEY, permissionsState] as const,
+      ['slingshot:package:capabilities:slingshot-permissions', permissionsState] as const,
       [
         'slingshot:package:capabilities:slingshot-notifications',
         {
@@ -262,6 +261,9 @@ export async function createHarness(opts?: {
     wsPublish: null,
     bus,
     capabilityProviders: new Map<string, string>([
+      ['evaluator', 'slingshot-permissions'],
+      ['registry', 'slingshot-permissions'],
+      ['adapter', 'slingshot-permissions'],
       ['builderFactory', 'slingshot-notifications'],
       ['deliveryRegistry', 'slingshot-notifications'],
     ]),

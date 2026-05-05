@@ -11,13 +11,15 @@ import {
   deepFreeze,
   getActorId,
   getActorTenantId,
+  getContext,
   getContextOrNull,
-  getPluginState,
-  publishPluginState,
+  provideCapability,
+  registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
+import { PushRuntimeCap } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -458,8 +460,9 @@ export function createPushPlugin(
         },
       };
 
-      const pluginState = getPluginState(app);
-      publishPluginState(pluginState, PUSH_PLUGIN_STATE_KEY, state);
+      await registerPluginCapabilities(getContext(app), 'slingshot-push', [
+        provideCapability(PushRuntimeCap, () => state),
+      ]);
 
       // Consume the slingshot-notifications contract: register our delivery adapter
       // through the typed `NotificationsDeliveryRegistry` capability when notifications

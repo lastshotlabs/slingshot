@@ -1,4 +1,4 @@
-import { definePluginStateKey, readPluginState } from './pluginState';
+import { getPluginStateOrNull } from './pluginState';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 
 // ── Models ──────────────────────────────────────────────────────────────────
@@ -435,31 +435,37 @@ export interface PermissionsState {
 }
 
 /**
- * Typed plugin-state key for the permissions runtime slot.
- */
-export const PERMISSIONS_RUNTIME_KEY =
-  definePluginStateKey<PermissionsState>(PERMISSIONS_STATE_KEY);
-
-/**
  * Resolve `PermissionsState` from plugin state when the permissions plugin is present.
  *
- * Returns `null` for absent or malformed state so optional integrations can fail
- * closed without inspecting raw map entries themselves.
+ * Reads the three capabilities (`evaluator`, `registry`, `adapter`) published by
+ * `slingshot-permissions` through its `Permissions` package contract. Returns `null`
+ * when any of them is unavailable, so optional integrations can fail closed without
+ * inspecting raw map entries themselves.
+ *
+ * For typed cross-package access prefer `ctx.capabilities.require(PermissionsEvaluatorCap)`
+ * etc. directly — this helper exists for the convenience of consumers that want the
+ * combined `{ evaluator, registry, adapter }` shape in one call.
  */
 export function getPermissionsStateOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PermissionsState | null {
-  const state = readPluginState(input, PERMISSIONS_RUNTIME_KEY);
-  if (!state?.adapter || !state.registry || !state.evaluator) {
-    return null;
-  }
-  return state;
+  // Read the contract slot the permissions plugin writes via `registerPluginCapabilities`.
+  // Tracked here as a string literal — slingshot-core can't import from
+  // `slingshot-permissions/public.ts` (would create a cycle).
+  const map = getPluginStateOrNull(input);
+  if (!map) return null;
+  const slot = map.get('slingshot:package:capabilities:slingshot-permissions') as
+    | { evaluator?: PermissionEvaluator; registry?: PermissionRegistry; adapter?: PermissionsAdapter }
+    | undefined;
+  if (!slot?.evaluator || !slot.registry || !slot.adapter) return null;
+  return { evaluator: slot.evaluator, registry: slot.registry, adapter: slot.adapter };
 }
 
 /**
  * Resolve `PermissionsState` from plugin state.
  *
- * Throws when `slingshot-permissions` has not published its runtime state.
+ * Throws when `slingshot-permissions` has not published either its contract capabilities
+ * or its legacy runtime state.
  */
 export function getPermissionsState(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,

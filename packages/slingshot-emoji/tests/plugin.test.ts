@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
-  PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
@@ -38,6 +37,11 @@ function makeAppContext(
     upload: uploadAdapter ? { adapter: uploadAdapter } : undefined,
     bus: runtime?.bus,
     events: runtime?.events,
+    capabilityProviders: new Map<string, string>([
+      ['evaluator', 'slingshot-permissions'],
+      ['registry', 'slingshot-permissions'],
+      ['adapter', 'slingshot-permissions'],
+    ]),
   };
 }
 
@@ -218,7 +222,7 @@ describe('slingshot-emoji parsed body caching', () => {
 describe('slingshot-emoji permission guarding', () => {
   test('plugin resolves permissions from pluginState when not provided explicitly', async () => {
     const app = new Hono();
-    const pluginState = new Map([[PERMISSIONS_STATE_KEY, createTestPermissions()]]);
+    const pluginState = new Map([['slingshot:package:capabilities:slingshot-permissions', createTestPermissions()]]);
     const runtime = createRuntime();
     const ctx = makeAppContext(pluginState, undefined, runtime);
     ctx.app = app;

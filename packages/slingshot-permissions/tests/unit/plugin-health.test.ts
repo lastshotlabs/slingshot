@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { PERMISSIONS_STATE_KEY, attachContext } from '@lastshotlabs/slingshot-core';
+import { attachContext } from '@lastshotlabs/slingshot-core';
 import { createPermissionsPlugin } from '../../src/plugin';
 
 function asNever<T>(v: T): never {
@@ -45,6 +45,6 @@ describe('createPermissionsPlugin getHealth()', () => {
       lastGroupExpansionErrorAt: null,
     });
     expect(health.details.adapter).toBeUndefined();
-    expect(ctx.pluginState.has(PERMISSIONS_STATE_KEY)).toBe(true);
+    expect(ctx.pluginState.has('slingshot:package:capabilities:slingshot-permissions')).toBe(true);
   });
 });

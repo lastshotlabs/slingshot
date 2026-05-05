@@ -866,7 +866,6 @@ function warnLegacyEntityRefOnce(args: { entity: string; plugin?: string }): voi
   if (warnedLegacyEntityRef.has(key)) return;
   warnedLegacyEntityRef.add(key);
   if (process.env.SLINGSHOT_SUPPRESS_LEGACY_ENTITY_REF_WARNING === '1') return;
-  // eslint-disable-next-line no-console
   console.warn(
     `[slingshot] entityRef({ plugin: '${args.plugin ?? '?'}', entity: '${args.entity}' }) is deprecated for cross-package access. ` +
       `Publish a typed ref through a package contract (definePackageContract) and import it from the provider's public.ts. ` +
@@ -1095,6 +1094,19 @@ export const route = Object.freeze({
  */
 export const PACKAGE_CAPABILITIES_PREFIX = 'slingshot:package:capabilities:';
 
+/**
+ * Build the `capabilityProviders` map key for a capability handle.
+ *
+ * Contract-bound handles (created via `definePackageContract(...).capability(...)`) are
+ * namespaced by their owning contract so two contracts that pick the same short name
+ * (e.g. both `slingshot-assets` and `slingshot-search` exposing a `runtime` capability)
+ * don't collide. Free-floating handles created via `defineCapability(...)` keep their
+ * legacy `name` key.
+ */
+export function capabilityProviderKey(handle: PackageCapabilityHandle<unknown>): string {
+  return handle.contract ? `${handle.contract}:${handle.name}` : handle.name;
+}
+
 /** Declare a named typed capability that packages can publish and require explicitly. */
 export function defineCapability<TValue>(name: string): PackageCapabilityHandle<TValue> {
   return Object.freeze({
@@ -1131,7 +1143,7 @@ export function resolveCapabilityValue<TValue>(
   },
   capability: PackageCapabilityHandle<TValue>,
 ): TValue | undefined {
-  const providerName = ctx.capabilityProviders?.get(capability.name);
+  const providerName = ctx.capabilityProviders?.get(capabilityProviderKey(capability));
   if (!providerName) return undefined;
   const slot = ctx.pluginState.get(`${PACKAGE_CAPABILITIES_PREFIX}${providerName}`) as
     | Record<string, unknown>
@@ -1168,18 +1180,19 @@ export async function registerPluginCapabilities(
     }
   }
 
-  // Test fixtures may not include `capabilityProviders` on the context — typed contracts
-  // are only resolvable when the framework wired the providers map. Silently noop in that
-  // case; legacy state-key publishes still flow through `pluginState` for back-compat.
-  if (!ctx.capabilityProviders) return;
-
-  const providersMap = ctx.capabilityProviders as Map<string, string>;
-  for (const entry of provided) {
-    const existing = providersMap.get(entry.capability.name);
-    if (existing && existing !== pluginName) {
-      throw new Error(
-        `Capability '${entry.capability.name}' is already provided by '${existing}' — cannot register from plugin '${pluginName}'`,
-      );
+  if (ctx.capabilityProviders) {
+    const providersMap = ctx.capabilityProviders as Map<string, string>;
+    for (const entry of provided) {
+      const key = capabilityProviderKey(entry.capability);
+      const existing = providersMap.get(key);
+      if (existing && existing !== pluginName) {
+        throw new Error(
+          `Capability '${entry.capability.name}' is already provided by '${existing}' — cannot register from plugin '${pluginName}'`,
+        );
+      }
+    }
+    for (const entry of provided) {
+      providersMap.set(capabilityProviderKey(entry.capability), pluginName);
     }
   }
 
@@ -1190,9 +1203,11 @@ export async function registerPluginCapabilities(
     }),
   );
 
-  for (const entry of provided) {
-    providersMap.set(entry.capability.name, pluginName);
-  }
+  // Always write the capability slot. Consumers that resolve through the providers map
+  // (`ctx.capabilities.maybe(handle)`) need both the map entry and the slot; consumers
+  // that read the slot by package name (`getPermissionsStateOrNull` and friends) need
+  // only the slot. Test fixtures that don't construct a providers map still get a
+  // working slot for direct readers.
   publishPluginState(
     ctx.pluginState,
     `${PACKAGE_CAPABILITIES_PREFIX}${pluginName}`,
@@ -1397,9 +1412,8 @@ export function definePackageContract<const TName extends string>(
       const dependencyNames = input.dependencies?.map(dep =>
         typeof dep === 'string' ? dep : dep.name,
       );
-      const { dependencies: _ignored, ...rest } = input;
       return definePackage({
-        ...rest,
+        ...input,
         name: contractName,
         dependencies: dependencyNames,
         contract: Object.freeze({

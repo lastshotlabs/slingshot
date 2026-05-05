@@ -9,13 +9,17 @@ import {
   deepFreeze,
   defineEvent,
   getContext,
-  getPermissionsState,
   getPluginState,
   publishPluginState,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import {
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
+} from '@lastshotlabs/slingshot-permissions';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
@@ -152,8 +156,16 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
         );
       }
 
-      const permissions = getPermissionsState(app) as PermissionsState;
       const slingshotCtx = getContext(app);
+      const evaluator = resolveCapabilityValue(slingshotCtx, PermissionsEvaluatorCap);
+      const registry = resolveCapabilityValue(slingshotCtx, PermissionsRegistryCap);
+      const adapter = resolveCapabilityValue(slingshotCtx, PermissionsAdapterCap);
+      if (!evaluator || !registry || !adapter) {
+        throw new Error(
+          '[slingshot-chat] requires slingshot-permissions to be loaded before slingshot-chat',
+        );
+      }
+      const permissions: PermissionsState = { evaluator, registry, adapter };
       const notificationsBuilderFactory = resolveCapabilityValue(
         slingshotCtx,
         NotificationsBuilderFactory,

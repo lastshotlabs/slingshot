@@ -1,5 +1,4 @@
 import type { NotificationRecord } from './notificationsPeer';
-import { PUSH_PLUGIN_STATE_KEY } from './pluginKeys';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 import { getPluginStateOrNull } from './pluginState';
 
@@ -35,12 +34,26 @@ export function getPushFormatterPeerOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PushFormatterPeer | null {
   const pluginState = getPluginStateOrNull(input);
-  const state = pluginState?.get(PUSH_PLUGIN_STATE_KEY) as
-    | { registerFormatter?: PushFormatterPeer['registerFormatter'] }
-    | null
+  // Read the contract slot the slingshot-push plugin writes via `registerPluginCapabilities`.
+  // The capability name used inside slingshot-push for the bundled runtime is `pushRuntime`;
+  // we duck-check `registerFormatter` so older legacy publishes (state-key only) still work
+  // when test fixtures use the old shape.
+  const slot = pluginState?.get('slingshot:package:capabilities:slingshot-push') as
+    | Record<string, unknown>
     | undefined;
-  if (!state || typeof state.registerFormatter !== 'function') {
-    return null;
+  const runtime = (slot?.pushRuntime ?? slot) as
+    | { registerFormatter?: PushFormatterPeer['registerFormatter'] }
+    | undefined;
+  if (runtime && typeof runtime.registerFormatter === 'function') {
+    return runtime as PushFormatterPeer;
   }
-  return state as PushFormatterPeer;
+  // Legacy state-key fallback for fixtures that publish PushPluginState directly under
+  // `'slingshot-push'`.
+  const legacy = pluginState?.get('slingshot-push') as
+    | { registerFormatter?: PushFormatterPeer['registerFormatter'] }
+    | undefined;
+  if (legacy && typeof legacy.registerFormatter === 'function') {
+    return legacy as PushFormatterPeer;
+  }
+  return null;
 }

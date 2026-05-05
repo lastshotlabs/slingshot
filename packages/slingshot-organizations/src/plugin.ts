@@ -9,12 +9,16 @@ import {
   createConsoleLogger,
   deepFreeze,
   getActorId,
+  getContext,
   getPluginState,
   getPluginStateOrNull,
   getRouteAuthOrNull,
+  provideCapability,
   publishPluginState,
+  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { OrgServiceCap } from './public';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { getOrganizationsAuthRuntime } from './lib/authRuntime';
@@ -25,7 +29,10 @@ import {
 import { DEFAULT_RESERVED_ORG_SLUGS, createOrgSlugSchema } from './lib/slugValidation';
 import { organizationsManifest } from './manifest/organizationsManifest';
 import { type OrganizationsRuntime, createOrganizationsManifestRuntime } from './manifest/runtime';
-import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } from './orgService';
+import {
+  type OrganizationsOrgService,
+  getOrganizationsOrgServiceOrNull,
+} from './orgService';
 import { ORGANIZATIONS_RECONCILE_STATE_KEY, type OrganizationsReconcileService } from './reconcile';
 
 const memberRoleSchema = z.string().min(1);
@@ -455,7 +462,12 @@ export function createOrganizationsPlugin(
         },
       };
 
-      publishPluginState(getPluginState(ctx.app), ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
+      // Contract-bound capability publish. The legacy `getOrganizationsOrgService(...)`
+      // helper resolves through the same slot internally, so direct callers continue to
+      // work without the dual state-key publish.
+      await registerPluginCapabilities(getContext(ctx.app), 'slingshot-organizations', [
+        provideCapability(OrgServiceCap, () => orgService),
+      ]);
 
       // Publish the reconcile service so operator tooling (CLI, admin route)
       // can call `reconcileOrphanedOrgRecords(orgId)` to clean up after a
@@ -474,9 +486,7 @@ export function createOrganizationsPlugin(
     },
 
     async seed({ app, manifestSeed, seedState }: PluginSeedContext) {
-      const orgService = getPluginState(app).get(ORGANIZATIONS_ORG_SERVICE_STATE_KEY) as
-        | OrganizationsOrgService
-        | undefined;
+      const orgService = getOrganizationsOrgServiceOrNull(getPluginState(app));
       if (!orgService) return;
 
       type SeedOrg = {

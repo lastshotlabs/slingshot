@@ -20,7 +20,6 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  PERMISSIONS_RUNTIME_KEY,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
@@ -211,7 +210,7 @@ export async function createPollsTestApp(
   // Set up allow-all permissions for testing (no slingshot-permissions dependency needed).
   // The cast is intentional: tests publish a partial PermissionsState that lacks the real
   // adapter, since these polls tests don't exercise the permissions adapter surface.
-  publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, {
+  publishPluginState(pluginState, 'slingshot:package:capabilities:slingshot-permissions', {
     evaluator: {
       can() {
         return Promise.resolve(true);

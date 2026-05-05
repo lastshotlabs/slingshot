@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
-    "@lastshotlabs/slingshot-entity": "workspace:*"
+    "@lastshotlabs/slingshot-entity": "workspace:*",
+    "@lastshotlabs/slingshot-permissions": "workspace:*"
   },
   "peerDependencies": {
     "@hono/zod-openapi": ">=0.18",

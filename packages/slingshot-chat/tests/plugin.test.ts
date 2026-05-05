@@ -11,7 +11,6 @@ import type {
 import {
   InProcessAdapter,
   PACKAGE_CAPABILITIES_PREFIX,
-  PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEntityRegistry,
@@ -169,7 +168,7 @@ describe('createChatPlugin', () => {
 
     attachContext(app, {
       pluginState: new Map<string, unknown>([
-        [PERMISSIONS_STATE_KEY, createPermissionsState()],
+        ['slingshot:package:capabilities:slingshot-permissions', createPermissionsState()],
         [
           `${PACKAGE_CAPABILITIES_PREFIX}slingshot-notifications`,
           createNotificationsCapabilitiesSlot(),
@@ -180,6 +179,9 @@ describe('createChatPlugin', () => {
       wsPublish: null,
       bus,
       capabilityProviders: new Map<string, string>([
+      ['evaluator', 'slingshot-permissions'],
+      ['registry', 'slingshot-permissions'],
+      ['adapter', 'slingshot-permissions'],
         ['builderFactory', 'slingshot-notifications'],
         ['deliveryRegistry', 'slingshot-notifications'],
       ]),

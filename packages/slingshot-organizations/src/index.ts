@@ -15,17 +15,18 @@ export { SlugConflictError, isUniqueViolationError } from './errors';
  */
 export { organizationsManifest } from './manifest/organizationsManifest';
 /**
- * State key and accessors for the organization service registered by the plugin.
+ * Accessors for the organization service registered by the plugin (resolves
+ * through the typed `OrgServiceCap` capability under the hood).
  */
-export {
-  ORGANIZATIONS_ORG_SERVICE_STATE_KEY,
-  getOrganizationsOrgService,
-  getOrganizationsOrgServiceOrNull,
-} from './orgService';
+export { getOrganizationsOrgService, getOrganizationsOrgServiceOrNull } from './orgService';
 /**
  * Organization service contract exposed by the plugin state.
  */
 export type { OrganizationsOrgService } from './orgService';
+/**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Organizations, OrgServiceCap } from './public';
 /**
  * State key and accessors for the organizations reconciliation service.
  */

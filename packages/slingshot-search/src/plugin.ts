@@ -22,11 +22,15 @@ import type {
   SearchPluginRuntime,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
+import { SearchRuntimeCap } from './public';
 import {
   SEARCH_PLUGIN_STATE_KEY,
   createNoopMetricsEmitter,
   defineEvent,
+  getContext,
   getContextOrNull,
+  provideCapability,
+  registerPluginCapabilities,
   getPluginState,
   noopLogger,
   publishPluginState,
@@ -260,6 +264,9 @@ export function createSearchPlugin(
         },
       };
       publishPluginState(getPluginState(app), SEARCH_PLUGIN_STATE_KEY, runtime);
+      await registerPluginCapabilities(getContext(app), 'slingshot-search', [
+        provideCapability(SearchRuntimeCap, () => runtime),
+      ]);
     },
 
     async teardown() {

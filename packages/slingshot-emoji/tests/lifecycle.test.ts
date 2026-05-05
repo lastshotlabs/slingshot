@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
-  PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
@@ -37,6 +36,11 @@ function makeAppContext(
     upload: uploadAdapter ? { adapter: uploadAdapter } : undefined,
     bus: runtime?.bus,
     events: runtime?.events,
+    capabilityProviders: new Map<string, string>([
+      ['evaluator', 'slingshot-permissions'],
+      ['registry', 'slingshot-permissions'],
+      ['adapter', 'slingshot-permissions'],
+    ]),
   };
 }
 
@@ -80,7 +84,7 @@ function createFrameworkConfig() {
 describe('slingshot-emoji lifecycle', () => {
   test('setupMiddleware can resolve permissions from pluginState fallback', async () => {
     const app = new Hono();
-    const pluginState = new Map([[PERMISSIONS_STATE_KEY, createTestPermissions()]]);
+    const pluginState = new Map([['slingshot:package:capabilities:slingshot-permissions', createTestPermissions()]]);
     const runtime = createRuntime();
     const ctx = makeAppContext(pluginState, undefined, runtime);
     ctx.app = app;

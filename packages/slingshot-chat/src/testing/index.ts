@@ -29,7 +29,6 @@ import type {
 import {
   InProcessAdapter,
   PACKAGE_CAPABILITIES_PREFIX,
-  PERMISSIONS_RUNTIME_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
@@ -396,7 +395,7 @@ export async function createChatTestApp(
       publishPluginState(pluginState, key, value);
     }
   }
-  publishPluginState(pluginState, PERMISSIONS_RUNTIME_KEY, permsState);
+  publishPluginState(pluginState, 'slingshot:package:capabilities:slingshot-permissions', permsState);
   // Publish the slingshot-notifications contract capabilities directly into the
   // pluginState slot the framework reads from. This mirrors what
   // `registerPluginCapabilities` does at runtime, sized for test fixtures that don't
@@ -417,6 +416,9 @@ export async function createChatTestApp(
     capabilityProviders: new Map<string, string>([
       [NotificationsBuilderFactory.name, 'slingshot-notifications'],
       [NotificationsDeliveryRegistry.name, 'slingshot-notifications'],
+      ['evaluator', 'slingshot-permissions'],
+      ['registry', 'slingshot-permissions'],
+      ['adapter', 'slingshot-permissions'],
     ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 

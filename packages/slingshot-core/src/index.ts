@@ -97,7 +97,6 @@ export {
   validateGrant,
   SUPER_ADMIN_ROLE,
   PERMISSIONS_STATE_KEY,
-  PERMISSIONS_RUNTIME_KEY,
   getPermissionsState,
   getPermissionsStateOrNull,
 } from './permissions';
@@ -137,6 +136,7 @@ export {
 /** Package-first authoring contracts for capabilities, domains, and typed route builders. */
 export {
   applyPublicEntityExposure,
+  capabilityProviderKey,
   defineCapability,
   definePackage,
   definePackageContract,

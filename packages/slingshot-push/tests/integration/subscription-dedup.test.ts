@@ -172,7 +172,10 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
-  const state = pluginState.get(PUSH_PLUGIN_STATE_KEY) as PushPluginState;
+  const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as
+    | { pushRuntime?: PushPluginState }
+    | undefined;
+  const state = slot?.pushRuntime as PushPluginState;
   return { app, pluginState: state };
 }
 

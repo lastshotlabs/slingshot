@@ -14,12 +14,14 @@ import {
   createNoopMetricsEmitter,
   deepFreeze,
   getActor,
+  getContext,
   getContextOrNull,
-  getPluginState,
   getRouteAuthOrNull,
-  publishPluginState,
+  provideCapability,
+  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { WebhookAdapterCap } from './public';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { WebhookConfigError, WebhookRuntimeError } from './errors/webhookErrors';
 import type { DispatchOptions } from './lib/dispatcher';
@@ -36,7 +38,7 @@ import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { webhookPluginConfigSchema } from './types/config';
 import type { InboundProvider } from './types/inbound';
-import { WEBHOOKS_PLUGIN_STATE_KEY, WEBHOOKS_RUNTIME_KEY } from './types/public';
+import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
@@ -619,7 +621,9 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           events.definitions,
         );
       }
-      publishPluginState(getPluginState(app), WEBHOOKS_RUNTIME_KEY, runtimeAdapter);
+      await registerPluginCapabilities(getContext(app), 'slingshot-webhooks', [
+        provideCapability(WebhookAdapterCap, () => runtimeAdapter),
+      ]);
       // Resolve the framework-owned metrics emitter so the dispatcher
       // pipeline publishes counters/gauges/timings on hot paths.
       const ctx = getContextOrNull(app);

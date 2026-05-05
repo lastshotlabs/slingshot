@@ -51,8 +51,11 @@ export { createSsrPlugin } from './plugin';
 
 /** Error thrown when the client asset manifest cannot be read or parsed. */
 export { SsrAssetManifestError } from './assets';
-/** ISR invalidator key exposed for plugin-state lookups. */
-export { SSR_ISR_INVALIDATORS_STATE_KEY } from './isr/revalidate';
+/**
+ * Provider-owned package contract for cross-package consumers (server actions,
+ * route handlers) that need to invalidate ISR cache entries.
+ */
+export { Ssr, IsrInvalidatorsCap } from './public';
 
 /** Resolve SSR route trees, nested page chains, and page declarations from the file system. */
 export {

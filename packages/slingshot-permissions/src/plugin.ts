@@ -8,14 +8,20 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_RUNTIME_KEY,
   SUPER_ADMIN_ROLE,
   createConsoleLogger,
+  getContext,
+  getPermissionsStateOrNull,
   getPluginState,
-  publishPluginState,
-  readPluginState,
+  provideCapability,
+  registerPluginCapabilities,
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
+import {
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
+} from './public';
 import { permissionsAdapterFactories } from './factories';
 import {
   type EvaluatorHealth,
@@ -237,8 +243,9 @@ export function createPermissionsPlugin(
 
     async setupMiddleware({ app, config: frameworkConfig }: PluginSetupContext) {
       const pluginState = getPluginState(app);
-      // Idempotent — if another plugin already seeded permissions state, skip.
-      const existing = readPluginState(pluginState, PERMISSIONS_RUNTIME_KEY);
+      // Idempotent — if another plugin (or a test fixture) already published the
+      // permissions contract capabilities, skip re-publishing.
+      const existing = getPermissionsStateOrNull(pluginState);
       if (existing) {
         // Reflect the externally-seeded state so getHealth() doesn't lie.
         if (existing.adapter) {
@@ -293,15 +300,19 @@ export function createPermissionsPlugin(
         }
       }
 
-      publishPluginState(
-        pluginState,
-        PERMISSIONS_RUNTIME_KEY,
-        Object.freeze({ evaluator, registry, adapter }),
-      );
+      // Contract-bound capability publish. Cross-package consumers do
+      // `ctx.capabilities.require(PermissionsEvaluatorCap)` etc., or fetch the
+      // bundled `{ evaluator, registry, adapter }` shape via `getPermissionsState(...)`
+      // (which resolves through the same contract slot internally).
+      await registerPluginCapabilities(getContext(app), 'slingshot-permissions', [
+        provideCapability(PermissionsEvaluatorCap, () => evaluator),
+        provideCapability(PermissionsRegistryCap, () => registry),
+        provideCapability(PermissionsAdapterCap, () => adapter),
+      ]);
     },
 
     setupPost({ app, bus }: PluginSetupContext) {
-      const permsState = readPluginState(getPluginState(app), PERMISSIONS_RUNTIME_KEY);
+      const permsState = getPermissionsStateOrNull(getPluginState(app));
       if (!permsState?.adapter) return;
       bus.on('auth:user.deleted', async ({ userId }) => {
         try {
@@ -319,7 +330,7 @@ export function createPermissionsPlugin(
     },
 
     async seed({ app, seedState }: PluginSeedContext) {
-      const permsState = readPluginState(getPluginState(app), PERMISSIONS_RUNTIME_KEY);
+      const permsState = getPermissionsStateOrNull(getPluginState(app));
       if (!permsState?.adapter) return;
 
       for (const [key, value] of seedState) {

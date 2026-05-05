@@ -19,6 +19,9 @@
     },
     {
       "path": "../slingshot-entity/tsconfig.typecheck.json"
+    },
+    {
+      "path": "../slingshot-permissions/tsconfig.typecheck.json"
     }
   ]
 }

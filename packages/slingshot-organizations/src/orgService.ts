@@ -1,5 +1,8 @@
 import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+// Note: `OrgServiceCap` lives in ./public; the helpers below resolve through the
+// PACKAGE_CAPABILITIES_PREFIX slot directly to avoid a static cycle (public.ts
+// imports from this file).
 
 /**
  * Runtime organization service published through plugin state.
@@ -31,12 +34,6 @@ export type OrganizationsOrgService = {
     invitedBy?: string,
   ): Promise<unknown>;
 };
-
-/**
- * Plugin-state key used to store and retrieve the {@link OrganizationsOrgService}
- * instance from the shared Slingshot plugin state map.
- */
-export const ORGANIZATIONS_ORG_SERVICE_STATE_KEY = 'slingshot-organizations.orgService' as const;
 
 function isOrganizationsOrgService(value: unknown): value is OrganizationsOrgService {
   return (
@@ -74,6 +71,16 @@ export function getOrganizationsOrgServiceOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): OrganizationsOrgService | null {
   const pluginState = getPluginStateOrNull(input);
-  const service = pluginState?.get(ORGANIZATIONS_ORG_SERVICE_STATE_KEY);
-  return isOrganizationsOrgService(service) ? service : null;
+  if (!pluginState) return null;
+
+  // Contract resolution: read the capability slot the plugin writes via
+  // `registerPluginCapabilities`. New consumers should prefer
+  // `ctx.capabilities.require(OrgServiceCap)` for typed access.
+  const slot = pluginState.get('slingshot:package:capabilities:slingshot-organizations') as
+    | { orgService?: OrganizationsOrgService }
+    | undefined;
+  if (slot?.orgService && isOrganizationsOrgService(slot.orgService)) {
+    return slot.orgService;
+  }
+  return null;
 }

@@ -9,9 +9,13 @@ export { createOrchestrationPlugin } from './plugin';
  */
 export type { OrchestrationPluginHealth } from './plugin';
 /**
- * Runtime lookup helpers and the plugin-state key used by Slingshot integrations.
+ * Runtime lookup helpers and the plugin name used by Slingshot integrations.
  */
 export { getOrchestration, getOrchestrationOrNull, ORCHESTRATION_PLUGIN_KEY } from './context';
+/**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Orchestration, OrchestrationRuntimeCap } from './public';
 /**
  * Create the default Slingshot event sink used by orchestration adapters and workers.
  */

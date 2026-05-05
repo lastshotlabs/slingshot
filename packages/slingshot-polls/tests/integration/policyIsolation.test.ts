@@ -11,7 +11,6 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
-  PERMISSIONS_STATE_KEY,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
@@ -74,7 +73,7 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
   const frameworkConfig = createTestFrameworkConfig();
 
   const pluginState = new Map<string, unknown>();
-  pluginState.set(PERMISSIONS_STATE_KEY, {
+  pluginState.set('slingshot:package:capabilities:slingshot-permissions', {
     evaluator: {
       can() {
         return Promise.resolve(true);

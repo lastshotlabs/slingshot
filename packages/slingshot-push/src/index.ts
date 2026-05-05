@@ -3,6 +3,10 @@
  */
 export { createPushPlugin } from './plugin';
 /**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Push, PushRuntimeCap } from './public';
+/**
  * Entity manifest describing push subscriptions, topics, memberships, and deliveries.
  */
 export { pushManifest } from './manifest/pushManifest';

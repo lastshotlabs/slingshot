@@ -32,10 +32,16 @@ describe('getOrchestrationOrNull — missing plugin state', () => {
     expect(getOrchestrationOrNull(ctx)).toBeNull();
   });
 
-  test('returns raw value when pluginState value is not a runtime (no type guard)', () => {
-    // getOrchestrationOrNull does not validate the runtime type, so a
-    // non-runtime value stored under the plugin key is returned as-is.
-    const ctx = { pluginState: new Map([[ORCHESTRATION_PLUGIN_KEY, 'not-a-runtime']]) } as never;
+  test('returns raw value when capability slot value is not a runtime (no type guard)', () => {
+    // getOrchestrationOrNull resolves through the contract capability slot and does
+    // not validate the runtime type, so a non-runtime value stored under the
+    // capability name is returned as-is.
+    const ctx = {
+      pluginState: new Map([
+        ['slingshot:package:capabilities:slingshot-orchestration', { runtime: 'not-a-runtime' }],
+      ]),
+      capabilityProviders: new Map([['runtime', 'slingshot-orchestration']]),
+    } as never;
     const result = getOrchestrationOrNull(ctx);
     expect(result).toBe('not-a-runtime');
   });
@@ -84,7 +90,7 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
     },
   });
 
-  test('returns a runtime with runTask capability', () => {
+  test('returns a runtime with runTask capability', async () => {
     const plugin = createOrchestrationPlugin({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
@@ -93,8 +99,9 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
 
     const app = new Hono<{ Variables: { pluginState: Map<string | symbol, unknown> } }>();
     const pluginState = new Map<string | symbol, unknown>();
-    attachContext(app, { app, pluginState } as never);
-    plugin.setupRoutes?.({
+    const capabilityProviders = new Map<string, string>();
+    attachContext(app, { app, pluginState, capabilityProviders } as never);
+    await plugin.setupRoutes?.({
       app: app as never,
       bus: createInProcessAdapter(),
       events: createEventPublisher({
@@ -104,13 +111,13 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
       config: {} as never,
     });
 
-    const runtime = getOrchestration({ pluginState } as never);
+    const runtime = getOrchestration({ pluginState, capabilityProviders } as never);
     expect(runtime).toBeDefined();
     expect(typeof runtime.runTask).toBe('function');
     expect(typeof runtime.getRun).toBe('function');
   });
 
-  test('getOrchestrationOrNull returns runtime after plugin setup', () => {
+  test('getOrchestrationOrNull returns runtime after plugin setup', async () => {
     const plugin = createOrchestrationPlugin({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
@@ -119,8 +126,9 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
 
     const app = new Hono<{ Variables: { pluginState: Map<string | symbol, unknown> } }>();
     const pluginState = new Map<string | symbol, unknown>();
-    attachContext(app, { app, pluginState } as never);
-    plugin.setupRoutes?.({
+    const capabilityProviders = new Map<string, string>();
+    attachContext(app, { app, pluginState, capabilityProviders } as never);
+    await plugin.setupRoutes?.({
       app: app as never,
       bus: createInProcessAdapter(),
       events: createEventPublisher({
@@ -130,7 +138,7 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
       config: {} as never,
     });
 
-    const runtime = getOrchestrationOrNull({ pluginState } as never);
+    const runtime = getOrchestrationOrNull({ pluginState, capabilityProviders } as never);
     expect(runtime).not.toBeNull();
     expect(typeof runtime?.runTask).toBe('function');
   });

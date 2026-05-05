@@ -1,11 +1,17 @@
-import { createConsoleLogger, getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
+import {
+  createConsoleLogger,
+  getContext,
+  provideCapability,
+  registerPluginCapabilities,
+} from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
   type OrchestrationRuntime,
   createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY, ORCHESTRATION_RUNTIME_KEY } from './context';
+import { ORCHESTRATION_PLUGIN_KEY } from './context';
+import { OrchestrationRuntimeCap } from './public';
 import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
@@ -92,7 +98,7 @@ export function createOrchestrationPlugin(
   return {
     name: ORCHESTRATION_PLUGIN_KEY,
     dependencies: [],
-    setupRoutes({ app, bus }: PluginSetupContext) {
+    async setupRoutes({ app, bus }: PluginSetupContext) {
       if (!runtime) {
         if (!providedAdapter) {
           throw new OrchestrationError(
@@ -109,7 +115,9 @@ export function createOrchestrationPlugin(
         });
       }
 
-      publishPluginState(getContext(app).pluginState, ORCHESTRATION_RUNTIME_KEY, runtime);
+      await registerPluginCapabilities(getContext(app), ORCHESTRATION_PLUGIN_KEY, [
+        provideCapability(OrchestrationRuntimeCap, () => runtime),
+      ]);
 
       if (!routes) return;
       if (routeMiddleware.length === 0) {

@@ -31,6 +31,7 @@ import {
   PACKAGE_CAPABILITIES_PREFIX,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  capabilityProviderKey,
   createEventDefinitionRegistry,
   createEventPublisher,
   createPluginStateMap,
@@ -414,11 +415,11 @@ export async function createChatTestApp(
     bus,
     events,
     capabilityProviders: new Map<string, string>([
-      [NotificationsBuilderFactory.name, 'slingshot-notifications'],
-      [NotificationsDeliveryRegistry.name, 'slingshot-notifications'],
-      ['evaluator', 'slingshot-permissions'],
-      ['registry', 'slingshot-permissions'],
-      ['adapter', 'slingshot-permissions'],
+      [capabilityProviderKey(NotificationsBuilderFactory), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsDeliveryRegistry), 'slingshot-notifications'],
+      ['slingshot-permissions:evaluator', 'slingshot-permissions'],
+      ['slingshot-permissions:registry', 'slingshot-permissions'],
+      ['slingshot-permissions:adapter', 'slingshot-permissions'],
     ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 

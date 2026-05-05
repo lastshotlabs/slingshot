@@ -183,7 +183,7 @@ export function buildHookServices(args: {
 
   const capabilities: PackageCapabilityReader = {
     maybe<TValue>(capability: PackageCapabilityHandle<TValue>): TValue | undefined {
-      const providerName = capabilityProviders.get(capability.name);
+      const providerName = capabilityProviders.get(capabilityProviderKey(capability));
       if (!providerName) return undefined;
       const slot = pluginState.get(`${PACKAGE_CAPABILITIES_PREFIX}${providerName}`) as
         | Record<string, unknown>

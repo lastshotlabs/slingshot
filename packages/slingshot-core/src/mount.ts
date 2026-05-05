@@ -8,6 +8,32 @@ import { type GuardWithMetadata, HandlerError, type HandlerMeta } from './handle
 
 type RouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 
+/**
+ * Convert a hono-style path (`/posts/:id`, `/users/:id?`, `/posts/:slug{.+}`) into the
+ * OpenAPI form (`/posts/{id}`, `/users/{id}`, `/posts/{slug}`).
+ *
+ * Hono uses colon-prefixed parameters; OpenAPI emits and codegen tools (including the
+ * Slingshot snapshot client) expect `{name}` braces. The framework's runtime router still
+ * needs the colon form, so this conversion only applies at the boundary where a path is
+ * handed to `createRoute(...)` / the OpenAPI registry — never to the live router.
+ *
+ * Idempotent on already-converted `{name}` segments. Strips hono's optional marker
+ * (`:id?`) and regex constraint (`:slug{.+}`) since OpenAPI represents them as plain
+ * `{slug}` without those modifiers.
+ */
+export function toOpenApiPath(path: string): string {
+  return path
+    .split('/')
+    .map(segment => {
+      if (!segment.startsWith(':')) return segment;
+      const withoutColon = segment.slice(1);
+      const withoutRegex = withoutColon.replace(/\{[^}]*\}$/, '');
+      const name = withoutRegex.replace(/\?$/, '');
+      return `{${name}}`;
+    })
+    .join('/');
+}
+
 export interface RouteOpts {
   method: RouteMethod;
   path: string;
@@ -99,7 +125,7 @@ export function toRoute(handler: SlingshotHandler, opts: RouteOpts) {
 
   return createRoute({
     method: opts.method,
-    path: opts.path,
+    path: toOpenApiPath(opts.path),
     tags: opts.tags,
     summary: opts.summary ?? handler.name,
     ...(Object.keys(request).length > 0 ? { request } : {}),

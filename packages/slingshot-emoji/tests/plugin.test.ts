@@ -38,9 +38,9 @@ function makeAppContext(
     bus: runtime?.bus,
     events: runtime?.events,
     capabilityProviders: new Map<string, string>([
-      ['evaluator', 'slingshot-permissions'],
-      ['registry', 'slingshot-permissions'],
-      ['adapter', 'slingshot-permissions'],
+      ['slingshot-permissions:evaluator', 'slingshot-permissions'],
+      ['slingshot-permissions:registry', 'slingshot-permissions'],
+      ['slingshot-permissions:adapter', 'slingshot-permissions'],
     ]),
   };
 }

@@ -261,11 +261,11 @@ export async function createHarness(opts?: {
     wsPublish: null,
     bus,
     capabilityProviders: new Map<string, string>([
-      ['evaluator', 'slingshot-permissions'],
-      ['registry', 'slingshot-permissions'],
-      ['adapter', 'slingshot-permissions'],
-      ['builderFactory', 'slingshot-notifications'],
-      ['deliveryRegistry', 'slingshot-notifications'],
+      ['slingshot-permissions:evaluator', 'slingshot-permissions'],
+      ['slingshot-permissions:registry', 'slingshot-permissions'],
+      ['slingshot-permissions:adapter', 'slingshot-permissions'],
+      ['slingshot-notifications:builderFactory', 'slingshot-notifications'],
+      ['slingshot-notifications:deliveryRegistry', 'slingshot-notifications'],
     ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 

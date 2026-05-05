@@ -40,7 +40,7 @@ describe('getOrchestrationOrNull — missing plugin state', () => {
       pluginState: new Map([
         ['slingshot:package:capabilities:slingshot-orchestration', { runtime: 'not-a-runtime' }],
       ]),
-      capabilityProviders: new Map([['runtime', 'slingshot-orchestration']]),
+      capabilityProviders: new Map([['slingshot-orchestration:runtime', 'slingshot-orchestration']]),
     } as never;
     const result = getOrchestrationOrNull(ctx);
     expect(result).toBe('not-a-runtime');

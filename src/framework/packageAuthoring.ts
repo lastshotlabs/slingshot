@@ -16,6 +16,7 @@ import {
   type TypedRouteResponseSpec,
   type TypedRouteResponses,
   applyPublicEntityExposure,
+  capabilityProviderKey,
   createRoute,
   createRouter,
   defineEvent,
@@ -31,6 +32,7 @@ import {
   requireEntityAdapter,
   resolveRepo,
   sha256,
+  toOpenApiPath,
 } from '@lastshotlabs/slingshot-core';
 import type {
   OperationConfig,
@@ -244,6 +246,7 @@ function registerRoute(
   router: OpenApiRegistrar,
   route: OpenApiRouteDefinition,
   handler: (c: import('hono').Context<AppEnv>) => Response | Promise<Response>,
+  honoPath: string,
 ): void {
   if (route.method === 'head') {
     const headOnly = async (c: import('hono').Context<AppEnv>) => {
@@ -253,7 +256,7 @@ function registerRoute(
       return handler(c);
     };
     router.openapi(route, headOnly);
-    router.get(route.path, headOnly);
+    router.get(honoPath, headOnly);
     return;
   }
   router.openapi(route, handler);
@@ -304,7 +307,7 @@ function createDomainRespond(
 function resolvePackageCapabilities(app: object, capabilityProviders: CapabilityProviderMap) {
   return {
     maybe<TValue>(capability: PackageCapabilityHandle<TValue>): TValue | undefined {
-      const providerName = capabilityProviders.get(capability.name);
+      const providerName = capabilityProviders.get(capabilityProviderKey(capability));
       if (!providerName) return undefined;
       const state = getContextOrNull(app)?.pluginState.get(
         `${PACKAGE_CAPABILITIES_PREFIX}${providerName}`,
@@ -806,7 +809,7 @@ function createPackagePlugin(
     dependencies: [
       ...(pkg.dependencies ?? []),
       ...pkg.capabilities.requires
-        .map(capability => capabilityProviders.get(capability.name))
+        .map(capability => capabilityProviders.get(capabilityProviderKey(capability)))
         .filter((name): name is string => Boolean(name && name !== pkg.name)),
     ],
     tenantExemptPaths: pkg.tenantExemptPaths ? [...pkg.tenantExemptPaths] : undefined,
@@ -951,7 +954,7 @@ function createPackagePlugin(
             router,
             createRoute({
               method: routeDefinition.method,
-              path: routePath,
+              path: toOpenApiPath(routePath),
               tags: [pkg.name, domain.name, ...(routeDefinition.tags ?? [])],
               summary: routeDefinition.summary ?? `${domain.name}:${routeDefinition.path}`,
               ...(routeDefinition.description ? { description: routeDefinition.description } : {}),
@@ -1009,6 +1012,7 @@ function createPackagePlugin(
               emitRouteEvent(c, routeDefinition.event);
               return response;
             },
+            routePath,
           );
         }
       }
@@ -1041,7 +1045,8 @@ export function compilePackages(packages: readonly SlingshotPackageDefinition[])
   for (const pkg of packages) {
     for (const provided of pkg.capabilities.provides) {
       const handle = provided.capability;
-      const existing = capabilityProviders.get(handle.name);
+      const key = capabilityProviderKey(handle);
+      const existing = capabilityProviders.get(key);
       if (existing && existing !== pkg.name) {
         throw new Error(
           `Package capability '${handle.name}' is published by both '${existing}' and '${pkg.name}'`,
@@ -1052,7 +1057,7 @@ export function compilePackages(packages: readonly SlingshotPackageDefinition[])
           `Package '${pkg.name}' provides capability '${handle.name}' but it is owned by contract '${handle.contract}'`,
         );
       }
-      capabilityProviders.set(handle.name, pkg.name);
+      capabilityProviders.set(key, pkg.name);
     }
   }
 
@@ -1089,7 +1094,7 @@ export function compilePackages(packages: readonly SlingshotPackageDefinition[])
 
   for (const pkg of packages) {
     for (const required of pkg.capabilities.requires) {
-      const provider = capabilityProviders.get(required.name);
+      const provider = capabilityProviders.get(capabilityProviderKey(required));
       if (!provider) {
         const where = required.source ? ` (required at ${required.source})` : '';
         throw new Error(

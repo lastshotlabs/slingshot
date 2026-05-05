@@ -753,8 +753,8 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       bus: runtime.bus,
       events: runtime.events,
       capabilityProviders: new Map<string, string>([
-        ['builderFactory', 'slingshot-notifications'],
-        ['deliveryRegistry', 'slingshot-notifications'],
+        ['slingshot-notifications:builderFactory', 'slingshot-notifications'],
+        ['slingshot-notifications:deliveryRegistry', 'slingshot-notifications'],
       ]),
     } as unknown as Parameters<typeof attachContext>[1]);
     app.use('*', async (c, next) => {

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import {
   InProcessAdapter,
   attachContext,
+  capabilityProviderKey,
   createEventDefinitionRegistry,
   createEventPublisher,
   createPluginStateMap,
@@ -408,8 +409,8 @@ export function createNotificationsTestBootstrap() {
       ],
     ]),
     capabilityProviders: new Map<string, string>([
-      [NotificationsBuilderFactory.name, 'slingshot-notifications'],
-      [NotificationsDeliveryRegistry.name, 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsBuilderFactory), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsDeliveryRegistry), 'slingshot-notifications'],
     ]),
     ws: null,
     wsEndpoints: {},

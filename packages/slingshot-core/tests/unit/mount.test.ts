@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineHandler } from '../../src/handler';
-import { toRoute } from '../../src/mount';
+import { toOpenApiPath, toRoute } from '../../src/mount';
 
 describe('toRoute', () => {
   const handler = defineHandler({
@@ -85,7 +85,40 @@ describe('toRoute', () => {
       params,
     });
     expect(route.method).toBe('get');
-    // Route was created without throwing — params were accepted
-    expect(route.path).toBe('/items/:id');
+    // Hono colon form is converted to OpenAPI brace form on the route definition
+    // (the live router is wired separately with the original colon form).
+    expect(route.path).toBe('/items/{id}');
+  });
+});
+
+describe('toOpenApiPath', () => {
+  test('converts a single hono param to OpenAPI brace form', () => {
+    expect(toOpenApiPath('/posts/:id')).toBe('/posts/{id}');
+  });
+
+  test('converts multiple hono params', () => {
+    expect(toOpenApiPath('/orgs/:orgId/users/:userId')).toBe('/orgs/{orgId}/users/{userId}');
+  });
+
+  test('leaves already-converted brace segments alone (idempotent)', () => {
+    expect(toOpenApiPath('/posts/{id}')).toBe('/posts/{id}');
+    expect(toOpenApiPath(toOpenApiPath('/posts/:id'))).toBe('/posts/{id}');
+  });
+
+  test('strips hono optional marker (`:id?` becomes `{id}`)', () => {
+    expect(toOpenApiPath('/posts/:id?')).toBe('/posts/{id}');
+  });
+
+  test('strips hono regex constraint (`:slug{.+}` becomes `{slug}`)', () => {
+    expect(toOpenApiPath('/posts/:slug{.+}')).toBe('/posts/{slug}');
+    expect(toOpenApiPath('/posts/:id{[0-9]+}')).toBe('/posts/{id}');
+  });
+
+  test('mixes literal segments and params correctly', () => {
+    expect(toOpenApiPath('/api/v1/matches/:id/start')).toBe('/api/v1/matches/{id}/start');
+  });
+
+  test('returns root path unchanged', () => {
+    expect(toOpenApiPath('/')).toBe('/');
   });
 });

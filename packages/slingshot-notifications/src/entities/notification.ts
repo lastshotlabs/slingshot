@@ -124,6 +124,41 @@ function materializeNotificationRecord(row: Record<string, unknown>): Notificati
 }
 
 /**
+ * Map a raw sqlite row (snake_case columns, epoch ms dates, JSON-encoded data)
+ * to a `NotificationRecord`. Used by every custom sqlite handler that returns
+ * notification rows — the entity wiring layer does not pass `fromRow` to
+ * `op.custom` factories, so handlers must do their own mapping.
+ */
+function sqliteRowToNotification(row: Record<string, unknown>): NotificationRecord {
+  const data = parseRowData(row['data'], row['id'], 'Notification');
+  return materializeNotificationRecord({
+    id: row['id'],
+    userId: row['user_id'],
+    tenantId: typeof row['tenant_id'] === 'string' ? row['tenant_id'] : null,
+    source: row['source'],
+    type: row['type'],
+    actorId: typeof row['actor_id'] === 'string' ? row['actor_id'] : null,
+    targetType: typeof row['target_type'] === 'string' ? row['target_type'] : null,
+    targetId: typeof row['target_id'] === 'string' ? row['target_id'] : null,
+    dedupKey: typeof row['dedup_key'] === 'string' ? row['dedup_key'] : null,
+    data,
+    read: row['read'] === 1 || row['read'] === true,
+    readAt: typeof row['read_at'] === 'number' ? new Date(row['read_at'] as number) : null,
+    deliverAt:
+      typeof row['deliver_at'] === 'number' ? new Date(row['deliver_at'] as number) : null,
+    dispatched: row['dispatched'] === 1 || row['dispatched'] === true,
+    dispatchedAt:
+      typeof row['dispatched_at'] === 'number'
+        ? new Date(row['dispatched_at'] as number)
+        : null,
+    scopeId: typeof row['scope_id'] === 'string' ? row['scope_id'] : null,
+    priority: row['priority'] ?? 'normal',
+    createdAt:
+      typeof row['created_at'] === 'number' ? new Date(row['created_at'] as number) : new Date(0),
+  });
+}
+
+/**
  * Shared notification entity.
  */
 export const Notification = defineEntity('Notification', {
@@ -608,28 +643,32 @@ export const notificationOperations = defineOperations(Notification, {
     sqlite:
       db =>
       ({ limit, now, cursor }) => {
-        const database = db as { query<T>(sql: string): { all(...args: unknown[]): T[] } };
-        let rows: unknown[];
+        // Table and columns match the entity's auto-generated sqlite schema:
+        // `notifications` (snake_case plural) with snake_case columns and
+        // dates stored as epoch ms integers (see fieldUtils `toSqliteRow`).
+        const database = db as {
+          query<T>(sql: string): { all(...args: unknown[]): T[] };
+        };
+        let rawRows: Record<string, unknown>[];
         if (cursor) {
-          rows = database
-            .query<unknown>(
-              'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? AND (deliverAt, id) > (SELECT deliverAt, id FROM Notification WHERE id = ?) ORDER BY deliverAt ASC, id ASC LIMIT ?',
+          rawRows = database
+            .query<Record<string, unknown>>(
+              'SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? AND (deliver_at, id) > (SELECT deliver_at, id FROM notifications WHERE id = ?) ORDER BY deliver_at ASC, id ASC LIMIT ?',
             )
-            .all(now.toISOString(), cursor, limit + 1);
+            .all(now.getTime(), cursor, limit + 1);
         } else {
-          rows = database
-            .query<unknown>(
-              'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? ORDER BY deliverAt ASC, id ASC LIMIT ?',
+          rawRows = database
+            .query<Record<string, unknown>>(
+              'SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? ORDER BY deliver_at ASC, id ASC LIMIT ?',
             )
-            .all(now.toISOString(), limit + 1);
+            .all(now.getTime(), limit + 1);
         }
-        const typed = rows as NotificationRecord[];
-        const hasMore = typed.length > limit;
+        const hasMore = rawRows.length > limit;
+        const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
+        const records = pageRows.map(sqliteRowToNotification);
         return Promise.resolve({
-          records: hasMore ? typed.slice(0, limit) : typed,
-          nextCursor: hasMore
-            ? ((typed[limit - 1] as unknown as Record<string, unknown>).id as string)
-            : null,
+          records,
+          nextCursor: hasMore ? records[records.length - 1]?.id ?? null : null,
         });
       },
     postgres:
@@ -731,9 +770,9 @@ export const notificationOperations = defineOperations(Notification, {
         };
         const row = database
           .query<{ count?: number }>(
-            'SELECT COUNT(*) AS count FROM Notification WHERE dispatched = 0 AND (deliverAt IS NULL OR deliverAt <= ?)',
+            'SELECT COUNT(*) AS count FROM notifications WHERE dispatched = 0 AND (deliver_at IS NULL OR deliver_at <= ?)',
           )
-          .get(now.toISOString());
+          .get(now.getTime());
         return Promise.resolve(typeof row?.count === 'number' ? row.count : 0);
       },
     postgres:
@@ -784,8 +823,8 @@ export const notificationOperations = defineOperations(Notification, {
       db =>
       ({ id, dispatchedAt }) => {
         const database = db as { run(sql: string, params?: unknown[]): { changes: number } };
-        database.run('UPDATE Notification SET dispatched = 1, dispatchedAt = ? WHERE id = ?', [
-          dispatchedAt.toISOString(),
+        database.run('UPDATE notifications SET dispatched = 1, dispatched_at = ? WHERE id = ?', [
+          dispatchedAt.getTime(),
           id,
         ]);
         return Promise.resolve();

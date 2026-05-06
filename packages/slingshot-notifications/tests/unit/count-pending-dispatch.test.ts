@@ -88,18 +88,17 @@ describe('NotificationAdapter.countPendingDispatch — sqlite backend', () => {
 
   beforeEach(() => {
     db = new Database(':memory:');
-    // Schema mirrors what the listPendingDispatch sqlite query addresses —
-    // the auto-generated entity adapter exposes the Notification table with
-    // camelCase columns matching the entity field names.
+    // Schema mirrors the entity adapter's auto-generated layout: snake_case
+    // plural table name, snake_case columns, INTEGER epoch ms for dates.
     db.run(`
-      CREATE TABLE Notification (
+      CREATE TABLE notifications (
         id TEXT PRIMARY KEY NOT NULL,
-        userId TEXT NOT NULL,
+        user_id TEXT NOT NULL,
         source TEXT NOT NULL,
         type TEXT NOT NULL,
-        deliverAt TEXT,
+        deliver_at INTEGER,
         dispatched INTEGER NOT NULL DEFAULT 0,
-        dispatchedAt TEXT
+        dispatched_at INTEGER
       )
     `);
     const factory = notificationOperations.operations.countPendingDispatch.sqlite;
@@ -120,13 +119,13 @@ describe('NotificationAdapter.countPendingDispatch — sqlite backend', () => {
     dispatched?: boolean;
   }): void {
     db.run(
-      'INSERT INTO Notification (id, userId, source, type, deliverAt, dispatched) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO notifications (id, user_id, source, type, deliver_at, dispatched) VALUES (?, ?, ?, ?, ?, ?)',
       [
         row.id,
         row.userId,
         'community',
         'community:mention',
-        row.deliverAt ? row.deliverAt.toISOString() : null,
+        row.deliverAt ? row.deliverAt.getTime() : null,
         row.dispatched ? 1 : 0,
       ],
     );

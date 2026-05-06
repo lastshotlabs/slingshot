@@ -5,10 +5,10 @@ import {
   attachContext,
   createEntityRegistry,
   getContext,
+  resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
 import { createNotificationsPlugin } from '../../src/plugin';
-import { NOTIFICATIONS_PLUGIN_STATE_KEY } from '../../src/state';
-import type { NotificationsPluginState } from '../../src/state';
+import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from '../../src/public';
 import { createNotificationsTestEvents } from '../../src/testing';
 
 function createFrameworkConfig() {
@@ -24,6 +24,7 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
   const ctx = {
     app,
     pluginState: new Map(),
+    capabilityProviders: new Map<string, string>(),
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
@@ -115,7 +116,7 @@ describe('createNotificationsPlugin lifecycle', () => {
     expect((await disabledApp.request('/notifications/sse')).status).toBe(404);
   });
 
-  test('setupPost publishes plugin state, drives builder flow, and teardown removes listeners', async () => {
+  test('setupPost publishes capabilities, drives builder flow, and teardown removes listeners', async () => {
     const app = new Hono();
     const bus = new InProcessAdapter();
     const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
@@ -149,18 +150,16 @@ describe('createNotificationsPlugin lifecycle', () => {
       events,
     });
 
-    const state = getContext(app).pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
-      | NotificationsPluginState
-      | undefined;
-    expect(state).toBeDefined();
-    expect(Object.isFrozen(state)).toBe(true);
-    expect(state?.config.mountPath).toBe('/notifications');
+    const ctx = getContext(app);
+    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactory);
+    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistry);
+    expect(builderFactory).toBeDefined();
+    expect(deliveryRegistry).toBeDefined();
 
     const deliver = mock(async () => {});
-    const adapter = { deliver };
-    state?.registerDeliveryAdapter(adapter as never);
+    deliveryRegistry?.register({ deliver } as never);
 
-    const created = await state?.createBuilder({ source: 'community' }).notify({
+    const created = await builderFactory?.({ source: 'community' }).notify({
       userId: 'user-1',
       type: 'community:mention',
       targetType: 'community:thread',
@@ -171,11 +170,11 @@ describe('createNotificationsPlugin lifecycle', () => {
     expect(created).toBeTruthy();
     expect(deliver).toHaveBeenCalledTimes(1);
 
-    const persisted = await state?.notifications.listByUser({ userId: 'user-1' });
-    expect(persisted?.items).toHaveLength(1);
-    expect(persisted?.items[0]?.source).toBe('community');
-
-    await expect(state?.dispatcher.tick()).resolves.toBe(0);
+    // Dispatcher health is observable through the plugin's getHealth() snapshot.
+    const health = plugin.getHealth();
+    expect(health.details.adapterAvailable).toBe(true);
+    expect(health.details.preferencesAdapterAvailable).toBe(true);
+    expect(health.details.deliveryAdapterCount).toBe(1);
 
     await plugin.teardown?.();
 
@@ -218,17 +217,18 @@ describe('createNotificationsPlugin lifecycle', () => {
       events,
     });
 
-    const state = getContext(app).pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
-      | NotificationsPluginState
-      | undefined;
-    expect(state).toBeDefined();
+    const deliveryRegistry = resolveCapabilityValue(
+      getContext(app),
+      NotificationsDeliveryRegistry,
+    );
+    expect(deliveryRegistry).toBeDefined();
 
     const firstDeliver = mock(async () => {
       throw new Error('adapter failed');
     });
     const secondDeliver = mock(async () => {});
-    state?.registerDeliveryAdapter({ deliver: firstDeliver } as never);
-    state?.registerDeliveryAdapter({ deliver: secondDeliver } as never);
+    deliveryRegistry?.register({ deliver: firstDeliver } as never);
+    deliveryRegistry?.register({ deliver: secondDeliver } as never);
 
     bus.emit('notifications:notification.created', {
       notification: {

@@ -371,7 +371,7 @@ describe('slingshot-notifications postgres handlers', () => {
     const page2 = await listPendingDispatch({
       limit: 1,
       now: new Date('2026-04-18T09:10:00.000Z'),
-      cursor: page1.nextCursor,
+      cursor: page1.nextCursor ?? undefined,
     });
     expect(page2.records).toHaveLength(1);
     expect(page2.records[0]?.id).toBe('n-second');

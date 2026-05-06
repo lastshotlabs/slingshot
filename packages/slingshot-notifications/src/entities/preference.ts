@@ -87,15 +87,39 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
     sqlite:
       db =>
       ({ userId }) => {
+        // The auto-generated sqlite table is `notification_preferences`
+        // (snake_case plural) with snake_case columns; map back to the
+        // camelCase record shape via `materializePreferenceRecord` since the
+        // entity wiring layer does not pass `fromRow` to custom op factories.
         const database = db as {
           query<T>(sql: string): { all(...args: unknown[]): T[] };
         };
+        const rows = database
+          .query<Record<string, unknown>>(
+            'SELECT * FROM notification_preferences WHERE user_id = ?',
+          )
+          .all(userId);
         return Promise.resolve(
-          database
-            .query<NotificationPreferenceRecord>(
-              'SELECT * FROM NotificationPreference WHERE userId = ?',
-            )
-            .all(userId),
+          rows.map(row =>
+            materializePreferenceRecord({
+              id: row['id'],
+              userId: row['user_id'],
+              tenantId: typeof row['tenant_id'] === 'string' ? row['tenant_id'] : null,
+              scope: row['scope'],
+              source: typeof row['source'] === 'string' ? row['source'] : null,
+              type: typeof row['type'] === 'string' ? row['type'] : null,
+              muted: row['muted'] === 1 || row['muted'] === true,
+              pushEnabled: row['push_enabled'] !== 0 && row['push_enabled'] !== false,
+              emailEnabled: row['email_enabled'] !== 0 && row['email_enabled'] !== false,
+              inAppEnabled: row['in_app_enabled'] !== 0 && row['in_app_enabled'] !== false,
+              quietStart: typeof row['quiet_start'] === 'string' ? row['quiet_start'] : null,
+              quietEnd: typeof row['quiet_end'] === 'string' ? row['quiet_end'] : null,
+              updatedAt:
+                typeof row['updated_at'] === 'number'
+                  ? new Date(row['updated_at'] as number)
+                  : new Date(0),
+            }),
+          ),
         );
       },
     postgres:

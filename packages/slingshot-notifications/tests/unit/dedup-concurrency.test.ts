@@ -12,6 +12,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { notificationOperations } from '../../src/entities/notification';
 import { createNotificationsTestAdapters } from '../../src/testing';
 
+function countOf(data: Readonly<Record<string, unknown>> | undefined): number {
+  const raw = data?.['count'];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : 1;
+}
+
 function createPayload(
   userId: string,
   source: string,
@@ -50,9 +55,7 @@ describe('dedupOrCreate concurrency — memory backend', () => {
     // Both should return the same record (same id).
     expect(resultA.record.id).toBe(resultB.record.id);
     // The non-created result should have the incremented count.
-    const aCount = resultA.record.data?.count ?? 1;
-    const bCount = resultB.record.data?.count ?? 1;
-    expect(Math.max(aCount, bCount)).toBe(2);
+    expect(Math.max(countOf(resultA.record.data), countOf(resultB.record.data))).toBe(2);
 
     // Verify only one row exists via unreadCount.
     const unread = await adapters.notifications.unreadCount({ userId: 'user-1' });
@@ -81,7 +84,7 @@ describe('dedupOrCreate concurrency — memory backend', () => {
     expect(new Set(ids).size).toBe(1);
 
     // The max count among results should reflect all four calls.
-    const maxCount = Math.max(...results.map(r => r.record.data?.count ?? 1));
+    const maxCount = Math.max(...results.map(r => countOf(r.record.data)));
     expect(maxCount).toBe(4);
 
     // Verify only one row exists.
@@ -178,7 +181,7 @@ describe('dedupOrCreate concurrency — memory backend', () => {
     expect(new Set(ids).size).toBe(1);
 
     // Max count reflects total calls.
-    const maxCount = Math.max(...results.map(r => r.record.data?.count ?? 1));
+    const maxCount = Math.max(...results.map(r => countOf(r.record.data)));
     expect(maxCount).toBe(CONCURRENCY);
 
     // Only one row persisted.
@@ -189,11 +192,12 @@ describe('dedupOrCreate concurrency — memory backend', () => {
 
 describe('dedupOrCreate concurrency — sqlite backend', () => {
   let db: Database;
-  let dedupOrCreate: (args: {
-    userId: string;
-    dedupKey: string;
-    create: Record<string, unknown>;
-  }) => Promise<{ record: Record<string, unknown>; created: boolean }>;
+  type DedupOrCreateFn = NonNullable<
+    typeof notificationOperations.operations.dedupOrCreate.sqlite
+  > extends (db: never) => infer Fn
+    ? Fn
+    : never;
+  let dedupOrCreate: DedupOrCreateFn;
 
   beforeEach(() => {
     db = new Database(':memory:');
@@ -225,7 +229,7 @@ describe('dedupOrCreate concurrency — sqlite backend', () => {
     if (typeof factory !== 'function') {
       throw new Error('Expected sqlite factory for dedupOrCreate');
     }
-    dedupOrCreate = factory(db) as typeof dedupOrCreate;
+    dedupOrCreate = factory(db);
   });
 
   afterEach(() => {
@@ -268,7 +272,7 @@ describe('dedupOrCreate concurrency — sqlite backend', () => {
     const ids = results.map(r => r.record.id);
     expect(new Set(ids).size).toBe(1);
 
-    const maxCount = Math.max(...results.map(r => r.record.data?.count ?? 1));
+    const maxCount = Math.max(...results.map(r => countOf(r.record.data)));
     expect(maxCount).toBe(2);
 
     // Verify only one row in the table.
@@ -299,7 +303,7 @@ describe('dedupOrCreate concurrency — sqlite backend', () => {
 
     expect(results.filter(r => r.created)).toHaveLength(1);
     expect(new Set(results.map(r => r.record.id)).size).toBe(1);
-    const maxCount = Math.max(...results.map(r => r.record.data?.count ?? 1));
+    const maxCount = Math.max(...results.map(r => countOf(r.record.data)));
     expect(maxCount).toBe(5);
 
     const all = db.query('SELECT COUNT(*) AS cnt FROM notifications').get() as {

@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { InProcessAdapter, getContext } from '@lastshotlabs/slingshot-core';
-import { NOTIFICATIONS_PLUGIN_STATE_KEY } from '../../src/state';
-import type { NotificationsPluginState } from '../../src/state';
+import { InProcessAdapter, getContext, resolveCapabilityValue } from '@lastshotlabs/slingshot-core';
+import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from '../../src/public';
 import {
   createNotificationsTestAdapters,
   createNotificationsTestBootstrap,
@@ -237,18 +236,18 @@ describe('notifications testing helpers', () => {
     });
   });
 
-  test('creates a bootstrap runtime with context state and builder helpers', async () => {
+  test('creates a bootstrap runtime with capability handles and builder helpers', async () => {
     const bootstrap = createNotificationsTestBootstrap();
     const ctx = getContext(bootstrap.app);
-    const state = ctx.pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as NotificationsPluginState;
 
     expect(ctx.bus).toBe(bootstrap.bus);
-    expect(state.config.mountPath).toBe('/notifications');
-    expect(state.config.sseEnabled).toBe(true);
-    expect(await state.dispatcher.tick()).toBe(0);
-    state.dispatcher.start();
-    state.dispatcher.stop();
-    state.registerDeliveryAdapter({
+
+    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactory);
+    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistry);
+    expect(builderFactory).toBeDefined();
+    expect(deliveryRegistry).toBeDefined();
+
+    deliveryRegistry?.register({
       async deliver() {},
     });
 

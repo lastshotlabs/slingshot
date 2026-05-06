@@ -608,17 +608,17 @@ export const notificationOperations = defineOperations(Notification, {
     sqlite:
       db =>
       ({ limit, now, cursor }) => {
-        const database = db as { prepare(sql: string): { all(...args: unknown[]): unknown[] } };
+        const database = db as { query<T>(sql: string): { all(...args: unknown[]): T[] } };
         let rows: unknown[];
         if (cursor) {
           rows = database
-            .prepare(
+            .query<unknown>(
               'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? AND (deliverAt, id) > (SELECT deliverAt, id FROM Notification WHERE id = ?) ORDER BY deliverAt ASC, id ASC LIMIT ?',
             )
             .all(now.toISOString(), cursor, limit + 1);
         } else {
           rows = database
-            .prepare(
+            .query<unknown>(
               'SELECT * FROM Notification WHERE dispatched = 0 AND deliverAt IS NOT NULL AND deliverAt <= ? ORDER BY deliverAt ASC, id ASC LIMIT ?',
             )
             .all(now.toISOString(), limit + 1);
@@ -727,18 +727,13 @@ export const notificationOperations = defineOperations(Notification, {
       db =>
       ({ now }) => {
         const database = db as {
-          prepare(sql: string): { get(...args: unknown[]): unknown };
-          query?<T>(sql: string): {
-            get(...args: unknown[]): T | null;
-          };
+          query<T>(sql: string): { get(...args: unknown[]): T | null };
         };
-        // Use the same statement shape `listPendingDispatch` uses for
-        // consistency with the test fakes that match SQL strings.
         const row = database
-          .prepare(
+          .query<{ count?: number }>(
             'SELECT COUNT(*) AS count FROM Notification WHERE dispatched = 0 AND (deliverAt IS NULL OR deliverAt <= ?)',
           )
-          .get(now.toISOString()) as { count?: number } | null;
+          .get(now.toISOString());
         return Promise.resolve(typeof row?.count === 'number' ? row.count : 0);
       },
     postgres:
@@ -788,10 +783,11 @@ export const notificationOperations = defineOperations(Notification, {
     sqlite:
       db =>
       ({ id, dispatchedAt }) => {
-        const database = db as { prepare(sql: string): { run(...args: unknown[]): unknown } };
-        database
-          .prepare('UPDATE Notification SET dispatched = 1, dispatchedAt = ? WHERE id = ?')
-          .run(dispatchedAt.toISOString(), id);
+        const database = db as { run(sql: string, params?: unknown[]): { changes: number } };
+        database.run('UPDATE Notification SET dispatched = 1, dispatchedAt = ? WHERE id = ?', [
+          dispatchedAt.toISOString(),
+          id,
+        ]);
         return Promise.resolve();
       },
     postgres:

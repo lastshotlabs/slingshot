@@ -87,11 +87,15 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
     sqlite:
       db =>
       ({ userId }) => {
-        const database = db as { prepare(sql: string): { all(...args: unknown[]): unknown[] } };
+        const database = db as {
+          query<T>(sql: string): { all(...args: unknown[]): T[] };
+        };
         return Promise.resolve(
           database
-            .prepare('SELECT * FROM NotificationPreference WHERE userId = ?')
-            .all(userId) as NotificationPreferenceRecord[],
+            .query<NotificationPreferenceRecord>(
+              'SELECT * FROM NotificationPreference WHERE userId = ?',
+            )
+            .all(userId),
         );
       },
     postgres:

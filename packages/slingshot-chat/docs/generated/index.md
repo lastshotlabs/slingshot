@@ -37,6 +37,7 @@ bun add @lastshotlabs/slingshot-chat
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `@lastshotlabs/slingshot-notifications`: `workspace:*`
+- `@lastshotlabs/slingshot-permissions`: `workspace:*`
 
 ## Peer Dependencies
 

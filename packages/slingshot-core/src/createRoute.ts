@@ -99,8 +99,16 @@ function toBaseName(method: string, path: string): string {
     .filter(Boolean)
     .map(seg => {
       if (seg.startsWith('{') && seg.endsWith('}')) {
+        // Defensive: a brace param may contain dots (e.g. `{actor.id}`) when an
+        // upstream codegen leaks a context-scoped param into the URL. Splitting on
+        // dots and PascalCasing each segment guarantees a valid TS identifier
+        // (`ByActorId`) so snapshot codegen and downstream type tools don't choke.
         const param = seg.slice(1, -1);
-        return 'By' + param.charAt(0).toUpperCase() + param.slice(1);
+        const parts = param
+          .split('.')
+          .filter(Boolean)
+          .map(p => p.charAt(0).toUpperCase() + p.slice(1));
+        return 'By' + parts.join('');
       }
       // kebab-case and plain segments → PascalCase
       return seg

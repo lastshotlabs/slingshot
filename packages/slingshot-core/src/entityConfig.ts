@@ -164,8 +164,9 @@ export interface FieldDef<
   readonly immutable: boolean;
   /**
    * Field is hidden from generated API responses. See `FieldOptions.private`.
+   * Optional in the type — defaults to `false` at every runtime construction site.
    */
-  readonly private: boolean;
+  readonly private?: boolean;
   /**
    * Named input-variant allowlist. Empty/undefined means all variants
    * (including default) may set this field. The literal type of this array

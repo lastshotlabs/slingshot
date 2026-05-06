@@ -11,6 +11,7 @@ import type {
   StoreType,
   SystemEventData,
 } from '@lastshotlabs/slingshot-core';
+import type { ChatInteractionsPeer } from './public';
 
 // ─── Entity model types ───────────────────────────────────────────────────────
 // Hand-written to match entity field definitions — single source of truth.
@@ -599,18 +600,7 @@ export interface ChatPluginState {
   readonly invites?: RoomInviteAdapter;
   readonly reminders?: ReminderAdapter;
   readonly config: Readonly<ChatPluginConfig>;
-  readonly interactionsPeer?: {
-    readonly peerKind: 'chat';
-    resolveMessageByKindAndId(
-      kind: 'chat:message' | 'community:thread' | 'community:reply' | 'community:post',
-      id: string,
-    ): Promise<{ readonly components?: unknown } | null>;
-    updateComponents(
-      kind: 'chat:message' | 'community:thread' | 'community:reply' | 'community:post',
-      id: string,
-      components: ReadonlyArray<unknown>,
-    ): Promise<void>;
-  };
+  readonly interactionsPeer?: ChatInteractionsPeer;
   /**
    * The shared `PermissionEvaluator` from `slingshot-permissions`.
    * Route handlers call `evaluator.can(subject, action, scope)` for access control.

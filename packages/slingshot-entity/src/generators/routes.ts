@@ -70,7 +70,9 @@ export function generateRoutes(
   lines.push(``);
   lines.push(`import { OpenAPIHono } from '@hono/zod-openapi';`);
   lines.push(`import { z } from 'zod';`);
-  lines.push(`import { createRoute, registerSchemas } from '@lastshotlabs/slingshot-core';`);
+  lines.push(
+    `import { createRoute, getActor, registerSchemas } from '@lastshotlabs/slingshot-core';`,
+  );
   lines.push(`import type { ${name}Adapter } from './adapter';`);
   lines.push(
     `import { ${schemas.entity}, ${schemas.create}, ${schemas.update}, ${schemas.listOptions} } from './schemas';`,
@@ -353,6 +355,34 @@ function generateCrudRoutes(
  * @param tag - OpenAPI tag.
  * @param schemas - Pre-computed schema variable name references.
  */
+/**
+ * Build the `actor.*` context-injection lines that merge authenticated-actor values
+ * into the params object before invoking the adapter. Mirrors the runtime behavior
+ * in `buildBareEntityRoutes.ts:1284-1297`. Empty array when no dotted (context)
+ * params are referenced by the op.
+ */
+function actorInjectionLines(contextParams: readonly string[]): string[] {
+  if (contextParams.length === 0) return [];
+  const out: string[] = [];
+  out.push(`      const actor = getActor(c);`);
+  out.push(`      const ctxOverrides: Record<string, unknown> = {};`);
+  if (contextParams.includes('actor.id')) {
+    out.push(`      if (actor.id != null) ctxOverrides['actor.id'] = actor.id;`);
+  }
+  if (contextParams.includes('actor.tenantId')) {
+    out.push(`      if (actor.tenantId != null) ctxOverrides['actor.tenantId'] = actor.tenantId;`);
+  }
+  if (contextParams.includes('actor.kind')) {
+    out.push(`      ctxOverrides['actor.kind'] = actor.kind;`);
+  }
+  if (contextParams.includes('actor.sessionId')) {
+    out.push(
+      `      if (actor.sessionId != null) ctxOverrides['actor.sessionId'] = actor.sessionId;`,
+    );
+  }
+  return out;
+}
+
 function generateOpRoute(
   lines: string[],
   config: ResolvedEntityConfig,
@@ -364,20 +394,30 @@ function generateOpRoute(
   schemas: ReturnType<typeof schemaNames>,
 ): void {
   const opPath = opNameToPath(opName);
-  const params = getOpParams(op);
+  const allParams = getOpParams(op);
+  // Partition by dot: dotted params (e.g. `actor.id`) are context-injected at
+  // runtime from the authenticated actor and never appear in the URL or zod
+  // request schema. Dot-free params are URL path segments.
+  const params = allParams.filter(p => !p.includes('.'));
+  const contextParams = allParams.filter(p => p.includes('.'));
+  const pathSuffix = params.length > 0 ? `/{${params.join('}/{')}}` : '';
 
   switch (op.kind) {
     case 'lookup': {
       const paramSchema = params.map(p => `${p}: z.string()`).join(', ');
+      const requestField =
+        params.length > 0 ? `      request: { params: z.object({ ${paramSchema} }) },` : '';
+      const paramsAssign =
+        params.length > 0 ? `      const urlParams = c.req.valid('param');` : `      const urlParams = {};`;
       if (op.returns === 'one') {
         lines.push(`  // Operation: ${opName} (lookup one)`);
         lines.push(`  router.openapi(`);
         lines.push(`    createRoute({`);
         lines.push(`      method: 'get',`);
-        lines.push(`      path: '/${basePath}/${opPath}/{${params.join('}/{')}}',`);
+        lines.push(`      path: '/${basePath}/${opPath}${pathSuffix}',`);
         lines.push(`      tags: ['${tag}'],`);
         lines.push(`      summary: '${opName}',`);
-        lines.push(`      request: { params: z.object({ ${paramSchema} }) },`);
+        if (requestField) lines.push(requestField);
         lines.push(`      responses: {`);
         lines.push(
           `        200: { content: { 'application/json': { schema: ${schemas.entity} } }, description: 'Found' },`,
@@ -388,7 +428,13 @@ function generateOpRoute(
         lines.push(`      },`);
         lines.push(`    }),`);
         lines.push(`    async c => {`);
-        lines.push(`      const params = c.req.valid('param');`);
+        lines.push(paramsAssign);
+        for (const line of actorInjectionLines(contextParams)) lines.push(line);
+        lines.push(
+          contextParams.length > 0
+            ? `      const params = { ...urlParams, ...ctxOverrides };`
+            : `      const params = urlParams;`,
+        );
         lines.push(`      const result = await adapter.${opName}(params);`);
         lines.push(`      if (!result) return c.json({ error: 'Not found' }, 404);`);
         lines.push(`      return c.json(result);`);
@@ -399,10 +445,10 @@ function generateOpRoute(
         lines.push(`  router.openapi(`);
         lines.push(`    createRoute({`);
         lines.push(`      method: 'get',`);
-        lines.push(`      path: '/${basePath}/${opPath}/{${params.join('}/{')}}',`);
+        lines.push(`      path: '/${basePath}/${opPath}${pathSuffix}',`);
         lines.push(`      tags: ['${tag}'],`);
         lines.push(`      summary: '${opName}',`);
-        lines.push(`      request: { params: z.object({ ${paramSchema} }) },`);
+        if (requestField) lines.push(requestField);
         lines.push(`      responses: {`);
         lines.push(
           `        200: { content: { 'application/json': { schema: z.object({ items: z.array(${schemas.entity}), nextCursor: z.string().optional(), hasMore: z.boolean() }) } }, description: 'List result' },`,
@@ -410,7 +456,13 @@ function generateOpRoute(
         lines.push(`      },`);
         lines.push(`    }),`);
         lines.push(`    async c => {`);
-        lines.push(`      const params = c.req.valid('param');`);
+        lines.push(paramsAssign);
+        for (const line of actorInjectionLines(contextParams)) lines.push(line);
+        lines.push(
+          contextParams.length > 0
+            ? `      const params = { ...urlParams, ...ctxOverrides };`
+            : `      const params = urlParams;`,
+        );
         lines.push(`      const result = await adapter.${opName}(params);`);
         lines.push(`      return c.json(result);`);
         lines.push(`    },`);
@@ -421,21 +473,31 @@ function generateOpRoute(
 
     case 'exists': {
       const paramSchema = params.map(p => `${p}: z.string()`).join(', ');
+      const requestField =
+        params.length > 0 ? `      request: { params: z.object({ ${paramSchema} }) },` : '';
+      const paramsAssign =
+        params.length > 0 ? `      const urlParams = c.req.valid('param');` : `      const urlParams = {};`;
       lines.push(`  // Operation: ${opName} (exists)`);
       lines.push(`  router.openapi(`);
       lines.push(`    createRoute({`);
       lines.push(`      method: 'head',`);
-      lines.push(`      path: '/${basePath}/${opPath}/{${params.join('}/{')}}',`);
+      lines.push(`      path: '/${basePath}/${opPath}${pathSuffix}',`);
       lines.push(`      tags: ['${tag}'],`);
       lines.push(`      summary: '${opName}',`);
-      lines.push(`      request: { params: z.object({ ${paramSchema} }) },`);
+      if (requestField) lines.push(requestField);
       lines.push(`      responses: {`);
       lines.push(`        200: { description: 'Exists' },`);
       lines.push(`        404: { description: 'Not found' },`);
       lines.push(`      },`);
       lines.push(`    }),`);
       lines.push(`    async c => {`);
-      lines.push(`      const params = c.req.valid('param');`);
+      lines.push(paramsAssign);
+      for (const line of actorInjectionLines(contextParams)) lines.push(line);
+      lines.push(
+        contextParams.length > 0
+          ? `      const params = { ...urlParams, ...ctxOverrides };`
+          : `      const params = urlParams;`,
+      );
       lines.push(`      const exists = await adapter.${opName}(params);`);
       lines.push(`      return exists ? c.body(null, 200) : c.body(null, 404);`);
       lines.push(`    },`);
@@ -465,7 +527,13 @@ function generateOpRoute(
       lines.push(`      },`);
       lines.push(`    }),`);
       lines.push(`    async c => {`);
-      lines.push(`      const params = c.req.valid('json');`);
+      lines.push(`      const body = c.req.valid('json');`);
+      for (const line of actorInjectionLines(contextParams)) lines.push(line);
+      lines.push(
+        contextParams.length > 0
+          ? `      const params = { ...body, ...ctxOverrides };`
+          : `      const params = body;`,
+      );
       lines.push(`      try {`);
       lines.push(`        const result = await adapter.${opName}(params);`);
       lines.push(`        if (!result) return c.json({ error: 'Precondition failed' }, 409);`);
@@ -507,8 +575,14 @@ function generateOpRoute(
       lines.push(`      },`);
       lines.push(`    }),`);
       lines.push(`    async c => {`);
-      lines.push(`      const body = c.req.valid('json');`);
-      lines.push(`      const params = { ${params.map(p => `${p}: body.${p}`).join(', ')} };`);
+      lines.push(`      const body = c.req.valid('json') as Record<string, unknown>;`);
+      for (const line of actorInjectionLines(contextParams)) lines.push(line);
+      const matchParamPairs = params.map(p => `${p}: body.${p}`).join(', ');
+      lines.push(
+        contextParams.length > 0
+          ? `      const params = { ${matchParamPairs}${matchParamPairs ? ', ' : ''}...ctxOverrides };`
+          : `      const params = { ${matchParamPairs} };`,
+      );
       lines.push(`      const input = { ${op.set.map(f => `${f}: body.${f}`).join(', ')} };`);
       lines.push(`      try {`);
       lines.push(`        const result = await adapter.${opName}(params, input);`);
@@ -550,10 +624,16 @@ function generateOpRoute(
       lines.push(`    }),`);
       lines.push(`    async c => {`);
       if (paramSchema) {
-        lines.push(`      const params = c.req.valid('json');`);
+        lines.push(`      const body = c.req.valid('json');`);
       } else {
-        lines.push(`      const params = {};`);
+        lines.push(`      const body = {};`);
       }
+      for (const line of actorInjectionLines(contextParams)) lines.push(line);
+      lines.push(
+        contextParams.length > 0
+          ? `      const params = { ...body, ...ctxOverrides };`
+          : `      const params = body;`,
+      );
       lines.push(`      try {`);
       lines.push(`        const count = await adapter.${opName}(params);`);
       lines.push(`        return c.json({ count });`);
@@ -569,7 +649,9 @@ function generateOpRoute(
     }
 
     case 'search': {
-      const filterParams = op.filter ? getOpParams(op) : [];
+      const allFilterParams = op.filter ? getOpParams(op) : [];
+      const filterParams = allFilterParams.filter(p => !p.includes('.'));
+      const filterContextParams = allFilterParams.filter(p => p.includes('.'));
       const queryFields = [`q: z.string()`, `limit: z.coerce.number().optional()`];
       if (op.paginate) queryFields.push(`cursor: z.string().optional()`);
       for (const p of filterParams) queryFields.push(`${p}: z.string().optional()`);
@@ -577,7 +659,7 @@ function generateOpRoute(
         ? `z.object({ items: z.array(${schemas.entity}), nextCursor: z.string().optional(), hasMore: z.boolean() })`
         : `z.array(${schemas.entity})`;
       lines.push(
-        `  // Operation: ${opName} (search${op.paginate ? ', paginated' : ''}${filterParams.length > 0 ? ', filtered' : ''})`,
+        `  // Operation: ${opName} (search${op.paginate ? ', paginated' : ''}${filterParams.length > 0 || filterContextParams.length > 0 ? ', filtered' : ''})`,
       );
       lines.push(`  router.openapi(`);
       lines.push(`    createRoute({`);
@@ -594,9 +676,13 @@ function generateOpRoute(
       lines.push(`    }),`);
       lines.push(`    async c => {`);
       lines.push(`      const query = c.req.valid('query');`);
-      if (filterParams.length > 0) {
+      for (const line of actorInjectionLines(filterContextParams)) lines.push(line);
+      const fromQuery = filterParams.map(p => `${p}: query.${p}`).join(', ');
+      if (filterParams.length > 0 || filterContextParams.length > 0) {
         lines.push(
-          `      const filterParams = { ${filterParams.map(p => `${p}: query.${p}`).join(', ')} };`,
+          filterContextParams.length > 0
+            ? `      const filterParams = { ${fromQuery}${fromQuery ? ', ' : ''}...ctxOverrides };`
+            : `      const filterParams = { ${fromQuery} };`,
         );
         lines.push(
           `      const results = await adapter.${opName}(query.q, filterParams, query.limit${op.paginate ? ', query.cursor' : ''});`,
@@ -633,10 +719,16 @@ function generateOpRoute(
       lines.push(`    }),`);
       lines.push(`    async c => {`);
       if (paramSchema) {
-        lines.push(`      const params = c.req.valid('query');`);
+        lines.push(`      const query = c.req.valid('query');`);
       } else {
-        lines.push(`      const params = {};`);
+        lines.push(`      const query = {};`);
       }
+      for (const line of actorInjectionLines(contextParams)) lines.push(line);
+      lines.push(
+        contextParams.length > 0
+          ? `      const params = { ...query, ...ctxOverrides };`
+          : `      const params = query;`,
+      );
       lines.push(`      const result = await adapter.${opName}(params);`);
       lines.push(`      return c.json(result);`);
       lines.push(`    },`);

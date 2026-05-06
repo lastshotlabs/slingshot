@@ -10,14 +10,19 @@ import {
   deepFreeze,
   defineEvent,
   getActor,
+  getContext,
   getContextOrNull,
   getPermissionsStateOrNull,
   getPluginStateOrNull,
+  provideCapability,
   publishPluginState,
+  registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import { CommunityInteractionsPeerCap } from './public';
+import type { CommunityInteractionsPeer } from './public';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { ChannelConfigDeps, EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
@@ -37,7 +42,7 @@ import { probePushFormatterRegistrar } from './peers/push';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
 import type { CommunityPluginConfig } from './types/config';
 import { communityPluginConfigSchema } from './types/config';
-import type { CommunityInteractionsPeer, CommunityPluginState } from './types/state';
+import type { CommunityPluginState } from './types/state';
 import { COMMUNITY_PLUGIN_STATE_KEY } from './types/state';
 
 type AdapterResult = BareEntityAdapter;
@@ -127,50 +132,71 @@ function buildInteractionsPeer(
 /**
  * Create the community plugin using the config-driven entity system.
  *
- * Wires all 8 community entities (Container, Thread, Reply, Reaction,
- * ContainerMember, ContainerRule, Report, Ban) through
- * `createEntityPlugin()`. No hand-written routes, no service layer — route
- * configuration on each entity drives auth, permissions, events, cascades,
- * and middleware.
+ * Wires all community entities — Container, Thread, Reply, Reaction,
+ * ContainerMember, ContainerRule, Report, Ban, Tag, ThreadTag, ContainerInvite,
+ * ContainerSubscription, ThreadSubscription, UserMute, Bookmark, AutoModRule,
+ * Warning, AuditLogEntry, ContainerSetting — through `createEntityPlugin()`. No
+ * hand-written routes, no service layer: route configuration on each entity
+ * drives auth, permissions, events, cascades, and middleware.
  *
  * **Permissions resolution:** the plugin reads `PermissionsState` from
- * `ctx.pluginState` (keyed by `PERMISSIONS_STATE_KEY`), which is populated by
- * `createPermissionsPlugin()` during its `setupMiddleware` phase. Declare
- * `'slingshot-permissions'` before community so the framework guarantees
- * ordering.
+ * `ctx.pluginState` during `setupMiddleware`, which is populated by
+ * `createPermissionsPlugin()`. Declare `'slingshot-permissions'` before
+ * community so the framework topological sort guarantees ordering.
+ *
+ * **Notifications resolution:** the plugin resolves the notifications builder
+ * factory through `ctx.capabilities.require(NotificationsBuilderFactory)` in
+ * `setupPost` and uses it to emit `community:reply`, `community:mention`,
+ * `community:ban`, `community:warning`, and `community:thread.subscribed_reply`
+ * notifications.
+ *
+ * **Public contract:** the plugin publishes `CommunityInteractionsPeerCap`
+ * (the `Community` package contract handle) so cross-package consumers — notably
+ * `slingshot-interactions` for component-tree resolution — can resolve the peer
+ * via `ctx.capabilities.require(CommunityInteractionsPeerCap)` instead of
+ * reaching into plugin state. The plugin also continues to write
+ * `interactionsPeer` into `pluginState` under `COMMUNITY_PLUGIN_STATE_KEY` so
+ * legacy `getPublishedInteractionsPeerOrNull` consumers keep working.
  *
  * @param rawConfig - Plugin configuration. Validated against the Zod schema at
  *   construction time; throws if any required field is missing or mis-typed.
- * @returns A `SlingshotPlugin` suitable for passing to `createApp()`.
+ * @returns A `SlingshotPlugin` suitable for passing to `createApp()`. When
+ *   `ws.wsEndpoint` is set, the returned plugin also exposes
+ *   `buildSubscribeGuard` and `buildReceiveIncoming` for explicit WS wiring.
  *
  * @throws {Error} If `rawConfig` fails the Zod schema validation.
- * @throws {Error} If `PERMISSIONS_STATE_KEY` is absent from `ctx.pluginState`
- *   when `setupMiddleware` runs.
+ * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs —
+ *   register `createPermissionsPlugin()` first.
+ * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
+ *   `setupPost` runs — register `createNotificationsPlugin()` first.
  *
  * @remarks
  * The plugin declares dependencies on `'slingshot-auth'`,
- * `'slingshot-notifications'`, and `'slingshot-permissions'`. Auth middleware must
- * therefore be registered before this plugin runs.
+ * `'slingshot-notifications'`, and `'slingshot-permissions'`.
  *
  * Adapter-dependent middleware (banCheck, autoMod, threadStateGuard,
- * banNotify) is initialised lazily during `setupRoutes` after the corresponding
- * entity adapters are resolved. The middleware refs start as no-ops to satisfy
- * the middleware map type.
+ * banNotify, replyCountUpdate/Decrement, auditLog) is initialised inside
+ * `setupMiddleware` once the manifest runtime captures the entity adapters via
+ * its `onAdaptersCaptured` callback. The middleware refs start as no-ops so the
+ * middleware map type is satisfied throughout boot.
  *
  * **WebSocket self-wiring:** When `ws.wsEndpoint` is configured, the plugin
  * self-registers its `onRoomSubscribe` guard and `incoming` handlers onto
  * `SlingshotContext.wsEndpoints[wsEndpoint]` during `setupPost`. No caller-side
- * wiring of `buildSubscribeGuard` or `buildReceiveIncoming` is needed. In
- * config-driven mode only `wsEndpoint` is required — WS publish/runtime access is
- * resolved lazily from `SlingshotContext`.
+ * wiring is required.
+ *
+ * **Push integration:** When `slingshot-push` is registered, the plugin
+ * registers formatter functions for each community notification type so push
+ * delivery produces meaningful titles, bodies, and deep-link URLs. The
+ * integration is duck-typed — community does not import `slingshot-push`.
  *
  * @example
  * ```ts
  * import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
  *
- * // Manifest-compatible — permissions come from pluginState, WS self-wires:
  * const community = createCommunityPlugin({
- *   containerCreation: 'admin',
+ *   authBridge: 'auto',
+ *   containerCreation: 'user',
  *   ws: { wsEndpoint: 'community' },
  * });
  * ```
@@ -584,6 +610,15 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         );
       }
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
+
+      // Contract-bound capability publish. The peer closure captures the lazy
+      // `threadAdapterRef`/`replyAdapterRef` getters so it always sees the
+      // latest adapters. `interactionsPeer` is also written into pluginState
+      // above so legacy `getPublishedInteractionsPeerOrNull` consumers keep
+      // working.
+      await registerPluginCapabilities(getContext(app), 'slingshot-community', [
+        provideCapability(CommunityInteractionsPeerCap, () => interactionsPeer),
+      ]);
 
       // Push formatter registration — optional integration with slingshot-push.
       // Duck-typed to avoid a direct dependency on @lastshotlabs/slingshot-push.

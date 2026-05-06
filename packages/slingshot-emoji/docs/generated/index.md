@@ -35,6 +35,7 @@ bun add @lastshotlabs/slingshot-emoji
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
+- `@lastshotlabs/slingshot-permissions`: `workspace:*`
 
 ## Peer Dependencies
 

@@ -10,11 +10,15 @@ import {
   defineEvent,
   getContext,
   getPluginState,
+  provideCapability,
   publishPluginState,
+  registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import { ChatInteractionsPeerCap } from './public';
+import type { ChatInteractionsPeer } from './public';
 import {
   PermissionsAdapterCap,
   PermissionsEvaluatorCap,
@@ -49,16 +53,70 @@ import { buildIncomingDispatch } from './ws/incoming';
 /**
  * Create the slingshot-chat plugin using the manifest-driven entity system.
  *
- * Persists rooms, memberships, messages, reactions, receipts, pins, blocks,
+ * Persists rooms, memberships, messages, reactions, read receipts, pins, blocks,
  * favorites, invites, and reminders through `createEntityPlugin({ manifest })`.
- * DM orchestration, unread counts, scheduler claims, and message encryption are
- * resolved through the chat manifest runtime.
+ * DM orchestration, unread counts, scheduled-message claims, message reminder
+ * claims, and message encryption are resolved through the chat manifest runtime.
  *
- * @param rawConfig - Plugin configuration. Validated with Zod at construction time.
+ * **Permissions resolution:** the plugin resolves the evaluator, registry, and
+ * adapter through `ctx.capabilities.require(PermissionsEvaluatorCap)` (and the
+ * matching registry/adapter caps) in `setupMiddleware`. Declare
+ * `'slingshot-permissions'` before chat so the framework topological sort
+ * guarantees ordering.
+ *
+ * **Notifications resolution:** the plugin resolves the notifications builder
+ * factory through `ctx.capabilities.require(NotificationsBuilderFactory)` in
+ * `setupMiddleware` and uses it to emit `chat:message` and `chat:invite`
+ * notifications.
+ *
+ * **Public contract:** the plugin publishes `ChatInteractionsPeerCap` (the
+ * `Chat` package contract handle) so cross-package consumers — notably
+ * `slingshot-interactions` for component-tree resolution — can resolve the peer
+ * via `ctx.capabilities.require(ChatInteractionsPeerCap)` instead of reaching
+ * into plugin state. The plugin also continues to write `interactionsPeer` into
+ * `pluginState` under `CHAT_PLUGIN_STATE_KEY` so legacy
+ * `getPublishedInteractionsPeerOrNull` consumers keep working. The full chat
+ * runtime — the bundled adapter set, evaluator, and config — is published
+ * separately under `CHAT_RUNTIME_KEY` for in-package consumers.
+ *
+ * @param rawConfig - Plugin configuration. Validated with Zod at construction
+ *   time; throws if any required field is missing or mis-typed.
  * @returns A `SlingshotPlugin` ready to pass to `createApp({ plugins: [...] })`.
  *
- * @throws {Error} If `slingshot-permissions` is not registered before chat.
- * @throws {Error} If `slingshot-notifications` is not registered before chat.
+ * @throws {Error} If `rawConfig` fails the Zod schema validation.
+ * @throws {Error} If `slingshot-permissions` is not registered before chat —
+ *   the evaluator/registry/adapter capabilities are required during
+ *   `setupMiddleware`.
+ * @throws {Error} If `slingshot-notifications` is not registered before chat —
+ *   the notifications builder factory is required during `setupMiddleware`.
+ *
+ * @remarks
+ * The plugin declares dependencies on `'slingshot-auth'`,
+ * `'slingshot-notifications'`, and `'slingshot-permissions'`.
+ *
+ * **WebSocket self-wiring:** chat self-registers its incoming event handlers
+ * onto `SlingshotContext.wsEndpoints[mountPath]` during `setupPost`. No
+ * caller-side wiring is required.
+ *
+ * **Background schedulers:** during `setupPost` the plugin starts two 30-second
+ * intervals — one for due reminders, one for scheduled message delivery. Both
+ * are cleared in `teardown()`.
+ *
+ * **Optional peer integrations:** chat opportunistically integrates with
+ * `slingshot-push` (formatter registration) and `slingshot-embeds` (URL unfurl
+ * on new messages) when those plugins are present. Both integrations are
+ * duck-typed — chat does not import them.
+ *
+ * @example
+ * ```ts
+ * import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+ *
+ * const chat = createChatPlugin({
+ *   storeType: 'postgres',
+ *   mountPath: '/chat',
+ *   enablePresence: true,
+ * });
+ * ```
  */
 export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
   const config: Readonly<ChatPluginConfig> = deepFreeze(
@@ -101,6 +159,21 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
   let notificationsBuilderFactoryRef:
     | ((opts: { source: string }) => import('@lastshotlabs/slingshot-core').NotificationBuilder)
     | undefined;
+
+  // Interactions peer — built once at plugin construction so the lifecycle
+  // phases and the capability publish all share one instance. Closes over
+  // `messageAdapterRef` so it always sees the latest adapter reference.
+  const interactionsPeer: ChatInteractionsPeer = {
+    peerKind: 'chat',
+    async resolveMessageByKindAndId(kind, id) {
+      if (kind !== 'chat:message') return null;
+      return (await messageAdapterRef?.getById(id)) ?? null;
+    },
+    async updateComponents(kind, id, components) {
+      if (kind !== 'chat:message' || !messageAdapterRef) return;
+      await messageAdapterRef.updateComponents({ id }, { components });
+    },
+  };
 
   return {
     name: CHAT_PLUGIN_STATE_KEY,
@@ -179,17 +252,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
       permissionsRef = permissions;
 
       publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, {
-        interactionsPeer: {
-          peerKind: 'chat',
-          async resolveMessageByKindAndId(kind, id) {
-            if (kind !== 'chat:message') return null;
-            return (await messageAdapterRef?.getById(id)) ?? null;
-          },
-          async updateComponents(kind, id, components) {
-            if (kind !== 'chat:message' || !messageAdapterRef) return;
-            await messageAdapterRef.updateComponents({ id }, { components });
-          },
-        },
+        interactionsPeer,
       } satisfies Pick<ChatPluginState, 'interactionsPeer'>);
 
       memberGrantRef.handler = createMemberGrantMiddleware({
@@ -463,11 +526,10 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
         favoriteAdapterRef &&
         permissionsRef
       ) {
-        const messageAdapter = messageAdapterRef;
         const chatState: ChatPluginState = {
           rooms: roomAdapterRef,
           members: memberAdapterRef,
-          messages: messageAdapter,
+          messages: messageAdapterRef,
           receipts: receiptAdapterRef,
           reactions: reactionAdapterRef,
           pins: pinAdapterRef,
@@ -476,17 +538,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           invites: inviteAdapterRef,
           reminders: reminderAdapterRef,
           config,
-          interactionsPeer: {
-            peerKind: 'chat',
-            async resolveMessageByKindAndId(kind, id) {
-              if (kind !== 'chat:message') return null;
-              return (await messageAdapter.getById(id)) ?? null;
-            },
-            async updateComponents(kind, id, components) {
-              if (kind !== 'chat:message') return;
-              await messageAdapter.updateComponents({ id }, { components });
-            },
-          },
+          interactionsPeer,
           evaluator: permissionsRef.evaluator,
         };
         publishPluginState(getPluginState(app), CHAT_RUNTIME_KEY, chatState);
@@ -496,6 +548,14 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
 
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
+
+      // Contract-bound capability publish. The peer closure captures
+      // `messageAdapterRef` so it always sees the latest adapter.
+      // `interactionsPeer` is also written into pluginState above so legacy
+      // `getPublishedInteractionsPeerOrNull` consumers keep working.
+      await registerPluginCapabilities(getContext(app), 'slingshot-chat', [
+        provideCapability(ChatInteractionsPeerCap, () => interactionsPeer),
+      ]);
     },
 
     teardown() {

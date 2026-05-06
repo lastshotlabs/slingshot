@@ -2,27 +2,26 @@
 import './events';
 
 /**
- * @lastshotlabs/slingshot-chat
- *
- * Framework-level reusable chat plugin for the Slingshot framework.
- * Provides rooms, messages, members, real-time delivery, DM topology,
- * broadcast channels, and full management (mute, block, favorites, pins).
+ * `@lastshotlabs/slingshot-chat` is Slingshot's chat domain package. It provides
+ * rooms, memberships, messages, reactions, read receipts, pins, blocks,
+ * favorites, invites, reminders, scheduled messages, and the WebSocket realtime
+ * surface — driven by the shared package-first/entity authoring model.
  *
  * @example
  * ```ts
- * import { createChatPlugin } from '@lastshotlabs/slingshot-chat'
+ * import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
  *
- * const app = await createApp({
- *   plugins: [
- *     createChatPlugin({
- *       storeType: 'postgres',
- *       mountPath: '/chat',
- *     }),
- *   ],
- * })
+ * createChatPlugin({
+ *   storeType: 'postgres',
+ *   mountPath: '/chat',
+ * });
  * ```
  */
 
+/**
+ * Entity record types, create/update inputs, adapter contracts, plugin runtime
+ * state, plugin config, encryption config variants, and WebSocket payload shapes.
+ */
 export type {
   // Entity types
   Room,
@@ -81,26 +80,34 @@ export type {
  *
  * @example
  * ```ts
- * import { createChatPlugin } from '@lastshotlabs/slingshot-chat'
+ * import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
  *
- * const app = await createApp({
- *   plugins: [
- *     createChatPlugin({ storeType: 'memory', mountPath: '/chat' }),
- *   ],
- * })
+ * createChatPlugin({ storeType: 'memory', mountPath: '/chat' });
  * ```
  */
 export { createChatPlugin } from './plugin';
+/**
+ * Entity manifest describing the chat entities and their wiring graph.
+ */
 export { chatManifest } from './manifest/chatManifest';
 
 /**
- * Plugin state key for looking up chat state in `ctx.pluginState`.
- *
- * @example
- * ```ts
- * import { CHAT_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-chat'
- * const chatState = ctx.pluginState.get(CHAT_PLUGIN_STATE_KEY) as ChatPluginState
- * ```
+ * Provider-owned package contract. Cross-package consumers resolve
+ * `ChatInteractionsPeerCap` through `ctx.capabilities.require(...)` instead
+ * of reaching into plugin state.
+ */
+export { Chat, ChatInteractionsPeerCap } from './public';
+/**
+ * Cross-package peer surface used to resolve chat-owned message trees and apply
+ * component updates returned by interaction dispatchers.
+ */
+export type { ChatInteractionsPeer } from './public';
+
+/**
+ * Plugin state key under which the chat plugin publishes a partial
+ * `ChatPluginState` (currently `interactionsPeer`) for back-compat with
+ * `getPublishedInteractionsPeerOrNull` consumers. Prefer the public contract
+ * (`ChatInteractionsPeerCap`) for new cross-package code.
  */
 export { CHAT_PLUGIN_STATE_KEY } from './state';
 

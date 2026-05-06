@@ -24,7 +24,17 @@ function defaultNamedOperationMethod(opConfig?: OperationConfig): NamedOpHttpMet
   }
 }
 
-/** Build a default URL path for an operation: base path from name, with `:param` segments appended for lookup/exists. */
+/**
+ * Build a default URL path for an operation. Lookup/exists ops append a `:param`
+ * segment for each declared param.
+ *
+ * Only dot-free params are appended to the URL — dotted params (e.g. `actor.id`,
+ * `actor.tenantId`) are context-injected at runtime from the authenticated actor
+ * and never appear in the URL or OpenAPI path. Including a dot in an OpenAPI path
+ * parameter (`/listByUser/{actor.id}`) is invalid: snapshot codegen tools, type
+ * generators, and any consumer doing `pathParams['actor.id']` lookups can't
+ * handle the dotted identifier.
+ */
 function defaultNamedOperationPath(opName: string, opConfig?: OperationConfig): string {
   const basePath = opNameToPath(opName);
   if (!opConfig) return basePath;
@@ -32,7 +42,7 @@ function defaultNamedOperationPath(opName: string, opConfig?: OperationConfig): 
   switch (opConfig.kind) {
     case 'lookup':
     case 'exists': {
-      const params = [...new Set(getOpParams(opConfig))];
+      const params = [...new Set(getOpParams(opConfig))].filter(p => !p.includes('.'));
       if (params.length === 0) return basePath;
       return `${basePath}/${params.map(param => `:${param}`).join('/')}`;
     }

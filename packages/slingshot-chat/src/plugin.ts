@@ -239,16 +239,11 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
         );
       }
       const permissions: PermissionsState = { evaluator, registry, adapter };
-      const notificationsBuilderFactory = resolveCapabilityValue(
-        slingshotCtx,
-        NotificationsBuilderFactory,
-      );
-      if (!notificationsBuilderFactory) {
-        throw new Error(
-          '[slingshot-chat] requires slingshot-notifications to be loaded before slingshot-chat',
-        );
-      }
-      notificationsBuilderFactoryRef = notificationsBuilderFactory;
+      // `NotificationsBuilderFactory` is published by `slingshot-notifications`
+      // in its `setupPost` phase, which runs AFTER every plugin's `setupMiddleware`.
+      // We can't resolve it here. Defer to chat's own `setupPost` where the
+      // capability is guaranteed to be available, and where the inner entity
+      // plugin's `setupPost` (which actually consumes the factory) runs.
       permissionsRef = permissions;
 
       publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, {
@@ -547,6 +542,23 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
     },
 
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      // Resolve the notifications builder factory now that `slingshot-notifications`
+      // has had its own `setupPost` run and published the capability. The inner
+      // entity plugin's `setupPost` (called below) closes over
+      // `notificationsBuilderFactoryRef` and uses it to wire the chat-message
+      // notify middleware — so this assignment must happen BEFORE that delegation.
+      const slingshotCtx = getContext(app);
+      const notificationsBuilderFactory = resolveCapabilityValue(
+        slingshotCtx,
+        NotificationsBuilderFactory,
+      );
+      if (!notificationsBuilderFactory) {
+        throw new Error(
+          '[slingshot-chat] requires slingshot-notifications to be loaded before slingshot-chat',
+        );
+      }
+      notificationsBuilderFactoryRef = notificationsBuilderFactory;
+
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       // Contract-bound capability publish. The peer closure captures

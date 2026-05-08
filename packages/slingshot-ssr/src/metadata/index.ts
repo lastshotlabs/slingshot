@@ -10,14 +10,55 @@
 //   server/robots.ts    → GET /robots.txt
 //   server/manifest.ts  → GET /manifest.webmanifest, /manifest.json
 //
+// Each convention function may optionally accept a `MetadataContext` argument
+// containing the slingshot `bsCtx` so dynamic generators (e.g. enumerating
+// public threads/profiles) can resolve entity adapters via
+// `requireEntityAdapter(bsCtx, ...)`. Functions that don't need it can keep
+// the no-arg signature — backward compatible.
+//
 // If the convention file does not exist, the route falls through to SSR/SPA.
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, getContextOrNull } from '@lastshotlabs/slingshot-core';
 
 const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * Context passed to metadata convention functions (`sitemap`, `robots`,
+ * `manifest`).
+ *
+ * `bsCtx` is the slingshot instance context — pass it to
+ * `requireEntityAdapter(...)` from `@lastshotlabs/slingshot-core` to read
+ * data when generating a dynamic sitemap or per-environment robots/manifest.
+ *
+ * Convention functions may ignore the argument entirely (the no-arg
+ * signature is still supported and back-compat).
+ *
+ * @example
+ * ```ts
+ * // server/sitemap.ts
+ * import type { MetadataContext, SitemapEntry } from '@lastshotlabs/slingshot-ssr';
+ * import { requireEntityAdapter } from '@lastshotlabs/slingshot-core';
+ * import { CommunityEntities } from '@lastshotlabs/slingshot-community';
+ *
+ * export default async function sitemap({ bsCtx }: MetadataContext): Promise<SitemapEntry[]> {
+ *   const containers = requireEntityAdapter(bsCtx, CommunityEntities.Container);
+ *   const result = await containers.list({ limit: 1000 });
+ *   return result.items.map((c) => ({ url: `https://example.com/c/${c.slug}` }));
+ * }
+ * ```
+ */
+export interface MetadataContext {
+  /**
+   * The slingshot instance context. Typed as `unknown` so this package doesn't
+   * pull in the framework type — cast to `SlingshotContext` at the call site
+   * with `import type` from `@lastshotlabs/slingshot-core`, or pass directly
+   * to helpers like `requireEntityAdapter` which accept it structurally.
+   */
+  readonly bsCtx: unknown;
+}
 
 /**
  * A single entry in a sitemap response.
@@ -303,12 +344,14 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
       try {
         const mod = (await import(sitemapPath)) as Record<string, unknown>;
         const fn = (mod['default'] ?? mod['sitemap']) as
-          | (() => Promise<SitemapEntry[]> | SitemapEntry[])
+          | ((
+              ctx?: MetadataContext,
+            ) => Promise<SitemapEntry[]> | SitemapEntry[])
           | undefined;
         if (typeof fn !== 'function') {
           return c.body('Not Found', 404, { 'Content-Type': 'text/plain' });
         }
-        const entries = await fn();
+        const entries = await fn({ bsCtx: getContextOrNull(honoApp) });
         const xml = serializeSitemap(entries);
         return c.body(xml, 200, {
           'Content-Type': 'application/xml; charset=utf-8',
@@ -330,12 +373,12 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
       try {
         const mod = (await import(robotsPath)) as Record<string, unknown>;
         const fn = (mod['default'] ?? mod['robots']) as
-          | (() => Promise<RobotsConfig> | RobotsConfig)
+          | ((ctx?: MetadataContext) => Promise<RobotsConfig> | RobotsConfig)
           | undefined;
         if (typeof fn !== 'function') {
           return c.body('Not Found', 404, { 'Content-Type': 'text/plain' });
         }
-        const config = await fn();
+        const config = await fn({ bsCtx: getContextOrNull(honoApp) });
         const txt = serializeRobots(config);
         return c.body(txt, 200, {
           'Content-Type': 'text/plain; charset=utf-8',
@@ -357,12 +400,14 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
       try {
         const mod = (await import(manifestPath)) as Record<string, unknown>;
         const fn = (mod['default'] ?? mod['manifest']) as
-          | (() => Promise<Record<string, unknown>> | Record<string, unknown>)
+          | ((
+              ctx?: MetadataContext,
+            ) => Promise<Record<string, unknown>> | Record<string, unknown>)
           | undefined;
         if (typeof fn !== 'function') {
           return c.body('Not Found', 404, { 'Content-Type': 'text/plain' });
         }
-        const data = await fn();
+        const data = await fn({ bsCtx: getContextOrNull(honoApp) });
         const json = JSON.stringify(data);
         return c.body(json, 200, {
           'Content-Type': 'application/manifest+json; charset=utf-8',

@@ -1023,6 +1023,17 @@ export const entityManifestSchema = z.object({
     .describe(
       'Entity operations keyed by operation name. Omit to use only the built-in CRUD operations.',
     ),
+  // Entity-level search config — passed through opaquely from `defineEntity()`'s
+  // `search:` to the registered ResolvedEntityConfig. The shape is validated by
+  // `defineEntity()` itself; this schema field is a transparent carrier so the
+  // manifest pipeline doesn't strip the data on its way through. Same shape as
+  // `routes` (also pass-through).
+  search: z
+    .unknown()
+    .optional()
+    .describe(
+      "Entity-level search index configuration. Pass-through to defineEntity's `search` field — see EntitySearchConfig in slingshot-core for the validated shape.",
+    ),
   routes: entityRouteConfigSchema
     .optional()
     .describe('Route-generation settings for the entity. Omit to use the entity plugin defaults.'),

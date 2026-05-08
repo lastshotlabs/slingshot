@@ -187,6 +187,7 @@ export function resolveEntityManifest(
     ttl: manifest.ttl,
     storage: manifest.storage,
     routes: manifest.routes as ResolvedEntityConfig['routes'],
+    search: manifest.search as ResolvedEntityConfig['search'],
   });
 
   // Resolve operations

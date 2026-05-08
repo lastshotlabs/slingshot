@@ -17,7 +17,7 @@ export type { CommunityPlugin } from './plugin';
  * `CommunityInteractionsPeerCap` through `ctx.capabilities.require(...)`
  * instead of reaching into plugin state.
  */
-export { Community, CommunityInteractionsPeerCap } from './public';
+export { Community, CommunityEntities, CommunityInteractionsPeerCap } from './public';
 /**
  * Cross-package peer surface used to resolve community-owned message trees and
  * apply component updates returned by interaction dispatchers.
@@ -54,6 +54,7 @@ export type {
  * for back-compat with `getPublishedInteractionsPeerOrNull` consumers.
  */
 export type { CommunityPluginState } from './types/state';
+export { CommunityPluginStateRef } from './types/state';
 /**
  * Plugin state key for looking up community state in `ctx.pluginState`.
  */
@@ -94,17 +95,18 @@ export type {
 } from './types/models';
 
 /** Container entity config and generated operations. */
-export { Container as ContainerEntity, containerOperations } from './entities/container';
+export { Container as ContainerEntity, containerOperations, containerModule } from './entities/container';
 /** Thread entity config and generated operations. */
-export { Thread as ThreadEntity, threadOperations } from './entities/thread';
+export { Thread as ThreadEntity, threadOperations, threadModule } from './entities/thread';
 /** Reply entity config and generated operations. */
-export { Reply as ReplyEntity, replyOperations } from './entities/reply';
+export { Reply as ReplyEntity, replyOperations, replyModule } from './entities/reply';
 /** Reaction entity config and generated operations. */
-export { Reaction as ReactionEntity, reactionOperations } from './entities/reaction';
+export { Reaction as ReactionEntity, reactionOperations, reactionModule } from './entities/reaction';
 /** ContainerMember entity config and generated operations. */
 export {
   ContainerMember as ContainerMemberEntity,
   containerMemberOperations,
+  containerMemberModule,
 } from './entities/containerMember';
 /** ContainerRule entity config and generated operations. */
 export {

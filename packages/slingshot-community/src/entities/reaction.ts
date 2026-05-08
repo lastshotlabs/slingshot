@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a user reaction (upvote, downvote, or emoji) on a
@@ -131,4 +131,12 @@ export const reactionOperations = defineOperations(Reaction, {
    * must close over the frozen `config.scoring` value from the plugin config.
    */
   updateScore: op.custom({}),
+});
+
+/**
+ * Package-authoring module for `Reaction`. See `containerModule` for rationale.
+ */
+export const reactionModule = entity({
+  config: Reaction,
+  operations: reactionOperations,
 });

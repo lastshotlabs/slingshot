@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 import {
   createListSortedMemoryHandler,
   createListSortedMongoHandler,
@@ -520,4 +520,12 @@ export const threadOperations = defineOperations(Thread, {
     mongo: collection => createListSortedMongoHandler(collection),
     redis: redis => createListSortedRedisHandler(redis),
   }),
+});
+
+/**
+ * Package-authoring module for `Thread`. See `containerModule` for rationale.
+ */
+export const threadModule = entity({
+  config: Thread,
+  operations: threadOperations,
 });

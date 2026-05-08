@@ -209,6 +209,11 @@ export function entityConfigToManifestEntry(
     operations: options.operations
       ? operationsToManifestOperations(options.operations, options.operationOverrides)
       : undefined,
+    // Pass entity-level search config through unchanged. The manifest schema
+    // accepts it as `unknown`; the validated shape lives in EntitySearchConfig
+    // (slingshot-core). Without this forward, downstream consumers (slingshot-search)
+    // can't see entities that declared `search:` on their original config.
+    search: config.search ? structuredClone(config.search) : undefined,
     routes: cloneRouteConfig(config.routes),
     channels: options.channels ? structuredClone(options.channels) : undefined,
     routePath: options.routePath,

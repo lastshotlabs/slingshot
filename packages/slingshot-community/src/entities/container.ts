@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a community container (space/channel).
@@ -113,4 +113,14 @@ export const containerOperations = defineOperations(Container, {
     fields: { slug: 'param:slug', tenantId: 'param:tenantId' },
     returns: 'one',
   }),
+});
+
+/**
+ * Package-authoring module for `Container`. Used by `Community.publicEntities`
+ * (in `../public.ts`) to expose the canonical adapter surface to cross-package
+ * consumers via `Community.publicEntity(containerModule).readonly([...])`.
+ */
+export const containerModule = entity({
+  config: Container,
+  operations: containerOperations,
 });

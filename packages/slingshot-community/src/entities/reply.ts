@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a reply within a thread.
@@ -180,4 +180,12 @@ export const replyOperations = defineOperations(Reply, {
     match: { id: 'param:id' },
     set: ['embeds'],
   }),
+});
+
+/**
+ * Package-authoring module for `Reply`. See `containerModule` for rationale.
+ */
+export const replyModule = entity({
+  config: Reply,
+  operations: replyOperations,
 });

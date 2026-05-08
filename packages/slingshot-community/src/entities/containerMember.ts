@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a container membership record.
@@ -143,4 +143,12 @@ export const containerMemberOperations = defineOperations(ContainerMember, {
     filter: { userId: 'param:userId' },
     returns: 'count',
   }),
+});
+
+/**
+ * Package-authoring module for `ContainerMember`. See `containerModule` for rationale.
+ */
+export const containerMemberModule = entity({
+  config: ContainerMember,
+  operations: containerMemberOperations,
 });

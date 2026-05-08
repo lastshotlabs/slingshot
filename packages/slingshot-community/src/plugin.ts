@@ -16,16 +16,15 @@ import {
   getPluginStateOrNull,
   provideCapability,
   publishPluginState,
+  readPluginState,
   registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
-import { CommunityInteractionsPeerCap } from './public';
-import type { CommunityInteractionsPeer } from './public';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { ChannelConfigDeps, EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import { notifyMentions } from './lib/mentions';
 import type { NotifyMentionsDeps } from './lib/mentions';
 import { communityManifest } from './manifest/communityManifest';
@@ -39,11 +38,12 @@ import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
 import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
 import { probePushFormatterRegistrar } from './peers/push';
+import { CommunityInteractionsPeerCap } from './public';
+import type { CommunityInteractionsPeer } from './public';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
 import type { CommunityPluginConfig } from './types/config';
 import { communityPluginConfigSchema } from './types/config';
-import type { CommunityPluginState } from './types/state';
-import { COMMUNITY_PLUGIN_STATE_KEY } from './types/state';
+import { COMMUNITY_PLUGIN_STATE_KEY, CommunityPluginStateRef } from './types/state';
 
 type AdapterResult = BareEntityAdapter;
 
@@ -387,11 +387,17 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
           publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissions);
         }
-        publishPluginState(pluginState, COMMUNITY_PLUGIN_STATE_KEY, {
+        // Merge with any existing slot value so we don't clobber entityAdapters
+        // that `innerPlugin` writes via `publishEntityAdaptersState`. Reads/writes
+        // go through the typed `CommunityPluginStateRef` so the value shape is
+        // checked at the call site.
+        const existing = readPluginState(pluginState, CommunityPluginStateRef);
+        publishPluginState(pluginState, CommunityPluginStateRef, {
+          ...(existing ?? {}),
           config,
           evaluator: permissions.evaluator,
           interactionsPeer,
-        } satisfies CommunityPluginState);
+        });
       }
 
       // Populate permission-dependent middleware refs now that permissions are resolved.
@@ -589,11 +595,17 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
           publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissionsRef);
         }
-        publishPluginState(pluginState, COMMUNITY_PLUGIN_STATE_KEY, {
+        // `innerPlugin.setupRoutes` (above) just published `entityAdapters` into
+        // this slot via `publishEntityAdaptersState`. Read the existing value and
+        // spread it through so the adapters survive while we refresh the keys
+        // this plugin owns. Typed via `CommunityPluginStateRef`.
+        const existing = readPluginState(pluginState, CommunityPluginStateRef);
+        publishPluginState(pluginState, CommunityPluginStateRef, {
+          ...(existing ?? {}),
           config,
           evaluator: permissionsRef.evaluator,
           interactionsPeer,
-        } satisfies CommunityPluginState);
+        });
       }
     },
 
@@ -601,7 +613,10 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       const appCtx = getContextOrNull(app);
       const pluginState = getPluginStateOrNull(app);
       if (!notificationsBuilderFactoryRef && appCtx) {
-        notificationsBuilderFactoryRef = resolveCapabilityValue(appCtx, NotificationsBuilderFactory);
+        notificationsBuilderFactoryRef = resolveCapabilityValue(
+          appCtx,
+          NotificationsBuilderFactory,
+        );
       }
       if (!notificationsBuilderFactoryRef) {
         throw new Error(

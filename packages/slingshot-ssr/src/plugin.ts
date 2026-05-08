@@ -19,7 +19,8 @@ import { IsrInvalidatorsCap } from './public';
 import { registerMetadataRoutes } from './metadata/index';
 import { buildSsrMiddleware, createIsrTracker } from './middleware';
 import { buildPageRouteTable } from './pageResolver';
-import { initRouteTree, invalidateRouteTree } from './resolver';
+import { createFileBasedRouteSource } from './routeSource/fileBased';
+import type { SsrRouteSource } from './routeSource/types';
 import type { SsrPluginConfig } from './types';
 
 function toTagValue(value: unknown): string | null {
@@ -44,9 +45,18 @@ function toTagValue(value: unknown): string | null {
  */
 export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
   const validated = ssrPluginConfigSchema.parse(rawConfig);
+
+  // Pick the route source. Explicit `routeSource` wins; otherwise build a
+  // file-based source from `serverRoutesDir`. The schema refine guarantees at
+  // least one of the two is present.
+  const routeSource: SsrRouteSource =
+    rawConfig.routeSource ??
+    createFileBasedRouteSource({ serverRoutesDir: validated.serverRoutesDir as string });
+
   const config: Readonly<SsrPluginConfig> = Object.freeze({
     ...rawConfig,
     serverRoutesDir: validated.serverRoutesDir,
+    routeSource,
     assetsManifest: validated.assetsManifest,
     entryPoint: validated.entryPoint,
     cacheControl: validated.cacheControl,
@@ -114,7 +124,7 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
         }
       }
 
-      initRouteTree(config.serverRoutesDir);
+      await routeSource.init();
 
       if (isrAdapter !== null) {
         isrInvalidators = createIsrInvalidators(isrAdapter);
@@ -135,12 +145,17 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
         }),
       );
 
-      registerMetadataRoutes(app, config.serverRoutesDir);
+      // Metadata convention routes (sitemap.ts / robots.ts / manifest.ts) live
+      // in `dirname(serverRoutesDir)`. Only register when the file-based source
+      // is in use; alternative sources have no co-located server/ directory.
+      if (config.serverRoutesDir !== undefined) {
+        registerMetadataRoutes(app, config.serverRoutesDir);
+      }
 
       app.use('*', buildSsrMiddleware(config, manifest, app, isrAdapter, isrTracker));
 
-      if (isDevMode) {
-        setupDevWatcher(config.serverRoutesDir);
+      if (isDevMode && config.serverRoutesDir !== undefined) {
+        setupDevWatcher(routeSource, config.serverRoutesDir);
       }
     },
 
@@ -301,7 +316,7 @@ function collectReferencedEntities(
  *
  * @param serverRoutesDir - Absolute path to the server routes directory.
  */
-function setupDevWatcher(serverRoutesDir: string): void {
+function setupDevWatcher(routeSource: SsrRouteSource, serverRoutesDir: string): void {
   try {
     const bunGlobal = globalThis as Record<string, unknown>;
     const bun = bunGlobal['Bun'] as
@@ -312,8 +327,8 @@ function setupDevWatcher(serverRoutesDir: string): void {
     if (!watcher) return;
 
     watcher.addEventListener('change', () => {
-      invalidateRouteTree(serverRoutesDir);
-      initRouteTree(serverRoutesDir);
+      routeSource.invalidate();
+      void Promise.resolve(routeSource.init());
     });
   } catch {
     // Best-effort only.

@@ -140,6 +140,16 @@ function collectCss(
 export function buildDevAssetTags(entryModule: string = '/src/main.tsx'): string {
   return [
     `<script type="module" src="/@vite/client"></script>`,
+    // React Refresh preamble — required by @vitejs/plugin-react. Without this,
+    // React modules transformed by the plugin throw "can't detect preamble" on
+    // module evaluation. Harmless when the plugin is not in use.
+    `<script type="module">
+import RefreshRuntime from "/@react-refresh";
+RefreshRuntime.injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;
+window.__vite_plugin_react_preamble_installed__ = true;
+</script>`,
     `<script type="module" src="${entryModule}"></script>`,
   ].join('\n');
 }

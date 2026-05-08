@@ -30,7 +30,9 @@ export function createContainerCreationGuardMiddleware(deps: {
       if (!principal) return c.json({ error: 'Unauthorized' }, 401);
       const can = await deps.permissionEvaluator.can(
         { subjectId: principal.subject, subjectType: 'user' },
-        'write',
+        // Fully-qualified to match the registered action vocabulary. Bare
+        // 'write' would never resolve through the registry's role->action map.
+        'community:container.write',
         { resourceType: 'community:container' },
       );
       if (!can) return c.json({ error: 'Only admins can create containers' }, 403);

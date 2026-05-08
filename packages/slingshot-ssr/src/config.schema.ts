@@ -116,7 +116,17 @@ export const ssrPluginConfigSchema = z.object({
     .string()
     .min(1, 'serverRoutesDir must be a non-empty path')
     .refine(isAbsolute, { message: 'serverRoutesDir must be an absolute path' })
-    .describe('Absolute path to the directory containing SSR server route modules.'),
+    .optional()
+    .describe(
+      'Absolute path to the directory containing SSR server route modules. ' +
+        'Optional when `routeSource` is supplied. If both are set, `routeSource` wins.',
+    ),
+  routeSource: z
+    .custom<import('./routeSource/types').SsrRouteSource>()
+    .optional()
+    .describe(
+      'Pluggable route source. Overrides the default file-based discovery when set.',
+    ),
   assetsManifest: z
     .string()
     .min(1, 'assetsManifest must be a non-empty path')
@@ -299,4 +309,10 @@ export const ssrPluginConfigSchema = z.object({
     })
     .optional()
     .describe('Retry configuration for page load failures.'),
-});
+}).refine(
+  (cfg) => cfg.serverRoutesDir !== undefined || cfg.routeSource !== undefined,
+  {
+    message: 'createSsrPlugin requires either `serverRoutesDir` or `routeSource`.',
+    path: ['serverRoutesDir'],
+  },
+);

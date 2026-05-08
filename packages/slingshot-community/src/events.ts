@@ -67,6 +67,16 @@ declare module '@lastshotlabs/slingshot-core' {
       userId: string;
       alreadyMember?: boolean | null;
     };
+    'community:member.joined': {
+      containerId: string;
+      userId: string;
+      tenantId?: string | null;
+    };
+    'community:member.left': {
+      containerId: string;
+      userId: string;
+      tenantId?: string | null;
+    };
     'community:reaction.added': {
       targetId: string;
       targetType: 'thread' | 'reply';

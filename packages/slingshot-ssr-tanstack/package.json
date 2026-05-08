@@ -1,0 +1,58 @@
+{
+  "name": "@lastshotlabs/slingshot-ssr-tanstack",
+  "version": "0.0.1",
+  "description": "TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./client": {
+      "bun": "./dist/src/client.js",
+      "types": "./dist/src/client.d.ts",
+      "import": "./dist/src/client.js"
+    },
+    "./vite": {
+      "bun": "./dist/src/vite-plugin.js",
+      "types": "./dist/src/vite-plugin.d.ts",
+      "import": "./dist/src/vite-plugin.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-ssr-tanstack"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-ssr": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-router": ">=1.0 <2",
+    "vite": ">=5 <8"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

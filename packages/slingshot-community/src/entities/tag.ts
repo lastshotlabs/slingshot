@@ -52,7 +52,10 @@ export const Tag = defineEntity('Tag', {
     },
     permissions: {
       resourceType: 'community:tag',
-      actions: ['write'],
+      // Fully-qualified to match `requires: 'community:tag.write'` clauses
+      // — the evaluator does literal action-string matching, so bare verbs
+      // here would never authorize anything.
+      actions: ['community:tag.write'],
       roles: {
         owner: ['*'],
         'community-admin': ['*'],

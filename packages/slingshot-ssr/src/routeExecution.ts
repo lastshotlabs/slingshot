@@ -112,7 +112,14 @@ export async function executeRouteModule<TData extends Record<string, unknown>>(
   match: SsrRouteMatch,
   ctx: SsrLoadContext,
 ): Promise<RouteExecution<TData>> {
-  const mod = await loadRouteModule<TData>(match.filePath);
+  // Prefer the source-supplied module loader when present — it knows how to
+  // adapt non-canonical route files (e.g. TanStack `{ Route, ssr }` exports)
+  // into slingshot's canonical `{ load, meta?, default }` shape. Otherwise
+  // fall back to the default file-based importer, which assumes the file at
+  // `match.filePath` already exports the canonical shape.
+  const mod = match.loadModule
+    ? ((await match.loadModule()) as RouteModuleExports<TData>)
+    : await loadRouteModule<TData>(match.filePath);
   const loaderResult = await mod.load(ctx);
   const meta = mod.meta ? await mod.meta(ctx, loaderResult) : {};
   return {

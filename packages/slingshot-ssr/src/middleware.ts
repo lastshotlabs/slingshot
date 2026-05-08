@@ -18,12 +18,18 @@ import type { CircuitBreaker, CircuitBreakerOptions } from './circuitBreaker';
 import { buildDevErrorOverlay } from './dev/overlay';
 import { isDraftRequest, withDraftContext } from './draft/index';
 import type { IsrCacheAdapter } from './isr/types';
-import {
-  isRouteParamTooLargeError,
-  resolveGlobalMiddlewarePath,
-  resolveRouteChain,
-} from './resolver';
+import { isRouteParamTooLargeError } from './resolver';
+import { createFileBasedRouteSource } from './routeSource/fileBased';
+import type { SsrRouteSource } from './routeSource/types';
 import { retry } from './retry';
+import { executeRouteModule } from './routeExecution';
+import {
+  isForbidden,
+  isLoadResult,
+  isNotFound,
+  isRedirect,
+  isUnauthorized,
+} from './types';
 import type { RetryOptions } from './retry';
 import type {
   IsrSink,
@@ -218,12 +224,31 @@ async function readFileViaRuntime(
  * @internal
  */
 export function buildSsrMiddleware(
-  config: Readonly<SsrPluginConfig>,
+  rawConfig: Readonly<SsrPluginConfig>,
   manifest: ViteManifest | null,
   app: object,
   isrAdapter: IsrCacheAdapter | null = null,
   isrTracker: IsrTracker | null = null,
 ): MiddlewareHandler {
+  // Resolve the route source up-front. `createSsrPlugin` already does this
+  // before passing config in, but `buildSsrMiddleware` is also called directly
+  // (notably in tests) with a config that may only have `serverRoutesDir`.
+  // Build the file-based source from `serverRoutesDir` if no explicit source
+  // was supplied; the rest of the middleware just reads `config.routeSource`.
+  const resolvedRouteSource: SsrRouteSource | null =
+    rawConfig.routeSource ??
+    (rawConfig.serverRoutesDir
+      ? createFileBasedRouteSource({ serverRoutesDir: rawConfig.serverRoutesDir })
+      : null);
+  if (resolvedRouteSource && resolvedRouteSource !== rawConfig.routeSource) {
+    // Tests / direct callers may skip `createSsrPlugin`. Initialize the source
+    // here so the file-based scanner has run before the first request.
+    void Promise.resolve(resolvedRouteSource.init());
+  }
+  const config: Readonly<SsrPluginConfig> = resolvedRouteSource
+    ? Object.freeze({ ...rawConfig, routeSource: resolvedRouteSource })
+    : rawConfig;
+
   const entryPoint = config.entryPoint ?? 'index.html';
   const isDevMode = config.devMode ?? process.env.NODE_ENV === 'development';
   const logger: Logger = config.logger ?? noopLogger;
@@ -448,12 +473,16 @@ export function buildSsrMiddleware(
       maxRouteParamBytes: config.maxRouteParamBytes,
     };
 
-    // 1. File-based chain resolver — resolves layouts, slots, interception, middleware
-    // 2. Renderer's own resolve() — for manifest/config-driven routing (no chain support)
-    //    Called when the file resolver has no match. Returns null to fall through to SPA.
+    // 1. Route source — resolves layouts, slots, interception, middleware via
+    //    the configured `SsrRouteSource` (defaults to file-based discovery).
+    // 2. Renderer's own resolve() — for manifest/config-driven routing (no
+    //    chain support). Called when the route source has no match. Returns
+    //    null to fall through to SPA.
     let chain: SsrRouteChain | null;
     try {
-      chain = resolveRouteChain(pathname, config.serverRoutesDir, fromPath, resolveOptions);
+      chain = config.routeSource
+        ? config.routeSource.resolveChain(pathname, { fromPath, ...resolveOptions })
+        : null;
     } catch (err) {
       if (isRouteParamTooLargeError(err)) {
         return c.text('URI Too Long', 414);
@@ -499,8 +528,8 @@ export function buildSsrMiddleware(
     // run it. This allows the middleware to redirect or rewrite requests that
     // have no file-based page — e.g. auth guards that redirect to /login, or
     // locale rewrites. Without this, middleware only runs for matched routes.
-    if (!chain && config.serverRoutesDir) {
-      const globalMiddlewarePath = resolveGlobalMiddlewarePath(config.serverRoutesDir);
+    if (!chain && config.routeSource) {
+      const globalMiddlewarePath = config.routeSource.resolveGlobalMiddleware();
       if (globalMiddlewarePath) {
         try {
           const mod = (await import(globalMiddlewarePath)) as Record<string, unknown>;
@@ -546,12 +575,12 @@ export function buildSsrMiddleware(
               const rewriteUrl = new URL(middlewareResult.rewrite, url.origin);
               let rewriteChain: SsrRouteChain | null;
               try {
-                rewriteChain = resolveRouteChain(
-                  rewriteUrl.pathname,
-                  config.serverRoutesDir,
-                  fromPath,
-                  resolveOptions,
-                );
+                rewriteChain = config.routeSource
+                  ? config.routeSource.resolveChain(rewriteUrl.pathname, {
+                      fromPath,
+                      ...resolveOptions,
+                    })
+                  : null;
               } catch (rewriteErr) {
                 if (isRouteParamTooLargeError(rewriteErr)) {
                   return c.text('URI Too Long', 414);
@@ -587,7 +616,21 @@ export function buildSsrMiddleware(
     }
     // ── End global middleware for unmatched routes ────────────────────────────
 
-    if (!chain) return next();
+    if (!chain) {
+      // No SSR route matched. If the client explicitly asked for JSON
+      // (e.g. a TanStack `loader` fetched `?_data=1`), don't fall through
+      // to the SPA fallback — it would proxy to the dev server or serve
+      // index.html and return an empty/HTML body, which the loader can't
+      // parse. Return a structured JSON 404 so the client surfaces a
+      // useful error.
+      if (wantsJsonResponse(c)) {
+        return c.json(
+          { notFound: true, reason: 'no_ssr_route_matched', pathname },
+          404,
+        );
+      }
+      return next();
+    }
     const resolvedChain = chain;
 
     // ── SSR Middleware execution (Phase 29) ────────────────────────────────────
@@ -637,12 +680,12 @@ export function buildSsrMiddleware(
             const rewriteUrl = new URL(middlewareResult.rewrite, url.origin);
             let rewriteChain: SsrRouteChain | null;
             try {
-              rewriteChain = resolveRouteChain(
-                rewriteUrl.pathname,
-                config.serverRoutesDir,
-                fromPath,
-                resolveOptions,
-              );
+              rewriteChain = config.routeSource
+                ? config.routeSource.resolveChain(rewriteUrl.pathname, {
+                    fromPath,
+                    ...resolveOptions,
+                  })
+                : null;
             } catch (rewriteErr) {
               if (isRouteParamTooLargeError(rewriteErr)) {
                 return c.text('URI Too Long', 414);
@@ -684,6 +727,32 @@ export function buildSsrMiddleware(
       }
     }
     // ── End middleware execution ───────────────────────────────────────────────
+
+    // ── JSON-mode loader response ─────────────────────────────────────────────
+    // When the client asks for JSON (via `?_data` query or `Accept: application/json`),
+    // run the matched route's loader and return its result as JSON instead of
+    // rendering HTML. This lets the same SSR URL serve both browsers (HTML)
+    // and client-side navigation (JSON), mirroring Remix's `?_data` pattern
+    // and TanStack Start's `createServerFn` RPC. No separate API surface for
+    // page data, no dual-loader pattern.
+    if (chain && wantsJsonResponse(c)) {
+      try {
+        return await respondWithLoaderJson(c, chain.page, bsCtx, url, query);
+      } catch (err) {
+        if (isRouteParamTooLargeError(err)) {
+          return c.text('URI Too Long', 414);
+        }
+        logger.error('[slingshot-ssr] JSON loader execution error', {
+          route: pathname,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return c.json(
+          { error: err instanceof Error ? err.message : String(err) },
+          500,
+        );
+      }
+    }
+    // ── End JSON-mode ─────────────────────────────────────────────────────────
 
     // Create the ISR sink — a mutable object the renderer populates after calling load().
     // The middleware reads revalidate/tags from it after render() returns.
@@ -973,9 +1042,11 @@ async function regeneratePage(
   const pathname = url.pathname;
   let chain: SsrRouteChain | null;
   try {
-    chain = resolveRouteChain(pathname, config.serverRoutesDir, undefined, {
-      maxRouteParamBytes: config.maxRouteParamBytes,
-    });
+    chain = config.routeSource
+      ? config.routeSource.resolveChain(pathname, {
+          maxRouteParamBytes: config.maxRouteParamBytes,
+        })
+      : null;
   } catch (err) {
     if (isRouteParamTooLargeError(err)) {
       // Background regen — log and bail. The original request returned 414.
@@ -1102,4 +1173,130 @@ function resolveCacheControl(
     return `public, s-maxage=${isrRevalidateSeconds}, stale-while-revalidate=${swrSeconds}`;
   }
   return etagEligible ? 'private, must-revalidate' : 'no-store';
+}
+
+// ───────────────────────────── JSON-mode helpers ─────────────────────────────
+
+/**
+ * Detect whether the client wants the loader's data as JSON instead of
+ * rendered HTML. Two signals:
+ *
+ *   1. `?_data` query parameter present (any value) — explicit opt-in,
+ *      mirrors Remix's data-route convention.
+ *   2. `Accept: application/json` (and not `text/html`) — content negotiation
+ *      for clients that haven't been retrofitted to send `?_data`.
+ *
+ * Browsers do not send `Accept: application/json` on regular page navigation
+ * (it's `text/html,...`), so this header is a reliable signal.
+ *
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wantsJsonResponse(c: any): boolean {
+  const u = new URL(c.req.url as string);
+  if (u.searchParams.has('_data')) return true;
+  const accept = (c.req.raw.headers as Headers).get('accept') ?? '';
+  if (accept.includes('text/html')) return false;
+  return accept.includes('application/json');
+}
+
+/**
+ * Remove `_data` from a query bag — that key is reserved by the JSON-mode
+ * protocol and should never reach a route's load() function.
+ *
+ * @internal
+ */
+function stripDataMarker(query: Record<string, string>): Record<string, string> {
+  if (!('_data' in query)) return query;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(query)) {
+    if (k !== '_data') out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Run the route's loader and return its result as a JSON response. Bypasses
+ * the renderer entirely — same data, no HTML.
+ *
+ * Loader signals (`redirect`, `notFound`, `forbidden`, `unauthorized`) are
+ * preserved as JSON shapes so the client can react accordingly:
+ *
+ *   { redirect: '/login', status: 302 }
+ *   { notFound: true }
+ *   { forbidden: true }
+ *   { unauthorized: true }
+ *   { data: ..., meta: ..., tags: ..., revalidate: ... }
+ *
+ * HTTP status mirrors what the HTML render would have used: 302/301/307/308
+ * for redirects, 404 for notFound, 403 for forbidden, 401 for unauthorized,
+ * 200 for success.
+ *
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function respondWithLoaderJson(
+  c: any,
+  pageMatch: SsrRouteChain['page'],
+  bsCtx: ReturnType<typeof getContext>,
+  url: URL,
+  query: Record<string, string>,
+): Promise<Response> {
+  // Strip the JSON-mode protocol parameter so loaders never see it in
+  // ctx.query (which they may pass to entity adapters as filters).
+  const loaderQuery = stripDataMarker(query);
+  const ctx = {
+    params: pageMatch.params,
+    query: loaderQuery,
+    url,
+    headers: c.req.raw.headers,
+    getUser: async () => {
+      const auth = (bsCtx as { auth?: { getUser?: (c: unknown) => Promise<unknown> } }).auth;
+      const fn = auth?.getUser;
+      if (typeof fn === 'function') {
+        return (await fn(c)) as { id: string; email: string; roles: string[] } | null;
+      }
+      return null;
+    },
+    bsCtx,
+    draftMode: () => ({ isEnabled: isDraftRequest(c as never) }),
+  } as never;
+
+  const exec = await executeRouteModule(pageMatch, ctx);
+  const result = exec.loaderResult as never;
+
+  if (isRedirect(result as never)) {
+    const r = result as unknown as { redirect: string; status?: 301 | 302 | 307 | 308 };
+    // For JSON-mode redirects, return the redirect signal as JSON rather than
+    // an HTTP redirect — the client (typically a TanStack `loader`) can choose
+    // whether to navigate the browser or fork its own logic.
+    return c.json({ redirect: r.redirect, status: r.status ?? 302 }, 200);
+  }
+  if (isNotFound(result as never)) {
+    return c.json({ notFound: true }, 404);
+  }
+  if (isForbidden(result as never)) {
+    return c.json({ forbidden: true }, 403);
+  }
+  if (isUnauthorized(result as never)) {
+    return c.json({ unauthorized: true }, 401);
+  }
+  if (isLoadResult(result as never)) {
+    const ok = result as unknown as {
+      data: Record<string, unknown>;
+      tags?: readonly string[];
+      revalidate?: number | false;
+      queryCache?: readonly { queryKey: readonly unknown[]; data: unknown }[];
+    };
+    const body = {
+      data: ok.data,
+      meta: exec.meta,
+      tags: ok.tags,
+      revalidate: ok.revalidate,
+      queryCache: ok.queryCache,
+    };
+    return c.json(body, 200);
+  }
+  // Unreachable in practice — loader return is exhaustive over the union.
+  return c.json({ error: 'Unrecognised loader result' }, 500);
 }

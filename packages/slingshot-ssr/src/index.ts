@@ -67,6 +67,21 @@ export {
   isRouteParamTooLargeError,
   DEFAULT_MAX_ROUTE_PARAM_BYTES,
 } from './resolver';
+
+/**
+ * Pluggable route discovery for slingshot-ssr.
+ *
+ * `SsrRouteSource` is the interface adapter authors implement to bring routes
+ * from a different system (e.g. TanStack Router's tree). The default file-based
+ * source preserves slingshot-ssr's historical behavior.
+ */
+export {
+  createFileBasedRouteSource,
+  type FileBasedRouteSourceConfig,
+  type ResolveRouteChainOptions,
+  type ResolveRouteOptions,
+  type SsrRouteSource,
+} from './routeSource/index';
 /**
  * Execute a file-based route module — the canonical helper for renderers.
  * Handles the dynamic import, `load()`, and `meta()` dance so individual

@@ -37,6 +37,13 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id` auto. `readAt` defaults to now but the client may supply
+      // it (e.g. a buffered "read at this moment" timestamp from the
+      // chat WS handler).
+      input: {
+        allow: ['messageId', 'roomId', 'readAt'],
+      },
       permission: {
         requires: 'chat:room.read',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
@@ -52,7 +59,12 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
         },
       },
     },
-    update: { auth: 'userAuth' },
+    update: {
+      // Editable surface — only `readAt` is mutable; the (user, message,
+      // room) tuple is immutable per the field definitions.
+      auth: 'userAuth',
+      input: { allow: ['readAt'] },
+    },
     delete: { auth: 'userAuth' },
     operations: {
       upsertReceipt: { auth: 'userAuth' },

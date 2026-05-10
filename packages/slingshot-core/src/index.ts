@@ -736,10 +736,12 @@ export type {
   LocationData,
   ContactData,
   SystemEventData,
+  ParsedBody,
   ParsedContent,
   ContentSegment,
 } from './content';
 export { MAX_CONTENT_BODY_LENGTH, MAX_CONTENT_MENTIONS, MAX_CONTENT_ATTACHMENTS } from './content';
+export { parseBody, parseContentTokens, extractMentionsFromBody, stripContentTokens } from './contentParser';
 export {
   assetRefSchema,
   quotePreviewSchema,

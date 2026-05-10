@@ -36,6 +36,13 @@ export const ContainerInvite = defineEntity('ContainerInvite', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `createdBy` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `usesRemaining` is excluded — it's
+      // managed by the internal `claimInviteSlot`/`releaseInviteSlot`
+      // operations during redemption. `revokedAt` is set on delete.
+      input: {
+        allow: ['tenantId', 'containerId', 'token', 'maxUses', 'expiresAt'],
+      },
       permission: {
         requires: 'community:container.manage-members',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },

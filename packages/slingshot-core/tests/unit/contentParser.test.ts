@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   extractMentionsFromBody,
+  parseBody,
   parseContentTokens,
   stripContentTokens,
 } from '../../src/contentParser';
@@ -232,5 +233,50 @@ describe('parseContentTokens edge cases', () => {
     const result = parseContentTokens(parts.join(' '));
     // Should be capped — not all 5000 regions get added
     expect(result.segments.length).toBeLessThanOrEqual(4096);
+  });
+});
+
+describe('parseBody', () => {
+  test('returns empty arrays + frozen result for empty body', () => {
+    const r = parseBody('', 'plain');
+    expect(r.format).toBe('plain');
+    expect(r.mentions).toHaveLength(0);
+    expect(r.broadcastMentions).toHaveLength(0);
+    expect(r.mentionedRoleIds).toHaveLength(0);
+    expect(r.emojiShortcodes).toHaveLength(0);
+    expect(r.urls).toHaveLength(0);
+    expect(Object.isFrozen(r)).toBe(true);
+  });
+
+  test('returns empty arrays for undefined/null body', () => {
+    expect(parseBody(undefined).mentions).toHaveLength(0);
+    expect(parseBody(null).mentions).toHaveLength(0);
+  });
+
+  test('extracts mentions / broadcast / roles / emoji / urls from body', () => {
+    const body = 'hi <@u1> and <@&r1> https://example.com :smile: <@everyone>';
+    const r = parseBody(body, 'markdown');
+    expect(r.mentions).toEqual(['u1']);
+    expect(r.mentionedRoleIds).toEqual(['r1']);
+    expect(r.broadcastMentions).toEqual(['everyone']);
+    expect(r.emojiShortcodes).toEqual(['smile']);
+    expect(r.urls).toEqual(['https://example.com']);
+    expect(r.format).toBe('markdown');
+  });
+
+  test('caps mentions at MAX_CONTENT_MENTIONS', () => {
+    // Generate 60 unique mentions; only 50 should survive the cap.
+    const tokens = Array.from({ length: 60 }, (_, i) => `<@u${i}>`).join(' ');
+    const r = parseBody(tokens);
+    expect(r.mentions).toHaveLength(50);
+  });
+
+  test('defaults format to markdown', () => {
+    expect(parseBody('hello').format).toBe('markdown');
+  });
+
+  test('skips tokens inside code spans', () => {
+    const r = parseBody('text `<@u1>` outside <@u2>');
+    expect(r.mentions).toEqual(['u2']);
   });
 });

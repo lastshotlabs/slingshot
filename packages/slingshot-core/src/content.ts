@@ -172,3 +172,20 @@ export const MAX_CONTENT_MENTIONS = 50;
 
 /** Hard cap on the number of attachments in a single content entity. */
 export const MAX_CONTENT_ATTACHMENTS = 10;
+
+/**
+ * Server-truth projection of a content body into the entity's sidecar
+ * fields. The runtime function lives in `./contentParser` to keep this
+ * module's value surface minimal; the result type is declared here so
+ * type-only consumers don't pull the parser in.
+ *
+ * See {@link import('./contentParser').parseBody}.
+ */
+export interface ParsedBody {
+  readonly format: ContentFormat;
+  readonly mentions: readonly string[];
+  readonly broadcastMentions: readonly ('everyone' | 'here')[];
+  readonly mentionedRoleIds: readonly string[];
+  readonly emojiShortcodes: readonly string[];
+  readonly urls: readonly string[];
+}

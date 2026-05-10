@@ -725,33 +725,64 @@ export interface RouteOperationConfig<
   dto?: TDtoVariant;
 
   /**
-   * Input-variant selector — controls which fields are settable in the
-   * generated create/update schemas for this operation. Fields with an
-   * `inputVariants` allowlist that includes this name are added to the
-   * schema; default-variant routes strip those fields automatically.
+   * Input shape control for the generated create/update schemas. Two forms:
    *
-   * Narrowed to the actual variant names declared by `field.inputVariants`
-   * across the entity's fields when authored alongside those fields inside
-   * `defineEntity` — picking a typo is a compile error.
+   *   1. **`'variantName'`** (string) — selects an `inputVariants` membership
+   *      filter. Fields with `field.inputVariants: ['variantName']` are
+   *      INCLUDED on this route; the default variant strips them.
+   *      Backwards-compatible with prior config where `input: 'admin'` was
+   *      the only shape.
    *
-   * Use this to expose admin-only or internal-only fields on a specific
-   * route without leaking them into the public-facing schema.
+   *   2. **`{ allow: [...] }`** (object) — explicit allowlist of fields
+   *      writable on this route. Every other field on the entity is stripped
+   *      from the route's request body, regardless of variant membership.
+   *      This is the right tool for hiding server-managed fields
+   *      (`authorId`, `score`, `replyCount`, `createdAt`, `status`, …) from
+   *      generated client request types, since the OpenAPI body schema is
+   *      derived from the same Zod schema this filter produces.
+   *
+   *      `allow` and `variant` can both be set. The variant filter still
+   *      applies on top of the allowlist (so an admin-variant field still
+   *      needs to be in `allow` to appear).
+   *
+   *      `dataScope` injections (e.g. `{ field: 'authorId', from: 'ctx:actor.id' }`)
+   *      run AFTER schema validation, so dropping a server-managed field
+   *      from the allowlist does not break the auto-set behavior — the
+   *      framework still injects it from request context.
    *
    * @example
    * ```ts
+   * // Allowlist (recommended for public-facing entities):
+   * routes: {
+   *   create: {
+   *     input: { allow: ['title', 'body', 'format', 'attachments'] },
+   *     // authorId is server-injected via dataScope; score/replyCount/etc.
+   *     // never appear in the client request type.
+   *   },
+   *   update: {
+   *     input: { allow: ['title', 'body', 'format', 'attachments'] },
+   *   },
+   * }
+   *
+   * // Variant (admin-only field surface):
    * fields: {
    *   email: field.string(),
-   *   role:  field.string({ inputVariants: ['admin'] }),  // only admin variant can set
+   *   role:  field.string({ inputVariants: ['admin'] }),
    * }
    * routes: {
-   *   create: {},                     // POST /users — public, role NOT settable
+   *   create: {}, // POST /users — role NOT settable
    *   operations: {
    *     adminCreate: { input: 'admin', http: { method: 'POST', path: 'admin' } },
    *   },
    * }
+   *
+   * // Both at once:
+   * routes: {
+   *   create: { input: { variant: 'admin', allow: ['email', 'role'] } },
+   * }
    * ```
    */
-  input?: TInputVariant;
+  input?: TInputVariant | { variant?: TInputVariant; allow?: readonly string[] };
 
   /**
    * Per-operation response transform — runs on the response body just before

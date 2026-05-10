@@ -35,12 +35,22 @@ export const ContainerRule = defineEntity('ContainerRule', {
     get: { auth: 'none' },
 
     create: {
+      // Client allowlist — `id`/`createdAt` auto. All other fields are
+      // editorial content set by the moderator authoring the rule.
+      input: {
+        allow: ['tenantId', 'containerId', 'title', 'description', 'order'],
+      },
       permission: {
         requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
     },
     update: {
+      // Editable surface — narrower than create. `containerId` is fixed
+      // post-create (rules don't move between containers).
+      input: {
+        allow: ['title', 'description', 'order'],
+      },
       permission: {
         requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },

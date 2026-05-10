@@ -31,14 +31,14 @@ function stubDeps(opts: { thread?: Partial<Thread> | null; reply?: Partial<Reply
 }
 
 describe('notifyMentions', () => {
-  test('sends notifications for explicit mentions on a thread', async () => {
+  test('sends notifications for body-token mentions on a thread', async () => {
     const { deps, notifications } = stubDeps({
       thread: {
         id: 't1',
         containerId: 'c1',
         authorId: 'author-1',
         mentions: ['user-2', 'user-3'],
-        body: 'Hello world',
+        body: 'Hello <@user-2> and <@user-3>',
       },
     });
     await notifyMentions({ id: 't1', authorId: 'author-1', tenantId: 'tenant-1' }, deps, 'thread');
@@ -56,12 +56,29 @@ describe('notifyMentions', () => {
         containerId: 'c1',
         authorId: 'author-1',
         mentions: ['author-1', 'user-2'],
-        body: 'Hello',
+        body: 'Hello <@author-1> and <@user-2>',
       },
     });
     await notifyMentions({ id: 't1', authorId: 'author-1' }, deps, 'thread');
     expect(notifications).toHaveLength(1);
     expect(notifications[0]?.userId).toBe('user-2');
+  });
+
+  test('ignores stored mentions array when body has no matching tokens (spoofing guard)', async () => {
+    // Client tries to spoof a notification by setting `mentions: [victim]`
+    // without writing `<@victim>` in the body. The fan-out path must ignore
+    // the stored array when the body has parseable content of its own.
+    const { deps, notifications } = stubDeps({
+      thread: {
+        id: 't1',
+        containerId: 'c1',
+        authorId: 'author-1',
+        mentions: ['victim-id'],
+        body: 'Just a normal post — no tokens here.',
+      },
+    });
+    await notifyMentions({ id: 't1', authorId: 'author-1' }, deps, 'thread');
+    expect(notifications).toHaveLength(0);
   });
 
   test('no-ops when id is missing from payload', async () => {
@@ -90,13 +107,31 @@ describe('notifyMentions', () => {
         containerId: 'c1',
         authorId: 'author-1',
         mentions: ['user-5'],
-        body: 'Reply body',
+        body: 'Reply body <@user-5>',
       },
     });
     await notifyMentions({ id: 'r1', authorId: 'author-1' }, deps, 'reply');
     expect(notifications).toHaveLength(1);
     expect(notifications[0]?.userId).toBe('user-5');
     expect(notifications[0]?.targetType).toBe('community:reply');
+  });
+
+  test('honors stored mentions when body is empty (image-only post)', async () => {
+    // Edge case: an image-only thread with no body text. The client passes
+    // `mentions` to notify users; we honor it because there's no body to
+    // serve as the source of truth.
+    const { deps, notifications } = stubDeps({
+      thread: {
+        id: 't1',
+        containerId: 'c1',
+        authorId: 'author-1',
+        mentions: ['user-9'],
+        body: undefined,
+      },
+    });
+    await notifyMentions({ id: 't1', authorId: 'author-1' }, deps, 'thread');
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.userId).toBe('user-9');
   });
 
   test('no-ops when reply is not found', async () => {

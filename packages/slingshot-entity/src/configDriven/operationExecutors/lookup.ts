@@ -9,7 +9,16 @@
  *
  * **Field matching:** `op.fields` maps entity field names to either:
  * - `'param:x'` — value resolved from the runtime `params` argument.
- * - A literal string value — matched directly.
+ *   The constraint behavior depends on what the caller passed for `x`:
+ *   - **omitted / `undefined`** — constraint is dropped (wildcard). Lets
+ *     callers skip optional fields like `tenantId` in single-tenant
+ *     deploys without forcing them to pass `null`.
+ *   - **`null`** — matches records where the field is null
+ *     (`IS NULL` in SQL; `record[field] === null` in JS; Mongo `null`
+ *     also matches missing fields).
+ *   - **primitive value** — exact match.
+ * - A literal string value — always matched directly. Config-time
+ *   constants are not subject to the omit/null rules above.
  *
  * **Sorting (memory only):** When `op.returns === 'many'`, results are sorted by
  * `cursorFields` in `defaultSortDir` order before slicing to `limit`. SQL and Mongo
@@ -33,6 +42,38 @@ function isParamRef(value: string | number | boolean): value is string {
 
 function toSqlLiteral(value: string | number | boolean): string {
   return typeof value === 'string' ? `'${value.replace(/'/g, "''")}'` : String(value);
+}
+
+/**
+ * Resolve a `param:x` field reference against the runtime params object.
+ *
+ * Returns one of:
+ * - `{ kind: 'omit' }` — the caller did not supply the param (key missing
+ *   or value is `undefined`). The matcher should skip this constraint
+ *   entirely. Lets callers omit optional fields like `tenantId` in
+ *   single-tenant deploys without forcing them to pass `null`.
+ * - `{ kind: 'null' }` — the caller passed `null`. The matcher should
+ *   match records where the field is null (`IS NULL` in SQL,
+ *   `record[field] === null` in JS).
+ * - `{ kind: 'value', value }` — the caller passed a primitive. Exact match.
+ *
+ * Literal field values (non-`param:` constants on the op definition) are
+ * always exact-match — they're config-time, not caller-supplied.
+ */
+type ResolvedConstraint =
+  | { kind: 'omit' }
+  | { kind: 'null' }
+  | { kind: 'value'; value: string | number | boolean };
+
+function resolveParam(
+  params: Record<string, unknown>,
+  paramName: string,
+): ResolvedConstraint {
+  if (!(paramName in params)) return { kind: 'omit' };
+  const v = params[paramName];
+  if (v === undefined) return { kind: 'omit' };
+  if (v === null) return { kind: 'null' };
+  return { kind: 'value', value: v as string | number | boolean };
 }
 
 /**
@@ -72,8 +113,18 @@ export function lookupMemory(
     resolved: Record<string, unknown>,
   ): boolean {
     for (const [field, value] of fieldEntries) {
-      const target = isParamRef(value) ? resolved[value.slice(6)] : value;
-      if (record[field] !== target) return false;
+      if (isParamRef(value)) {
+        const c = resolveParam(resolved, value.slice(6));
+        if (c.kind === 'omit') continue;
+        if (c.kind === 'null') {
+          if (record[field] !== null && record[field] !== undefined) return false;
+        } else {
+          if (record[field] !== c.value) return false;
+        }
+      } else {
+        // Literal config-time constant — always exact match.
+        if (record[field] !== value) return false;
+      }
     }
     return true;
   }
@@ -132,26 +183,50 @@ export function lookupSqlite(
   fromRow: (row: Record<string, unknown>) => Record<string, unknown>,
 ): (params: Record<string, unknown>) => Promise<unknown> {
   const fieldEntries = Object.entries(op.fields);
-  const conditions = fieldEntries.map(([field]) => `${toSnakeCase(field)} = ?`);
-  const where = conditions.join(' AND ');
+
+  // WHERE clause is built per-call: param presence at call time decides
+  // whether each constraint contributes a `field = ?`, an `IS NULL`, or
+  // is omitted entirely. Literal field values are still embedded
+  // directly so they don't need a per-call rebuild.
+  function buildClause(params: Record<string, unknown>): { where: string; binds: unknown[] } {
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    for (const [field, value] of fieldEntries) {
+      const col = toSnakeCase(field);
+      if (isParamRef(value)) {
+        const c = resolveParam(params, value.slice(6));
+        if (c.kind === 'omit') continue;
+        if (c.kind === 'null') {
+          conditions.push(`${col} IS NULL`);
+        } else {
+          conditions.push(`${col} = ?`);
+          binds.push(c.value);
+        }
+      } else {
+        conditions.push(`${col} = ${toSqlLiteral(value)}`);
+      }
+    }
+    // Empty WHERE (all params omitted, all constants resolved) → match all.
+    return { where: conditions.length === 0 ? '1=1' : conditions.join(' AND '), binds };
+  }
 
   if (op.returns === 'one') {
     return params => {
       ensureTable();
-      const bindValues = fieldEntries.map(([, v]) => (isParamRef(v) ? params[v.slice(6)] : v));
+      const { where, binds } = buildClause(params);
       const row = db
         .query<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${where} LIMIT 1`)
-        .get(...bindValues);
+        .get(...binds);
       return Promise.resolve(row ? fromRow(row) : null);
     };
   }
 
   return params => {
     ensureTable();
-    const bindValues = fieldEntries.map(([, v]) => (isParamRef(v) ? params[v.slice(6)] : v));
+    const { where, binds } = buildClause(params);
     const rows = db
       .query<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${where}`)
-      .all(...bindValues);
+      .all(...binds);
     return Promise.resolve({
       items: rows.map(r => fromRow(r)),
       nextCursor: undefined,
@@ -188,27 +263,44 @@ export function lookupPostgres(
   fromRow: (row: Record<string, unknown>) => Record<string, unknown>,
 ): (params: Record<string, unknown>) => Promise<unknown> {
   const fieldEntries = Object.entries(op.fields);
-  let paramIdx = 0;
-  const conditions = fieldEntries.map(([field, value]) => {
-    if (isParamRef(value)) return `${toSnakeCase(field)} = $${++paramIdx}`;
-    return `${toSnakeCase(field)} = ${toSqlLiteral(value)}`;
-  });
-  const where = conditions.join(' AND ');
-  const paramFields = fieldEntries.filter(([, v]) => isParamRef(v));
+
+  // Per-call WHERE clause — same semantics as the SQLite executor; see
+  // its comment for rationale.
+  function buildClause(params: Record<string, unknown>): { where: string; binds: unknown[] } {
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    let paramIdx = 0;
+    for (const [field, value] of fieldEntries) {
+      const col = toSnakeCase(field);
+      if (isParamRef(value)) {
+        const c = resolveParam(params, value.slice(6));
+        if (c.kind === 'omit') continue;
+        if (c.kind === 'null') {
+          conditions.push(`${col} IS NULL`);
+        } else {
+          conditions.push(`${col} = $${++paramIdx}`);
+          binds.push(c.value);
+        }
+      } else {
+        conditions.push(`${col} = ${toSqlLiteral(value)}`);
+      }
+    }
+    return { where: conditions.length === 0 ? 'TRUE' : conditions.join(' AND '), binds };
+  }
 
   if (op.returns === 'one') {
     return async params => {
       await ensureTable();
-      const bindValues = paramFields.map(([, v]) => params[(v as string).slice(6)]);
-      const result = await pool.query(`SELECT * FROM ${table} WHERE ${where} LIMIT 1`, bindValues);
+      const { where, binds } = buildClause(params);
+      const result = await pool.query(`SELECT * FROM ${table} WHERE ${where} LIMIT 1`, binds);
       return result.rows[0] ? fromRow(result.rows[0]) : null;
     };
   }
 
   return async params => {
     await ensureTable();
-    const bindValues = paramFields.map(([, v]) => params[(v as string).slice(6)]);
-    const result = await pool.query(`SELECT * FROM ${table} WHERE ${where}`, bindValues);
+    const { where, binds } = buildClause(params);
+    const result = await pool.query(`SELECT * FROM ${table} WHERE ${where}`, binds);
     return { items: result.rows.map(r => fromRow(r)), nextCursor: undefined, hasMore: false };
   };
 }
@@ -242,7 +334,15 @@ export function lookupMongo(
     const query: Record<string, unknown> = {};
     for (const [field, value] of fieldEntries) {
       const mongoField = config.fields[field].primary ? config._storageFields.mongoPkField : field;
-      query[mongoField] = isParamRef(value) ? params[value.slice(6)] : value;
+      if (isParamRef(value)) {
+        const c = resolveParam(params, value.slice(6));
+        if (c.kind === 'omit') continue;
+        // Mongo: matching `null` also matches docs missing the field, which
+        // is what we want for "single-tenant tenantId" type lookups.
+        query[mongoField] = c.kind === 'null' ? null : c.value;
+      } else {
+        query[mongoField] = value;
+      }
     }
     return query;
   }
@@ -294,8 +394,17 @@ export function lookupRedis(
     resolved: Record<string, unknown>,
   ): boolean {
     for (const [field, value] of fieldEntries) {
-      const target = isParamRef(value) ? resolved[value.slice(6)] : value;
-      if (record[field] !== target) return false;
+      if (isParamRef(value)) {
+        const c = resolveParam(resolved, value.slice(6));
+        if (c.kind === 'omit') continue;
+        if (c.kind === 'null') {
+          if (record[field] !== null && record[field] !== undefined) return false;
+        } else {
+          if (record[field] !== c.value) return false;
+        }
+      } else {
+        if (record[field] !== value) return false;
+      }
     }
     return true;
   }

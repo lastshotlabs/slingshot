@@ -36,6 +36,13 @@ export const RoomInvite = defineEntity('RoomInvite', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `createdBy` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `useCount` is excluded — incremented by the
+      // internal `claimInviteSlot` operation. `revoked` is toggled by the
+      // named `revokeInvite` operation.
+      input: {
+        allow: ['roomId', 'token', 'maxUses', 'expiresAt'],
+      },
       permission: {
         requires: 'chat:room.invite',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },

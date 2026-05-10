@@ -141,16 +141,33 @@ export interface EntityZodSchemas {
  * generated spec as a named `$ref` component.
  *
  * @param config - The resolved entity configuration.
- * @param inputVariant - Optional input-variant name. When provided, the
- *   generated `create` and `update` schemas include fields whose
- *   `inputVariants` array contains this name; default-variant routes
- *   (no name passed) strip any field with a non-empty allowlist.
+ * @param inputControl - Either a string variant name (legacy, equivalent
+ *   to `{ variant }`), or an object with optional `variant` (membership
+ *   filter against `field.inputVariants`) and optional `allow` (explicit
+ *   per-route allowlist of writable field names). When `allow` is set,
+ *   any field NOT in the allowlist is stripped from the create/update
+ *   schemas regardless of variant. The two filters are AND'd: a field
+ *   needs to satisfy both gates to land in the schema.
+ *
+ *   Server-managed fields (`authorId`, `score`, `replyCount`, `status`,
+ *   `createdAt`, …) belong in NEITHER list — they're injected via
+ *   `dataScope`, computed by triggers, or set by named operations. The
+ *   allowlist is the right tool to keep them out of generated client
+ *   request types.
  * @returns `EntityZodSchemas` with `entity`, `create`, `update`, `list`, and `listOptions`.
  */
 export function buildEntityZodSchemas(
   config: ResolvedEntityConfig,
-  inputVariant?: string,
+  inputControl?: string | { readonly variant?: string; readonly allow?: readonly string[] },
 ): EntityZodSchemas {
+  // Normalize the legacy string form.
+  const inputVariant: string | undefined =
+    typeof inputControl === 'string' ? inputControl : inputControl?.variant;
+  const allowList: ReadonlySet<string> | undefined =
+    typeof inputControl === 'object' && inputControl?.allow
+      ? new Set(inputControl.allow)
+      : undefined;
+
   // A field is settable by the requested input variant when it has no
   // `inputVariants` allowlist or when the requested name appears in the list.
   function isSettableByVariant(def: FieldDef): boolean {
@@ -158,6 +175,12 @@ export function buildEntityZodSchemas(
     if (!allow || allow.length === 0) return true;
     if (!inputVariant) return false;
     return allow.includes(inputVariant);
+  }
+
+  // Per-route explicit allowlist gate. When `allow` is unset, every
+  // field passes (back-compat). When set, only listed names pass.
+  function isInRouteAllowlist(fieldName: string): boolean {
+    return allowList === undefined || allowList.has(fieldName);
   }
 
   const fieldDefs = Object.entries(config.fields);
@@ -198,28 +221,36 @@ export function buildEntityZodSchemas(
   // Register so the schema appears as a named component in the OpenAPI spec
   const entity = registerSchema(config.name, entityRaw);
 
-  // Create input schema — excludes auto-defaults, onUpdate fields, and
-  // variant-gated fields not allowed by the requested input variant.
-  // dataScope-injected fields are present but optional.
+  // Create input schema — excludes auto-defaults, onUpdate fields,
+  // variant-gated fields not allowed by the requested input variant,
+  // and (when set) any field not in the route's explicit allowlist.
+  // dataScope-injected fields stay present-but-optional EVEN when
+  // they're not in `allow` because the route handler injects them
+  // from request context — the schema needs the slot for the merged
+  // value, not the client to set it.
   const createShape: Record<string, z.ZodType> = {};
   for (const [fieldName, def] of fieldDefs) {
     if (def.onUpdate === 'now') continue;
     if (isAutoDefault(def.default)) continue;
     if (!isSettableByVariant(def)) continue;
+    const isInjected = dataScopeCreateFields.has(fieldName);
+    if (!isInRouteAllowlist(fieldName) && !isInjected) continue;
     const isNullable = nullableFkFields.has(fieldName) || def.optional;
     const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
     const base = fieldToZod({ ...def, optional: false }, isNullable);
-    const isInjected = dataScopeCreateFields.has(fieldName);
     createShape[fieldName] = isNullable || hasLiteralDefault || isInjected ? base.optional() : base;
   }
   const create = z.object(createShape);
 
-  // Update input schema — all mutable, non-onUpdate, variant-allowed fields as optional.
+  // Update input schema — all mutable, non-onUpdate, variant-allowed,
+  // route-allowlisted fields as optional. `dataScope` doesn't apply to
+  // updates by default, so the allowlist gate is unconditional here.
   const updateShape: Record<string, z.ZodType> = {};
   for (const [fieldName, def] of fieldDefs) {
     if (def.immutable) continue;
     if (def.onUpdate === 'now') continue;
     if (!isSettableByVariant(def)) continue;
+    if (!isInRouteAllowlist(fieldName)) continue;
     const isNullable = nullableFkFields.has(fieldName) || def.optional;
     const base = fieldToZod({ ...def, optional: false }, isNullable);
     updateShape[fieldName] = base.optional();

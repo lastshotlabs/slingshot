@@ -14,6 +14,7 @@ import {
   getContextOrNull,
   getPermissionsStateOrNull,
   getPluginStateOrNull,
+  parseBody,
   provideCapability,
   publishPluginState,
   readPluginState,
@@ -27,10 +28,16 @@ import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import { notifyMentions } from './lib/mentions';
 import type { NotifyMentionsDeps } from './lib/mentions';
+import { extractUrls } from './lib/urls';
+import { probeEmbedsPeer } from './peers/embeds';
 import { communityManifest } from './manifest/communityManifest';
 import { createCommunityManifestRuntime } from './manifest/runtime';
 import { createBanNotifyMiddleware } from './middleware/banNotify';
 import { createContainerCreationGuardMiddleware } from './middleware/containerCreationGuard';
+import {
+  createContainerCreatorGrantMiddleware,
+  type ContainerMemberCreator,
+} from './middleware/containerCreatorGrant';
 import { createGrantManagerMiddleware } from './middleware/grantManager';
 import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
 import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middleware/peerGuards';
@@ -61,6 +68,29 @@ function hasGetById(adapter: AdapterResult | undefined): adapter is AdapterResul
   getById(id: string): Promise<{ role?: string; userId?: string; containerId?: string } | null>;
 } {
   return adapter != null && typeof (adapter as Record<string, unknown>).getById === 'function';
+}
+
+/** Runtime check that an adapter exposes the `attachEmbeds` field-update operation. */
+function hasAttachEmbeds(adapter: AdapterResult | undefined): adapter is AdapterResult & {
+  attachEmbeds(match: { id: string }, data: { embeds: unknown }): Promise<unknown>;
+} {
+  return adapter != null && typeof (adapter as Record<string, unknown>).attachEmbeds === 'function';
+}
+
+/** Runtime check that an adapter exposes the `attachMentions` field-update operation. */
+function hasAttachMentions(adapter: AdapterResult | undefined): adapter is AdapterResult & {
+  attachMentions(
+    match: { id: string },
+    data: {
+      mentions: readonly string[];
+      broadcastMentions: readonly ('everyone' | 'here')[];
+      mentionedRoleIds: readonly string[];
+    },
+  ): Promise<unknown>;
+} {
+  return (
+    adapter != null && typeof (adapter as Record<string, unknown>).attachMentions === 'function'
+  );
 }
 
 /**
@@ -266,6 +296,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
   const solutionReplyGuardRef: LazyMiddleware = { handler: noop };
   const banNotifyRef: LazyMiddleware = { handler: noop };
   const containerCreationGuardRef: LazyMiddleware = { handler: noop };
+  const containerCreatorGrantRef: LazyMiddleware = { handler: noop };
   const grantManagerRef: LazyMiddleware = { handler: noop };
   const replyCountUpdateRef: LazyMiddleware = { handler: noop };
   const replyCountDecrementRef: LazyMiddleware = { handler: noop };
@@ -419,6 +450,25 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           };
         },
       });
+      // Container creator grant: lazily wired against `memberAdapterRef`
+      // which `manifestRuntime.onAdaptersCaptured` populates below. The
+      // wrapper-functor pattern means the middleware closes over the
+      // ref, not the adapter — so by the time a request hits, the
+      // captured adapter is in place.
+      containerCreatorGrantRef.handler = createContainerCreatorGrantMiddleware({
+        permissionsAdapter: permissions.adapter,
+        memberAdapter: {
+          create: async input => {
+            const adapter = memberAdapterRef as unknown as ContainerMemberCreator | undefined;
+            if (!adapter || typeof adapter.create !== 'function') {
+              throw new Error(
+                '[slingshot-community] ContainerMember adapter unavailable when issuing creator grant',
+              );
+            }
+            return adapter.create(input);
+          },
+        },
+      });
       const memberJoinGuard = createMemberJoinGuardMiddleware();
       const roleAssignmentGuard = createRoleAssignmentGuardMiddleware({
         evaluator: permissions.evaluator,
@@ -501,6 +551,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           auditLog: async (c, next) => auditLogRef.handler(c, next),
           grantManager: async (c, next) => grantManagerRef.handler(c, next),
           containerCreationGuard: async (c, next) => containerCreationGuardRef.handler(c, next),
+          containerCreatorGrant: async (c, next) => containerCreatorGrantRef.handler(c, next),
           banNotify: async (c, next) => banNotifyRef.handler(c, next),
           memberJoinGuard,
           roleAssignmentGuard,
@@ -579,6 +630,148 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
             if (!deps) return;
             await notifyMentions(payload, deps, 'reply');
           });
+
+          // parseBody → attachMentions: server-truth normalization of the
+          // body's mention tokens into the entity's `mentions` /
+          // `broadcastMentions` / `mentionedRoleIds` sidecars. Closes the
+          // spoofing gap where a client could set those arrays to arbitrary
+          // user IDs without writing the corresponding `<@id>` token in
+          // the body. Failures are silent — sidecar normalization is
+          // best-effort and must never break create.
+          postBus.on('community:thread.created', async payload => {
+            const adapter = threadAdapterRef;
+            if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+            const id = typeof payload.id === 'string' ? payload.id : undefined;
+            if (!id) return;
+            const record = (await adapter.getById(id)) as
+              | { body?: string; format?: 'plain' | 'markdown' }
+              | null;
+            if (!record) return;
+            const parsed = parseBody(record.body, record.format ?? 'markdown');
+            try {
+              await adapter.attachMentions(
+                { id },
+                {
+                  mentions: parsed.mentions,
+                  broadcastMentions: parsed.broadcastMentions,
+                  mentionedRoleIds: parsed.mentionedRoleIds,
+                },
+              );
+            } catch {
+              // Silent — best-effort normalization.
+            }
+          });
+
+          postBus.on('community:reply.created', async payload => {
+            const adapter = replyAdapterRef;
+            if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+            const id = typeof payload.id === 'string' ? payload.id : undefined;
+            if (!id) return;
+            const record = (await adapter.getById(id)) as
+              | { body?: string; format?: 'plain' | 'markdown' }
+              | null;
+            if (!record) return;
+            const parsed = parseBody(record.body, record.format ?? 'markdown');
+            try {
+              await adapter.attachMentions(
+                { id },
+                {
+                  mentions: parsed.mentions,
+                  broadcastMentions: parsed.broadcastMentions,
+                  mentionedRoleIds: parsed.mentionedRoleIds,
+                },
+              );
+            } catch {
+              // Silent — best-effort normalization.
+            }
+          });
+
+          // Link unfurl: when slingshot-embeds is registered, fan out
+          // thread/reply creates → URL extraction → unfurl → attachEmbeds →
+          // `community:thread.embeds.resolved` / `community:reply.embeds.resolved`.
+          //
+          // Mirrors slingshot-chat's pattern (`chat:message.created`). The
+          // event payload doesn't include `body`, so we hydrate via the
+          // adapter. Failures are silent — embed resolution is best-effort
+          // and must never break the create path.
+          const embedsState = probeEmbedsPeer(app);
+          if (embedsState) {
+            postBus.on('community:thread.created', async payload => {
+              const threadAdapter = threadAdapterRef;
+              if (!hasAttachEmbeds(threadAdapter) || !hasGetById(threadAdapter)) return;
+              const threadId = typeof payload.id === 'string' ? payload.id : undefined;
+              const containerId =
+                typeof payload.containerId === 'string' ? payload.containerId : undefined;
+              if (!threadId || !containerId) return;
+              const record = (await threadAdapter.getById(threadId)) as { body?: string } | null;
+              const urls = extractUrls(record?.body);
+              if (urls.length === 0) return;
+              try {
+                const embeds = await embedsState.unfurl(urls);
+                if (embeds.length === 0) return;
+                await threadAdapter.attachEmbeds({ id: threadId }, { embeds });
+                events.publish(
+                  'community:thread.embeds.resolved',
+                  {
+                    id: threadId,
+                    tenantId:
+                      typeof payload.tenantId === 'string' ? payload.tenantId : null,
+                    containerId,
+                    embeds,
+                  },
+                  {
+                    source: 'system',
+                    userId:
+                      typeof payload.authorId === 'string' ? payload.authorId : null,
+                    requestTenantId: null,
+                  },
+                );
+              } catch {
+                // Silent — embed resolution is best-effort.
+              }
+            });
+
+            postBus.on('community:reply.created', async payload => {
+              const replyAdapter = replyAdapterRef;
+              if (!hasAttachEmbeds(replyAdapter) || !hasGetById(replyAdapter)) return;
+              const replyId = typeof payload.id === 'string' ? payload.id : undefined;
+              const containerId =
+                typeof payload.containerId === 'string' ? payload.containerId : undefined;
+              if (!replyId || !containerId) return;
+              const record = (await replyAdapter.getById(replyId)) as {
+                body?: string;
+                threadId?: string;
+              } | null;
+              const threadId = typeof record?.threadId === 'string' ? record.threadId : undefined;
+              if (!threadId) return;
+              const urls = extractUrls(record?.body);
+              if (urls.length === 0) return;
+              try {
+                const embeds = await embedsState.unfurl(urls);
+                if (embeds.length === 0) return;
+                await replyAdapter.attachEmbeds({ id: replyId }, { embeds });
+                events.publish(
+                  'community:reply.embeds.resolved',
+                  {
+                    id: replyId,
+                    tenantId:
+                      typeof payload.tenantId === 'string' ? payload.tenantId : null,
+                    threadId,
+                    containerId,
+                    embeds,
+                  },
+                  {
+                    source: 'system',
+                    userId:
+                      typeof payload.authorId === 'string' ? payload.authorId : null,
+                    requestTenantId: null,
+                  },
+                );
+              } catch {
+                // Silent — embed resolution is best-effort.
+              }
+            });
+          }
         },
       });
 

@@ -39,6 +39,13 @@ export const Report = defineEntity('Report', {
     dataScope: { field: 'reporterId', from: 'ctx:actor.id', applyTo: ['create'] },
 
     create: {
+      // Client allowlist — `reporterId` is server-injected via dataScope;
+      // `id`/`createdAt`/`updatedAt` auto. `status`/`resolvedBy`/
+      // `resolvedAction` are excluded — `status` defaults to `pending`
+      // and the named `resolve`/`dismiss` operations transition it.
+      input: {
+        allow: ['tenantId', 'containerId', 'targetId', 'targetType', 'reason'],
+      },
       middleware: ['reportTargetGuard'],
       event: {
         key: 'community:content.reported',

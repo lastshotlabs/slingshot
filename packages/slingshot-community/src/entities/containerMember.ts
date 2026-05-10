@@ -41,6 +41,14 @@ export const ContainerMember = defineEntity('ContainerMember', {
     dataScope: { field: 'userId', from: 'ctx:actor.id', applyTo: ['create', 'get', 'list'] },
 
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `joinedAt`/`id` auto. `role` is excluded: per the entity docstring
+      // the create route is treated as a self-join and the effective role
+      // is always normalized to `member`. Elevated roles are granted only
+      // through the `assignRole` operation.
+      input: {
+        allow: ['tenantId', 'containerId'],
+      },
       middleware: ['memberJoinGuard', 'memberJoinPolicyGuard', 'grantManager'],
       event: {
         key: 'community:member.joined',

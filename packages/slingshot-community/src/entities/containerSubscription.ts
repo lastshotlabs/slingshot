@@ -26,13 +26,24 @@ export const ContainerSubscription = defineEntity('ContainerSubscription', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto.
+      input: {
+        allow: ['tenantId', 'containerId', 'notifyOn'],
+      },
       permission: {
         requires: 'community:container.read',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
       event: { key: 'community:subscription.created', payload: ['id', 'userId', 'containerId'] },
     },
-    update: {},
+    update: {
+      // Editable surface — only `notifyOn` is mutable; `userId` and
+      // `containerId` are immutable per the field definitions.
+      input: {
+        allow: ['notifyOn'],
+      },
+    },
     delete: {
       event: { key: 'community:subscription.deleted', payload: ['id', 'userId', 'containerId'] },
     },

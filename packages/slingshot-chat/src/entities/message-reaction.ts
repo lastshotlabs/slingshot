@@ -39,6 +39,12 @@ export const MessageReaction = defineEntity('MessageReaction', {
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. All remaining fields identify the
+      // (message, room, emoji) tuple being added.
+      input: {
+        allow: ['messageId', 'roomId', 'emoji'],
+      },
       permission: {
         requires: 'chat:room.write',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
@@ -54,7 +60,13 @@ export const MessageReaction = defineEntity('MessageReaction', {
         },
       },
     },
-    update: { auth: 'userAuth' },
+    update: {
+      // Editable surface — empty. All non-system fields are immutable per
+      // the field definitions; the route exists for API completeness but
+      // accepts no mutable input.
+      auth: 'userAuth',
+      input: { allow: [] },
+    },
     delete: {
       permission: {
         requires: 'chat:room.write',

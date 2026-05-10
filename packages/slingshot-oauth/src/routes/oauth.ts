@@ -1,7 +1,12 @@
 import { decodeIdToken } from 'arctic';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { generateCodeVerifier, generateState, userAuth } from '@lastshotlabs/slingshot-auth';
+import {
+  generateCodeVerifier,
+  generateState,
+  publishAuthEvent,
+  userAuth,
+} from '@lastshotlabs/slingshot-auth';
 import { ErrorResponse as OAuthErrorResponse } from '@lastshotlabs/slingshot-auth';
 import type { AuthRuntimeContext, HookContext } from '@lastshotlabs/slingshot-auth';
 import {
@@ -25,6 +30,7 @@ import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { COOKIE_REFRESH_TOKEN, COOKIE_TOKEN } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { encodeStateWithContext, parseStateContext } from '../state-context';
 
 /**
  * Builds a `HookContext` from a Hono context for use with auth lifecycle hooks.
@@ -155,6 +161,17 @@ const finishOAuth = async (
     if (user.created) {
       const role = config.defaultRole;
       if (role && adapter.setRoles) await adapter.setRoles(user.id, [role]);
+      // Mirror the email/password register path: emit auth:user.created so
+      // downstream subscribers (profile bootstrap, welcome email, audit
+      // log, …) see OAuth first-logins as user-creation events instead of
+      // having to detect "first login" via auth:login. Same payload shape
+      // and ctx as services/auth.ts:402-411.
+      publishAuthEvent(
+        runtime.events,
+        'auth:user.created',
+        { userId: user.id, email: profile.email ?? identifier },
+        { userId: user.id, actorId: user.id },
+      );
     }
 
     await assertLoginEmailVerified(user.id, runtime);
@@ -387,6 +404,63 @@ export const createOAuthRouter = (
   const encodeOAuthLinkContext = (userId: string, sessionId: string): string =>
     `link:${encodeURIComponent(userId)}:${encodeURIComponent(sessionId)}`;
 
+  /**
+   * Resolve the per-flow post-login redirect.
+   *
+   * Reads `?return_to=` off the start request, validates it against
+   * `runtime.config.oauthAllowedRedirectUrls`, and returns the
+   * validated value. When absent or invalid, returns `null` so the
+   * caller falls back to the configured default.
+   *
+   * Validation has to live here (and not be skipped because the suffix
+   * gets re-validated at callback) because we don't want to encode an
+   * invalid value into state and then reject the entire callback —
+   * better to refuse the start and surface a 400.
+   */
+  const resolveStartReturnTo = (c: Context<AppEnv>): string | null => {
+    const raw = c.req.query('return_to');
+    if (!raw) return null;
+    const allowed = runtime.config.oauthAllowedRedirectUrls ?? [];
+    try {
+      const target = new URL(raw);
+      const ok = allowed.some(entry => {
+        const a = new URL(entry);
+        if (a.origin !== target.origin) return false;
+        const originOnly = a.pathname === '/' && !a.search && !a.hash;
+        return originOnly || a.href === target.href;
+      });
+      return ok ? raw : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Resolve the redirect URL the OAuth callback will navigate to.
+   *
+   * Prefers `returnTo` parsed from the state-token suffix (set at flow
+   * start via `?return_to=`), validated again against
+   * `allowedRedirectUrls` so a tampered suffix can never escape the
+   * allowlist. Falls back to the configured `postLoginRedirect`.
+   */
+  const resolveCallbackRedirect = (state: string): string => {
+    const ctx = parseStateContext(state);
+    if (!ctx.returnTo) return postLoginRedirect;
+    const allowed = runtime.config.oauthAllowedRedirectUrls ?? [];
+    try {
+      const target = new URL(ctx.returnTo);
+      const ok = allowed.some(entry => {
+        const a = new URL(entry);
+        if (a.origin !== target.origin) return false;
+        const originOnly = a.pathname === '/' && !a.search && !a.hash;
+        return originOnly || a.href === target.href;
+      });
+      return ok ? ctx.returnTo : postLoginRedirect;
+    } catch {
+      return postLoginRedirect;
+    }
+  };
+
   const parseOAuthLinkContext = (
     value: string | undefined,
   ): { userId: string; sessionId: string } | null => {
@@ -514,8 +588,14 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
         const codeVerifier = generateCodeVerifier();
+        // Encode optional `?return_to=<allowlisted-url>` into the state
+        // token so the callback knows where to redirect this specific
+        // flow (different origins — admin vs. web — start the same
+        // OAuth client; the per-request return target tells them apart).
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state, codeVerifier);
         const url = getGoogle().createAuthorizationURL(state, codeVerifier, [
           'openid',
@@ -575,7 +655,7 @@ export const createOAuthRouter = (
           'google',
           info.sub,
           { email: info.email, name: info.name, avatarUrl: info.picture },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -709,7 +789,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getApple().createAuthorizationURL(state, ['name', 'email']);
         return c.redirect(url.toString());
@@ -769,7 +851,7 @@ export const createOAuthRouter = (
           'apple',
           claims.sub,
           { email: claims.email, name },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -898,8 +980,10 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
         const codeVerifier = generateCodeVerifier();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state, codeVerifier);
         const url = getMicrosoft().createAuthorizationURL(state, codeVerifier, [
           'openid',
@@ -964,7 +1048,7 @@ export const createOAuthRouter = (
           'microsoft',
           info.id,
           { email: info.mail ?? info.userPrincipalName, name: info.displayName },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -1098,7 +1182,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getGitHub().createAuthorizationURL(state, ['read:user', 'user:email']);
         return c.redirect(url.toString());
@@ -1174,7 +1260,7 @@ export const createOAuthRouter = (
           'github',
           String(info.id),
           { email, name: info.name, avatarUrl: info.avatar_url },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -1303,7 +1389,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getLinkedIn().createAuthorizationURL(state, ['openid', 'profile', 'email']);
         return c.redirect(url.toString());
@@ -1359,7 +1447,7 @@ export const createOAuthRouter = (
           'linkedin',
           info.sub,
           { email: info.email, name: info.name, avatarUrl: info.picture },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -1488,8 +1576,10 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
         const codeVerifier = generateCodeVerifier();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state, codeVerifier);
         const url = getTwitter().createAuthorizationURL(state, codeVerifier, [
           'tweet.read',
@@ -1556,7 +1646,7 @@ export const createOAuthRouter = (
           'twitter',
           user.id,
           { name: user.name, avatarUrl: user.profile_image_url },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -1689,7 +1779,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getGitLab().createAuthorizationURL(state, ['read_user']);
         return c.redirect(url.toString());
@@ -1755,7 +1847,7 @@ export const createOAuthRouter = (
           'gitlab',
           String(info.id),
           { email: info.email, name: info.name, avatarUrl: info.avatar_url },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -1884,7 +1976,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getSlack().createAuthorizationURL(state, ['openid', 'profile', 'email']);
         return c.redirect(url.toString());
@@ -1940,7 +2034,7 @@ export const createOAuthRouter = (
           'slack',
           info.sub,
           { email: info.email, name: info.name, avatarUrl: info.picture },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );
@@ -2069,7 +2163,9 @@ export const createOAuthRouter = (
         },
       }),
       async c => {
-        const state = generateState();
+        const nonce = generateState();
+        const returnTo = resolveStartReturnTo(c);
+        const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
         await storeOAuthState(state);
         const url = getBitbucket().createAuthorizationURL(state);
         return c.redirect(url.toString());
@@ -2144,7 +2240,7 @@ export const createOAuthRouter = (
           'bitbucket',
           info.account_id,
           { email, name: info.display_name, avatarUrl: info.links?.avatar?.href },
-          postLoginRedirect,
+          resolveCallbackRedirect(state),
         );
       },
     );

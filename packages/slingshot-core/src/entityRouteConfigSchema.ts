@@ -106,6 +106,24 @@ const routeOperationConfigSchema = z.object({
   event: routeEventSchema.optional(),
   middleware: z.array(z.string()).optional(),
   idempotency: routeIdempotencySchema.optional(),
+  // Response DTO variant selector — names a key in the entity's `dto` map.
+  dto: z.string().optional(),
+  // Input shape control. Either a string variant name (legacy) or an
+  // object with optional `variant` (membership filter against
+  // `field.inputVariants`) and/or `allow` (explicit per-route allowlist
+  // of writable fields). Silently dropping these by validating with a
+  // closed shape is the bug we're avoiding here — Zod strips unknown
+  // keys by default, so the runtime would see no `input` even when
+  // entity authors set it.
+  input: z
+    .union([
+      z.string(),
+      z.object({
+        variant: z.string().optional(),
+        allow: z.array(z.string()).optional(),
+      }),
+    ])
+    .optional(),
 });
 
 const namedOpHttpMethodSchema = z.enum(['get', 'post', 'put', 'patch', 'delete']);

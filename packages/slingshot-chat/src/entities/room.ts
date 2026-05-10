@@ -50,6 +50,22 @@ export const Room = defineEntity('Room', {
       },
     },
     create: {
+      // Client allowlist — `id`/`createdAt`/`updatedAt` auto.
+      // `lastMessageAt`/`lastMessageId` are excluded — managed by the
+      // named `updateLastMessage` operation. `archived`/`archivedAt`
+      // are excluded — toggled by the `archiveRoom`/`unarchiveRoom` ops.
+      input: {
+        allow: [
+          'tenantId',
+          'name',
+          'type',
+          'encrypted',
+          'retentionDays',
+          'description',
+          'topic',
+          'avatarUrl',
+        ],
+      },
       permission: { requires: 'chat:room.write' },
       event: {
         key: 'chat:room.created',
@@ -63,6 +79,13 @@ export const Room = defineEntity('Room', {
       middleware: ['roomCreatorGrant'],
     },
     update: {
+      // Editable surface — narrower than create. `type` and `encrypted`
+      // are fixed post-create (changing them would invalidate stored
+      // messages or change room semantics). Archive state and last-message
+      // pointers go through their own named operations.
+      input: {
+        allow: ['name', 'description', 'topic', 'avatarUrl', 'retentionDays'],
+      },
       permission: {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'param:id' },

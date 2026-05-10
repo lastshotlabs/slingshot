@@ -100,6 +100,7 @@ export const Message = defineEntity('Message', {
       'decrementReplyCount',
       'updateComponents',
       'attachEmbeds',
+      'attachMentions',
       'claimDueScheduledMessages',
     ],
     dataScope: { field: 'authorId', from: 'ctx:actor.id' },
@@ -111,6 +112,35 @@ export const Message = defineEntity('Message', {
     },
     list: {},
     create: {
+      // `authorId` is server-injected via dataScope; `editedAt`,
+      // `deletedAt`, `deliveredTo`, `readBy`, `replyCount`, `authorName`
+      // are server-managed counters or denormalized snapshots.
+      // `forwardedFromId` is set by the forwardMessage named op, never
+      // by direct create.
+      input: {
+        allow: [
+          'roomId',
+          'body',
+          'type',
+          'format',
+          'replyToId',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'quotedMessageId',
+          'quotePreview',
+          'pollId',
+          'stickerId',
+          'location',
+          'contact',
+          'systemEvent',
+          'appMetadata',
+          'components',
+          'voice',
+          'scheduledAt',
+        ],
+      },
       permission: {
         requires: 'chat:room.write',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
@@ -136,6 +166,23 @@ export const Message = defineEntity('Message', {
       ],
     },
     update: {
+      // Edit surface — narrow. Author can amend the body + attachments;
+      // can't change the room it lives in or any threading anchor.
+      // `editedAt` is auto-set on update via onUpdate semantics.
+      input: {
+        allow: [
+          'body',
+          'format',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'quotePreview',
+          'location',
+          'contact',
+          'components',
+        ],
+      },
       permission: {
         requires: 'chat:message.edit',
         scope: { resourceType: 'chat:message', resourceId: 'param:id' },
@@ -202,6 +249,7 @@ export const Message = defineEntity('Message', {
       decrementReplyCount: { auth: 'userAuth' },
       updateComponents: { auth: 'userAuth' },
       attachEmbeds: { auth: 'userAuth' },
+      attachMentions: { auth: 'userAuth' },
       claimDueScheduledMessages: { auth: 'userAuth' },
     },
     middleware: {
@@ -303,6 +351,18 @@ export const messageOperations = defineOperations(Message, {
   attachEmbeds: op.fieldUpdate({
     match: { id: 'param:id' },
     set: ['embeds'],
+  }),
+
+  /**
+   * Overwrite the message's mention sidecar fields with server-parsed
+   * values. Called from a `chat:message.created` bus subscriber that
+   * runs `parseBody(body, format)` from slingshot-core. Internal-only —
+   * disabled from routes so client-supplied `mentions` arrays cannot be
+   * round-tripped to fan out spoofed notifications.
+   */
+  attachMentions: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['mentions', 'broadcastMentions', 'mentionedRoleIds'],
   }),
 
   /** Internal: atomic batch claim of due scheduled messages. No HTTP route. */

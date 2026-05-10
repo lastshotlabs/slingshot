@@ -24,7 +24,14 @@ export const UserMute = defineEntity('UserMute', {
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
-    create: {},
+    create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. All remaining fields identify the
+      // (muted user, optional container scope) tuple.
+      input: {
+        allow: ['mutedUserId', 'containerId'],
+      },
+    },
     delete: {},
     operations: {
       isMuted: { auth: 'userAuth' },

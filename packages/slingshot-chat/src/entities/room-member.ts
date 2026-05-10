@@ -42,6 +42,12 @@ export const RoomMember = defineEntity('RoomMember', {
     },
     list: {},
     create: {
+      // Client allowlist — `id`/`joinedAt` auto. `lastReadAt` is excluded —
+      // managed by the named `updateLastRead` operation as the user reads
+      // messages.
+      input: {
+        allow: ['roomId', 'userId', 'role', 'nickname', 'notifyOn', 'mutedUntil'],
+      },
       permission: {
         requires: 'chat:room.invite',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
@@ -59,6 +65,11 @@ export const RoomMember = defineEntity('RoomMember', {
       middleware: ['dmRoomGuard', 'memberGrant', 'memberInviteNotify'],
     },
     update: {
+      // Editable surface — narrower than create. `roomId` and `userId`
+      // are immutable per the field definitions.
+      input: {
+        allow: ['role', 'nickname', 'notifyOn', 'mutedUntil'],
+      },
       permission: {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },

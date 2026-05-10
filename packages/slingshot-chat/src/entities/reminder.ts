@@ -34,6 +34,13 @@ export const Reminder = defineEntity('Reminder', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `triggered` is excluded — it's flipped by
+      // the internal `claimDueReminders` operation when the scheduler
+      // fires.
+      input: {
+        allow: ['roomId', 'messageId', 'note', 'triggerAt'],
+      },
       permission: {
         requires: 'chat:room.read',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },

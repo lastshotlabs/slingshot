@@ -28,6 +28,12 @@ export const Tag = defineEntity('Tag', {
     get: { auth: 'none' },
     list: { auth: 'none' },
     create: {
+      // Client allowlist — `id`/`createdAt` auto. `usageCount` is a
+      // denormalized counter maintained by `incrementUsage`/`decrementUsage`
+      // middleware on ThreadTag create/delete.
+      input: {
+        allow: ['tenantId', 'slug', 'label', 'description', 'color'],
+      },
       permission: { requires: 'community:tag.write' },
       event: {
         key: 'community:tag.created',
@@ -40,6 +46,11 @@ export const Tag = defineEntity('Tag', {
       },
     },
     update: {
+      // Editable surface — `slug` stays editable for renames. `tenantId`
+      // and `usageCount` are excluded.
+      input: {
+        allow: ['slug', 'label', 'description', 'color'],
+      },
       permission: { requires: 'community:tag.write' },
     },
     delete: {

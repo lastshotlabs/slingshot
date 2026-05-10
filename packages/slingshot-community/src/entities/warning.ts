@@ -35,6 +35,12 @@ export const Warning = defineEntity('Warning', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `issuedBy` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `acknowledgedAt` is excluded — it's set by
+      // the named `acknowledge` operation when the warned user confirms.
+      input: {
+        allow: ['tenantId', 'userId', 'containerId', 'reason', 'severity'],
+      },
       permission: {
         requires: 'community:container.warn-user',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },

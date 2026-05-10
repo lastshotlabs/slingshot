@@ -32,6 +32,11 @@ export const Block = defineEntity('Block', {
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      // Client allowlist — `blockerId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. Only `blockedId` is client-supplied.
+      input: {
+        allow: ['blockedId'],
+      },
       event: { key: 'chat:user.blocked', payload: ['blockerId', 'blockedId'] },
     },
     delete: {

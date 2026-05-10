@@ -32,9 +32,21 @@ export const FavoriteRoom = defineEntity('FavoriteRoom', {
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `sortOrder` defaults to 0 but the client
+      // may pre-set it on insert.
+      input: {
+        allow: ['roomId', 'sortOrder'],
+      },
       event: { key: 'chat:room.favorited', payload: ['userId', 'roomId'] },
     },
-    update: { auth: 'userAuth' },
+    update: {
+      // Editable surface — only `sortOrder` is mutable; (`userId`, `roomId`)
+      // are immutable per the field definitions. The `updateOrder` op is
+      // an alternative composite-key entry point with the same effect.
+      auth: 'userAuth',
+      input: { allow: ['sortOrder'] },
+    },
     delete: {
       event: { key: 'chat:room.unfavorited', payload: ['userId', 'roomId'] },
     },

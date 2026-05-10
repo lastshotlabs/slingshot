@@ -56,6 +56,22 @@ export const Container = defineEntity('Container', {
     list: { auth: 'none' },
 
     create: {
+      // `createdBy` is server-injected via dataScope; `deletedAt` is
+      // managed by soft-delete; `createdAt`/`updatedAt` auto.
+      input: {
+        allow: [
+          'tenantId',
+          'slug',
+          'name',
+          'description',
+          'parentId',
+          'type',
+          'joinPolicy',
+          'bannerUrl',
+          'iconUrl',
+          'theme',
+        ],
+      },
       permission: { requires: 'community:container.write' },
       event: {
         key: 'community:container.created',
@@ -69,9 +85,24 @@ export const Container = defineEntity('Container', {
           resourceId: 'record:id',
         },
       },
-      middleware: ['containerCreationGuard'],
+      middleware: ['containerCreationGuard', 'containerCreatorGrant'],
     },
     update: {
+      // `slug` stays editable (the entity allows it; renaming a community
+      // is a moderator action). `createdBy` is immutable post-create.
+      input: {
+        allow: [
+          'slug',
+          'name',
+          'description',
+          'parentId',
+          'type',
+          'joinPolicy',
+          'bannerUrl',
+          'iconUrl',
+          'theme',
+        ],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'param:id' },
@@ -99,7 +130,7 @@ export const Container = defineEntity('Container', {
       getBySlug: { auth: 'none' },
     },
 
-    middleware: { containerCreationGuard: true },
+    middleware: { containerCreationGuard: true, containerCreatorGrant: true },
   },
 });
 

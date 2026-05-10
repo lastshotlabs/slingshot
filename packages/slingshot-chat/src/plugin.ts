@@ -10,6 +10,7 @@ import {
   defineEvent,
   getContext,
   getPluginState,
+  parseBody,
   provideCapability,
   publishPluginState,
   registerPluginCapabilities,
@@ -345,6 +346,37 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           const pushState = probePushFormatterRegistry(app);
           if (pushState) {
             registerChatPushFormatters(pushState);
+          }
+
+          // parseBody → attachMentions: server-truth normalization of the
+          // body's mention tokens into the message's `mentions` /
+          // `broadcastMentions` / `mentionedRoleIds` sidecars. Closes the
+          // spoofing gap where a client could set those arrays to
+          // arbitrary user IDs. Failures are silent — sidecar
+          // normalization is best-effort and must never break send.
+          if (messageAdapterRef) {
+            const msgAdapter = messageAdapterRef;
+            postBus.on('chat:message.created', async (payload: Record<string, unknown>) => {
+              const id = typeof payload.id === 'string' ? payload.id : undefined;
+              if (!id) return;
+              const record = (await msgAdapter.getById(id)) as
+                | { body?: string; format?: 'plain' | 'markdown' }
+                | null;
+              if (!record) return;
+              const parsed = parseBody(record.body, record.format ?? 'markdown');
+              try {
+                await msgAdapter.attachMentions(
+                  { id },
+                  {
+                    mentions: parsed.mentions,
+                    broadcastMentions: parsed.broadcastMentions,
+                    mentionedRoleIds: parsed.mentionedRoleIds,
+                  },
+                );
+              } catch {
+                // Silent — best-effort normalization.
+              }
+            });
           }
 
           const embedsState = probeEmbedsPeer(app);

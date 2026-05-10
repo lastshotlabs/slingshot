@@ -27,6 +27,11 @@ export const ThreadTag = defineEntity('ThreadTag', {
     defaults: { auth: 'userAuth' },
     disable: ['list', 'listByTag'],
     create: {
+      // Client allowlist — `id`/`createdAt` auto. All three remaining
+      // fields identify the (thread, tag, container) tuple being linked.
+      input: {
+        allow: ['threadId', 'tagId', 'containerId'],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },

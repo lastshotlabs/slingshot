@@ -39,6 +39,12 @@ export const Pin = defineEntity('Pin', {
       },
     },
     create: {
+      // Client allowlist — `pinnedBy` is server-injected via dataScope;
+      // `id`/`pinnedAt` auto. The remaining fields identify the
+      // (room, message) tuple being pinned.
+      input: {
+        allow: ['roomId', 'messageId'],
+      },
       permission: {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },

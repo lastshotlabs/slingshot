@@ -31,6 +31,13 @@ export const Asset = defineEntity('Asset', {
     get: {},
     list: {},
     create: {
+      // Client allowlist — `ownerUserId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. The `key` plus storage metadata
+      // (`mimeType`/`size`/`bucket`/`originalName`) come from the
+      // presign-upload flow when the client confirms the upload.
+      input: {
+        allow: ['key', 'tenantId', 'mimeType', 'size', 'bucket', 'originalName'],
+      },
       auth: 'userAuth',
       event: {
         key: 'assets:asset.created',

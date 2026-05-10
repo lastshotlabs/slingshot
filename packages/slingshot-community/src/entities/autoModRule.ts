@@ -43,12 +43,23 @@ export const AutoModRule = defineEntity('AutoModRule', {
       },
     },
     create: {
+      // Client allowlist — `createdBy` is server-injected via dataScope;
+      // `id`/`createdAt`/`updatedAt` auto. All remaining fields are
+      // editorial config for the rule.
+      input: {
+        allow: ['tenantId', 'containerId', 'name', 'enabled', 'matcher', 'decision', 'priority'],
+      },
       permission: {
         requires: 'community:container.manage-automod',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
     },
     update: {
+      // Editable surface — narrower than create. `tenantId`/`containerId`
+      // are fixed post-create (rules don't move between containers).
+      input: {
+        allow: ['name', 'enabled', 'matcher', 'decision', 'priority'],
+      },
       permission: {
         requires: 'community:container.manage-automod',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },

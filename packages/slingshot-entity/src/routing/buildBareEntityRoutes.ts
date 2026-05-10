@@ -824,7 +824,15 @@ function createPlannedRouteDefinition(
   config: ResolvedEntityConfig,
   schemas: ReturnType<typeof buildEntityZodSchemas>,
   tag: string,
+  // Per-route input-shaped schemas. The default (no variant, no
+  // allowlist) build is in `schemas`; when a route declares
+  // `routes.<op>.input` (variant or allowlist), the caller hands a
+  // narrowed pair here so the create/update body schemas reflect the
+  // route's actual writable surface in OpenAPI. This is the seam the
+  // `dto.input.allow` allowlist flows through.
+  routeSchemas?: ReturnType<typeof buildEntityZodSchemas>,
 ): RouteDefinition {
+  const cs = routeSchemas ?? schemas;
   const errorSchema = z.object({ error: z.string() });
 
   if (route.kind === 'extra') {
@@ -848,7 +856,7 @@ function createPlannedRouteDefinition(
   switch (route.generatedRouteKey) {
     case 'create': {
       const request = buildTypedRouteRequest(route.request) ?? {
-        body: { content: { 'application/json': { schema: schemas.create } } },
+        body: { content: { 'application/json': { schema: cs.create } } },
       };
       return createRoute({
         method: 'post',
@@ -904,7 +912,7 @@ function createPlannedRouteDefinition(
     case 'update': {
       const request = buildTypedRouteRequest(route.request) ?? {
         params: z.object({ id: z.string() }),
-        body: { content: { 'application/json': { schema: schemas.update } } },
+        body: { content: { 'application/json': { schema: cs.update } } },
       };
       return createRoute({
         method: 'patch',
@@ -1096,18 +1104,33 @@ export function buildBareEntityRoutes<
     ? `${options.parentPath.replace(/^\//, '')}/${entitySegment}`
     : entitySegment;
   const schemas = buildEntityZodSchemas(config);
-  // Cache per-variant schema builds — each (entity, variant) combo is built at most
-  // once per call to buildBareEntityRoutes. The default-variant build is reused via
-  // `schemas` above; named variants are produced lazily when a route asks for them.
+  // Cache per-input-shape schema builds — each (entity, variant, allow-set)
+  // combo is built at most once per call. The default build (no variant,
+  // no allowlist) is reused via `schemas` above; specific shapes are
+  // produced lazily as routes ask for them.
+  type InputControl =
+    | string
+    | { readonly variant?: string; readonly allow?: readonly string[] }
+    | undefined;
   const variantSchemaCache = new Map<string, ReturnType<typeof buildEntityZodSchemas>>();
+  function inputCacheKey(input: InputControl): string {
+    if (!input) return '';
+    if (typeof input === 'string') return `v:${input}`;
+    const variant = input.variant ?? '';
+    // Sort the allow array so [a,b] and [b,a] hit the same cache slot.
+    const allow = input.allow ? [...input.allow].sort().join(',') : '';
+    return `o:${variant}|${allow}`;
+  }
   function schemasForVariant(
-    variant: string | undefined,
+    input: InputControl,
   ): ReturnType<typeof buildEntityZodSchemas> {
-    if (!variant) return schemas;
-    const cached = variantSchemaCache.get(variant);
+    if (!input) return schemas;
+    const key = inputCacheKey(input);
+    if (key === '') return schemas;
+    const cached = variantSchemaCache.get(key);
     if (cached) return cached;
-    const built = buildEntityZodSchemas(config, variant);
-    variantSchemaCache.set(variant, built);
+    const built = buildEntityZodSchemas(config, input);
+    variantSchemaCache.set(key, built);
     return built;
   }
   const disabled = new Set(config.routes?.disable ?? []);
@@ -1138,7 +1161,20 @@ export function buildBareEntityRoutes<
       };
       const executor =
         route.buildExecutor?.(executorBuilderContext) ?? defaultGeneratedExecutor(route, adapter);
-      const routeDef = createPlannedRouteDefinition(route, config, schemas, tag);
+      // Per-route input-shape resolution: for create/update routes,
+      // look up the route's `input` config (variant + allowlist) and
+      // hand the resulting narrowed schemas to the route definition
+      // builder. Other route kinds (`get`, `list`, `delete`, named
+      // ops) use the default schemas — no body shape variation
+      // applies.
+      const routeInput =
+        route.generatedRouteKey === 'create'
+          ? config.routes?.create?.input
+          : route.generatedRouteKey === 'update'
+            ? config.routes?.update?.input
+            : undefined;
+      const routeSchemas = routeInput ? schemasForVariant(routeInput) : schemas;
+      const routeDef = createPlannedRouteDefinition(route, config, schemas, tag, routeSchemas);
 
       registerRoute(
         router,

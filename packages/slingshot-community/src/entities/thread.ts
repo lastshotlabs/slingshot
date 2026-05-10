@@ -116,12 +116,40 @@ export const Thread = defineEntity('Thread', {
       'updateLastActivity',
       'updateComponents',
       'attachEmbeds',
+      'attachMentions',
     ],
     dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
 
     get: { auth: 'none', middleware: ['publishedThreadGuard'] },
 
     create: {
+      // Client allowlist — fields users actually write. Excludes
+      // `authorId` (server-injected via dataScope), `status`/`pinned`/
+      // `locked`/`score`/`reactionSummary`/`replyCount`/`viewCount`/
+      // `*ReplyAt`/`solution*`/`publishedAt`/`deletedBy` (server-managed,
+      // updated by named ops or denormalization triggers). Mention
+      // sidecars (`mentions`, `broadcastMentions`, `mentionedRoleIds`)
+      // are accepted as advisory but the parseBody subscriber overwrites
+      // them server-side from the body tokens.
+      input: {
+        allow: [
+          'tenantId',
+          'containerId',
+          'title',
+          'body',
+          'format',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'pollId',
+          'stickerId',
+          'location',
+          'contact',
+          'components',
+          'tagIds',
+        ],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
@@ -147,6 +175,26 @@ export const Thread = defineEntity('Thread', {
       ],
     },
     update: {
+      // Editable surface — narrower than create. Author can revise
+      // `title`/`body`/`format`/`attachments`/`tagIds`/sidecars, but
+      // can't change `containerId` (immutable by convention) or any
+      // server-managed counter / status field. Pin, lock, publish are
+      // separate named operations with their own permissions.
+      input: {
+        allow: [
+          'title',
+          'body',
+          'format',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'location',
+          'contact',
+          'components',
+          'tagIds',
+        ],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
@@ -315,6 +363,7 @@ export const Thread = defineEntity('Thread', {
       },
       incrementView: { auth: 'none', middleware: ['publishedThreadGuard'] },
       attachEmbeds: { auth: 'userAuth' },
+      attachMentions: { auth: 'userAuth' },
     },
     permissions: {
       resourceType: 'community:container',
@@ -485,6 +534,18 @@ export const threadOperations = defineOperations(Thread, {
   attachEmbeds: op.fieldUpdate({
     match: { id: 'param:id' },
     set: ['embeds'],
+  }),
+
+  /**
+   * Overwrite the thread's mention sidecar fields with server-parsed
+   * values. Called from a `community:thread.created` bus subscriber that
+   * runs `parseBody(body, format)` from slingshot-core. Internal-only —
+   * disabled from routes so client-supplied `mentions` arrays cannot be
+   * round-tripped to fan out spoofed notifications.
+   */
+  attachMentions: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['mentions', 'broadcastMentions', 'mentionedRoleIds'],
   }),
 
   /**

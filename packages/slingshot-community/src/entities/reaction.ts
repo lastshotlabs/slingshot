@@ -45,6 +45,12 @@ export const Reaction = defineEntity('Reaction', {
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
 
     create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `createdAt`/`id` auto. Update is disabled — no need for an update
+      // allowlist. `value` is the emoji code-point or upvote/downvote marker.
+      input: {
+        allow: ['tenantId', 'targetId', 'targetType', 'containerId', 'type', 'value'],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },

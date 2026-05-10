@@ -1,4 +1,5 @@
-import type { ContentSegment, ParsedContent } from './content';
+import type { ContentFormat, ContentSegment, ParsedBody, ParsedContent } from './content';
+import { MAX_CONTENT_MENTIONS } from './content';
 
 // --- Token patterns ---------------------------------------------------------
 // Order matters when scanning a text run: role mention MUST be tried before
@@ -285,4 +286,53 @@ export function stripContentTokens(body: string): string {
 export function extractMentionsFromBody(body: string): readonly string[] {
   const parsed = parseContentTokens(body);
   return parsed.mentionedUserIds;
+}
+
+/**
+ * Server-truth projection of a content body into the entity's sidecar
+ * fields.
+ *
+ * Canonical normalization step every content-bearing entity (Thread,
+ * Reply, Message) should run after create/update so the stored
+ * `mentions` / `broadcastMentions` / `mentionedRoleIds` arrays reflect
+ * what was *actually written in the body* — not what a client claimed.
+ *
+ * Bounded by `MAX_CONTENT_MENTIONS` to defend against pathological inputs.
+ *
+ * Consumers (slingshot-community, slingshot-chat, app-side plugins) call
+ * this from a `*.created` bus subscriber and write the result back via a
+ * narrowly-scoped `attachMentions` field-update operation.
+ *
+ * @param body - The raw body string. `undefined`/empty/null produces
+ *   empty arrays (legitimate for image-only / attachment-only posts).
+ * @param format - Content format hint. Reserved for future format-aware
+ *   normalization; currently echoed back unchanged.
+ * @returns A frozen result with the parsed sidecar arrays.
+ */
+export function parseBody(
+  body: string | undefined | null,
+  format: ContentFormat = 'markdown',
+): ParsedBody {
+  if (!body) {
+    return Object.freeze({
+      format,
+      mentions: Object.freeze([]) as readonly string[],
+      broadcastMentions: Object.freeze([]) as readonly ('everyone' | 'here')[],
+      mentionedRoleIds: Object.freeze([]) as readonly string[],
+      emojiShortcodes: Object.freeze([]) as readonly string[],
+      urls: Object.freeze([]) as readonly string[],
+    });
+  }
+  const parsed = parseContentTokens(body);
+  return Object.freeze({
+    format,
+    mentions:
+      parsed.mentionedUserIds.length > MAX_CONTENT_MENTIONS
+        ? parsed.mentionedUserIds.slice(0, MAX_CONTENT_MENTIONS)
+        : parsed.mentionedUserIds,
+    broadcastMentions: parsed.broadcastMentions,
+    mentionedRoleIds: parsed.mentionedRoleIds,
+    emojiShortcodes: parsed.emojiShortcodes,
+    urls: parsed.urls,
+  });
 }

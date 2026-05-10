@@ -24,8 +24,21 @@ export const ThreadSubscription = defineEntity('ThreadSubscription', {
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
-    create: { middleware: ['publishedThreadGuard'] },
-    update: {},
+    create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto.
+      input: {
+        allow: ['tenantId', 'threadId', 'notifyOn'],
+      },
+      middleware: ['publishedThreadGuard'],
+    },
+    update: {
+      // Editable surface — only `notifyOn` is mutable; `userId` and
+      // `threadId` are immutable per the field definitions.
+      input: {
+        allow: ['notifyOn'],
+      },
+    },
     delete: {},
     operations: {
       getSubscription: { auth: 'userAuth' },

@@ -28,8 +28,21 @@ export const Bookmark = defineEntity('Bookmark', {
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
-    create: { middleware: ['targetVisibilityGuard'] },
-    update: {},
+    create: {
+      // Client allowlist — `userId` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `tag` is the optional user-defined label.
+      input: {
+        allow: ['targetId', 'targetType', 'tag'],
+      },
+      middleware: ['targetVisibilityGuard'],
+    },
+    update: {
+      // Editable surface — only the user-defined `tag` is mutable;
+      // the bookmark target (`targetId`/`targetType`) is immutable.
+      input: {
+        allow: ['tag'],
+      },
+    },
     delete: {},
     operations: {
       isBookmarked: { auth: 'userAuth' },

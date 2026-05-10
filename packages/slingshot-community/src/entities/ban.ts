@@ -50,6 +50,12 @@ export const Ban = defineEntity('Ban', {
     },
 
     create: {
+      // Client allowlist — `bannedBy` is server-injected via dataScope;
+      // `id`/`createdAt` auto. `unbannedBy`/`unbannedAt` are excluded —
+      // they're set by the named `removeBan` operation when a ban is lifted.
+      input: {
+        allow: ['tenantId', 'userId', 'containerId', 'reason', 'expiresAt'],
+      },
       permission: {
         requires: 'community:container.apply-ban',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },

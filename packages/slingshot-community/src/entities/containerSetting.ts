@@ -39,12 +39,38 @@ export const ContainerSetting = defineEntity('ContainerSetting', {
       },
     },
     create: {
+      // Client allowlist — `id`/`createdAt`/`updatedAt` auto. All
+      // remaining fields are moderator-tunable settings.
+      input: {
+        allow: [
+          'containerId',
+          'tenantId',
+          'slowModeSec',
+          'wordFilter',
+          'threadCreateRateCount',
+          'threadCreateRateWindowSec',
+          'replyCreateRateCount',
+          'replyCreateRateWindowSec',
+        ],
+      },
       permission: {
         requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
       },
     },
     update: {
+      // Editable surface — narrower than create. `containerId` is fixed
+      // post-create; uniqueness on `containerId` enforces one settings row.
+      input: {
+        allow: [
+          'slowModeSec',
+          'wordFilter',
+          'threadCreateRateCount',
+          'threadCreateRateWindowSec',
+          'replyCreateRateCount',
+          'replyCreateRateWindowSec',
+        ],
+      },
       permission: {
         requires: 'community:container.manage-settings',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },

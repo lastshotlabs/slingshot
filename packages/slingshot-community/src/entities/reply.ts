@@ -66,10 +66,32 @@ export const Reply = defineEntity('Reply', {
   },
   routes: {
     defaults: { auth: 'userAuth' },
-    disable: ['get', 'list', 'updateComponents', 'attachEmbeds'],
+    disable: ['get', 'list', 'updateComponents', 'attachEmbeds', 'attachMentions'],
     dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
 
     create: {
+      // Client allowlist — `authorId` is server-injected via dataScope;
+      // `status`, `score`, `reactionSummary`, `isSolution`, `depth`,
+      // `deletedBy` are server-managed. Mention sidecars are advisory
+      // and overwritten by the parseBody subscriber.
+      input: {
+        allow: [
+          'tenantId',
+          'threadId',
+          'containerId',
+          'parentId',
+          'body',
+          'format',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'stickerId',
+          'location',
+          'contact',
+          'quotedReplyId',
+        ],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
@@ -97,6 +119,22 @@ export const Reply = defineEntity('Reply', {
       ],
     },
     update: {
+      // Authors can edit content surface only. `parentId`/`quotedReplyId`
+      // are immutable post-create (the entity flags them so anyway, but
+      // declaring them out of the allowlist makes the API contract
+      // explicit). `isSolution` flips via the markAsSolution named op.
+      input: {
+        allow: [
+          'body',
+          'format',
+          'mentions',
+          'broadcastMentions',
+          'mentionedRoleIds',
+          'attachments',
+          'location',
+          'contact',
+        ],
+      },
       permission: {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
@@ -126,6 +164,7 @@ export const Reply = defineEntity('Reply', {
       listByThread: { auth: 'none', middleware: ['publishedThreadGuard'] },
       updateComponents: { auth: 'userAuth' },
       attachEmbeds: { auth: 'userAuth' },
+      attachMentions: { auth: 'userAuth' },
     },
     middleware: {
       pollRequiredGuard: true,
@@ -179,6 +218,15 @@ export const replyOperations = defineOperations(Reply, {
   attachEmbeds: op.fieldUpdate({
     match: { id: 'param:id' },
     set: ['embeds'],
+  }),
+
+  /**
+   * Overwrite the reply's mention sidecar fields with server-parsed
+   * values. See {@link Thread.attachMentions} for rationale.
+   */
+  attachMentions: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['mentions', 'broadcastMentions', 'mentionedRoleIds'],
   }),
 });
 

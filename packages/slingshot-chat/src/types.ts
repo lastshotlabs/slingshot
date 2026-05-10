@@ -417,6 +417,21 @@ export interface MessageAdapter {
   searchMessages(params: Record<string, unknown>): Promise<PaginatedResult<Message>>;
   /** Attach resolved link-preview embeds to a message. */
   attachEmbeds(match: { id: string }, data: { embeds?: unknown }): Promise<Message | null>;
+  /**
+   * Attach server-parsed mention sidecars to a message. Called from a
+   * `chat:message.created` bus subscriber after `parseBody(body, format)`
+   * runs. Internal-only — overwrites client-supplied mention arrays so
+   * notifications cannot be spoofed by writing mentions that are not in
+   * the body.
+   */
+  attachMentions(
+    match: { id: string },
+    data: {
+      mentions: readonly string[];
+      broadcastMentions: readonly ('everyone' | 'here')[];
+      mentionedRoleIds: readonly string[];
+    },
+  ): Promise<Message | null>;
   /** Internal: atomic batch claim of due scheduled messages. */
   claimDueScheduledMessages(params: { limit: number }): Promise<Message[]>;
 }

@@ -93,9 +93,19 @@ export async function notifyMentions(
     containerId = reply.containerId;
   }
 
-  // Prefer explicit mentions array; fall back to parsing body tokens.
+  // Body parsing wins over the stored `mentions` array. The array is
+  // client-supplied at create time and not yet normalized server-side, so
+  // trusting it for notification fan-out would let a caller spoof
+  // notifications to arbitrary users by writing `mentions: [victimId]`
+  // without `<@victimId>` ever appearing in the body. The `<@id>` tokens in
+  // the body ARE the message — that's the bound we honor for fan-out.
+  //
+  // Stored `mentions` is used only as a fallback for genuinely body-less
+  // posts (image-only / attachment-only) where there's no text to parse.
   const tokens =
-    mentions && mentions.length > 0 ? mentions : body ? extractMentionsFromBody(body) : [];
+    body && body.length > 0
+      ? extractMentionsFromBody(body)
+      : (mentions ?? []);
 
   if (tokens.length === 0) return;
 

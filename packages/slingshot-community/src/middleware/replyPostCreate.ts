@@ -2,11 +2,10 @@
 import type { MiddlewareHandler } from 'hono';
 
 /**
- * After-middleware on Reply.create that extracts mention metadata from
- * the reply body and updates the reply with sidecar fields.
- *
- * Placeholder — client-provided mention fields pass through as-is.
- * Full content-model parsing wired in a later phase.
+ * No-op middleware retained as a manifest hook point. See
+ * {@link createThreadPostCreateMiddleware} for rationale — the actual
+ * server-truth mention normalization runs as a
+ * `community:reply.created` bus subscriber in the plugin.
  *
  * @internal
  */

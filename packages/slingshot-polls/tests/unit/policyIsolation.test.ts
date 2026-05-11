@@ -1,25 +1,28 @@
 import { describe, expect, it } from 'bun:test';
-import { createPollsPlugin } from '../../src/plugin';
+import { createPollsPackage } from '../../src/plugin';
 
 describe('policy state isolation', () => {
-  it('two plugin instances do not share source handlers', () => {
-    const pluginA = createPollsPlugin({ closeCheckIntervalMs: 0 });
-    const pluginB = createPollsPlugin({ closeCheckIntervalMs: 0 });
+  it('two package instances do not share source handlers', () => {
+    const packageA = createPollsPackage({
+      closeCheckIntervalMs: 0,
+      sourceHandlers: { 'test:isolated': () => Promise.resolve({ allow: true }) },
+    });
+    const packageB = createPollsPackage({ closeCheckIntervalMs: 0 });
 
-    // Register a handler only on instance A.
-    pluginA.registerSourceHandler('test:isolated', () => Promise.resolve({ allow: true }));
-
-    // Structural assertion: the two plugins are distinct objects with
-    // independent registration functions.
-    expect(pluginA).not.toBe(pluginB);
-    expect(pluginA.registerSourceHandler).not.toBe(pluginB.registerSourceHandler);
+    // Structural assertion: the two packages are distinct objects. Handler
+    // maps are captured in setupMiddleware closures (derived from config), so
+    // there is no shared module-level state to leak between instances.
+    expect(packageA).not.toBe(packageB);
+    expect(packageA.setupMiddleware).not.toBe(packageB.setupMiddleware);
   });
 
-  it('registerSourceHandler supports both poll and vote entities', () => {
-    const plugin = createPollsPlugin({ closeCheckIntervalMs: 0 });
-
-    // Should not throw for either entity target.
-    plugin.registerSourceHandler('test:poll', () => Promise.resolve({ allow: true }), 'poll');
-    plugin.registerSourceHandler('test:vote', () => Promise.resolve({ allow: true }), 'vote');
+  it('sourceHandlers and voteHandlers accept handlers for both poll and vote entities', () => {
+    // Should not throw at construction time when both handler maps are present.
+    const pkg = createPollsPackage({
+      closeCheckIntervalMs: 0,
+      sourceHandlers: { 'test:poll': () => Promise.resolve({ allow: true }) },
+      voteHandlers: { 'test:vote': () => Promise.resolve({ allow: true }) },
+    });
+    expect(pkg.name).toBe('slingshot-polls');
   });
 });

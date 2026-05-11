@@ -13,8 +13,8 @@
  * @packageDocumentation
  */
 
-// Plugin factory
-export { createPollsPlugin } from './plugin';
+// Package factory
+export { createPollsPackage } from './plugin';
 
 // Entity definitions
 export { Poll } from './entities/poll';
@@ -32,8 +32,8 @@ export { POLLS_PLUGIN_STATE_KEY, POLL_VOTE_ERRORS, CLIENT_SAFE_POLL_EVENTS } fro
 // Config schema
 export { PollsPluginConfigSchema } from './validation/config';
 
-// Policy factories — consumers register per-sourceType handlers via
-// plugin.registerSourceHandler() (instance-scoped, not module-level).
+// Policy factories — apps declare per-sourceType handlers via the package's
+// `sourceHandlers` / `voteHandlers` config fields.
 export {
   createPollSourcePolicy,
   createPollVotePolicy,

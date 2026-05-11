@@ -1,50 +1,42 @@
 /**
- * Polls plugin factory.
+ * Polls package factory.
  *
- * Creates a `SlingshotPlugin` that registers the Poll and PollVote entities,
- * mounts the vote guard and create guard, the results route, and the
- * auto-close sweep interval.
+ * Creates a `SlingshotPackageDefinition` that mounts the Poll and PollVote
+ * entities, the vote and create guards, the results route, and the auto-close
+ * sweep interval.
  *
  * Every adapter, middleware, sweep handle, and rate-limit tracker is built
- * via a factory that captures state in closure (Rule 3). Multiple plugin
+ * via a factory that captures state in closure (Rule 3). Multiple package
  * instances in the same process do not share state.
  *
- * @param rawConfig - Plugin configuration. See {@link PollsPluginConfig}.
- * @returns A `SlingshotPlugin` ready to pass to `createApp({ plugins: [...] })`.
+ * @param rawConfig - Package configuration. See {@link PollsPluginConfig}.
+ * @returns A `SlingshotPackageDefinition` ready to pass to `createApp({ packages: [...] })`.
  */
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type {
   PluginSetupContext,
-  SlingshotPlugin,
-  StoreInfra,
-  StoreType,
+  PolicyResolver,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  definePackage,
   getPluginState,
   publishPluginState,
-  resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
 import {
-  createEntityPlugin,
   getEntityPolicyResolver,
   registerEntityPolicy,
   resolvePolicy,
 } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { pollFactories, pollVoteFactories } from './entities/factories';
-import { Poll } from './entities/poll';
-import { PollVote } from './entities/pollVote';
+import { buildPollEntityModules } from './entities/modules';
 import { startCloseSweep } from './lib/closeSweep';
 import { buildRateLimitMiddleware, createInMemoryRateLimiter } from './lib/rateLimit';
 import { buildPollCreateGuard } from './middleware/pollCreateGuard';
 import { buildPollVoteGuard } from './middleware/pollVoteGuard';
-import { pollOperations, pollVoteOperations } from './operations/index';
 import { createResultsHandler } from './operations/results';
 import {
   POLL_SOURCE_POLICY_KEY,
@@ -65,63 +57,81 @@ import { PollsPluginConfigSchema } from './validation/config';
 import { buildPollSchemas } from './validation/polls';
 import { PollResultsParamsSchema } from './validation/results';
 
-type AdapterResult = BareEntityAdapter;
-
 /**
- * Create the polls plugin.
+ * Create the polls package.
+ *
+ * Per-sourceType policy handlers for poll authorization are declared on the
+ * `sourceHandlers` (and `voteHandlers`) config fields. There is no runtime
+ * `registerSourceHandler` — apps know which source types they expose at
+ * package construction time.
  *
  * @example
  * ```ts
- * import { createPollsPlugin } from '@lastshotlabs/slingshot-polls';
+ * import { createPollsPackage } from '@lastshotlabs/slingshot-polls';
  *
- * const polls = createPollsPlugin({ mountPath: '/polls' });
- * const app = createApp({ plugins: [polls] });
+ * const polls = createPollsPackage({
+ *   mountPath: '/polls',
+ *   sourceHandlers: {
+ *     'chat:message': chatPollResolver,
+ *   },
+ *   voteHandlers: {
+ *     'chat:message': chatVoteResolver,
+ *   },
+ * });
+ * const app = createApp({ packages: [polls] });
  * ```
  */
-export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): SlingshotPlugin & {
-  /** Register a per-sourceType policy handler. Call before `setupMiddleware`. */
-  registerSourceHandler: (sourceType: string, handler: unknown, entity?: 'poll' | 'vote') => void;
-} {
+export function createPollsPackage(
+  rawConfig: Partial<PollsPluginConfig> = {},
+): SlingshotPackageDefinition {
   // Validate + freeze config at construction time (Rule 12).
   const config = deepFreeze(
     validatePluginConfig(POLLS_PLUGIN_STATE_KEY, rawConfig, PollsPluginConfigSchema),
-  );
+  ) as PollsPluginConfig;
 
-  // Closure-owned state - no module-level singletons (Rule 3).
+  // Closure-owned adapter refs populated by the entity modules' `onAdapter`
+  // callbacks during bootstrap. The vote-guard middleware, close sweep, and
+  // /results route all read from these refs.
+  //
+  // The adapters here are the SAME instances the entity-plugin routes use —
+  // critical for memory-store correctness, since memory adapters carry state
+  // per-instance and a second `resolveRepo` call would create a divergent
+  // store.
   let pollAdapter: PollAdapter | undefined;
   let pollVoteAdapter: PollVoteAdapter | undefined;
-  let innerPlugin: EntityPlugin | undefined;
   let sweepHandle: { stop(): void } | undefined;
 
-  // Closure-owned handler maps for policy dispatch (Rule 3).
-  const sourceHandlers = new Map<string, PolicyResolver<PollRecord, Partial<PollRecord>>>();
-  const voteHandlers = new Map<string, PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>>();
+  const { pollModule, pollVoteModule } = buildPollEntityModules({
+    onPollAdapter: adapter => {
+      pollAdapter = adapter as unknown as PollAdapter;
+    },
+    onPollVoteAdapter: adapter => {
+      pollVoteAdapter = adapter as unknown as PollVoteAdapter;
+    },
+  });
 
-  /**
-   * Register a per-sourceType policy handler for poll authorization.
-   *
-   * Call before `setupMiddleware` so the policy dispatch table picks up the
-   * handler. Two entity targets are supported: `'poll'` for poll CRUD and
-   * `'vote'` for vote operations.
-   *
-   * @param sourceType - The discriminator value (e.g. `'chat:message'`).
-   * @param handler - The policy resolver function.
-   * @param entity - Which entity the handler applies to. Default: `'poll'`.
-   */
-  function registerSourceHandler(
-    sourceType: string,
-    handler: unknown,
-    entity: 'poll' | 'vote' = 'poll',
-  ): void {
-    if (entity === 'vote') {
-      voteHandlers.set(
-        sourceType,
-        handler as PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>,
-      );
-    } else {
-      sourceHandlers.set(sourceType, handler as PolicyResolver<PollRecord, Partial<PollRecord>>);
-    }
-  }
+  // Frozen handler maps derived from config. `sourceHandlers` and `voteHandlers`
+  // are Records on the config; the policy factory expects Maps, so we adapt
+  // once here.
+  const sourceHandlers = new Map<string, PolicyResolver<PollRecord, Partial<PollRecord>>>(
+    Object.entries(
+      (config.sourceHandlers ?? {}) as Record<
+        string,
+        PolicyResolver<PollRecord, Partial<PollRecord>>
+      >,
+    ),
+  );
+  const voteHandlers = new Map<
+    string,
+    PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>
+  >(
+    Object.entries(
+      (config.voteHandlers ?? {}) as Record<
+        string,
+        PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>
+      >,
+    ),
+  );
 
   // Build parameterized Zod schemas from config limits.
   const { PollCreateInputSchema } = buildPollSchemas({
@@ -155,53 +165,30 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
         : async (_c, next) => next(),
   };
 
-  // Entity entries for createEntityPlugin.
-  const entities: EntityPluginEntry[] = [
-    {
-      config: Poll,
-      operations: pollOperations.operations,
-      buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
-        const adapter = resolveRepo(pollFactories, storeType, infra);
-        pollAdapter = adapter as unknown as PollAdapter;
-        return adapter as unknown as AdapterResult;
-      },
-    },
-    {
-      config: PollVote,
-      operations: pollVoteOperations.operations,
-      buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
-        const adapter = resolveRepo(pollVoteFactories, storeType, infra);
-        pollVoteAdapter = adapter as unknown as PollVoteAdapter;
-        return adapter as unknown as AdapterResult;
-      },
-    },
-  ];
-
-  return {
+  return definePackage({
     name: POLLS_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
-    registerSourceHandler,
+    entities: [pollModule, pollVoteModule],
+    middleware,
 
-    async setupMiddleware(ctx: PluginSetupContext) {
+    setupMiddleware(ctx: PluginSetupContext) {
       // Register dispatched policy resolvers before entity routes are mounted.
-      // Consumer plugins register their per-sourceType handlers via
-      // plugin.registerSourceHandler() before this lifecycle phase.
-      registerEntityPolicy(ctx.app, POLL_SOURCE_POLICY_KEY, createPollSourcePolicy(sourceHandlers));
+      // Handler maps come from config (Option 3 in the package-migration spec).
+      // Entity adapter refs are populated by the entity modules' onAdapter
+      // hooks during the framework's entity-bootstrap step, which runs after
+      // setupMiddleware completes — middleware closures that reference the
+      // refs (pollVoteGuard) are only invoked at request time, by which point
+      // both refs are populated.
+      registerEntityPolicy(
+        ctx.app,
+        POLL_SOURCE_POLICY_KEY,
+        createPollSourcePolicy(sourceHandlers),
+      );
       registerEntityPolicy(ctx.app, POLL_VOTE_POLICY_KEY, createPollVotePolicy(voteHandlers));
-
-      innerPlugin ??= createEntityPlugin({
-        name: POLLS_PLUGIN_STATE_KEY,
-        mountPath: config.mountPath,
-        entities,
-        middleware,
-      });
-
-      await innerPlugin?.setupMiddleware?.(ctx);
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
+    setupRoutes({ app }: PluginSetupContext) {
       // Mount the results route manually - needs cross-entity access.
       if (
         pollAdapter &&
@@ -255,11 +242,9 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
-
+    setupPost({ app, bus }: PluginSetupContext) {
       if (!pollAdapter || !pollVoteAdapter) {
-        throw new Error('[slingshot-polls] Adapters not resolved after entity plugin setup.');
+        throw new Error('[slingshot-polls] Adapters not resolved after entity package setup.');
       }
 
       // Start auto-close sweep.
@@ -275,7 +260,6 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
         pollAdapter,
         pollVoteAdapter,
         sweepHandle,
-        registerSourceHandler,
       });
       publishPluginState(getPluginState(app), POLLS_RUNTIME_KEY, state);
     },
@@ -283,5 +267,5 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
     teardown() {
       sweepHandle?.stop();
     },
-  };
+  });
 }

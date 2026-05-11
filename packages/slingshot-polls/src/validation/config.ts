@@ -65,6 +65,18 @@ export const PollsPluginConfigSchema = z.object({
     .default([])
     .describe('Poll route keys to skip when mounting routes. Default: [].'),
   rateLimit: PollsRateLimitConfigSchema.describe('Rate-limiting configuration for poll routes.'),
+  sourceHandlers: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Per-sourceType policy handlers for the Poll entity. Map keys are stable source-type discriminators (e.g. "chat:message"); values are PolicyResolver functions. Unregistered source types are denied.',
+    ),
+  voteHandlers: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Per-sourceType policy handlers for the PollVote entity. Same shape as `sourceHandlers`, applied to vote operations.',
+    ),
 });
 
 /** Input type accepted by `createPollsPlugin()`. */

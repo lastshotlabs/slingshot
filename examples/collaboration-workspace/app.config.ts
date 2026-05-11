@@ -9,7 +9,7 @@ import { createGifsPlugin } from '../../packages/slingshot-gifs/src/index.ts';
 import { createInteractionsPackage } from '../../packages/slingshot-interactions/src/index.ts';
 import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
-import { createPollsPlugin } from '../../packages/slingshot-polls/src/index.ts';
+import { createPollsPackage } from '../../packages/slingshot-polls/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
 export default defineApp({
@@ -34,7 +34,6 @@ export default defineApp({
         sendMessage: ['user', 'moderator', 'admin'],
       },
     }),
-    createPollsPlugin(),
     createAssetsPlugin({
       storage: { adapter: 'memory' },
       presignedUrls: true,
@@ -60,6 +59,7 @@ export default defineApp({
       dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
     }),
     createEmojiPackage({}),
+    createPollsPackage(),
     createInteractionsPackage({
       handlers: {
         'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },

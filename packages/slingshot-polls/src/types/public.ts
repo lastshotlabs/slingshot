@@ -2,6 +2,7 @@ import {
   POLLS_PLUGIN_STATE_KEY as CORE_POLLS_PLUGIN_STATE_KEY,
   definePluginStateKey,
 } from '@lastshotlabs/slingshot-core';
+import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
 
 /**
  * Public types for `@lastshotlabs/slingshot-polls`.
@@ -233,6 +234,25 @@ export interface PollsPluginConfig {
   readonly disableRoutes: readonly PollsRouteKey[];
   /** Per-operation rate limiting. Opt-in — omit for no limiting. */
   readonly rateLimit?: PollsRateLimitConfig;
+  /**
+   * Per-sourceType policy handlers for the Poll entity. Map keys are stable
+   * source-type discriminators (e.g. `'chat:message'`); values are
+   * `PolicyResolver` functions. Unregistered source types are denied.
+   *
+   * Apps declare all source handlers at package construction time — there is no
+   * runtime registration API. Pass an empty object (or omit) when the package
+   * is used without policy gating (e.g. early development or admin-only mode).
+   */
+  readonly sourceHandlers?: Readonly<
+    Record<string, PolicyResolver<PollRecord, Partial<PollRecord>>>
+  >;
+  /**
+   * Per-sourceType policy handlers for the PollVote entity. Same shape as
+   * `sourceHandlers`, applied to vote operations.
+   */
+  readonly voteHandlers?: Readonly<
+    Record<string, PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>>
+  >;
 }
 
 // --- Plugin state ---
@@ -243,12 +263,6 @@ export interface PollsPluginState {
   readonly pollAdapter: unknown;
   readonly pollVoteAdapter: unknown;
   readonly sweepHandle: { stop(): void } | null;
-  /** Register a per-sourceType policy handler. Call before `setupMiddleware`. */
-  readonly registerSourceHandler: (
-    sourceType: string,
-    handler: unknown,
-    entity?: 'poll' | 'vote',
-  ) => void;
 }
 
 /** Typed plugin-state key for the polls runtime slot. */

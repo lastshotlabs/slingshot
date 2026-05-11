@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
-import { 'slingshot:package:capabilities:slingshot-permissions', attachContext } from '@lastshotlabs/slingshot-core';
+import { attachContext } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
 import { createPermissionsPlugin } from '../../src/plugin';
 

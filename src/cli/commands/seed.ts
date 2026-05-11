@@ -1,26 +1,26 @@
 import { Command, Flags } from '@oclif/core';
-import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { parseAndResolveMultiEntityManifest } from '@lastshotlabs/slingshot-entity';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
 export default class Seed extends Command {
   static override description =
     'Seed databases with realistic fake data generated from entity schemas. ' +
-    'Reads a JSON entity manifest, generates fake records using @faker-js/faker, ' +
-    'and persists them via in-memory adapters or exports as JSON.';
+    'Imports a TypeScript module that exports one or more ResolvedEntityConfig values ' +
+    'from defineEntity(), generates fake records using @faker-js/faker, and either ' +
+    'writes JSON fixtures or prints to stdout.';
 
   static override examples = [
-    '<%= config.bin %> seed --manifest ./slingshot.entities.json --count 20',
-    '<%= config.bin %> seed --manifest ./slingshot.entities.json --count 50 --seed 42',
-    '<%= config.bin %> seed --manifest ./slingshot.entities.json --entities User,Post --count 100',
-    '<%= config.bin %> seed --manifest ./slingshot.entities.json --count 10 --output ./fixtures',
+    '<%= config.bin %> seed --definition ./src/entities/index.ts --count 20',
+    '<%= config.bin %> seed --definition ./src/entities/index.ts --count 50 --seed 42',
+    '<%= config.bin %> seed --definition ./src/entities/index.ts --entities User,Post --count 100',
+    '<%= config.bin %> seed --definition ./src/entities/index.ts --count 10 --output ./fixtures',
   ];
 
   static override flags = {
-    manifest: Flags.string({
-      char: 'm',
-      description: 'Path to a JSON multi-entity manifest file',
+    definition: Flags.string({
+      char: 'd',
+      description:
+        'Path to a TypeScript module exporting one or more ResolvedEntityConfig values from defineEntity()',
       required: true,
     }),
     count: Flags.integer({
@@ -49,23 +49,22 @@ export default class Seed extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(Seed);
 
-    // -- Parse manifest --
-    const absPath = resolve(flags.manifest);
-    let raw: unknown;
+    // -- Import entity definitions --
+    const absPath = resolve(flags.definition);
+    let entityModule: Record<string, unknown>;
     try {
-      raw = JSON.parse(readFileSync(absPath, 'utf-8'));
+      entityModule = (await import(absPath)) as Record<string, unknown>;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.error(`Failed to read manifest from '${absPath}': ${message}`);
+      this.error(`Failed to import entity definitions from '${absPath}': ${message}`);
     }
 
-    let configs: ResolvedEntityConfig[];
-    try {
-      const result = parseAndResolveMultiEntityManifest(raw);
-      configs = Object.values(result.entities).map(entry => entry.config);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.error(`Invalid entity manifest: ${message}`);
+    let configs: ResolvedEntityConfig[] = findEntityConfigs(entityModule);
+    if (configs.length === 0) {
+      this.error(
+        `No ResolvedEntityConfig export found in '${absPath}'. ` +
+          `Ensure the file exports one or more values created by defineEntity().`,
+      );
     }
 
     // -- Filter entities --
@@ -167,4 +166,27 @@ export default class Seed extends Command {
     }
     this.log(JSON.stringify(output, null, 2));
   }
+}
+
+function findEntityConfigs(mod: Record<string, unknown>): ResolvedEntityConfig[] {
+  const found: ResolvedEntityConfig[] = [];
+  const seen = new Set<string>();
+  for (const value of Object.values(mod)) {
+    if (isResolvedEntityConfig(value) && !seen.has(value.name)) {
+      seen.add(value.name);
+      found.push(value);
+    }
+  }
+  return found;
+}
+
+function isResolvedEntityConfig(value: unknown): value is ResolvedEntityConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>)['_pkField'] === 'string' &&
+    typeof (value as Record<string, unknown>)['_storageName'] === 'string' &&
+    typeof (value as Record<string, unknown>)['name'] === 'string' &&
+    typeof (value as Record<string, unknown>)['fields'] === 'object'
+  );
 }

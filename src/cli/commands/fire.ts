@@ -1,6 +1,6 @@
 import { Command, Flags } from '@oclif/core';
-import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
 export default class Fire extends Command {
   static override description =
@@ -9,27 +9,28 @@ export default class Fire extends Command {
 
   static override examples = [
     '<%= config.bin %> fire --schema ./src/schemas/createUser.ts --count 5',
-    '<%= config.bin %> fire --manifest ./slingshot.entities.json --entity User --operation create --count 3',
+    '<%= config.bin %> fire --definition ./src/entities/index.ts --entity User --operation create --count 3',
     '<%= config.bin %> fire --schema ./src/schemas/createUser.ts --post http://localhost:3000/api/users',
     '<%= config.bin %> fire --schema ./src/schemas/createUser.ts --output ./payloads',
-    '<%= config.bin %> fire --manifest ./slingshot.entities.json --entity User --operation create --seed 42',
+    '<%= config.bin %> fire --definition ./src/entities/index.ts --entity User --operation create --seed 42',
   ];
 
   static override flags = {
     schema: Flags.string({
       description:
         'Path to a TypeScript file exporting a Zod schema (default export or named "schema")',
-      exclusive: ['manifest'],
+      exclusive: ['definition'],
     }),
-    manifest: Flags.string({
-      char: 'm',
-      description: 'Path to a JSON entity manifest file',
+    definition: Flags.string({
+      char: 'd',
+      description:
+        'Path to a TypeScript module exporting one or more ResolvedEntityConfig values from defineEntity()',
       exclusive: ['schema'],
     }),
     entity: Flags.string({
       char: 'e',
-      description: 'Entity name (when using --manifest)',
-      dependsOn: ['manifest'],
+      description: 'Entity name (when using --definition)',
+      dependsOn: ['definition'],
     }),
     operation: Flags.string({
       description: 'Which schema to generate from: create, update, entity, or list',
@@ -60,39 +61,37 @@ export default class Fire extends Command {
     let schema: { _zod: { def: { type: string } } };
     let label: string;
 
-    if (flags.manifest) {
-      // Generate from entity manifest
-      const absPath = resolve(flags.manifest);
-      let raw: unknown;
+    if (flags.definition) {
+      // Generate from a TypeScript entity definition module
+      const absPath = resolve(flags.definition);
+      let entityModule: Record<string, unknown>;
       try {
-        raw = JSON.parse(readFileSync(absPath, 'utf-8'));
+        entityModule = (await import(absPath)) as Record<string, unknown>;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        this.error(`Failed to read manifest: ${message}`);
+        this.error(`Failed to import entity definitions from '${absPath}': ${message}`);
       }
 
-      const { parseAndResolveMultiEntityManifest, generateSchemas } =
-        await import('@lastshotlabs/slingshot-entity');
-
-      const resolved = parseAndResolveMultiEntityManifest(raw);
-      const entries = Object.entries(resolved.entities).map(([key, entry]) => ({
-        key,
-        config: entry.config,
-      }));
-      const available = entries.map(({ config }) => config.name).join(', ');
+      const configs = findEntityConfigs(entityModule);
+      if (configs.length === 0) {
+        this.error(
+          `No ResolvedEntityConfig export found in '${absPath}'. ` +
+            `Ensure the file exports one or more values created by defineEntity().`,
+        );
+      }
+      const available = configs.map(c => c.name).join(', ');
 
       if (!flags.entity) {
-        this.error(`--entity is required when using --manifest. Available: ${available}`);
+        this.error(`--entity is required when using --definition. Available: ${available}`);
       }
 
-      const entry = entries.find(
-        ({ key, config }) => key === flags.entity || config.name === flags.entity,
-      );
-      if (!entry) {
+      const config = configs.find(c => c.name === flags.entity);
+      if (!config) {
         this.error(`Entity "${flags.entity}" not found. Available: ${available}`);
       }
 
-      const schemas = generateSchemas(entry.config);
+      const { generateSchemas } = await import('@lastshotlabs/slingshot-entity');
+      const schemas = generateSchemas(config);
       const schemaMap: Record<string, { _zod: { def: { type: string } } }> = {
         create: schemas.createSchema,
         update: schemas.updateSchema,
@@ -101,7 +100,7 @@ export default class Fire extends Command {
       };
 
       schema = schemaMap[flags.operation];
-      label = `${entry.config.name}.${flags.operation}`;
+      label = `${config.name}.${flags.operation}`;
     } else if (flags.schema) {
       // Import a raw Zod schema from a file
       const absPath = resolve(flags.schema);
@@ -119,7 +118,7 @@ export default class Fire extends Command {
       }
       label = flags.schema;
     } else {
-      this.error('One of --schema or --manifest is required.');
+      this.error('One of --schema or --definition is required.');
     }
 
     // Generate payloads — use generateMany which correctly seeds once
@@ -165,4 +164,27 @@ export default class Fire extends Command {
       this.log(JSON.stringify(payloads, null, 2));
     }
   }
+}
+
+function findEntityConfigs(mod: Record<string, unknown>): ResolvedEntityConfig[] {
+  const found: ResolvedEntityConfig[] = [];
+  const seen = new Set<string>();
+  for (const value of Object.values(mod)) {
+    if (isResolvedEntityConfig(value) && !seen.has(value.name)) {
+      seen.add(value.name);
+      found.push(value);
+    }
+  }
+  return found;
+}
+
+function isResolvedEntityConfig(value: unknown): value is ResolvedEntityConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>)['_pkField'] === 'string' &&
+    typeof (value as Record<string, unknown>)['_storageName'] === 'string' &&
+    typeof (value as Record<string, unknown>)['name'] === 'string' &&
+    typeof (value as Record<string, unknown>)['fields'] === 'object'
+  );
 }

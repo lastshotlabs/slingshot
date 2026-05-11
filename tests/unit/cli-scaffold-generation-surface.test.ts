@@ -66,19 +66,16 @@ describe('root cli scaffold/generation surface', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('generates seed data from a manifest and writes dry-run output', async () => {
+  test('generates seed data from a TypeScript entity definition module', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'slingshot-seed-'));
-    const manifestPath = join(tmp, 'entities.json');
-    writeFileSync(manifestPath, '{"manifestVersion":1}\n', 'utf8');
+    const definitionPath = join(tmp, 'entity.ts');
+    writeFileSync(
+      definitionPath,
+      'export const UserEntity = { name: "User", relations: {}, fields: {}, _pkField: "id", _storageName: "users" };\n',
+      'utf8',
+    );
 
     mock.module('@lastshotlabs/slingshot-entity', () => ({
-      parseAndResolveMultiEntityManifest: () => ({
-        entities: {
-          User: {
-            config: { name: 'User', relations: {}, _pkField: 'id' },
-          },
-        },
-      }),
       generateSchemas: () => ({
         createSchema: { _zod: { def: { type: 'object' } } },
       }),
@@ -107,7 +104,7 @@ describe('root cli scaffold/generation surface', () => {
 
     const Seed = (await import('../../src/cli/commands/seed')).default;
     const command = new Seed(
-      ['--manifest', manifestPath, '--count', '1', '--dry-run'],
+      ['--definition', definitionPath, '--count', '1', '--dry-run'],
       makeOclifConfig() as never,
     );
     const logs = captureLogs(command);
@@ -118,23 +115,22 @@ describe('root cli scaffold/generation surface', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('fires generated payloads from either a schema file or a manifest', async () => {
+  test('fires generated payloads from either a schema file or a definition module', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'slingshot-fire-'));
     const schemaPath = join(tmp, 'schema.ts');
-    const manifestPath = join(tmp, 'entities.json');
+    const definitionPath = join(tmp, 'entity.ts');
     writeFileSync(
       schemaPath,
       'export const schema = { _zod: { def: { type: "object" } } };\n',
       'utf8',
     );
-    writeFileSync(manifestPath, '{"manifestVersion":1}\n', 'utf8');
+    writeFileSync(
+      definitionPath,
+      'export const UserEntity = { name: "User", fields: {}, _pkField: "id", _storageName: "users" };\n',
+      'utf8',
+    );
 
     mock.module('@lastshotlabs/slingshot-entity', () => ({
-      parseAndResolveMultiEntityManifest: () => ({
-        entities: {
-          User: { config: { name: 'User' } },
-        },
-      }),
       generateSchemas: () => ({
         createSchema: z.object({ id: z.string() }),
         updateSchema: z.object({ id: z.string().optional() }),
@@ -156,13 +152,13 @@ describe('root cli scaffold/generation surface', () => {
     await schemaCommand.run();
     expect(schemaLogs.join('\n')).toContain('[');
 
-    const manifestCommand = new Fire(
-      ['--manifest', manifestPath, '--entity', 'User', '--operation', 'create'],
+    const definitionCommand = new Fire(
+      ['--definition', definitionPath, '--entity', 'User', '--operation', 'create'],
       makeOclifConfig() as never,
     );
-    const manifestLogs = captureLogs(manifestCommand);
-    await manifestCommand.run();
-    expect(manifestLogs.join('\n')).toContain('{');
+    const definitionLogs = captureLogs(definitionCommand);
+    await definitionCommand.run();
+    expect(definitionLogs.join('\n')).toContain('{');
 
     rmSync(tmp, { recursive: true, force: true });
   });

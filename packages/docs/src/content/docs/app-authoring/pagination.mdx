@@ -55,8 +55,8 @@ export const catalogPackage = definePackage({
               schema: paginatedResponse(Product, 'ProductPage'),
             },
           },
-          handler: async ({ input, respond }) => {
-            const { limit, offset } = parseOffsetParams(input.query);
+          handler: async ({ query, respond }) => {
+            const { limit, offset } = parseOffsetParams(query);
             const items = await listProducts({ skip: offset, take: limit });
             return respond.json({ items, total: items.length, limit, offset });
           },
@@ -102,8 +102,8 @@ export const feedPackage = definePackage({
           responses: {
             200: { description: 'Page of posts', schema: cursorResponse(Post, 'PostPage') },
           },
-          handler: async ({ input, respond }) => {
-            const { limit, cursor } = parseCursorParams(input.query);
+          handler: async ({ query, respond }) => {
+            const { limit, cursor } = parseCursorParams(query);
             const page = await loadPosts({ limit, cursor });
             return respond.json({
               items: page.items,

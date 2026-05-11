@@ -9,6 +9,13 @@
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { OrganizationsOrgService } from './orgService';
 
+/** Provider-owned package contract for `slingshot-organizations`. */
 export const Organizations = definePackageContract('slingshot-organizations');
 
+/**
+ * Capability handle for the organizations org service.
+ *
+ * Cross-package consumers resolve it through `ctx.capabilities.require(OrgServiceCap)`
+ * to look up org membership, create orgs, and manage org-scoped state.
+ */
 export const OrgServiceCap = Organizations.capability<OrganizationsOrgService>('orgService');

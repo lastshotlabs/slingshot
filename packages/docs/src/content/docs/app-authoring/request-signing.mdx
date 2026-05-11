@@ -55,7 +55,7 @@ export const partnersPackage = definePackage({
           path: '/orders',
           middleware: ['signed'],
           request: { body: z.object({ orderId: z.string() }) },
-          handler: async ({ input, respond }) => respond.json({ ok: true, ...input.body }),
+          handler: async ({ body, respond }) => respond.json({ ok: true, ...body }),
         }),
       ],
     }),

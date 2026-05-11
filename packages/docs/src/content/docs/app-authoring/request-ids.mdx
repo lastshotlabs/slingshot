@@ -23,6 +23,7 @@ trace context propagation instead.
 ## Reading the ID in a handler
 
 ```typescript title="src/billing/package.ts"
+import { z } from 'zod';
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 export const billingPackage = definePackage({
@@ -34,9 +35,10 @@ export const billingPackage = definePackage({
       routes: [
         route.get({
           path: '/:id',
-          handler: async ({ c, respond }) => {
-            const requestId = c.get('requestId');
-            console.log('lookup invoice', { requestId, id: c.req.param('id') });
+          request: { params: z.object({ id: z.string() }) },
+          handler: async ({ params, requestContext, respond }) => {
+            const { requestId } = requestContext;
+            console.log('lookup invoice', { requestId, id: params.id });
             return respond.json({ requestId });
           },
         }),

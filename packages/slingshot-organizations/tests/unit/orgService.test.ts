@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  ORGANIZATIONS_ORG_SERVICE_STATE_KEY,
   getOrganizationsOrgService,
   getOrganizationsOrgServiceOrNull,
 } from '../../src/orgService';
+
+// The orgService helpers read the capability slot written by
+// `registerPluginCapabilities(..., 'slingshot-organizations', ...)`. Tests
+// publish the service directly under this slot.
+const ORGANIZATIONS_ORG_SERVICE_STATE_KEY =
+  'slingshot:package:capabilities:slingshot-organizations';
 
 function makeValidService() {
   return {
@@ -14,7 +19,11 @@ function makeValidService() {
 }
 
 function makePluginState(key: string, value: unknown) {
-  return { pluginState: new Map([[key, value]]) };
+  // The orgService capability slot stores `{ orgService }`; store under that
+  // shape when the test targets the capability key, and pass raw values through
+  // when the test stores under an unrelated key.
+  const slot = key === ORGANIZATIONS_ORG_SERVICE_STATE_KEY ? { orgService: value } : value;
+  return { pluginState: new Map([[key, slot]]) };
 }
 
 describe('getOrganizationsOrgServiceOrNull', () => {

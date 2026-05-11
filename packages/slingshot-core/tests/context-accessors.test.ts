@@ -9,7 +9,6 @@ import { createCoreRegistrar } from '../src/coreRegistrar';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
 import { getEmbedsPeer, getEmbedsPeerOrNull } from '../src/embedsPeer';
 import { ANONYMOUS_ACTOR } from '../src/identity';
-import { getNotificationsState, getNotificationsStateOrNull } from '../src/notificationsPeer';
 import { getPermissionsState, getPermissionsStateOrNull } from '../src/permissions';
 import {
   getPluginState,
@@ -304,10 +303,6 @@ describe('slingshot-core context accessors', () => {
     expect(getAuthRuntimePeerOrNull(app)).toEqual({ adapter: {} });
     expect(getEmbedsPeer(app)).toBe(pluginState.get('slingshot-embeds') as never);
     expect(getEmbedsPeerOrNull(app)).toBe(pluginState.get('slingshot-embeds') as never);
-    expect(getNotificationsState(app)).toBe(pluginState.get('slingshot-notifications') as never);
-    expect(getNotificationsStateOrNull(app)).toBe(
-      pluginState.get('slingshot-notifications') as never,
-    );
     expect(getPermissionsState(app)).toBe(permissionsState as never);
     expect(getPermissionsStateOrNull(app)).toBe(permissionsState as never);
     expect(getPushFormatterPeer(app)).toBe(pluginState.get('slingshot-push') as never);
@@ -331,7 +326,6 @@ describe('slingshot-core context accessors', () => {
     expect(getPluginStateOrNull(app)).toBeNull();
     expect(getAuthRuntimePeerOrNull(app)).toBeNull();
     expect(getEmbedsPeerOrNull(app)).toBeNull();
-    expect(getNotificationsStateOrNull(app)).toBeNull();
     expect(getPermissionsStateOrNull(app)).toBeNull();
     expect(getPushFormatterPeerOrNull(app)).toBeNull();
     expect(getSearchPluginRuntimeOrNull(app)).toBeNull();
@@ -340,9 +334,6 @@ describe('slingshot-core context accessors', () => {
       'auth runtime peer is not available in pluginState',
     );
     expect(() => getEmbedsPeer(app)).toThrow('embeds peer is not available in pluginState');
-    expect(() => getNotificationsState(app)).toThrow(
-      'notifications peer state is not available in pluginState',
-    );
     expect(() => getPermissionsState(app)).toThrow(
       'permissions state is not available in pluginState',
     );

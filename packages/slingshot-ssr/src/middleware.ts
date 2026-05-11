@@ -1,7 +1,7 @@
 // packages/slingshot-ssr/src/middleware.ts
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import {
   type Logger,
   PathTraversalError,
@@ -34,6 +34,7 @@ import type { RetryOptions } from './retry';
 import type {
   IsrSink,
   SsrCacheControl,
+  SsrLoadContext,
   SsrMiddlewareContext,
   SsrMiddlewareResult,
   SsrPluginConfig,
@@ -1191,11 +1192,10 @@ function resolveCacheControl(
  *
  * @internal
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function wantsJsonResponse(c: any): boolean {
-  const u = new URL(c.req.url as string);
+function wantsJsonResponse(c: Context): boolean {
+  const u = new URL(c.req.url);
   if (u.searchParams.has('_data')) return true;
-  const accept = (c.req.raw.headers as Headers).get('accept') ?? '';
+  const accept = c.req.raw.headers.get('accept') ?? '';
   if (accept.includes('text/html')) return false;
   return accept.includes('application/json');
 }
@@ -1234,9 +1234,8 @@ function stripDataMarker(query: Record<string, string>): Record<string, string> 
  *
  * @internal
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function respondWithLoaderJson(
-  c: any,
+  c: Context,
   pageMatch: SsrRouteChain['page'],
   bsCtx: ReturnType<typeof getContext>,
   url: URL,
@@ -1245,7 +1244,7 @@ async function respondWithLoaderJson(
   // Strip the JSON-mode protocol parameter so loaders never see it in
   // ctx.query (which they may pass to entity adapters as filters).
   const loaderQuery = stripDataMarker(query);
-  const ctx = {
+  const ctx: unknown = {
     params: pageMatch.params,
     query: loaderQuery,
     url,
@@ -1259,10 +1258,10 @@ async function respondWithLoaderJson(
       return null;
     },
     bsCtx,
-    draftMode: () => ({ isEnabled: isDraftRequest(c as never) }),
-  } as never;
+    draftMode: () => ({ isEnabled: isDraftRequest(c) }),
+  };
 
-  const exec = await executeRouteModule(pageMatch, ctx);
+  const exec = await executeRouteModule(pageMatch, ctx as SsrLoadContext);
   const result = exec.loaderResult as never;
 
   if (isRedirect(result as never)) {

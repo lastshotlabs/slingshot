@@ -59,6 +59,7 @@ into `pluginState` under `COMMUNITY_PLUGIN_STATE_KEY` so legacy
 `getPublishedInteractionsPeerOrNull` callers keep working.
 
 ```ts
+// @skip-typecheck
 import { CommunityInteractionsPeerCap } from '@lastshotlabs/slingshot-community';
 import { getContext } from '@lastshotlabs/slingshot-core';
 

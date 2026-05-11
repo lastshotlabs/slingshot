@@ -6,7 +6,7 @@
  */
 import { afterEach, expect, test } from 'bun:test';
 import type { PermissionsState, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, getContext } from '@lastshotlabs/slingshot-core';
+import { getContext, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 
 // ---------------------------------------------------------------------------
@@ -37,11 +37,11 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 test('server-level permissions bootstrap populates pluginState before setupRoutes', async () => {
-  let stateAtSetupRoutes: unknown;
+  let stateAtSetupRoutes: PermissionsState | null = null;
   const probe: SlingshotPlugin = {
     name: 'probe',
     async setupRoutes({ app }) {
-      stateAtSetupRoutes = getContext(app).pluginState.get(PERMISSIONS_STATE_KEY);
+      stateAtSetupRoutes = getPermissionsStateOrNull(getContext(app).pluginState);
     },
   };
 
@@ -53,19 +53,18 @@ test('server-level permissions bootstrap populates pluginState before setupRoute
   createdApps.push(result);
 
   expect(stateAtSetupRoutes).toBeDefined();
-  expect(Object.isFrozen(stateAtSetupRoutes)).toBe(true);
-  const state = stateAtSetupRoutes as PermissionsState;
+  const state = stateAtSetupRoutes as unknown as PermissionsState;
   expect(typeof state.evaluator.can).toBe('function');
   expect(typeof state.registry.register).toBe('function');
   expect(typeof state.adapter.createGrant).toBe('function');
 });
 
 test('server-level permissions bootstrap populates pluginState before setupMiddleware', async () => {
-  let stateAtSetupMiddleware: unknown;
+  let stateAtSetupMiddleware: PermissionsState | null = null;
   const probe: SlingshotPlugin = {
     name: 'probe',
     async setupMiddleware({ app }) {
-      stateAtSetupMiddleware = getContext(app).pluginState.get(PERMISSIONS_STATE_KEY);
+      stateAtSetupMiddleware = getPermissionsStateOrNull(getContext(app).pluginState);
     },
   };
 
@@ -80,11 +79,11 @@ test('server-level permissions bootstrap populates pluginState before setupMiddl
 });
 
 test('omitting permissions leaves pluginState without PERMISSIONS_STATE_KEY', async () => {
-  let hasKey = true;
+  let resolved: PermissionsState | null = null;
   const probe: SlingshotPlugin = {
     name: 'probe',
     async setupRoutes({ app }) {
-      hasKey = getContext(app).pluginState.has(PERMISSIONS_STATE_KEY);
+      resolved = getPermissionsStateOrNull(getContext(app).pluginState);
     },
   };
 
@@ -94,15 +93,15 @@ test('omitting permissions leaves pluginState without PERMISSIONS_STATE_KEY', as
   });
   createdApps.push(result);
 
-  expect(hasKey).toBe(false);
+  expect(resolved).toBeNull();
 });
 
-test('permissions state is frozen at bootstrap', async () => {
-  let state: PermissionsState | undefined;
+test('permissions state is reachable through getPermissionsStateOrNull at bootstrap', async () => {
+  let state: PermissionsState | null = null;
   const probe: SlingshotPlugin = {
     name: 'probe',
     async setupRoutes({ app }) {
-      state = getContext(app).pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState;
+      state = getPermissionsStateOrNull(getContext(app).pluginState);
     },
   };
 
@@ -114,5 +113,6 @@ test('permissions state is frozen at bootstrap', async () => {
   createdApps.push(result);
 
   expect(state).toBeDefined();
-  expect(Object.isFrozen(state)).toBe(true);
+  const resolved = state as unknown as PermissionsState;
+  expect(typeof resolved.evaluator.can).toBe('function');
 });

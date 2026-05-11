@@ -40,8 +40,8 @@ export const billingPackage = definePackage({
           path: '/charge',
           middleware: ['idempotent'],
           request: { body: z.object({ amount: z.number(), currency: z.string() }) },
-          handler: async ({ input, respond }) => {
-            const charge = await processCharge(input.body);
+          handler: async ({ body, respond }) => {
+            const charge = await processCharge(body);
             return respond.json({ id: charge.id, status: 'captured' });
           },
         }),

@@ -17,6 +17,7 @@
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { OrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
 
+/** Provider-owned package contract for `slingshot-orchestration-plugin`. */
 export const Orchestration = definePackageContract('slingshot-orchestration');
 
 /** Typed capability handle resolving to the orchestration runtime. */

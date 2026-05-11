@@ -33,16 +33,18 @@ function parseCiphertext(ciphertext: string): { iv: Uint8Array; payload: Uint8Ar
 export function createAesGcmEncryptionProvider(
   config: ChatAesGcmEncryptionConfig,
 ): ChatEncryptionProvider {
-  let keyPromise: Promise<CryptoKey> | undefined;
+  let keyPromise: Promise<webcrypto.CryptoKey> | undefined;
 
-  const getKey = (): Promise<CryptoKey> => {
-    keyPromise ??= cryptoApi.subtle.importKey(
-      'raw',
-      Buffer.from(config.keyBase64, 'base64'),
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt'],
-    );
+  const getKey = (): Promise<webcrypto.CryptoKey> => {
+    if (!keyPromise) {
+      keyPromise = cryptoApi.subtle.importKey(
+        'raw',
+        Buffer.from(config.keyBase64, 'base64'),
+        { name: 'AES-GCM' },
+        false,
+        ['encrypt', 'decrypt'],
+      );
+    }
 
     return keyPromise;
   };

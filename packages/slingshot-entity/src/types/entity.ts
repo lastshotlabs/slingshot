@@ -4,6 +4,7 @@
 import type {
   EntityDtoConfig,
   EntityRouteConfig,
+  EntitySearchConfig,
   EntityStorageConventions,
   EntityStorageFieldMap,
   EntitySystemFields,
@@ -253,6 +254,8 @@ export interface EntityConfig<
   readonly tenant?: TenantConfig;
   readonly ttl?: EntityTtlConfig;
   readonly storage?: EntityStorageHints;
+  /** Search engine configuration. Declares searchable fields, sync strategy, etc. */
+  readonly search?: EntitySearchConfig;
   /**
    * Entity-level DTO mapping config. Declare `default` plus any named variants
    * (`list`, `admin`, `public`, …); routes pick a variant via `routes.<op>.dto`

@@ -9,11 +9,15 @@ import {
   PERMISSIONS_STATE_KEY,
   getActor,
   getContext,
-  publishPluginState,
+  provideCapability,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
 import { createOAuthPlugin } from '@lastshotlabs/slingshot-oauth';
 import {
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
   createMemoryPermissionsAdapter,
   createPermissionEvaluator,
   createPermissionRegistry,
@@ -195,7 +199,14 @@ export function communityPlugin(overrides: Partial<CommunityPluginConfig> = {}):
     ...plugin,
     dependencies: ['slingshot-auth', 'slingshot-notifications'],
     async setupMiddleware(ctx: PluginSetupContext) {
-      publishPluginState(getContext(ctx.app).pluginState, PERMISSIONS_STATE_KEY, permissionsState);
+      // Publish permissions via the capability contract so cross-package
+      // consumers (community plugin, admin plugin) resolve them through
+      // `getPermissionsStateOrNull` / `ctx.capabilities.require(...)`.
+      await registerPluginCapabilities(getContext(ctx.app), PERMISSIONS_STATE_KEY, [
+        provideCapability(PermissionsEvaluatorCap, () => permissionsState.evaluator),
+        provideCapability(PermissionsRegistryCap, () => permissionsState.registry),
+        provideCapability(PermissionsAdapterCap, () => permissionsState.adapter),
+      ]);
       await plugin.setupMiddleware?.(ctx);
     },
   };

@@ -457,8 +457,18 @@ export function getPermissionsStateOrNull(
   const slot = map.get('slingshot:package:capabilities:slingshot-permissions') as
     | { evaluator?: PermissionEvaluator; registry?: PermissionRegistry; adapter?: PermissionsAdapter }
     | undefined;
-  if (!slot?.evaluator || !slot.registry || !slot.adapter) return null;
-  return { evaluator: slot.evaluator, registry: slot.registry, adapter: slot.adapter };
+  if (slot?.evaluator && slot.registry && slot.adapter) {
+    return { evaluator: slot.evaluator, registry: slot.registry, adapter: slot.adapter };
+  }
+  // Fall back to the legacy PERMISSIONS_STATE_KEY slot for plugins/tests that publish
+  // permissions directly without going through the capability contract. Return the
+  // stored value as-is (instead of reconstructing) so reference-equality consumers
+  // continue to see the same object across reads.
+  const legacy = map.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+  if (legacy?.evaluator && legacy.registry && legacy.adapter) {
+    return legacy;
+  }
+  return null;
 }
 
 /**

@@ -5,7 +5,12 @@ import './events';
 /** Build the search plugin that discovers searchable entities, mounts routes, and wires indexing. */
 export { createSearchPlugin } from './plugin';
 
-// --- Provider-owned package contract for cross-package consumers ---
+/**
+ * Provider-owned package contract and capability handles for the search runtime.
+ *
+ * Cross-package consumers resolve search capabilities through this contract instead
+ * of reaching into plugin state directly.
+ */
 export { Search, SearchRuntimeCap } from './public';
 
 // --- Event-sync manager (used by package tests and operators wiring custom DLQ stores) ---

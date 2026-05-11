@@ -1,20 +1,22 @@
 # slingshot-search
 
-Enterprise search plugin with swappable providers, query parsing, index settings, and event
-sync hooks for keeping entity-backed indexes current.
+Enterprise search **package** with swappable providers, query parsing, index settings, and
+event sync hooks for keeping entity-backed indexes current. Authored via `definePackage(...)`
+and consumed through `createApp({ packages: [...] })`.
 
 ## Key Files
 
-| File                       | What                                                                |
-| -------------------------- | ------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for plugin, provider factories, and search types |
-| src/plugin.ts              | `createSearchPlugin()` factory                                      |
-| src/types/config.ts        | Search plugin config schema and admin gate types                    |
-| src/types/provider.ts      | Provider-specific config contracts                                  |
-| src/searchManager.ts       | Search manager orchestration                                        |
-| src/eventSync.ts           | Search sync event handling                                          |
-| src/providers/typesense.ts | Representative provider implementation                              |
-| docs/human/index.md        | Package guide synced into the docs site                             |
+| File                       | What                                                                 |
+| -------------------------- | -------------------------------------------------------------------- |
+| src/index.ts               | Public API surface for package, provider factories, and search types |
+| src/plugin.ts              | `createSearchPackage()` factory                                      |
+| src/public.ts              | `definePackageContract('slingshot-search')` + `SearchRuntimeCap`     |
+| src/types/config.ts        | Search package config schema and admin gate types                    |
+| src/types/provider.ts      | Provider-specific config contracts                                   |
+| src/searchManager.ts       | Search manager orchestration                                         |
+| src/eventSync.ts           | Search sync event handling                                           |
+| src/providers/typesense.ts | Representative provider implementation                               |
+| docs/human/index.md        | Package guide synced into the docs site                              |
 
 ## Connections
 

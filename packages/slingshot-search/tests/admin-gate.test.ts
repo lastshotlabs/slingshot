@@ -1,5 +1,5 @@
 /**
- * Tests for the adminGate startup warning in createSearchPlugin.
+ * Tests for the adminGate startup warning in createSearchPackage.
  *
  * Verifies that when admin routes are not disabled and no adminGate is configured,
  * a warning is emitted. No warning when adminGate is set or routes are disabled.
@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { Hono } from 'hono';
 import type { LogFields, Logger } from '@lastshotlabs/slingshot-core';
-import { createSearchPlugin } from '../src/plugin';
+import { createSearchPackage } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
 import type { SearchAdminGate } from '../src/types/config';
 
@@ -27,7 +27,7 @@ function makeSetupContext() {
     events: { get: () => null, register: () => {} } as unknown,
   };
   return context as unknown as Parameters<
-    NonNullable<ReturnType<typeof createSearchPlugin>['setupRoutes']>
+    NonNullable<ReturnType<typeof createSearchPackage>['setupRoutes']>
   >[0];
 }
 
@@ -35,7 +35,7 @@ function makeSetupContext() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('createSearchPlugin — adminGate startup warning', () => {
+describe('createSearchPackage — adminGate startup warning', () => {
   let warnings: string[];
   let logger: Logger;
 
@@ -55,7 +55,7 @@ describe('createSearchPlugin — adminGate startup warning', () => {
   });
 
   it('emits a warning when adminGate is not set and ADMIN route is not disabled', () => {
-    const plugin = createSearchPlugin(
+    const pkg = createSearchPackage(
       {
         providers: {
           default: { provider: 'db-native' },
@@ -64,7 +64,7 @@ describe('createSearchPlugin — adminGate startup warning', () => {
       { logger },
     );
 
-    plugin.setupRoutes!(makeSetupContext());
+    pkg.setupRoutes!(makeSetupContext());
 
     expect(warnings.some(m => m.includes('[slingshot-search]') && m.includes('adminGate'))).toBe(
       true,
@@ -76,7 +76,7 @@ describe('createSearchPlugin — adminGate startup warning', () => {
       verifyRequest: async () => true,
     };
 
-    const plugin = createSearchPlugin(
+    const pkg = createSearchPackage(
       {
         providers: {
           default: { provider: 'db-native' },
@@ -86,13 +86,13 @@ describe('createSearchPlugin — adminGate startup warning', () => {
       { logger },
     );
 
-    plugin.setupRoutes!(makeSetupContext());
+    pkg.setupRoutes!(makeSetupContext());
 
     expect(warnings.some(m => m.includes('adminGate'))).toBe(false);
   });
 
   it('does not emit a warning when the ADMIN route is explicitly disabled', () => {
-    const plugin = createSearchPlugin(
+    const pkg = createSearchPackage(
       {
         providers: {
           default: { provider: 'db-native' },
@@ -102,7 +102,7 @@ describe('createSearchPlugin — adminGate startup warning', () => {
       { logger },
     );
 
-    plugin.setupRoutes!(makeSetupContext());
+    pkg.setupRoutes!(makeSetupContext());
 
     expect(warnings.some(m => m.includes('adminGate'))).toBe(false);
   });

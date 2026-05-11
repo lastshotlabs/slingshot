@@ -4,8 +4,8 @@
  * Provides pre-configured search providers and plugins for use in tests.
  * Uses the DB-native (in-memory) provider — no external services required.
  */
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { createSearchPlugin } from './plugin';
+import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
+import { createSearchPackage } from './plugin';
 import { createDbNativeProvider } from './providers/dbNative';
 import type { SearchPluginConfig } from './types/config';
 import type { SearchProvider } from './types/provider';
@@ -32,29 +32,31 @@ export function createTestSearchProvider(): SearchProvider {
 }
 
 /**
- * Create a pre-configured search plugin with the DB-native provider for test apps.
+ * Create a pre-configured search package with the DB-native provider for test apps.
  *
- * Provides a zero-config search plugin suitable for `createApp()` in tests.
- * Uses `autoCreateIndexes: true` so entities with `search` config get indexes
- * without extra setup. Accepts optional overrides to customize the plugin config.
+ * Provides a zero-config search package suitable for `createApp({ packages: [...] })`
+ * in tests. Uses `autoCreateIndexes: true` so entities with `search` config get
+ * indexes without extra setup. Accepts optional overrides to customize the config.
  *
  * @param overrides - Optional partial `SearchPluginConfig` to merge on top of
  *   the test defaults.
- * @returns A `SlingshotPlugin` with name `'slingshot-search'`.
+ * @returns A `SlingshotPackageDefinition` ready for `createApp({ packages })`.
  *
  * @example
  * ```ts
- * import { createTestSearchPlugin } from '@lastshotlabs/slingshot-search/testing';
+ * import { createTestSearchPackage } from '@lastshotlabs/slingshot-search/testing';
  *
- * const search = createTestSearchPlugin();
+ * const search = createTestSearchPackage();
  * const { app } = await createApp({
  *   routesDir: import.meta.dir + '/routes',
- *   plugins: [search],
+ *   packages: [search],
  * });
  * ```
  */
-export function createTestSearchPlugin(overrides?: Partial<SearchPluginConfig>): SlingshotPlugin {
-  return createSearchPlugin({
+export function createTestSearchPackage(
+  overrides?: Partial<SearchPluginConfig>,
+): SlingshotPackageDefinition {
+  return createSearchPackage({
     providers: {
       default: { provider: 'db-native' },
     },

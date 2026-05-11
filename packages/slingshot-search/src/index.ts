@@ -1,9 +1,9 @@
 // --- Events (module augmentation — imported for side effects) ---
 import './events';
 
-// --- Plugin ---
-/** Build the search plugin that discovers searchable entities, mounts routes, and wires indexing. */
-export { createSearchPlugin } from './plugin';
+// --- Package ---
+/** Build the search package that discovers searchable entities, mounts routes, and wires indexing. */
+export { createSearchPackage } from './plugin';
 
 /**
  * Provider-owned package contract and capability handles for the search runtime.

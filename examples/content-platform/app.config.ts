@@ -7,7 +7,7 @@ import { createCommunityPlugin } from '../../packages/slingshot-community/src/in
 import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
 import { createNotificationsPlugin } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
-import { createSearchPlugin } from '../../packages/slingshot-search/src/index.ts';
+import { createSearchPackage } from '../../packages/slingshot-search/src/index.ts';
 import { createSsrPlugin } from '../../packages/slingshot-ssr/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 import { renderer } from './src/renderer.ts';
@@ -53,11 +53,6 @@ export default defineApp({
       presignedUrls: true,
       image: { allowedOrigins: ['assets.example.com'] },
     }),
-    createSearchPlugin({
-      providers: {
-        default: { provider: 'db-native' },
-      },
-    }),
     createDeepLinksPlugin({
       fallbackBaseUrl: 'https://content.example.com',
       fallbackRedirects: {
@@ -71,6 +66,13 @@ export default defineApp({
       staticDir,
       draftModeSecret: process.env.DRAFT_MODE_SECRET ?? 'draft-secret',
       isr: { adapter: createKvIsrCache(inMemoryKv) },
+    }),
+  ],
+  packages: [
+    createSearchPackage({
+      providers: {
+        default: { provider: 'db-native' },
+      },
     }),
   ],
 });

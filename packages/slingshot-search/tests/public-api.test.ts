@@ -1,33 +1,34 @@
 import { describe, expect, test } from 'bun:test';
 import * as entry from '../src/index';
-import { createSearchPlugin } from '../src/plugin';
+import { createSearchPackage } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
-import { createTestSearchPlugin, createTestSearchProvider } from '../src/testing';
+import { createTestSearchPackage, createTestSearchProvider } from '../src/testing';
 import { searchPluginConfigSchema } from '../src/types/config';
 
 describe('slingshot-search public api', () => {
   test('entrypoint re-exports plugin and route ids', () => {
-    expect(entry.createSearchPlugin).toBe(createSearchPlugin);
+    expect(entry.createSearchPackage).toBe(createSearchPackage);
     expect(entry.SEARCH_ROUTES).toBe(SEARCH_ROUTES);
   });
 
   test('testing helpers provide a db-native provider and plugin surface', () => {
     const provider = createTestSearchProvider();
-    const plugin = createTestSearchPlugin({
+    const pkg = createTestSearchPackage({
       disableRoutes: [SEARCH_ROUTES.ADMIN],
     });
 
     expect(typeof provider.connect).toBe('function');
     expect(typeof provider.teardown).toBe('function');
     expect(typeof provider.search).toBe('function');
-    expect(plugin.name).toBe('slingshot-search');
-    expect(typeof plugin.setupRoutes).toBe('function');
-    expect(typeof plugin.setupPost).toBe('function');
+    expect(pkg.kind).toBe('package');
+    expect(pkg.name).toBe('slingshot-search');
+    expect(typeof pkg.setupRoutes).toBe('function');
+    expect(typeof pkg.setupPost).toBe('function');
   });
 
-  test('createSearchPlugin validates adminGate adapters at construction time', () => {
+  test('createSearchPackage validates adminGate adapters at construction time', () => {
     expect(() =>
-      createSearchPlugin({
+      createSearchPackage({
         providers: {
           default: { provider: 'db-native' },
         },
@@ -36,9 +37,9 @@ describe('slingshot-search public api', () => {
     ).toThrow(/verifyRequest/);
   });
 
-  test('createSearchPlugin rejects mountPath values without a leading slash', () => {
+  test('createSearchPackage rejects mountPath values without a leading slash', () => {
     expect(() =>
-      createSearchPlugin({
+      createSearchPackage({
         providers: {
           default: { provider: 'db-native' },
         },

@@ -1,31 +1,24 @@
 import { Command, Flags } from '@oclif/core';
-import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
-import { parseAndResolveMultiEntityManifest, writeGenerated } from '@lastshotlabs/slingshot-entity';
+import { writeGenerated } from '@lastshotlabs/slingshot-entity';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
 export default class Generate extends Command {
   static override description =
-    'Generate source files for entity definitions. Accepts a TypeScript definition file (--definition) or a JSON multi-entity manifest (--manifest).';
+    'Generate source files for entity definitions. Accepts a TypeScript file that exports one or more ResolvedEntityConfig values (e.g. results of defineEntity()).';
 
   static override examples = [
     '<%= config.bin %> generate --definition ./src/entities/message.ts --outdir ./src/generated/message',
     '<%= config.bin %> generate --definition ./src/entities/message.ts --outdir ./src/generated/message --migration',
-    '<%= config.bin %> generate --manifest ./slingshot.entities.json --outdir ./src/generated',
-    '<%= config.bin %> generate --manifest ./slingshot.entities.json --outdir ./src/generated --dry-run',
+    '<%= config.bin %> generate --definition ./src/entities/index.ts --outdir ./src/generated --dry-run',
   ];
 
   static override flags = {
     definition: Flags.string({
       char: 'd',
-      description: 'Path to the entity definition file (must export a ResolvedEntityConfig)',
-      exclusive: ['manifest'],
-    }),
-    manifest: Flags.string({
-      char: 'm',
       description:
-        'Path to a JSON multi-entity manifest file. Each entity is generated into {outdir}/{entityName}.',
-      exclusive: ['definition'],
+        'Path to a TypeScript module exporting one or more ResolvedEntityConfig values from defineEntity()',
+      required: true,
     }),
     outdir: Flags.string({
       char: 'o',
@@ -54,49 +47,7 @@ export default class Generate extends Command {
     const dryRun = flags['dry-run'];
     const outDir = resolve(flags.outdir);
 
-    if (flags.manifest) {
-      this.runManifest(flags.manifest, { outDir, snapshotDir, migration, dryRun });
-    } else if (flags.definition) {
-      await this.runDefinition(flags.definition, { outDir, snapshotDir, migration, dryRun });
-    } else {
-      this.error('One of --definition or --manifest is required.');
-    }
-  }
-
-  private runManifest(
-    manifestPath: string,
-    opts: { outDir: string; snapshotDir: string; migration: boolean; dryRun: boolean },
-  ): void {
-    const absPath = resolve(manifestPath);
-
-    let raw: unknown;
-    try {
-      raw = JSON.parse(readFileSync(absPath, 'utf-8'));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.error(`Failed to read manifest from '${absPath}': ${message}`);
-    }
-
-    let resolved: Awaited<ReturnType<typeof parseAndResolveMultiEntityManifest>>;
-    try {
-      resolved = parseAndResolveMultiEntityManifest(raw);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.error(`Invalid manifest: ${message}`);
-    }
-
-    for (const [entityName, { config, operations }] of Object.entries(resolved.entities)) {
-      const entityOutDir = join(opts.outDir, entityName);
-      const files = writeGenerated(config, {
-        outDir: entityOutDir,
-        dryRun: opts.dryRun,
-        snapshotDir: opts.snapshotDir,
-        migration: opts.migration,
-        operations,
-      });
-
-      this.logEntityResult(entityName, entityOutDir, files, opts.dryRun, opts.migration);
-    }
+    await this.runDefinition(flags.definition, { outDir, snapshotDir, migration, dryRun });
   }
 
   private async runDefinition(
@@ -113,22 +64,37 @@ export default class Generate extends Command {
       this.error(`Failed to import entity definition from '${absPath}': ${message}`);
     }
 
-    const config = findEntityConfig(entityModule);
-    if (!config) {
+    const configs = findEntityConfigs(entityModule);
+    if (configs.length === 0) {
       this.error(
         `No ResolvedEntityConfig export found in '${absPath}'. ` +
-          `Ensure the file exports a value created by defineEntity().`,
+          `Ensure the file exports one or more values created by defineEntity().`,
       );
     }
 
-    const files = writeGenerated(config, {
-      outDir: opts.outDir,
-      dryRun: opts.dryRun,
-      snapshotDir: opts.snapshotDir,
-      migration: opts.migration,
-    });
+    if (configs.length === 1) {
+      const [config] = configs;
+      if (!config) return;
+      const files = writeGenerated(config, {
+        outDir: opts.outDir,
+        dryRun: opts.dryRun,
+        snapshotDir: opts.snapshotDir,
+        migration: opts.migration,
+      });
+      this.logEntityResult(config.name, opts.outDir, files, opts.dryRun, opts.migration);
+      return;
+    }
 
-    this.logEntityResult(config.name, opts.outDir, files, opts.dryRun, opts.migration);
+    for (const config of configs) {
+      const entityOutDir = join(opts.outDir, config.name);
+      const files = writeGenerated(config, {
+        outDir: entityOutDir,
+        dryRun: opts.dryRun,
+        snapshotDir: opts.snapshotDir,
+        migration: opts.migration,
+      });
+      this.logEntityResult(config.name, entityOutDir, files, opts.dryRun, opts.migration);
+    }
   }
 
   private logEntityResult(
@@ -142,7 +108,7 @@ export default class Generate extends Command {
     const sourceFiles = Object.keys(files).filter(f => !f.startsWith('migrations/'));
 
     if (dryRun) {
-      this.log(`Generated files (dry run):`);
+      this.log(`${entityName}: generated files (dry run):`);
       for (const filename of Object.keys(files)) {
         this.log(`  ${filename}`);
       }
@@ -162,13 +128,16 @@ export default class Generate extends Command {
   }
 }
 
-function findEntityConfig(mod: Record<string, unknown>): ResolvedEntityConfig | null {
+function findEntityConfigs(mod: Record<string, unknown>): ResolvedEntityConfig[] {
+  const found: ResolvedEntityConfig[] = [];
+  const seen = new Set<string>();
   for (const value of Object.values(mod)) {
-    if (isResolvedEntityConfig(value)) {
-      return value;
+    if (isResolvedEntityConfig(value) && !seen.has(value.name)) {
+      seen.add(value.name);
+      found.push(value);
     }
   }
-  return null;
+  return found;
 }
 
 function isResolvedEntityConfig(value: unknown): value is ResolvedEntityConfig {

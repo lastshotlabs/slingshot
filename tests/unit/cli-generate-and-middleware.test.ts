@@ -35,14 +35,12 @@ afterEach(() => {
 });
 
 describe('generate command and framework middleware', () => {
-  test('generates entities from both manifests and definition exports', async () => {
+  test('generates entities from a definition module export', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'slingshot-generate-'));
-    const manifestPath = join(tempDir, 'entities.json');
     const definitionPath = join(tempDir, 'entity.ts');
     const outDir = join(tempDir, 'generated');
     const calls: Array<{ kind: string; outDir: string; migration: boolean; dryRun: boolean }> = [];
 
-    writeFileSync(manifestPath, '{"manifestVersion":1}\n', 'utf8');
     writeFileSync(
       definitionPath,
       'export const User = { name: "User", fields: {}, _pkField: "id", _storageName: "users" };\n',
@@ -50,14 +48,6 @@ describe('generate command and framework middleware', () => {
     );
 
     mock.module('@lastshotlabs/slingshot-entity', () => ({
-      parseAndResolveMultiEntityManifest: () => ({
-        entities: {
-          User: {
-            config: { name: 'User', fields: {}, _pkField: 'id', _storageName: 'users' },
-            operations: { create: true },
-          },
-        },
-      }),
       writeGenerated: (
         config: { name: string },
         options: { outDir: string; migration: boolean; dryRun: boolean },
@@ -76,20 +66,6 @@ describe('generate command and framework middleware', () => {
 
     const Generate = (await import(`../../src/cli/commands/generate.ts?gen=${Date.now()}`)).default;
 
-    const manifestCommand = new Generate(
-      ['--manifest', manifestPath, '--outdir', outDir, '--dry-run'],
-      makeOclifConfig() as never,
-    );
-    const manifestLogs = captureLogs(manifestCommand);
-    await manifestCommand.run();
-    expect(manifestLogs.join('\n')).toContain('Generated files (dry run):');
-    expect(calls[0]).toEqual({
-      kind: 'User',
-      outDir: join(outDir, 'User'),
-      migration: false,
-      dryRun: true,
-    });
-
     const definitionCommand = new Generate(
       ['--definition', definitionPath, '--outdir', outDir, '--migration'],
       makeOclifConfig() as never,
@@ -98,7 +74,7 @@ describe('generate command and framework middleware', () => {
     await definitionCommand.run();
     expect(definitionLogs.join('\n')).toContain('User: generated 1 source file(s)');
     expect(definitionLogs.join('\n')).toContain('User: generated 1 migration file(s):');
-    expect(calls[1]).toEqual({
+    expect(calls[0]).toEqual({
       kind: 'User',
       outDir,
       migration: true,

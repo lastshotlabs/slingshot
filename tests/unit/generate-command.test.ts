@@ -98,7 +98,7 @@ describe('slingshot generate CLI', () => {
     await cmd.run();
 
     const output = logs.join('\n');
-    expect(output).toContain('Generated files (dry run):');
+    expect(output).toContain('Order: generated files (dry run):');
     expect(output).toContain('types.ts');
     expect(output).toContain('schemas.ts');
     expect(output).toContain('adapter.ts');
@@ -149,29 +149,36 @@ describe('slingshot generate CLI', () => {
     expect(output).toContain('migrations/mongo.js');
   });
 
-  it('dry-run with --manifest generates files for each entity', async () => {
-    const manifestPath = join(TMP_ROOT, 'entities.json');
+  it('dry-run with a multi-entity definition generates files for each entity', async () => {
+    const multiDef = join(TMP_ROOT, 'multi-entity.ts');
     writeFileSync(
-      manifestPath,
-      JSON.stringify({
-        manifestVersion: 1,
-        namespace: 'shop',
-        entities: {
-          Product: {
-            fields: {
-              id: { type: 'string', primary: true, default: 'uuid' },
-              name: { type: 'string' },
-              price: { type: 'number', default: 0 },
-            },
-          },
-        },
-      }),
+      multiDef,
+      `import { defineEntity, field, index } from '${SLINGSHOT_ENTITY_PATH}';
+
+export const ProductEntity = defineEntity('Product', {
+  namespace: 'shop',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    name: field.string(),
+    price: field.number({ default: 0 }),
+  },
+});
+
+export const CategoryEntity = defineEntity('Category', {
+  namespace: 'shop',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    name: field.string(),
+  },
+  indexes: [index(['name'])],
+});
+`,
       'utf-8',
     );
 
     const cmd = makeCommand([
-      '--manifest',
-      manifestPath,
+      '--definition',
+      multiDef,
       '--outdir',
       OUT_DIR,
       '--snapshot-dir',
@@ -187,36 +194,22 @@ describe('slingshot generate CLI', () => {
     await cmd.run();
 
     const output = logs.join('\n');
-    expect(output).toContain('Generated files (dry run):');
-    expect(output).toContain('types.ts');
+    expect(output).toContain('Product: generated files (dry run):');
+    expect(output).toContain('Category: generated files (dry run):');
   });
 
-  it('errors on invalid manifest JSON', async () => {
-    const manifestPath = join(TMP_ROOT, 'bad.json');
-    writeFileSync(manifestPath, '{ not valid json }', 'utf-8');
+  it('errors when the definition module exports no entity configs', async () => {
+    const emptyDef = join(TMP_ROOT, 'empty.ts');
+    writeFileSync(emptyDef, `export const notAnEntity = { foo: 'bar' };\n`, 'utf-8');
 
-    const cmd = makeCommand(['--manifest', manifestPath, '--outdir', OUT_DIR]);
+    const cmd = makeCommand(['--definition', emptyDef, '--outdir', OUT_DIR]);
 
     spyOn(cmd, 'log').mockImplementation(() => {});
     spyOn(cmd, 'error').mockImplementation((msg: string) => {
       throw new Error(msg);
     });
 
-    await expect(cmd.run()).rejects.toThrow(/Failed to read manifest/);
-  });
-
-  it('errors on invalid manifest schema', async () => {
-    const manifestPath = join(TMP_ROOT, 'bad-schema.json');
-    writeFileSync(manifestPath, JSON.stringify({ wrong: 'data' }), 'utf-8');
-
-    const cmd = makeCommand(['--manifest', manifestPath, '--outdir', OUT_DIR]);
-
-    spyOn(cmd, 'log').mockImplementation(() => {});
-    spyOn(cmd, 'error').mockImplementation((msg: string) => {
-      throw new Error(msg);
-    });
-
-    await expect(cmd.run()).rejects.toThrow(/Invalid manifest/);
+    await expect(cmd.run()).rejects.toThrow(/No ResolvedEntityConfig export found/);
   });
 
   it('dry-run with --migration and no prior snapshot emits no migration files', async () => {
@@ -239,7 +232,7 @@ describe('slingshot generate CLI', () => {
     await cmd.run();
 
     const output = logs.join('\n');
-    expect(output).toContain('Generated files (dry run):');
+    expect(output).toContain('Order: generated files (dry run):');
     expect(output).not.toContain('migrations/');
   });
 });

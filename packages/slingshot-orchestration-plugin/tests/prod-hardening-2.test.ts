@@ -21,7 +21,7 @@ import {
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY } from '../src/context';
-import { createOrchestrationPlugin } from '../src/plugin';
+import { createOrchestrationPackage } from '../src/plugin';
 
 const noopTask = defineTask({
   name: 'noop-task',
@@ -65,7 +65,7 @@ describe('adminAuth — edge cases', () => {
   test('adminAuth returning Response denies access with that response', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -94,7 +94,7 @@ describe('adminAuth — edge cases', () => {
   test('adminAuth returning error response denies access with structured error', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -124,7 +124,7 @@ describe('adminAuth — edge cases', () => {
     let middlewareRan = false;
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -154,7 +154,7 @@ describe('routeMiddleware — ordering and execution', () => {
     const order: number[] = [];
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -189,7 +189,7 @@ describe('routeMiddleware — ordering and execution', () => {
   test('middleware can short-circuit before reaching the handler', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -219,7 +219,7 @@ describe('plugin — routePrefix customization', () => {
   test('custom routePrefix mounts routes at that path', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routePrefix: '/jobs',
@@ -242,7 +242,7 @@ describe('plugin — routePrefix customization', () => {
   test('routes at default prefix still work when custom prefix is set', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routePrefix: '/jobs',
@@ -267,7 +267,7 @@ describe('plugin — routePrefix customization', () => {
 describe('plugin — event sink integration with bus', () => {
   test('plugin stores runtime in pluginState after setupRoutes with adapter', async () => {
     const realAdapter = createMemoryAdapter({ concurrency: 1 });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter: realAdapter,
       tasks: [noopTask],
       routes: false,
@@ -293,7 +293,7 @@ describe('plugin — event sink integration with bus', () => {
 
   test('runtime in pluginState can execute a task', async () => {
     const realAdapter = createMemoryAdapter({ concurrency: 1 });
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter: realAdapter,
       tasks: [noopTask],
       routes: false,
@@ -321,7 +321,7 @@ describe('plugin — event sink integration with bus', () => {
 
   test('teardown disposes the event sink', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,

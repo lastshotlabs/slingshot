@@ -3,11 +3,7 @@ import './events';
 /**
  * Slingshot-specific integration surface for the portable orchestration runtime.
  */
-export { createOrchestrationPlugin } from './plugin';
-/**
- * Health snapshot returned by the orchestration plugin instance.
- */
-export type { OrchestrationPluginHealth } from './plugin';
+export { createOrchestrationPackage } from './plugin';
 /**
  * Runtime lookup helpers and the plugin name used by Slingshot integrations.
  */

@@ -1,10 +1,14 @@
+import type {
+  PluginSetupContext,
+  SlingshotPackageDefinition,
+} from '@lastshotlabs/slingshot-core';
 import {
   createConsoleLogger,
+  definePackage,
   getContext,
   provideCapability,
   registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
-import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
   type OrchestrationRuntime,
@@ -21,20 +25,6 @@ const logger = createConsoleLogger({ base: { component: 'slingshot-orchestration
 const DEFAULT_START_MAX_ATTEMPTS = 1;
 const DEFAULT_START_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_CAP_MS = 30_000;
-
-/**
- * Cached health snapshot returned by `createOrchestrationPlugin().getHealth()`.
- *
- * The plugin reports `degraded` until a provided adapter has started. Apps that
- * pass a prebuilt runtime are considered adapter-available immediately because
- * lifecycle ownership stays outside this plugin.
- */
-export interface OrchestrationPluginHealth {
-  /** Coarse plugin state suitable for admin health summaries. */
-  readonly status: 'healthy' | 'degraded';
-  /** `true` once the plugin-owned adapter has successfully started. */
-  readonly adapterAvailable: boolean;
-}
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -56,7 +46,7 @@ async function startAdapterWithRetry(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await adapter.start();
-      return; // success
+      return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt < maxAttempts) {
@@ -72,15 +62,15 @@ async function startAdapterWithRetry(
 }
 
 /**
- * Create the Slingshot integration layer for the portable orchestration runtime.
+ * Create the Slingshot integration package for the portable orchestration runtime.
  *
- * The plugin publishes the runtime through `ctx.pluginState`, bridges lifecycle events
+ * Publishes the runtime through `OrchestrationRuntimeCap`, bridges lifecycle events
  * onto `ctx.bus`, optionally mounts HTTP routes, and manages adapter startup/shutdown
  * when an adapter instance is provided instead of a pre-built runtime.
  */
-export function createOrchestrationPlugin(
+export function createOrchestrationPackage(
   options: ConfigurableOrchestrationPluginOptions,
-): SlingshotPlugin & { getHealth(): OrchestrationPluginHealth } {
+): SlingshotPackageDefinition {
   const workflows = options.workflows ?? [];
   const routes = options.routes ?? true;
   const routePrefix = options.routePrefix ?? '/orchestration';
@@ -90,20 +80,20 @@ export function createOrchestrationPlugin(
   const providedAdapter = 'adapter' in options ? options.adapter : undefined;
   const startMaxAttempts = options.startMaxAttempts ?? DEFAULT_START_MAX_ATTEMPTS;
   const startBackoffMs = options.startBackoffMs ?? DEFAULT_START_BACKOFF_MS;
+
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
   let eventSink: SlingshotEventSink | null = null;
-  /** Tracks whether the adapter (when provided) has started successfully. */
-  let adapterStarted = providedAdapter === undefined;
 
-  return {
+  return definePackage({
     name: ORCHESTRATION_PLUGIN_KEY,
     dependencies: [],
+
     async setupRoutes({ app, bus }: PluginSetupContext) {
       if (!runtime) {
         if (!providedAdapter) {
           throw new OrchestrationError(
             'INVALID_CONFIG',
-            'Orchestration plugin requires either a runtime or an adapter.',
+            'Orchestration package requires either a runtime or an adapter.',
           );
         }
         eventSink = createSlingshotEventSink(bus);
@@ -115,6 +105,11 @@ export function createOrchestrationPlugin(
         });
       }
 
+      // Imperative capability publish — the framework's capabilities.provides
+      // resolver runs at setupMiddleware time, before setupRoutes creates the
+      // runtime. Publishing here keeps the package-capabilities pluginState
+      // slot populated immediately after setupRoutes for both framework-driven
+      // boots and isolated lifecycle tests.
       await registerPluginCapabilities(getContext(app), ORCHESTRATION_PLUGIN_KEY, [
         provideCapability(OrchestrationRuntimeCap, () => runtime),
       ]);
@@ -140,12 +135,13 @@ export function createOrchestrationPlugin(
       });
       app.route(routePrefix, router);
     },
+
     async setupPost() {
       if (providedAdapter) {
         await startAdapterWithRetry(providedAdapter, startMaxAttempts, startBackoffMs);
-        adapterStarted = true;
       }
     },
+
     async teardown() {
       try {
         if (providedAdapter) {
@@ -158,9 +154,5 @@ export function createOrchestrationPlugin(
         }
       }
     },
-    getHealth(): OrchestrationPluginHealth {
-      const status: 'healthy' | 'degraded' = adapterStarted ? 'healthy' : 'degraded';
-      return { status, adapterAvailable: adapterStarted };
-    },
-  };
+  });
 }

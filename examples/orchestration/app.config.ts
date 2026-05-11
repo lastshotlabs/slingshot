@@ -1,7 +1,7 @@
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 import { createBillingApiPlugin } from './src/billingPlugin.ts';
 import {
   orchestrationTasks,
@@ -23,7 +23,10 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createOrchestrationPlugin({
+    createBillingApiPlugin(),
+  ],
+  packages: [
+    createOrchestrationPackage({
       adapter: createMemoryAdapter({ concurrency: 10 }),
       tasks: orchestrationTasks,
       workflows: orchestrationWorkflows,
@@ -32,6 +35,5 @@ export default defineApp({
       routeMiddleware: [requireOperationsKey],
       resolveRequestContext: resolveOperationsRequestContext,
     }),
-    createBillingApiPlugin(),
   ],
 });

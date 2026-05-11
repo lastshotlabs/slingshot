@@ -10,7 +10,7 @@ import { OrchestrationRuntimeCap } from './public';
 export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration';
 
 /**
- * Read the orchestration runtime published by `createOrchestrationPlugin()`.
+ * Read the orchestration runtime published by `createOrchestrationPackage()`.
  *
  * Resolves through the typed `OrchestrationRuntimeCap` contract capability. Throws
  * when the plugin has not been registered for the current app instance.
@@ -24,7 +24,7 @@ export function getOrchestration(ctx: SlingshotContext): OrchestrationRuntime {
   if (!runtime) {
     throw new OrchestrationError(
       'ADAPTER_ERROR',
-      'Orchestration plugin is not registered. Add createOrchestrationPlugin() to your plugins array.',
+      'Orchestration plugin is not registered. Add createOrchestrationPackage() to your plugins array.',
     );
   }
   return runtime;

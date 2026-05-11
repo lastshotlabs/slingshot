@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createBullMQOrchestrationAdapter } from '../../packages/slingshot-orchestration-bullmq/src/index.ts';
-import { createOrchestrationPlugin } from '../../packages/slingshot-orchestration-plugin/src/index.ts';
+import { createOrchestrationPackage } from '../../packages/slingshot-orchestration-plugin/src/index.ts';
 import {
   OrchestrationError,
   defineTask,
@@ -110,7 +110,9 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createOrchestrationPlugin({
+  ],
+  packages: [
+    createOrchestrationPackage({
       adapter,
       tasks: [sendEmail],
       workflows: [onboardCustomerWorkflow],

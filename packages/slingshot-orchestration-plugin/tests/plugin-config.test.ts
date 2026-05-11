@@ -1,6 +1,6 @@
 // packages/slingshot-orchestration-plugin/tests/plugin-config.test.ts
 //
-// Tests for the createOrchestrationPlugin configuration validation:
+// Tests for the createOrchestrationPackage configuration validation:
 // - Adapter type resolution (adapter vs runtime)
 // - Invalid config rejection
 // - routes option interaction with routeMiddleware
@@ -22,7 +22,7 @@ import {
   defineWorkflow,
   sleep,
 } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '../src/plugin';
+import { createOrchestrationPackage } from '../src/plugin';
 
 const noopTask = defineTask({
   name: 'noop-task',
@@ -67,12 +67,12 @@ function setupPluginState(app: Hono) {
   return pluginState;
 }
 
-describe('createOrchestrationPlugin — adapter type resolution', () => {
+describe('createOrchestrationPackage — adapter type resolution', () => {
   test('accepts a prebuilt runtime and uses it directly', () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: false,
@@ -85,7 +85,7 @@ describe('createOrchestrationPlugin — adapter type resolution', () => {
 
   test('accepts an adapter and builds an internal runtime', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -97,7 +97,7 @@ describe('createOrchestrationPlugin — adapter type resolution', () => {
   });
 
   test('throws INVALID_CONFIG during setupRoutes when neither adapter nor runtime is provided', () => {
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       // @ts-expect-error - testing missing adapter/runtime
       tasks: [noopTask],
       routes: false,
@@ -112,7 +112,7 @@ describe('createOrchestrationPlugin — adapter type resolution', () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter: makeMockAdapter(), tasks: [noopTask] });
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       // @ts-expect-error - testing conflicting adapter/runtime
       adapter,
       runtime,
@@ -127,10 +127,10 @@ describe('createOrchestrationPlugin — adapter type resolution', () => {
   });
 });
 
-describe('createOrchestrationPlugin — task and workflow registration', () => {
+describe('createOrchestrationPackage — task and workflow registration', () => {
   test('registers tasks with adapter during setupRoutes', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -146,7 +146,7 @@ describe('createOrchestrationPlugin — task and workflow registration', () => {
 
   test('registers workflows with adapter during setupRoutes', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       workflows: [noopWorkflow],
@@ -162,7 +162,7 @@ describe('createOrchestrationPlugin — task and workflow registration', () => {
 
   test('does not crash with empty workflows array', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       workflows: [],
@@ -173,10 +173,10 @@ describe('createOrchestrationPlugin — task and workflow registration', () => {
   });
 });
 
-describe('createOrchestrationPlugin — routes option interaction', () => {
+describe('createOrchestrationPackage — routes option interaction', () => {
   test('throws INVALID_CONFIG when routes is true and routeMiddleware is empty (default)', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -191,7 +191,7 @@ describe('createOrchestrationPlugin — routes option interaction', () => {
 
   test('accepts routes:true with routeMiddleware provided', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -211,7 +211,7 @@ describe('createOrchestrationPlugin — routes option interaction', () => {
 
   test('does not throw when routes is false even with empty routeMiddleware', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,

@@ -23,8 +23,8 @@ const noopTask = defineTask({
 });
 
 describe('plugin public exports', () => {
-  test('exports createOrchestrationPlugin', () => {
-    expect(typeof pluginExports.createOrchestrationPlugin).toBe('function');
+  test('exports createOrchestrationPackage', () => {
+    expect(typeof pluginExports.createOrchestrationPackage).toBe('function');
   });
 
   test('exports getOrchestration and getOrchestrationOrNull', () => {
@@ -64,7 +64,7 @@ describe('OrchestrationRequestContext shape — resolved through route resolver'
       tasks: [noopTask],
     });
 
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -92,7 +92,7 @@ describe('OrchestrationRequestContext shape — resolved through route resolver'
       tasks: [noopTask],
     });
 
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,
@@ -123,7 +123,7 @@ describe('OrchestrationRequestContext shape — resolved through route resolver'
 describe('OrchestrationPluginOptions — discriminated union', () => {
   test('adapter-provided options work without runtime', () => {
     const adapter = createMemoryAdapter({ concurrency: 1 });
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -134,7 +134,7 @@ describe('OrchestrationPluginOptions — discriminated union', () => {
   test('runtime-provided options work without adapter', () => {
     const adapter = createMemoryAdapter({ concurrency: 1 });
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: false,
@@ -146,7 +146,7 @@ describe('OrchestrationPluginOptions — discriminated union', () => {
 describe('ConfigurableOrchestrationPluginOptions — route options combine with union', () => {
   test('accepts all route options alongside adapter', () => {
     const adapter = createMemoryAdapter({ concurrency: 1 });
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -169,7 +169,7 @@ describe('ConfigurableOrchestrationPluginOptions — route options combine with 
   test('accepts all route options alongside runtime', () => {
     const adapter = createMemoryAdapter({ concurrency: 1 });
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
-    const plugin = pluginExports.createOrchestrationPlugin({
+    const plugin = pluginExports.createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: true,

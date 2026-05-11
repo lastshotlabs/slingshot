@@ -15,7 +15,7 @@ import {
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
-import { createOrchestrationPlugin } from '../src/plugin';
+import { createOrchestrationPackage } from '../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -68,25 +68,25 @@ function makeMockAdapter() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('createOrchestrationPlugin — metadata', () => {
+describe('createOrchestrationPackage — metadata', () => {
   test('plugin has the correct name', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({ adapter, tasks: [noopTask], routes: false });
+    const plugin = createOrchestrationPackage({ adapter, tasks: [noopTask], routes: false });
     expect(plugin.name).toBe(ORCHESTRATION_PLUGIN_KEY);
     expect(plugin.name).toBe('slingshot-orchestration');
   });
 
   test('plugin has empty dependencies array', () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({ adapter, tasks: [noopTask], routes: false });
+    const plugin = createOrchestrationPackage({ adapter, tasks: [noopTask], routes: false });
     expect(plugin.dependencies).toEqual([]);
   });
 });
 
-describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
+describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
   test('throws INVALID_CONFIG when routeMiddleware is empty', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -109,7 +109,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
 
   test('throws with correct message about routeMiddleware requirement', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -133,7 +133,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
   test('mounts routes when routeMiddleware is provided', async () => {
     const adapter = makeMockAdapter();
     const guardCalled: boolean[] = [];
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: true,
@@ -154,7 +154,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
 
   test('publishes runtime on pluginState after setupRoutes', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -170,10 +170,10 @@ describe('createOrchestrationPlugin — setupRoutes with routes: true', () => {
   });
 });
 
-describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
+describe('createOrchestrationPackage — setupRoutes with routes: false', () => {
   test('does not throw when routes: false and routeMiddleware is empty', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -188,7 +188,7 @@ describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
 
   test('still publishes runtime on pluginState when routes: false', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -204,10 +204,10 @@ describe('createOrchestrationPlugin — setupRoutes with routes: false', () => {
   });
 });
 
-describe('createOrchestrationPlugin — setupPost / teardown with adapter', () => {
+describe('createOrchestrationPackage — setupPost / teardown with adapter', () => {
   test('setupPost calls adapter.start()', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -220,7 +220,7 @@ describe('createOrchestrationPlugin — setupPost / teardown with adapter', () =
 
   test('teardown calls adapter.shutdown()', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -232,14 +232,14 @@ describe('createOrchestrationPlugin — setupPost / teardown with adapter', () =
   });
 });
 
-describe('createOrchestrationPlugin — setupPost / teardown with runtime', () => {
+describe('createOrchestrationPackage — setupPost / teardown with runtime', () => {
   test('setupPost does not call start when a prebuilt runtime is provided', async () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter, tasks: [noopTask] });
     const startSpy = mock(async () => {});
     adapter.start = startSpy;
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: false,
@@ -257,7 +257,7 @@ describe('createOrchestrationPlugin — setupPost / teardown with runtime', () =
     const shutdownSpy = mock(async () => {});
     adapter.shutdown = shutdownSpy;
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       runtime,
       tasks: [noopTask],
       routes: false,
@@ -269,7 +269,7 @@ describe('createOrchestrationPlugin — setupPost / teardown with runtime', () =
   });
 });
 
-describe('createOrchestrationPlugin — setupPost retry behavior', () => {
+describe('createOrchestrationPackage — setupPost retry behavior', () => {
   test('retries adapter.start() on failure when startMaxAttempts > 1', async () => {
     let callCount = 0;
     const failingAdapter = makeMockAdapter();
@@ -280,7 +280,7 @@ describe('createOrchestrationPlugin — setupPost retry behavior', () => {
       }
     });
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter: failingAdapter,
       tasks: [noopTask],
       routes: false,
@@ -302,7 +302,7 @@ describe('createOrchestrationPlugin — setupPost retry behavior', () => {
       throw new Error('start failed');
     });
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -325,7 +325,7 @@ describe('createOrchestrationPlugin — setupPost retry behavior', () => {
       throw new Error('persistent failure');
     });
 
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,
@@ -365,7 +365,7 @@ describe('getOrchestration / getOrchestrationOrNull', () => {
 
   test('getOrchestration returns runtime published by setupRoutes', async () => {
     const adapter = makeMockAdapter();
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter,
       tasks: [noopTask],
       routes: false,

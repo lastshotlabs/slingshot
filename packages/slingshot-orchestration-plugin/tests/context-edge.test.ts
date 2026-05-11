@@ -19,7 +19,7 @@ import {
 } from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
 import * as pluginIndex from '../src/index';
-import { createOrchestrationPlugin } from '../src/plugin';
+import { createOrchestrationPackage } from '../src/plugin';
 
 describe('getOrchestrationOrNull — missing plugin state', () => {
   test('returns null when pluginState is empty', () => {
@@ -91,7 +91,7 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
   });
 
   test('returns a runtime with runTask capability', async () => {
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
       routes: false,
@@ -118,7 +118,7 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
   });
 
   test('getOrchestrationOrNull returns runtime after plugin setup', async () => {
-    const plugin = createOrchestrationPlugin({
+    const plugin = createOrchestrationPackage({
       adapter: createMemoryAdapter({ concurrency: 1 }),
       tasks: [noopTask],
       routes: false,

@@ -478,6 +478,19 @@ export interface SlingshotPackageDefinition {
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
   /**
+   * Early lifecycle hook for event-definition registration and other concerns
+   * that must complete before any routes are wired. Runs inside the framework's
+   * `setupMiddleware` phase after the package's own setup work runs.
+   */
+  readonly setupMiddleware?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
+   * Route-mounting hook for routers that don't fit cleanly into domain modules
+   * (large per-entity routers, federated/aggregating routers, etc.). Runs inside
+   * the framework's `setupRoutes` phase after entity adapters are resolved and
+   * domain modules are mounted.
+   */
+  readonly setupRoutes?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
    * Boot-time hook invoked after the package's entity adapters and domain routes
    * are wired. Use for event-bus subscriptions, capability publication that needs
    * to read resolved adapters, and any imperative setup the declarative surface
@@ -485,8 +498,8 @@ export interface SlingshotPackageDefinition {
    */
   readonly setupPost?: (ctx: PluginSetupContext) => void | Promise<void>;
   /**
-   * Cleanup hook invoked when the app shuts down. Counterpart to `setupPost` for
-   * unsubscribing event handlers, closing queues, and releasing other resources.
+   * Cleanup hook invoked when the app shuts down. Counterpart to the setup hooks
+   * for unsubscribing event handlers, closing queues, and releasing other resources.
    */
   readonly teardown?: () => void | Promise<void>;
   /** Contract metadata when the package was produced through `definePackageContract`. */
@@ -521,6 +534,19 @@ export interface DefinePackageInput {
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
   /**
+   * Early lifecycle hook for event-definition registration and other concerns
+   * that must complete before any routes are wired. Runs inside the framework's
+   * `setupMiddleware` phase after the package's own setup work runs.
+   */
+  readonly setupMiddleware?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
+   * Route-mounting hook for routers that don't fit cleanly into domain modules
+   * (large per-entity routers, federated/aggregating routers, etc.). Runs inside
+   * the framework's `setupRoutes` phase after entity adapters are resolved and
+   * domain modules are mounted.
+   */
+  readonly setupRoutes?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
    * Boot-time hook invoked after the package's entity adapters and domain routes
    * are wired. Use for event-bus subscriptions, capability publication that needs
    * to read resolved adapters, and any imperative setup the declarative surface
@@ -528,8 +554,8 @@ export interface DefinePackageInput {
    */
   readonly setupPost?: (ctx: PluginSetupContext) => void | Promise<void>;
   /**
-   * Cleanup hook invoked when the app shuts down. Counterpart to `setupPost` for
-   * unsubscribing event handlers, closing queues, and releasing other resources.
+   * Cleanup hook invoked when the app shuts down. Counterpart to the setup hooks
+   * for unsubscribing event handlers, closing queues, and releasing other resources.
    */
   readonly teardown?: () => void | Promise<void>;
   /**
@@ -1274,6 +1300,8 @@ export function definePackage(input: DefinePackageInput): SlingshotPackageDefini
     tenantExemptPaths: freezeReadonlyArray(input.tenantExemptPaths),
     csrfExemptPaths: freezeReadonlyArray(input.csrfExemptPaths),
     publicPaths: freezeReadonlyArray(input.publicPaths),
+    setupMiddleware: input.setupMiddleware,
+    setupRoutes: input.setupRoutes,
     setupPost: input.setupPost,
     teardown: input.teardown,
     contract: input.contract,

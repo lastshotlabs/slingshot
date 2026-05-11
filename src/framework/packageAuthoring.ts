@@ -820,10 +820,12 @@ function createPackagePlugin(
       await entityPlugin?.setupMiddleware?.(ctx);
       await publishPackageRuntimeState(ctx.app, pkg);
       registerPackageRouteEvents(ctx.events, pkg);
+      await pkg.setupMiddleware?.(ctx);
     },
 
     async setupRoutes(ctx) {
       await entityPlugin?.setupRoutes?.(ctx);
+      await pkg.setupRoutes?.(ctx);
       if (pkg.domains.length === 0) {
         return;
       }

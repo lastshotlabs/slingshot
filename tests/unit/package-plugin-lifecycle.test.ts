@@ -12,7 +12,7 @@ import {
 } from '@lastshotlabs/slingshot-interactions';
 import {
   NotificationsBuilderFactory,
-  createNotificationsPlugin,
+  createNotificationsPackage,
 } from '@lastshotlabs/slingshot-notifications';
 import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 import { createTestApp } from '../setup';
@@ -65,7 +65,7 @@ describe('package plugin lifecycle', () => {
   });
 
   test('slingshot-notifications publishes plugin state, mounts SSE, and unregisters its listener on teardown', async () => {
-    const plugin = createNotificationsPlugin({
+    const plugin = createNotificationsPackage({
       dispatcher: {
         enabled: false,
         intervalMs: 30_000,
@@ -74,7 +74,7 @@ describe('package plugin lifecycle', () => {
     });
 
     const app = await createTestApp({
-      plugins: [plugin],
+      packages: [plugin],
     });
     const ctx = getContext(app);
     createdApps.push(ctx);

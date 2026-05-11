@@ -2,16 +2,20 @@
 
 Shared notification storage, preference resolution, scheduling, and dispatcher plumbing. Other
 feature packages depend on this package for notification persistence and delivery.
-Notification entities follow the shared package-first/entity model; `createNotificationsPlugin()` is
-the runtime shell that wires storage, dispatch, and delivery.
+Notification entities follow the shared package-first/entity model; `createNotificationsPackage()`
+is the runtime shell that wires storage, dispatch, and delivery. Composed via
+`createApp({ packages: [createNotificationsPackage(...)] })`.
 
 ## Key Files
 
-| File                      | What                                                             |
-| ------------------------- | ---------------------------------------------------------------- |
-| src/index.ts              | Public API surface for plugin, builder, dispatcher, and entities |
-| src/plugin.ts             | `createNotificationsPlugin()` factory                            |
-| src/types/config.ts       | Notifications plugin config schema                               |
+| File                              | What                                                              |
+| --------------------------------- | ----------------------------------------------------------------- |
+| src/index.ts                      | Public API surface for package, builder, dispatcher, and entities |
+| src/plugin.ts                     | `createNotificationsPackage()` factory (`SlingshotPackageDefinition`) |
+| src/entities/notification.ts      | `Notification` entity, operations, and `notificationModule`       |
+| src/entities/preference.ts        | `NotificationPreference` entity, operations, and `notificationPreferenceModule` |
+| src/public.ts                     | `Notifications` contract; `BuilderFactory`, `DeliveryRegistry`, `HealthCap` capabilities |
+| src/types/config.ts               | Notifications package config schema                               |
 | src/builder.ts            | Notification builder entry points                                |
 | src/dispatcher.ts         | Delivery dispatcher implementation                               |
 | src/preferences.ts        | Preference and quiet-hours resolution                            |

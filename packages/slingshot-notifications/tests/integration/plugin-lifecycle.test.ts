@@ -7,8 +7,12 @@ import {
   getContext,
   resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
-import { createNotificationsPlugin } from '../../src/plugin';
-import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from '../../src/public';
+import { createNotificationsPackage } from '../../src/plugin';
+import {
+  NotificationsBuilderFactory,
+  NotificationsDeliveryRegistry,
+  NotificationsHealthCap,
+} from '../../src/public';
 import { createNotificationsTestEvents } from '../../src/testing';
 
 function createFrameworkConfig() {
@@ -33,33 +37,7 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
   attachContext(app, ctx as never);
 }
 
-describe('createNotificationsPlugin lifecycle', () => {
-  test('setupPost fails loudly when setupRoutes never resolved the entity adapters', async () => {
-    const app = new Hono();
-    const bus = new InProcessAdapter();
-    const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
-    attachMinimalContext(app, bus);
-
-    const plugin = createNotificationsPlugin({
-      dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
-    });
-
-    await plugin.setupMiddleware?.({
-      app: app as never,
-      config: createFrameworkConfig(),
-      bus,
-      events,
-    });
-    await expect(
-      plugin.setupPost?.({
-        app: app as never,
-        config: createFrameworkConfig(),
-        bus,
-        events,
-      }),
-    ).rejects.toThrow('Entity adapters were not resolved during setupRoutes');
-  });
-
+describe('createNotificationsPackage lifecycle', () => {
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
     const enabledBus = new InProcessAdapter();
     const enabledEvents = createNotificationsTestEvents(enabledBus, {
@@ -68,7 +46,7 @@ describe('createNotificationsPlugin lifecycle', () => {
 
     const enabledApp = new Hono();
     attachMinimalContext(enabledApp, enabledBus);
-    const enabledPlugin = createNotificationsPlugin({
+    const enabledPlugin = createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
       sseEnabled: true,
       ssePath: '/stream',
@@ -96,7 +74,7 @@ describe('createNotificationsPlugin lifecycle', () => {
     });
     const disabledApp = new Hono();
     attachMinimalContext(disabledApp, disabledBus);
-    const disabledPlugin = createNotificationsPlugin({
+    const disabledPlugin = createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
       sseEnabled: false,
     });
@@ -122,7 +100,7 @@ describe('createNotificationsPlugin lifecycle', () => {
     const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
     attachMinimalContext(app, bus);
 
-    const plugin = createNotificationsPlugin({
+    const plugin = createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
       defaultPreferences: {
         pushEnabled: false,
@@ -170,8 +148,10 @@ describe('createNotificationsPlugin lifecycle', () => {
     expect(created).toBeTruthy();
     expect(deliver).toHaveBeenCalledTimes(1);
 
-    // Dispatcher health is observable through the plugin's getHealth() snapshot.
-    const health = plugin.getHealth();
+    // Dispatcher health is observable through the NotificationsHealthCap capability.
+    const getHealth = resolveCapabilityValue(ctx, NotificationsHealthCap);
+    expect(getHealth).toBeDefined();
+    const health = getHealth!();
     expect(health.details.adapterAvailable).toBe(true);
     expect(health.details.preferencesAdapterAvailable).toBe(true);
     expect(health.details.deliveryAdapterCount).toBe(1);
@@ -194,7 +174,7 @@ describe('createNotificationsPlugin lifecycle', () => {
     const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
     attachMinimalContext(app, bus);
 
-    const plugin = createNotificationsPlugin({
+    const plugin = createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
     });
 
@@ -247,7 +227,7 @@ describe('createNotificationsPlugin lifecycle', () => {
   });
 
   test('rejects mountPath values without a leading slash', () => {
-    expect(() => createNotificationsPlugin({ mountPath: 'notifications' } as never)).toThrow(
+    expect(() => createNotificationsPackage({ mountPath: 'notifications' } as never)).toThrow(
       /mountPath must start with '\//i,
     );
   });

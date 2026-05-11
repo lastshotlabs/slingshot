@@ -13,6 +13,7 @@
 
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { DeliveryAdapter, NotificationBuilder } from '@lastshotlabs/slingshot-core';
+import type { DispatcherHealth } from './dispatcher';
 
 /** Provider-owned contract for `slingshot-notifications`. */
 export const Notifications = definePackageContract('slingshot-notifications');
@@ -40,3 +41,32 @@ export interface NotificationsDeliveryRegistry {
 }
 export const NotificationsDeliveryRegistry =
   Notifications.capability<NotificationsDeliveryRegistry>('deliveryRegistry');
+
+/**
+ * Aggregated health snapshot for the notifications package.
+ */
+export interface NotificationsHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    /** Whether the notification entity adapter was resolved. */
+    readonly adapterAvailable: boolean;
+    /** Whether the preference entity adapter was resolved. */
+    readonly preferencesAdapterAvailable: boolean;
+    /** Number of registered delivery adapters. */
+    readonly deliveryAdapterCount: number;
+    /** Configured rate-limit backend name. */
+    readonly rateLimitBackend: string;
+    /** Delegated dispatcher health snapshot. */
+    readonly dispatcherHealth: DispatcherHealth;
+  };
+}
+
+/**
+ * Capability for reading the aggregated notifications health snapshot.
+ *
+ * Consumers resolve via `ctx.capabilities.require(NotificationsHealthCap)()` and
+ * receive a frozen `NotificationsHealth` representing adapter, delivery, rate-limit,
+ * and dispatcher state at call time.
+ */
+export const NotificationsHealthCap =
+  Notifications.capability<() => NotificationsHealth>('health');

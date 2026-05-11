@@ -1,9 +1,9 @@
 import './events';
 
 /**
- * Create the notifications plugin and wire entity storage, routing, and delivery hooks.
+ * Create the notifications package and wire entity storage, routing, and delivery hooks.
  */
-export { createNotificationsPlugin } from './plugin';
+export { createNotificationsPackage } from './plugin';
 /**
  * Provider-owned package contract. Cross-package consumers import the contract object
  * and the published capability handles instead of reaching into plugin state directly.
@@ -12,13 +12,16 @@ export {
   Notifications,
   NotificationsBuilderFactory,
   NotificationsDeliveryRegistry,
+  NotificationsHealthCap,
 } from './public';
+/** Aggregated health snapshot type for the notifications package. */
+export type { NotificationsHealth } from './public';
 /**
  * Zod schema used to validate notifications plugin configuration.
  */
 export { notificationsPluginConfigSchema } from './types/config';
 /**
- * Configuration shape accepted by `createNotificationsPlugin()`.
+ * Configuration shape accepted by `createNotificationsPackage()`.
  */
 export type { NotificationsPluginConfig } from './types/config';
 /**

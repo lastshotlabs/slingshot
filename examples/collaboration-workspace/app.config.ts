@@ -7,7 +7,7 @@ import { createEmbedsPlugin } from '../../packages/slingshot-embeds/src/index.ts
 import { createEmojiPackage } from '../../packages/slingshot-emoji/src/index.ts';
 import { createGifsPlugin } from '../../packages/slingshot-gifs/src/index.ts';
 import { createInteractionsPackage } from '../../packages/slingshot-interactions/src/index.ts';
-import { createNotificationsPlugin } from '../../packages/slingshot-notifications/src/index.ts';
+import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
 import { createPollsPlugin } from '../../packages/slingshot-polls/src/index.ts';
 import { defineApp } from '../../src/index.ts';
@@ -24,9 +24,6 @@ export default defineApp({
     createAuthPlugin({
       auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-    }),
-    createNotificationsPlugin({
-      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
     }),
     createPermissionsPlugin(),
     createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
@@ -59,6 +56,9 @@ export default defineApp({
     }),
   ],
   packages: [
+    createNotificationsPackage({
+      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+    }),
     createEmojiPackage({}),
     createInteractionsPackage({
       handlers: {

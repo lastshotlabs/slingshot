@@ -1,7 +1,7 @@
 import type {
   MetricsEmitter,
   PluginSetupContext,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
@@ -10,6 +10,7 @@ import {
   createNoopMetricsEmitter,
   deepFreeze,
   defineEvent,
+  definePackage,
   getContextOrNull,
   provideCapability,
   registerPluginCapabilities,
@@ -17,16 +18,18 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { createNotificationBuilder } from './builder';
 import { createIntervalDispatcher } from './dispatcher';
-import type { DispatcherAdapter, DispatcherHealth } from './dispatcher';
+import type { DispatcherAdapter } from './dispatcher';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
-import { Notification, notificationOperations } from './entities/notification';
-import { NotificationPreference, notificationPreferenceOperations } from './entities/preference';
-import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from './public';
+import { notificationModule } from './entities/notification';
+import { notificationPreferenceModule } from './entities/preference';
+import {
+  NotificationsBuilderFactory,
+  NotificationsDeliveryRegistry,
+  NotificationsHealthCap,
+} from './public';
+import type { NotificationsHealth } from './public';
 import { resolveRateLimitBackend } from './rateLimit';
 import { createNotificationSseRoute } from './sse';
 import type {
@@ -39,33 +42,13 @@ import type {
 import type { NotificationsPluginConfig } from './types/config';
 import { notificationsPluginConfigSchema } from './types/config';
 
-// Stable identifier for this plugin. Used both as the inner entity-plugin name and as
-// the contract owner name when registering capabilities.
+// Stable identifier for this package. Used as the contract owner name when
+// registering capabilities and as the package `name` in `definePackage`.
 const NOTIFICATIONS_PLUGIN_NAME = 'slingshot-notifications' as const;
 
 const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
 
-type AdapterResult = BareEntityAdapter;
 type ActorParam = { 'actor.id': string };
-
-/**
- * Aggregated health snapshot for the notifications plugin.
- */
-export interface NotificationsHealth {
-  readonly status: 'healthy' | 'degraded' | 'unhealthy';
-  readonly details: {
-    /** Whether the notification entity adapter was resolved. */
-    readonly adapterAvailable: boolean;
-    /** Whether the preference entity adapter was resolved. */
-    readonly preferencesAdapterAvailable: boolean;
-    /** Number of registered delivery adapters. */
-    readonly deliveryAdapterCount: number;
-    /** Configured rate-limit backend name. */
-    readonly rateLimitBackend: string;
-    /** Delegated dispatcher health snapshot. */
-    readonly dispatcherHealth: DispatcherHealth;
-  };
-}
 
 function errorLogFields(err: unknown): { err: string; name?: string } {
   if (err instanceof Error) return { err: err.message, name: err.name };
@@ -218,14 +201,23 @@ function wrapPreferenceAdapter(
 }
 
 /**
- * Create the shared notifications plugin.
+ * Create the shared notifications package.
  *
- * @param rawConfig - Notifications plugin config.
- * @returns Slingshot notifications plugin.
+ * Two entity modules (Notification, NotificationPreference) flow through the
+ * declarative package entity-mounting path; imperative work (event registration,
+ * SSE route, dispatcher startup, capability publication, TTL sweep) lives in
+ * `setupMiddleware` / `setupRoutes` / `setupPost`.
+ *
+ * Health observability is exposed through the `NotificationsHealthCap`
+ * capability — cross-package consumers resolve it via
+ * `ctx.capabilities.require(NotificationsHealthCap)()`.
+ *
+ * @param rawConfig - Notifications package config.
+ * @returns A `SlingshotPackageDefinition` ready for `createApp({ packages })`.
  */
-export function createNotificationsPlugin(
+export function createNotificationsPackage(
   rawConfig: Partial<NotificationsPluginConfig> = {},
-): SlingshotPlugin & { getHealth(): NotificationsHealth } {
+): SlingshotPackageDefinition {
   const config = deepFreeze(
     validatePluginConfig('slingshot-notifications', rawConfig, notificationsPluginConfigSchema),
   );
@@ -234,13 +226,13 @@ export function createNotificationsPlugin(
   let preferencesAdapter: NotificationPreferenceAdapter | undefined;
   let teardown: (() => Promise<void>) | undefined;
   const deliveryAdapters = new Set<DeliveryAdapter>();
-  // Hoisted so getHealth() can reference it. Assigned in setupPost.
+  // Hoisted so the health capability can reference it. Assigned in setupPost.
   let dispatcher!: DispatcherAdapter;
 
   // The unified metrics emitter is owned by the framework context and not
-  // available until `setupPost` runs. Resolve lazily through this proxy so
-  // the dispatcher and builders see the framework-owned emitter at call
-  // time without needing re-construction.
+  // available until `setupPost` runs. Resolve lazily through this proxy so the
+  // dispatcher and builders see the framework-owned emitter at call time
+  // without needing re-construction.
   let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
   const metricsProxy: MetricsEmitter = {
     counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
@@ -248,49 +240,54 @@ export function createNotificationsPlugin(
     timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
   };
 
-  const entities: EntityPluginEntry[] = [
-    {
-      config: Notification,
-      operations: notificationOperations.operations,
-      buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
-        // The generated entity adapter exposes both the BareEntityAdapter CRUD
-        // surface and the named-operation methods declared in
-        // notificationOperations. Its inferred type is
-        // BareEntityAdapter | Record<string, unknown>, which does not
-        // structurally overlap with NotificationAdapter — go through `unknown`
-        // to bridge the boundary. wrapNotificationAdapter() then enforces the
-        // actor-param contract at every call site.
-        const adapter = resolveRepo(notificationFactories, storeType, infra);
-        notificationsAdapter = validateNotificationAdapter(adapter);
-        return adapter as unknown as AdapterResult;
-      },
-    },
-    {
-      config: NotificationPreference,
-      operations: notificationPreferenceOperations.operations,
-      buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
-        // Same boundary as Notification above: bridge generated entity adapter
-        // shape to the typed NotificationPreferenceAdapter contract.
-        const adapter = resolveRepo(notificationPreferenceFactories, storeType, infra);
-        preferencesAdapter = validateNotificationPreferenceAdapter(adapter);
-        return adapter as unknown as AdapterResult;
-      },
-    },
-  ];
+  function buildHealth(): NotificationsHealth {
+    const adapterAvailable = notificationsAdapter != null;
+    const preferencesAvailable = preferencesAdapter != null;
+    const dispatchCount = deliveryAdapters.size;
 
-  const innerPlugin = createEntityPlugin({
+    let status: NotificationsHealth['status'] = 'healthy';
+    if (!adapterAvailable || !preferencesAvailable) {
+      status = 'unhealthy';
+    } else if (dispatchCount === 0) {
+      status = 'degraded';
+    }
+
+    return {
+      status,
+      details: {
+        adapterAvailable,
+        preferencesAdapterAvailable: preferencesAvailable,
+        deliveryAdapterCount: dispatchCount,
+        rateLimitBackend: config.rateLimit.backend,
+        dispatcherHealth: dispatcher.getHealth(),
+      },
+    };
+  }
+
+  return definePackage({
     name: NOTIFICATIONS_PLUGIN_NAME,
     mountPath: config.mountPath,
-    entities,
-  });
-
-  return {
-    name: NOTIFICATIONS_PLUGIN_NAME,
     dependencies: ['slingshot-auth'],
+    entities: [notificationModule, notificationPreferenceModule],
 
-    async setupMiddleware(ctx: PluginSetupContext) {
-      if (!ctx.events.get('notifications:notification.created')) {
-        ctx.events.register(
+    setupMiddleware({ config: frameworkConfig, events }: PluginSetupContext) {
+      // Resolve the entity adapters imperatively so the dispatcher and SSE
+      // wrappers (mounted later in setupPost / setupRoutes) have stable refs.
+      // The entity modules themselves go through the framework's
+      // entity-plugin path, which resolves the same factories again for their
+      // CRUD routes — two cheap resolutions of the same factory are simpler
+      // than threading refs through the entity plugin's onAdapter callback.
+      const storeType: StoreType = frameworkConfig.resolvedStores.authStore;
+      const infra: StoreInfra = frameworkConfig.storeInfra;
+      notificationsAdapter = validateNotificationAdapter(
+        resolveRepo(notificationFactories, storeType, infra),
+      );
+      preferencesAdapter = validateNotificationPreferenceAdapter(
+        resolveRepo(notificationPreferenceFactories, storeType, infra),
+      );
+
+      if (!events.get('notifications:notification.created')) {
+        events.register(
           defineEvent('notifications:notification.created', {
             ownerPlugin: NOTIFICATIONS_PLUGIN_NAME,
             exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
@@ -307,20 +304,16 @@ export function createNotificationsPlugin(
           }),
         );
       }
-      await innerPlugin.setupMiddleware?.(ctx);
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupRoutes({ app, bus }: PluginSetupContext) {
       if (config.sseEnabled) {
         app.route('/', createNotificationSseRoute(bus, config.ssePath));
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin.setupPost?.({ app, config: frameworkConfig, bus, events });
-
+    async setupPost({ app, bus, events }: PluginSetupContext) {
       // Resolve the framework-owned metrics emitter so the dispatcher and
       // per-source builders publish counters/gauges/timings on hot paths.
       const ctx = getContextOrNull(app);
@@ -420,15 +413,14 @@ export function createNotificationsPlugin(
       };
 
       // Contract-bound capability publish — cross-package consumers resolve
-      // `NotificationsBuilderFactory` and `NotificationsDeliveryRegistry` through
-      // `ctx.capabilities.require(...)`. The plugin's own runtime state lives in
-      // closure variables (`notificationsAdapter`, `dispatcher`, `deliveryAdapters`,
-      // etc.) referenced by `getHealth()`.
+      // `NotificationsBuilderFactory`, `NotificationsDeliveryRegistry`, and
+      // `NotificationsHealthCap` through `ctx.capabilities.require(...)`.
       const slingshotCtx = getContextOrNull(app);
       if (slingshotCtx) {
         await registerPluginCapabilities(slingshotCtx, NOTIFICATIONS_PLUGIN_NAME, [
           provideCapability(NotificationsBuilderFactory, () => builderFactory),
           provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
+          provideCapability(NotificationsHealthCap, () => buildHealth),
         ]);
       }
 
@@ -499,29 +491,5 @@ export function createNotificationsPlugin(
     teardown() {
       return teardown?.() ?? Promise.resolve();
     },
-
-    getHealth(): NotificationsHealth {
-      const adapterAvailable = notificationsAdapter != null;
-      const preferencesAvailable = preferencesAdapter != null;
-      const dispatchCount = deliveryAdapters.size;
-
-      let status: NotificationsHealth['status'] = 'healthy';
-      if (!adapterAvailable || !preferencesAvailable) {
-        status = 'unhealthy';
-      } else if (dispatchCount === 0) {
-        status = 'degraded';
-      }
-
-      return {
-        status,
-        details: {
-          adapterAvailable,
-          preferencesAdapterAvailable: preferencesAvailable,
-          deliveryAdapterCount: dispatchCount,
-          rateLimitBackend: config.rateLimit.backend,
-          dispatcherHealth: dispatcher.getHealth(),
-        },
-      };
-    },
-  };
+  });
 }

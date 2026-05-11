@@ -13,7 +13,7 @@ import {
   communityPlugin,
   createTestApp,
   createTestPermissions,
-  notificationsPlugin,
+  notificationsPackage,
 } from '../setup';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,8 @@ describe('admin auto-discovery — permissions from community plugin pluginState
   test('createSlingshotAdminPlugin({}) works when community has registered permissions', async () => {
     // community plugin registers permissions in pluginState during setupRoutes
     const app = await createTestApp({
-      plugins: [notificationsPlugin(), communityPlugin(), createSlingshotAdminPlugin({})],
+      plugins: [communityPlugin(), createSlingshotAdminPlugin({})],
+      packages: [notificationsPackage()],
     });
 
     // Admin routes are reachable (401 = auth guard ran, not an init error)
@@ -34,7 +35,8 @@ describe('admin auto-discovery — permissions from community plugin pluginState
 
   test('GET /admin/capabilities is reachable when permissions auto-discovered', async () => {
     const app = await createTestApp({
-      plugins: [notificationsPlugin(), communityPlugin(), createSlingshotAdminPlugin({})],
+      plugins: [communityPlugin(), createSlingshotAdminPlugin({})],
+      packages: [notificationsPackage()],
     });
 
     const res = await app.request('/admin/capabilities');
@@ -83,10 +85,10 @@ describe('admin auto-discovery — explicit permissions take precedence', () => 
     // Both community and admin have permissions; explicit ones should win
     const app = await createTestApp({
       plugins: [
-        notificationsPlugin(),
         communityPlugin(),
         createSlingshotAdminPlugin({ permissions: explicitPermissions }),
       ],
+      packages: [notificationsPackage()],
     });
 
     // Plugin wired successfully with explicit permissions

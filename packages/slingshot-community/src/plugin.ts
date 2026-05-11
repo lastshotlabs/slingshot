@@ -198,7 +198,7 @@ function buildInteractionsPeer(
  * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs —
  *   register `createPermissionsPlugin()` first.
  * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
- *   `setupPost` runs — register `createNotificationsPlugin()` first.
+ *   `setupPost` runs — register `createNotificationsPackage()` first.
  *
  * @remarks
  * The plugin declares dependencies on `'slingshot-auth'`,
@@ -814,7 +814,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       if (!notificationsBuilderFactoryRef) {
         throw new Error(
           '[slingshot-community] slingshot-notifications is a required dependency. ' +
-            'Register createNotificationsPlugin() before this plugin.',
+            'Register createNotificationsPackage() before this plugin.',
         );
       }
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });

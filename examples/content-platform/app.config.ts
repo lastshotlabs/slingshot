@@ -5,7 +5,7 @@ import { createAssetsPlugin } from '../../packages/slingshot-assets/src/index.ts
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createCommunityPlugin } from '../../packages/slingshot-community/src/index.ts';
 import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
-import { createNotificationsPlugin } from '../../packages/slingshot-notifications/src/index.ts';
+import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
 import { createSearchPackage } from '../../packages/slingshot-search/src/index.ts';
 import { createSsrPlugin } from '../../packages/slingshot-ssr/src/index.ts';
@@ -43,9 +43,6 @@ export default defineApp({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createNotificationsPlugin({
-      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-    }),
     createPermissionsPlugin(),
     createCommunityPlugin({ containerCreation: 'admin' }),
     createAssetsPlugin({
@@ -69,6 +66,9 @@ export default defineApp({
     }),
   ],
   packages: [
+    createNotificationsPackage({
+      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+    }),
     createSearchPackage({
       providers: {
         default: { provider: 'db-native' },

@@ -4,7 +4,11 @@ import type { AuthPluginConfig } from '@lastshotlabs/slingshot-auth';
 import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
 import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
 import type { CommunityPluginConfig } from '@lastshotlabs/slingshot-community';
-import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotPackageDefinition,
+  SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
   getActor,
@@ -12,7 +16,7 @@ import {
   provideCapability,
   registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
-import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
 import { createOAuthPlugin } from '@lastshotlabs/slingshot-oauth';
 import {
   PermissionsAdapterCap,
@@ -174,6 +178,7 @@ export async function createTestApp(
     security: { ...baseConfig.security, ...overrides?.security },
     logging: { ...baseConfig.logging, ...overrides?.logging },
     plugins: [authPlugin(mergedAuthOverrides), ...oauthPlugin, ...(overrides?.plugins ?? [])],
+    packages: [...(overrides?.packages ?? [])],
   };
   const { app, ctx } = await createApp(config);
   (app as any).ctx = ctx;
@@ -212,8 +217,8 @@ export function communityPlugin(overrides: Partial<CommunityPluginConfig> = {}):
   };
 }
 
-export function notificationsPlugin(): SlingshotPlugin {
-  return createNotificationsPlugin({
+export function notificationsPackage(): SlingshotPackageDefinition {
+  return createNotificationsPackage({
     dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
   });
 }

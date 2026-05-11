@@ -101,25 +101,8 @@ export default defineApp({
 });
 ```
 
-### Manifest
-
-```json title="slingshot.json"
-{
-  "plugins": [
-    { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user", "admin"] } } },
-    { "plugin": "slingshot-permissions" },
-    { "plugin": "slingshot-notifications" },
-    {
-      "plugin": "slingshot-chat",
-      "config": { "storeType": "memory", "mountPath": "/chat" }
-    }
-  ]
-}
-```
-
 The `slingshot-permissions` and `slingshot-notifications` registrations must come before
-`slingshot-chat` in both modes — the plugin throws during setup if either capability is
-unavailable.
+`slingshot-chat` — the plugin throws during setup if either capability is unavailable.
 
 ## Authoring Story
 

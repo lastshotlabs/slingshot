@@ -96,25 +96,8 @@ export default defineApp({
 });
 ```
 
-### Manifest
-
-```json title="slingshot.json"
-{
-  "plugins": [
-    { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user", "admin"] } } },
-    { "plugin": "slingshot-permissions" },
-    { "plugin": "slingshot-notifications" },
-    {
-      "plugin": "slingshot-community",
-      "config": { "authBridge": "auto", "containerCreation": "user" }
-    }
-  ]
-}
-```
-
 The `slingshot-permissions` and `slingshot-notifications` registrations must come before
-`slingshot-community` in both modes — the plugin throws during setup if either capability is
-unavailable.
+`slingshot-community` — the plugin throws during setup if either capability is unavailable.
 
 ## Authoring Story
 

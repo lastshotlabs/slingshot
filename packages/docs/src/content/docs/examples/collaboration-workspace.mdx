@@ -156,7 +156,7 @@ bun add @lastshotlabs/slingshot \
     import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
     import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
     import { createEmbedsPlugin } from '@lastshotlabs/slingshot-embeds';
-    import { createEmojiPlugin } from '@lastshotlabs/slingshot-emoji';
+    import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
     import { createGifsPlugin } from '@lastshotlabs/slingshot-gifs';
     import { createInteractionsPlugin } from '@lastshotlabs/slingshot-interactions';
     import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
@@ -190,7 +190,6 @@ bun add @lastshotlabs/slingshot \
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
           image: { allowedOrigins: ['localhost'] },
         }),
-        createEmojiPlugin({}),
         createEmbedsPlugin({}),
         createGifsPlugin({
           provider: 'tenor',
@@ -211,6 +210,7 @@ bun add @lastshotlabs/slingshot \
           },
         }),
       ],
+      packages: [createEmojiPackage({})],
     });
     ```
 

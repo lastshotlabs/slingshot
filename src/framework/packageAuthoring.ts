@@ -1024,9 +1024,11 @@ function createPackagePlugin(
     async setupPost(ctx) {
       await entityPlugin?.setupPost?.(ctx);
       await publishPackageRuntimeState(ctx.app, pkg);
+      await pkg.setupPost?.(ctx);
     },
 
     async teardown() {
+      await pkg.teardown?.();
       await entityPlugin?.teardown?.();
     },
   };

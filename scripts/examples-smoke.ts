@@ -117,13 +117,20 @@ export async function smokeModuleExportsExample(
     }
   }
 
-  const config = loadConfigFromModule(mod) as { plugins?: Array<{ name?: string }> } | null;
+  const config = loadConfigFromModule(mod) as {
+    plugins?: Array<{ name?: string }>;
+    packages?: Array<{ name?: string }>;
+  } | null;
 
   if (!config) {
     throw new Error(`${example.entrypoint} must export a defineApp() default to validate plugins`);
   }
 
-  const pluginNames = new Set((config.plugins ?? []).map(plugin => plugin.name).filter(Boolean));
+  const pluginNames = new Set(
+    [...(config.plugins ?? []), ...(config.packages ?? [])]
+      .map(entry => entry.name)
+      .filter(Boolean),
+  );
 
   for (const requiredPlugin of example.requiredPlugins) {
     if (!pluginNames.has(requiredPlugin)) {

@@ -1,85 +1,49 @@
-import type {
-  DynamicEventBus,
-  PermissionsState,
-  PluginSetupContext,
-  SlingshotPlugin,
-  StorageAdapter,
-} from '@lastshotlabs/slingshot-core';
+import type { DynamicEventBus, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import {
+  type SlingshotPackageDefinition,
+  definePackage,
   getContext,
-  resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import {
-  PermissionsAdapterCap,
-  PermissionsEvaluatorCap,
-  PermissionsRegistryCap,
-} from '@lastshotlabs/slingshot-permissions';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import { emojiManifest } from './emoji';
-import type { EmojiPluginConfig } from './types';
-import { emojiPluginConfigSchema } from './types';
-
-/** Enforces shortcode format: lowercase alphanumeric + underscores, 2–32 chars. */
-const SHORTCODE_RE = /^[a-z0-9_]{2,32}$/;
+import { emojiModule } from './entities/emoji';
+import { shortcodeGuard } from './middleware/shortcodeGuard';
+import type { EmojiPackageConfig } from './types';
+import { emojiPackageConfigSchema } from './types';
 
 /**
- * Create the emoji plugin for custom emoji management.
+ * Create the emoji package: custom emoji metadata management with org-scoped
+ * shortcode uniqueness, permission-guarded CRUD, and event-driven notifications.
  *
- * Wires the Emoji entity through `createEntityPlugin()` using the manifest-driven
- * zero-code path. Routes are permission-guarded and emit events on create/delete.
+ * Emoji assets are managed by the framework upload system — this package stores
+ * only the `uploadKey` reference. The `update` route is intentionally disabled
+ * (emojis are immutable; delete and re-upload to change).
  *
- * The emoji plugin does NOT handle file uploads. Clients use the framework upload
- * system (presign, upload, then POST emoji metadata with `uploadKey`).
+ * Permissions resolve through the `slingshot-permissions` package, which must be
+ * registered before this one. Shortcodes must match `/^[a-z0-9_]{2,32}$/`; the
+ * `shortcodeGuard` middleware enforces this on the create route and returns 400
+ * with a clear error when violated.
  *
- * **Permissions resolution:** `permissions` in config is optional. When omitted,
- * the plugin reads `PermissionsState` from `ctx.pluginState` (keyed by
- * `PERMISSIONS_STATE_KEY`), which is populated by `createPermissionsPlugin()`
- * during its `setupMiddleware` phase. Declare `'slingshot-permissions'` as a
- * dependency so the framework guarantees ordering.
- *
- * **Shortcode validation:** Shortcodes must match `/^[a-z0-9_]{2,32}$/` (lowercase
- * alphanumeric + underscores, 2–32 chars). Validated by middleware on the create
- * route — returns 400 with a clear error message if the shortcode is invalid.
- *
- * **Delete cascade:** When an emoji is deleted, the plugin subscribes to the
- * `emoji:emoji.deleted` event and calls `storageAdapter.delete(uploadKey)` to
- * remove the uploaded file. Requires `slingshot-uploads` to be registered and
- * a storage adapter to be configured. When no storage adapter is configured,
+ * When the framework upload system is configured (`ctx.upload.adapter` is set),
+ * the package subscribes to `emoji:emoji.deleted` and removes the uploaded file
+ * via `storageAdapter.delete(uploadKey)`. When no storage adapter is configured,
  * a warning is logged and the cascade is skipped.
- *
- * @param rawConfig - Plugin configuration. Validated against the Zod schema at
- *   construction time; throws if any required field is missing or mis-typed.
- *   All fields are optional.
- * @returns A `SlingshotPlugin` suitable for passing to `createApp()`.
- *
- * @throws {Error} If `rawConfig` fails the Zod schema validation.
- * @throws {Error} If `permissions` is omitted and `PERMISSIONS_STATE_KEY` is
- *   absent from `ctx.pluginState` when `setupMiddleware` runs.
- *
- * @remarks
- * The plugin declares a dependency on `'slingshot-auth'` (always) and
- * `'slingshot-permissions'` (when `permissions` is not provided explicitly).
  *
  * @example
  * ```ts
- * import { createEmojiPlugin } from '@lastshotlabs/slingshot-emoji';
+ * import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
  *
- * // With permissions resolved from pluginState (recommended):
- * const emoji = createEmojiPlugin({});
- *
- * // With explicit permissions:
- * const emoji = createEmojiPlugin({
- *   permissions: { evaluator, registry, adapter },
- *   mountPath: '/custom-emoji',
+ * export default defineApp({
+ *   plugins: [createPermissionsPlugin({ adapter: permissionsAdapter })],
+ *   packages: [createEmojiPackage({})],
  * });
  * ```
  */
-export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
-  const explicitPermissions = (rawConfig as Partial<EmojiPluginConfig> | undefined)?.permissions;
-
-  const config = validatePluginConfig('slingshot-emoji', rawConfig, emojiPluginConfigSchema);
-
+export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefinition {
+  const config: EmojiPackageConfig = validatePluginConfig(
+    'slingshot-emoji',
+    rawConfig,
+    emojiPackageConfigSchema,
+  );
   const frozenConfig = Object.freeze({ ...config });
   if (frozenConfig.presignExpirySeconds !== undefined) {
     console.warn(
@@ -87,85 +51,19 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
     );
   }
 
-  // Inner entity plugin — created in setupMiddleware after permissions are resolved.
-  let innerPlugin: SlingshotPlugin | undefined;
   let teardownDeleteCascade: (() => void) | undefined;
 
-  return {
+  return definePackage({
     name: 'slingshot-emoji',
-    dependencies:
-      explicitPermissions != null
-        ? ['slingshot-auth']
-        : ['slingshot-auth', 'slingshot-permissions'],
-
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      // Resolve permissions — explicit config wins, contract resolution as fallback.
-      let permissions: PermissionsState | undefined = explicitPermissions;
-      if (!permissions) {
-        const ctx = getContext(app);
-        const evaluator = resolveCapabilityValue(ctx, PermissionsEvaluatorCap);
-        const registry = resolveCapabilityValue(ctx, PermissionsRegistryCap);
-        const adapter = resolveCapabilityValue(ctx, PermissionsAdapterCap);
-        if (!evaluator || !registry || !adapter) {
-          throw new Error(
-            '[slingshot-emoji] No permissions available. Either pass `permissions` ' +
-              'in the plugin config or register createPermissionsPlugin() before this plugin.',
-          );
-        }
-        permissions = { evaluator, registry, adapter };
-      }
-
-      const mountPath = frozenConfig.mountPath ?? '/emoji';
-
-      // Shortcode validation middleware — runs before the entity create route handler.
-      // Registered here so it is always ahead of the entity plugin's route registration.
-      //
-      // To avoid double-consuming the request body (which can fail with non-buffered
-      // bodies), we parse JSON once and store it on the context via `c.set('parsedBody', …)`.
-      // The entity handler can then read from `c.get('parsedBody')` instead of calling
-      // `c.req.json()` again.
-      app.use(mountPath, async (c, next) => {
-        if (c.req.method !== 'POST') return next();
-        const rawBody: unknown = await c.req.json().catch(() => null);
-        c.set('parsedBody' as never, rawBody as never);
-        const shortcode =
-          rawBody != null && typeof rawBody === 'object' && 'shortcode' in rawBody
-            ? (rawBody as { shortcode: unknown }).shortcode
-            : undefined;
-        if (typeof shortcode === 'string' && !SHORTCODE_RE.test(shortcode)) {
-          return c.json(
-            {
-              error: 'Invalid shortcode',
-              detail:
-                'Shortcode must be 2–32 characters and contain only lowercase letters, digits, and underscores.',
-            },
-            400,
-          );
-        }
-        return next();
-      });
-
-      innerPlugin = createEntityPlugin({
-        name: 'slingshot-emoji',
-        mountPath,
-        manifest: emojiManifest,
-        permissions,
-      });
-
-      if (innerPlugin.setupMiddleware) {
-        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus, events });
-      }
-    },
-
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-    },
-
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
-
-      // Delete cascade — remove the uploaded file when an emoji is deleted.
-      const storageAdapter = getContext(app).upload?.adapter as StorageAdapter | null | undefined;
+    mountPath: frozenConfig.mountPath ?? '/emoji',
+    dependencies: ['slingshot-auth', 'slingshot-permissions'],
+    entities: [emojiModule],
+    middleware: { shortcodeGuard },
+    setupPost(ctx) {
+      const storageAdapter = getContext(ctx.app).upload?.adapter as
+        | StorageAdapter
+        | null
+        | undefined;
       if (!storageAdapter) {
         console.warn(
           '[slingshot-emoji] No storage adapter configured — emoji delete will not cascade to storage.',
@@ -173,9 +71,7 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
         return;
       }
 
-      // Cast bus for string-keyed subscriptions (same pattern used by wiring helpers).
-      const dynamicBus = bus as unknown as Pick<DynamicEventBus, 'on' | 'off'>;
-
+      const dynamicBus = ctx.bus as unknown as Pick<DynamicEventBus, 'on' | 'off'>;
       const deletedHandler = async (payload: unknown) => {
         const uploadKey = (payload as Record<string, unknown>).uploadKey as string | undefined;
         if (!uploadKey) {
@@ -186,16 +82,12 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
         }
         await storageAdapter.delete(uploadKey);
       };
-
       dynamicBus.on('emoji:emoji.deleted', deletedHandler);
-      teardownDeleteCascade = () => {
-        dynamicBus.off('emoji:emoji.deleted', deletedHandler);
-      };
+      teardownDeleteCascade = () => dynamicBus.off('emoji:emoji.deleted', deletedHandler);
     },
-
-    async teardown() {
+    teardown() {
       teardownDeleteCascade?.();
-      await innerPlugin?.teardown?.();
+      teardownDeleteCascade = undefined;
     },
-  };
+  });
 }

@@ -8,6 +8,7 @@ import type {
   RouteRateLimitConfig,
 } from './entityRouteConfig';
 import type { Actor } from './identity';
+import type { PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';
 import { publishPluginState } from './pluginState';
 
@@ -476,6 +477,18 @@ export interface SlingshotPackageDefinition {
   readonly csrfExemptPaths?: readonly string[];
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
+  /**
+   * Boot-time hook invoked after the package's entity adapters and domain routes
+   * are wired. Use for event-bus subscriptions, capability publication that needs
+   * to read resolved adapters, and any imperative setup the declarative surface
+   * cannot express. Runs inside the framework's `setupPost` lifecycle phase.
+   */
+  readonly setupPost?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
+   * Cleanup hook invoked when the app shuts down. Counterpart to `setupPost` for
+   * unsubscribing event handlers, closing queues, and releasing other resources.
+   */
+  readonly teardown?: () => void | Promise<void>;
   /** Contract metadata when the package was produced through `definePackageContract`. */
   readonly contract?: PackageContractMetadata;
 }
@@ -507,6 +520,18 @@ export interface DefinePackageInput {
   readonly csrfExemptPaths?: readonly string[];
   /** Publicly accessible paths added by the package. */
   readonly publicPaths?: readonly string[];
+  /**
+   * Boot-time hook invoked after the package's entity adapters and domain routes
+   * are wired. Use for event-bus subscriptions, capability publication that needs
+   * to read resolved adapters, and any imperative setup the declarative surface
+   * cannot express. Runs inside the framework's `setupPost` lifecycle phase.
+   */
+  readonly setupPost?: (ctx: PluginSetupContext) => void | Promise<void>;
+  /**
+   * Cleanup hook invoked when the app shuts down. Counterpart to `setupPost` for
+   * unsubscribing event handlers, closing queues, and releasing other resources.
+   */
+  readonly teardown?: () => void | Promise<void>;
   /**
    * Contract metadata, populated automatically when the package is produced through
    * `definePackageContract`. Direct callers of `definePackage` should leave this
@@ -1249,6 +1274,8 @@ export function definePackage(input: DefinePackageInput): SlingshotPackageDefini
     tenantExemptPaths: freezeReadonlyArray(input.tenantExemptPaths),
     csrfExemptPaths: freezeReadonlyArray(input.csrfExemptPaths),
     publicPaths: freezeReadonlyArray(input.publicPaths),
+    setupPost: input.setupPost,
+    teardown: input.teardown,
     contract: input.contract,
   });
 }

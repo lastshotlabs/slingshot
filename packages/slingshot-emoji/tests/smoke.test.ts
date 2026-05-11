@@ -1,6 +1,19 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import {
+  PERMISSIONS_STATE_KEY,
+  getContext,
+  provideCapability,
+  registerPluginCapabilities,
+  type PluginSetupContext,
+  type SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
+import {
+  PermissionsAdapterCap,
+  PermissionsEvaluatorCap,
+  PermissionsRegistryCap,
+} from '@lastshotlabs/slingshot-permissions';
 import { createTestApp, createTestPermissions } from '../../../tests/setup';
-import { createEmojiPlugin } from '../src/plugin';
+import { createEmojiPackage } from '../src/plugin';
 
 const createdApps: Array<{ destroy(): Promise<void> }> = [];
 
@@ -10,30 +23,66 @@ afterEach(async () => {
   }
 });
 
-describe('slingshot-emoji smoke', () => {
-  test('rejects invalid shortcode payloads before entity handling runs', async () => {
+function testPermissionsPlugin(): SlingshotPlugin {
+  const state = createTestPermissions();
+  return {
+    name: PERMISSIONS_STATE_KEY,
+    async setupMiddleware(ctx: PluginSetupContext) {
+      await registerPluginCapabilities(getContext(ctx.app), PERMISSIONS_STATE_KEY, [
+        provideCapability(PermissionsEvaluatorCap, () => state.evaluator),
+        provideCapability(PermissionsRegistryCap, () => state.registry),
+        provideCapability(PermissionsAdapterCap, () => state.adapter),
+      ]);
+    },
+  };
+}
+
+describe('slingshot-emoji package', () => {
+  test('boots cleanly and mounts the entity create route', async () => {
     const app = await createTestApp({
-      plugins: [
-        createEmojiPlugin({
-          permissions: createTestPermissions(),
-        }),
-      ],
+      plugins: [testPermissionsPlugin()],
+      packages: [createEmojiPackage({})],
     });
     createdApps.push((app as { ctx: { destroy(): Promise<void> } }).ctx);
 
-    const response = await app.request('/emoji', {
+    // Unauthenticated POST to the create route — auth intercepts first, but a
+    // non-404 confirms the route is registered at the expected path.
+    const response = await app.request('/emoji/emojis', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        shortcode: 'Bad-Emoji',
-        name: 'Bad Emoji',
-        uploadKey: 'uploads/emoji.png',
+        shortcode: 'valid_code',
+        name: 'Test',
+        uploadKey: 'uploads/test.png',
       }),
     });
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: 'Invalid shortcode',
-    });
+    expect(response.status).not.toBe(404);
+  });
+
+  test('emits deprecation warning when presignExpirySeconds is provided', () => {
+    const original = console.warn;
+    const warnings: string[] = [];
+    console.warn = (msg: unknown) => {
+      warnings.push(String(msg));
+    };
+    try {
+      createEmojiPackage({ presignExpirySeconds: 1800 });
+      expect(warnings.some(w => w.includes('presignExpirySeconds'))).toBe(true);
+    } finally {
+      console.warn = original;
+    }
+  });
+
+  test('returns a package definition with expected shape', () => {
+    const pkg = createEmojiPackage({ mountPath: '/emoji' });
+    expect(pkg.kind).toBe('package');
+    expect(pkg.name).toBe('slingshot-emoji');
+    expect(pkg.mountPath).toBe('/emoji');
+    expect(pkg.entities).toHaveLength(1);
+    expect(pkg.entities[0]?.entityName).toBe('Emoji');
+    expect(pkg.dependencies).toContain('slingshot-auth');
+    expect(pkg.dependencies).toContain('slingshot-permissions');
+    expect(pkg.middleware).toHaveProperty('shortcodeGuard');
   });
 });

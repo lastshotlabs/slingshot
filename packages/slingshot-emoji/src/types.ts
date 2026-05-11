@@ -1,100 +1,46 @@
 import { z } from 'zod';
-import type {
-  PermissionEvaluator,
-  PermissionRegistry,
-  PermissionsAdapter,
-} from '@lastshotlabs/slingshot-core';
 
 /**
- * Zod validation schema for {@link EmojiPluginConfig}.
+ * Zod validation schema for {@link EmojiPackageConfig}.
  *
- * Used by `createEmojiPlugin()` to validate the raw config object at
- * construction time via `validatePluginConfig()`. Exported so callers can
- * pre-validate config before passing it in.
- *
- * @example
- * ```ts
- * import { emojiPluginConfigSchema } from '@lastshotlabs/slingshot-emoji';
- *
- * const result = emojiPluginConfigSchema.safeParse(rawConfig);
- * if (!result.success) console.error(result.error.issues);
- * ```
+ * Used by `createEmojiPackage()` to validate the raw config at construction time.
  */
-export const emojiPluginConfigSchema = z.object({
+export const emojiPackageConfigSchema = z.object({
   /**
    * Base path under which all emoji routes are mounted.
    * Defaults to `'/emoji'`.
    */
   mountPath: z.string().startsWith('/').optional(),
   /**
-   * Permission evaluator, registry, and adapter from `@lastshotlabs/slingshot-core`.
-   *
-   * When omitted, the plugin reads shared permissions state from
-   * `ctx.pluginState` (populated by `createPermissionsPlugin()`). Declare
-   * `'slingshot-permissions'` as a dependency — or pass this explicitly — to
-   * ensure the state is available before the plugin's `setupMiddleware` runs.
-   */
-  permissions: z
-    .object({
-      evaluator: z.custom<PermissionEvaluator>(v => v != null && typeof v === 'object', {
-        message: 'Expected a PermissionEvaluator instance',
-      }),
-      registry: z.custom<PermissionRegistry>(v => v != null && typeof v === 'object', {
-        message: 'Expected a PermissionRegistry instance',
-      }),
-      adapter: z.custom<PermissionsAdapter>(v => v != null && typeof v === 'object', {
-        message: 'Expected a PermissionsAdapter instance',
-      }),
-    })
-    .loose()
-    .optional(),
-  /**
    * Deprecated: ignored legacy field that no longer affects runtime behavior.
    *
    * The emoji package does not generate presigned URLs itself. If this field is
-   * provided, the plugin warns and ignores it.
+   * provided, the package warns and ignores it.
    */
   presignExpirySeconds: z.number().int().positive().optional(),
 });
 
 /**
- * Fully-typed configuration for the emoji plugin.
+ * Fully-typed configuration for the emoji package.
  *
- * Inferred from {@link emojiPluginConfigSchema}. Pass a value of this type
- * to `createEmojiPlugin()`. All fields are optional.
+ * Pass a value of this type to `createEmojiPackage()`. All fields are optional.
  *
- * @remarks
- * **Field summary:**
- *
- * - `mountPath` - Base path for all emoji routes. Defaults to `'/emoji'`.
- * - `permissions` - Optional explicit permission evaluator, registry, and adapter.
- *   When omitted, the plugin reads shared permissions state from `ctx.pluginState`
- *   (populated by `createPermissionsPlugin()`).
- * - `presignExpirySeconds` - Deprecated legacy field. Ignored when provided.
- *
- * @example
- * ```ts
- * import type { EmojiPluginConfig } from '@lastshotlabs/slingshot-emoji';
- *
- * const config: EmojiPluginConfig = {
- *   mountPath: '/emoji',
- *   presignExpirySeconds: 1800, // warns and is ignored
- * };
- * ```
+ * Permissions resolve through the `slingshot-permissions` package, which must be
+ * registered before this one. Apps that need a custom permissions adapter should
+ * configure it on the permissions package, not here.
  */
-export type EmojiPluginConfig = z.infer<typeof emojiPluginConfigSchema>;
+export type EmojiPackageConfig = z.infer<typeof emojiPackageConfigSchema>;
 
 /**
  * Shape of an emoji record as returned by the API.
  *
- * Matches the entity fields defined in the emoji manifest. The `uploadKey`
- * references a file managed by the framework upload system — the emoji plugin
+ * Matches the entity fields defined in `src/entities/emoji.ts`. The `uploadKey`
+ * references a file managed by the framework upload system — the emoji package
  * does not handle file uploads directly.
  *
- * @remarks
  * Shortcodes must match `/^[a-z0-9_]{2,32}$/` (e.g. `party_parrot`). Validated
- * by middleware in `createEmojiPlugin()` on the create route. Uniqueness is also
- * enforced by the `[orgId, shortcode]` unique index.
+ * by the `shortcodeGuard` middleware on the create route. Uniqueness is enforced
+ * by the `[orgId, shortcode]` unique index.
  */
 export interface EmojiRecord {
   /** Unique emoji identifier (UUID). */
@@ -103,10 +49,7 @@ export interface EmojiRecord {
   orgId: string;
   /** Display name of the emoji. */
   name: string;
-  /**
-   * Shortcode used to reference the emoji in text (e.g. `party_parrot`).
-   * Must be unique within the org. Format: `/^[a-z0-9_]{2,32}$/`.
-   */
+  /** Shortcode used to reference the emoji in text. Must be unique within the org. */
   shortcode: string;
   /** Optional grouping category. */
   category?: string;

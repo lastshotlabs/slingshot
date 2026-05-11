@@ -1,21 +1,25 @@
 /**
  * @module @lastshotlabs/slingshot-emoji
  *
- * Custom emoji management plugin for slingshot.
+ * Custom emoji management package for slingshot.
  *
  * Provides CRUD routes for custom emoji with org-scoped shortcode uniqueness,
  * permission-guarded access, and event-driven notifications. Emoji assets are
- * managed by the framework upload system — this plugin stores only the
+ * managed by the framework upload system — this package stores only the
  * `uploadKey` reference.
  *
  * @example
  * ```ts
- * import { createEmojiPlugin } from '@lastshotlabs/slingshot-emoji';
+ * import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
  *
- * const emoji = createEmojiPlugin({ mountPath: '/emoji' });
+ * export default defineApp({
+ *   plugins: [createPermissionsPlugin({ adapter })],
+ *   packages: [createEmojiPackage({ mountPath: '/emoji' })],
+ * });
  * ```
  */
-export { createEmojiPlugin } from './plugin';
-export { emojiManifest } from './emoji';
-export { emojiPluginConfigSchema } from './types';
-export type { EmojiPluginConfig, EmojiRecord } from './types';
+export { createEmojiPackage } from './plugin';
+export { EmojiEntity, emojiOperations, emojiModule } from './entities/emoji';
+export { shortcodeGuard } from './middleware/shortcodeGuard';
+export { emojiPackageConfigSchema } from './types';
+export type { EmojiPackageConfig, EmojiRecord } from './types';

@@ -68,8 +68,6 @@ import type {
   PlannedEntityRoute,
   RouteConfigDeps,
 } from './routing';
-import { buildEventKeyMap, extractEventKey, wireActivityLog } from './wiring/activityLog';
-import { wireAutoGrant } from './wiring/autoGrant';
 import { createPermissionsResolver } from './wiring/resolvePermissions';
 
 type OpenApiCapableRouter = {
@@ -1127,75 +1125,6 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               registry: resolvedPermissions.registry,
               adapter: resolvedPermissions.adapter,
             }),
-          );
-        }
-      }
-
-      // Wire autoGrant for manifest entities that declare it.
-      if (pluginConfig.manifest && resolvedPermissions) {
-        for (const [entityName, entityDef] of Object.entries(pluginConfig.manifest.entities)) {
-          if (!entityDef.autoGrant) continue;
-          const rawEvent = entityDef.routes?.create?.event;
-          const eventKey = extractEventKey(rawEvent);
-          const resourceType = entityDef.routes?.permissions?.resourceType;
-          if (!eventKey || !resourceType) {
-            entityLogger.warn(
-              'autoGrant — requires routes.create.event.key and routes.permissions.resourceType to be set',
-              {
-                entityName,
-              },
-            );
-            continue;
-          }
-          const resolvedEntry = resolvedEntries.find(e => e.config.name === entityName);
-          wireAutoGrant(
-            bus,
-            entityName,
-            eventKey,
-            entityDef.autoGrant,
-            resourceType,
-            resolvedPermissions.adapter,
-            resolvedEntry
-              ? {
-                  pkField: resolvedEntry.config._pkField,
-                  tenantField: resolvedEntry.config.tenant
-                    ? resolvedEntry.config._systemFields.tenantField
-                    : undefined,
-                }
-              : undefined,
-          );
-        }
-      }
-
-      // Wire activityLog for manifest entities that declare it.
-      if (pluginConfig.manifest) {
-        for (const [entityName, entityDef] of Object.entries(pluginConfig.manifest.entities)) {
-          if (!entityDef.activityLog) continue;
-          const targetAdapter = resolvedAdapters[entityDef.activityLog.entity] as
-            | { create(data: Record<string, unknown>): Promise<Record<string, unknown>> }
-            | undefined;
-          if (!targetAdapter) {
-            throw new Error(
-              `[activityLog:${entityName}] Target entity "${entityDef.activityLog.entity}" ` +
-                `not found in resolved adapters. Ensure it is declared in the manifest.`,
-            );
-          }
-          const eventKeyMap = buildEventKeyMap(entityDef);
-          const resolvedLogEntry = resolvedEntries.find(e => e.config.name === entityName);
-          wireActivityLog(
-            bus,
-            entityName,
-            entityDef.activityLog,
-            eventKeyMap,
-            targetAdapter,
-            resolvedLogEntry
-              ? {
-                  pkField: resolvedLogEntry.config._pkField,
-                  tenantField: resolvedLogEntry.config.tenant
-                    ? resolvedLogEntry.config._systemFields.tenantField
-                    : undefined,
-                }
-              : undefined,
           );
         }
       }

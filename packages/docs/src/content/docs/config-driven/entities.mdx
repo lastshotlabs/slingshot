@@ -218,40 +218,6 @@ Built-in defaults when conventions are omitted:
 
 Custom resolvers return `undefined` for unrecognized sentinels to signal a fall-through to the built-in handler.
 
-## Manifest helper field mapping
-
-When using `autoGrant` or `activityLog`, payload field names are resolved from entity metadata instead of hardcoded first-party names.
-
-Resolution priority (highest to lowest):
-
-1. Explicit config fields (`resourceIdField`, `tenantIdField`, `actorIdFields`)
-2. Resolved entity fields (PK field, tenant field from `tenant.field`)
-3. Hardcoded defaults (`'id'`/`'orgId'` for autoGrant, `'id'`/`'orgId'` for activityLog)
-
-```json title="app.config.ts"
-{
-  "entities": {
-    "Project": {
-      "fields": { "projectId": { "type": "string", "primary": true }, ... },
-      "tenant": { "field": "workspaceId" },
-      "autoGrant": {
-        "on": "created",
-        "role": "project:owner",
-        "subjectField": "createdBy"
-      },
-      "activityLog": {
-        "entity": "Activity",
-        "resourceType": "project",
-        "actorIdFields": ["assignee", "createdBy"],
-        "events": { "created": { "action": "created" } }
-      }
-    }
-  }
-}
-```
-
-The `autoGrant` above resolves `resourceId` from `projectId` (entity PK) and `tenantId` from `workspaceId` (entity tenant field) automatically.
-
 ## Channel declarations
 
 Entity modules can also own realtime declarations through `channels`.

@@ -10,9 +10,6 @@ export {
   validateEntityManifest,
   handlerRefSchema,
   runtimeHookRefSchema,
-  autoGrantConfigSchema,
-  activityEventConfigSchema,
-  activityLogConfigSchema,
   adapterTransformsSchema,
   manifestHooksSchema,
 } from './entityManifestSchema';
@@ -26,9 +23,6 @@ export type {
   ManifestValidationResult,
   HandlerRef,
   RuntimeHookRef,
-  AutoGrantConfig,
-  ActivityEventConfig,
-  ActivityLogConfig,
   ManifestHooks,
 } from './entityManifestSchema';
 

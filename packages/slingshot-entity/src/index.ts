@@ -124,9 +124,6 @@ export {
   parseAndResolveEntityManifest,
   resolveMultiEntityManifest,
   parseAndResolveMultiEntityManifest,
-  autoGrantConfigSchema,
-  activityEventConfigSchema,
-  activityLogConfigSchema,
   runtimeHookRefSchema,
   adapterTransformsSchema,
   manifestHooksSchema,
@@ -155,9 +152,6 @@ export type {
   EntityManifestRuntime,
   EntityManifestConversionOptions,
   ResolvedManifest,
-  AutoGrantConfig,
-  ActivityEventConfig,
-  ActivityLogConfig,
   ManifestHooks,
 } from './manifest';
 

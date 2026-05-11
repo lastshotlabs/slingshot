@@ -7,8 +7,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ManifestEntities, ManifestEntity } from '../../src/index';
 import {
-  activityLogConfigSchema,
-  autoGrantConfigSchema,
   manifestEntitiesSchema,
   manifestEntitySchema,
   multiEntityManifestSchema,
@@ -237,105 +235,6 @@ describe('manifestEntitiesSchema', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// autoGrantConfigSchema
-// ---------------------------------------------------------------------------
-
-describe('autoGrantConfigSchema', () => {
-  it('validates a well-formed autoGrant config', () => {
-    const result = autoGrantConfigSchema.safeParse({
-      on: 'created',
-      role: 'document:owner',
-      subjectField: 'createdBy',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects unknown "on" value', () => {
-    const result = autoGrantConfigSchema.safeParse({
-      on: 'updated',
-      role: 'document:owner',
-      subjectField: 'createdBy',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty role', () => {
-    const result = autoGrantConfigSchema.safeParse({
-      on: 'created',
-      role: '',
-      subjectField: 'createdBy',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty subjectField', () => {
-    const result = autoGrantConfigSchema.safeParse({
-      on: 'created',
-      role: 'owner',
-      subjectField: '',
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// activityLogConfigSchema
-// ---------------------------------------------------------------------------
-
-describe('activityLogConfigSchema', () => {
-  it('validates a well-formed activityLog config', () => {
-    const result = activityLogConfigSchema.safeParse({
-      entity: 'Activity',
-      resourceType: 'content:document',
-      events: {
-        created: { action: 'created', meta: ['title', 'typeId'] },
-        deleted: { action: 'deleted' },
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects empty entity string', () => {
-    const result = activityLogConfigSchema.safeParse({
-      entity: '',
-      resourceType: 'doc',
-      events: { created: { action: 'created' } },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty resourceType string', () => {
-    const result = activityLogConfigSchema.safeParse({
-      entity: 'Activity',
-      resourceType: '',
-      events: { created: { action: 'created' } },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects event with empty action', () => {
-    const result = activityLogConfigSchema.safeParse({
-      entity: 'Activity',
-      resourceType: 'doc',
-      events: { created: { action: '' } },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts events without meta field', () => {
-    const result = activityLogConfigSchema.safeParse({
-      entity: 'Activity',
-      resourceType: 'doc',
-      events: { deleted: { action: 'deleted' } },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.events['deleted'].meta).toBeUndefined();
-    }
-  });
-});
-
 describe('runtimeHookRefSchema', () => {
   it('accepts hook refs with optional params', () => {
     const result = runtimeHookRefSchema.safeParse({
@@ -368,49 +267,3 @@ describe('multiEntityManifestSchema runtime hooks', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// entityManifestSchema with autoGrant + activityLog
-// ---------------------------------------------------------------------------
-
-describe('entityManifestSchema — autoGrant and activityLog fields', () => {
-  it('accepts entity with autoGrant', () => {
-    const result = manifestEntitySchema.safeParse({
-      ...validEntityDef,
-      autoGrant: { on: 'created', role: 'owner', subjectField: 'createdBy' },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts entity with activityLog', () => {
-    const result = manifestEntitySchema.safeParse({
-      ...validEntityDef,
-      activityLog: {
-        entity: 'Activity',
-        resourceType: 'shop:product',
-        events: { created: { action: 'created', meta: ['name'] } },
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts entity with both autoGrant and activityLog', () => {
-    const result = manifestEntitySchema.safeParse({
-      ...validEntityDef,
-      autoGrant: { on: 'created', role: 'owner', subjectField: 'createdBy' },
-      activityLog: {
-        entity: 'Activity',
-        resourceType: 'shop:product',
-        events: { created: { action: 'created' } },
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects invalid autoGrant nested inside entity', () => {
-    const result = manifestEntitySchema.safeParse({
-      ...validEntityDef,
-      autoGrant: { on: 'deleted', role: 'owner', subjectField: 'createdBy' },
-    });
-    expect(result.success).toBe(false);
-  });
-});

@@ -119,12 +119,6 @@ Built-in defaults: Redis key is `${storageName}:${appName}:${pk}`, auto-default 
 `'uuid'`/`'cuid'`/`'now'`, on-update handles `'now'`. Custom resolvers return `undefined`
 to fall through to the built-in handler.
 
-### Manifest Helper Field Mapping
-
-`autoGrant` and `activityLog` manifest helpers resolve payload fields from entity metadata
-(`_pkField`, `_systemFields.tenantField`) instead of hardcoding `id` and `orgId`. Explicit
-config (`resourceIdField`, `tenantIdField`, `actorIdFields`) overrides resolved defaults.
-
 ### Operation Registry
 
 Policy and data-scope logic resolves operation semantics through a centralized registry

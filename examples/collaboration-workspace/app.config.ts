@@ -6,7 +6,7 @@ import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/i
 import { createEmbedsPlugin } from '../../packages/slingshot-embeds/src/index.ts';
 import { createEmojiPackage } from '../../packages/slingshot-emoji/src/index.ts';
 import { createGifsPlugin } from '../../packages/slingshot-gifs/src/index.ts';
-import { createInteractionsPlugin } from '../../packages/slingshot-interactions/src/index.ts';
+import { createInteractionsPackage } from '../../packages/slingshot-interactions/src/index.ts';
 import { createNotificationsPlugin } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
 import { createPollsPlugin } from '../../packages/slingshot-polls/src/index.ts';
@@ -57,12 +57,14 @@ export default defineApp({
         '/share/*': '/thread/:id',
       },
     }),
-    createInteractionsPlugin({
+  ],
+  packages: [
+    createEmojiPackage({}),
+    createInteractionsPackage({
       handlers: {
         'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },
         'chat:pin:': { kind: 'queue', target: 'jobs:chat.pin', fireAndForget: true },
       },
     }),
   ],
-  packages: [createEmojiPackage({})],
 });

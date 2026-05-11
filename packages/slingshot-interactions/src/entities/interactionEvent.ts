@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /** Semantic statuses recorded in the interaction audit trail. */
 export type InteractionResponseStatus =
@@ -64,4 +64,11 @@ export const interactionEventOperations = defineOperations(InteractionEvent, {
     },
     returns: 'many',
   }),
+});
+
+/** Package-authoring module for InteractionEvent. */
+export const interactionEventModule = entity({
+  config: InteractionEvent,
+  operations: interactionEventOperations,
+  path: 'interactionEvents',
 });

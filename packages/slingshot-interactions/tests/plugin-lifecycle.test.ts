@@ -9,7 +9,7 @@ import {
   getContext,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import { createInteractionsPlugin } from '../src/plugin';
+import { createInteractionsPackage } from '../src/plugin';
 import { INTERACTIONS_PLUGIN_STATE_KEY } from '../src/state';
 import type { InteractionsPluginState } from '../src/state';
 import { createFakeDispatcher } from '../src/testing';
@@ -167,13 +167,13 @@ function createFrameworkConfig() {
   return cfg as never;
 }
 
-describe('createInteractionsPlugin lifecycle', () => {
+describe('createInteractionsPackage lifecycle', () => {
   test('setupMiddleware requires permissions state', async () => {
     const app = new Hono();
     const bus = new InProcessAdapter();
     attachInteractionsContext(app, bus, false);
 
-    const plugin = createInteractionsPlugin({});
+    const plugin = createInteractionsPackage({});
 
     await expect(
       plugin.setupMiddleware?.({
@@ -190,7 +190,7 @@ describe('createInteractionsPlugin lifecycle', () => {
     const bus = new InProcessAdapter();
     attachInteractionsContext(app, bus, true);
 
-    const plugin = createInteractionsPlugin({});
+    const plugin = createInteractionsPackage({});
 
     await expect(
       plugin.setupRoutes?.({
@@ -209,7 +209,7 @@ describe('createInteractionsPlugin lifecycle', () => {
     const bus = new InProcessAdapter();
     attachInteractionsContext(app, bus, true);
 
-    const plugin = createInteractionsPlugin({
+    const plugin = createInteractionsPackage({
       mountPath: '/interactions',
       handlers: {},
       rateLimit: { windowMs: 30_000, max: 5 },

@@ -1,7 +1,7 @@
 /**
- * Manifest-first compliance test for slingshot-interactions.
+ * Boot-from-JSON-config compliance test for slingshot-interactions.
  *
- * Verifies that the plugin boots entirely from a JSON manifest config — no
+ * Verifies that the package boots entirely from a JSON-safe config — no
  * function references, no class instances, all three HandlerTemplate kinds
  * (webhook, route, queue) declared purely as JSON.
  *
@@ -21,7 +21,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import type { ChatInteractionsPeer } from '../../src/peers/types';
-import { createInteractionsPlugin } from '../../src/plugin';
+import { createInteractionsPackage } from '../../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Minimal fake PermissionsState
@@ -237,7 +237,7 @@ async function bootFromManifest(): Promise<Harness> {
     password: Bun.password,
   };
 
-  const plugin = createInteractionsPlugin(config);
+  const plugin = createInteractionsPackage(config);
   await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
   await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
   await plugin.setupPost?.({ app, config: frameworkConfig as never, bus, events });
@@ -463,7 +463,7 @@ describe('Config validation from manifest', () => {
         },
       },
     });
-    expect(() => createInteractionsPlugin(JSON.parse(badConfig))).toThrow();
+    expect(() => createInteractionsPackage(JSON.parse(badConfig))).toThrow();
   });
 
   test('empty handlers produces a plugin with zero compiled handlers', async () => {
@@ -526,7 +526,7 @@ describe('Config validation from manifest', () => {
       password: Bun.password,
     };
 
-    const plugin = createInteractionsPlugin(minimalConfig);
+    const plugin = createInteractionsPackage(minimalConfig);
     await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
     await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
 

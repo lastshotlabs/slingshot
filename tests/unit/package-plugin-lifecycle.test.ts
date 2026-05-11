@@ -8,7 +8,7 @@ import {
 } from '@lastshotlabs/slingshot-game-engine';
 import {
   INTERACTIONS_PLUGIN_STATE_KEY,
-  createInteractionsPlugin,
+  createInteractionsPackage,
 } from '@lastshotlabs/slingshot-interactions';
 import {
   NotificationsBuilderFactory,
@@ -100,7 +100,7 @@ describe('package plugin lifecycle', () => {
 
   test('slingshot-interactions fails fast without permissions state', async () => {
     const plugin = {
-      ...createInteractionsPlugin({
+      ...createInteractionsPackage({
         handlers: {},
         rateLimit: { windowMs: 60_000, max: 20 },
       }),
@@ -124,7 +124,7 @@ describe('package plugin lifecycle', () => {
     const app = await createTestApp({
       plugins: [
         createPermissionsPlugin(),
-        createInteractionsPlugin({
+        createInteractionsPackage({
           handlers: {},
           rateLimit: { windowMs: 60_000, max: 20 },
         }),

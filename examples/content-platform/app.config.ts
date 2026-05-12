@@ -6,7 +6,7 @@ import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createCommunityPlugin } from '../../packages/slingshot-community/src/index.ts';
 import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
 import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
-import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
+import { createPermissionsPackage } from '../../packages/slingshot-permissions/src/index.ts';
 import { createSearchPackage } from '../../packages/slingshot-search/src/index.ts';
 import { createSsrPlugin } from '../../packages/slingshot-ssr/src/index.ts';
 import { defineApp } from '../../src/index.ts';
@@ -43,7 +43,6 @@ export default defineApp({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createPermissionsPlugin(),
     createCommunityPlugin({ containerCreation: 'admin' }),
     createDeepLinksPlugin({
       fallbackBaseUrl: 'https://content.example.com',
@@ -61,6 +60,7 @@ export default defineApp({
     }),
   ],
   packages: [
+    createPermissionsPackage(),
     createAssetsPackage({
       storage: { adapter: 'memory' },
       presignedUrls: true,

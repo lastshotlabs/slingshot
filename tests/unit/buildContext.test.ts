@@ -862,7 +862,7 @@ describe('buildContext lifecycle', () => {
     expect(ctx.wsEndpoints?.['/notifications']).toBeDefined();
   });
 
-  // Permissions bootstrap moved to the permissions plugin (createPermissionsPlugin).
+  // Permissions bootstrap moved to the permissions plugin (createPermissionsPackage).
   // Tested in tests/unit/permissions-bootstrap.test.ts via createApp().
 
   test('ReadonlyMap forEach passes thisArg correctly (lines 178-181)', async () => {

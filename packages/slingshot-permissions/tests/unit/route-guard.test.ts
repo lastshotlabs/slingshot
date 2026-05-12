@@ -6,7 +6,7 @@ import {
   getPluginState,
   route,
 } from '@lastshotlabs/slingshot-core';
-import { createPermissionsPlugin } from '../../src/plugin';
+import { createPermissionsPackage } from '../../src/plugin';
 
 const rootAppModulePath = '../../../../src/app';
 const { createApp } = await import(rootAppModulePath);
@@ -103,8 +103,7 @@ describe('permissions route guard — HTTP level', () => {
   test('anonymous request with no actor → 403 on permission-guarded route', async () => {
     const result = await createApp({
       ...baseConfig,
-      plugins: [createPermissionsPlugin()],
-      packages: [postsPackage],
+      packages: [createPermissionsPackage(), postsPackage],
     });
     createdContexts.push(result.ctx);
 
@@ -125,8 +124,7 @@ describe('permissions route guard — HTTP level', () => {
           await next();
         },
       ],
-      plugins: [createPermissionsPlugin()],
-      packages: [postsPackage],
+      packages: [createPermissionsPackage(), postsPackage],
     });
     createdContexts.push(result.ctx);
 
@@ -152,8 +150,7 @@ describe('permissions route guard — HTTP level', () => {
           await next();
         },
       ],
-      plugins: [createPermissionsPlugin()],
-      packages: [postsPackage],
+      packages: [createPermissionsPackage(), postsPackage],
     });
     createdContexts.push(result.ctx);
 
@@ -211,8 +208,7 @@ describe('permissions route guard — HTTP level', () => {
           await next();
         },
       ],
-      plugins: [createPermissionsPlugin()],
-      packages: [modPackage],
+      packages: [createPermissionsPackage(), modPackage],
     });
     createdContexts.push(result.ctx);
 
@@ -280,8 +276,7 @@ describe('permissions route guard — HTTP level', () => {
           await next();
         },
       ],
-      plugins: [createPermissionsPlugin()],
-      packages: [postsPackage],
+      packages: [createPermissionsPackage(), postsPackage],
     });
     createdContexts.push(result.ctx);
 
@@ -329,8 +324,7 @@ describe('permissions route guard — HTTP level', () => {
           await next();
         },
       ],
-      plugins: [createPermissionsPlugin()],
-      packages: [postsPackage],
+      packages: [createPermissionsPackage(), postsPackage],
     });
     createdContexts.push(result.ctx);
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { type MultiEntityManifest, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 import { createApp } from '../../src/app';
 import type { CreateAppConfig } from '../../src/app';
 
@@ -178,13 +178,13 @@ describe('entity manifest matrix', () => {
         security: {},
         logging: { onLog: () => {} },
         plugins: [
-          createPermissionsPlugin(),
           createEntityPlugin({
             name: `matrix-${label}`,
             mountPath: `/${label}`,
             manifest: matrixManifest(`matrix_${label}`),
           }),
         ],
+        packages: [createPermissionsPackage()],
       });
       const base = `/${label}/items`;
 

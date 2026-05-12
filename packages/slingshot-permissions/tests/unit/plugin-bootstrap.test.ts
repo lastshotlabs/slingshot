@@ -7,7 +7,7 @@ import {
 import { permissionsAdapterFactories } from '../../src/factories';
 import { createAuthGroupResolver } from '../../src/lib/authGroupResolver';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';
-import { createPermissionsPlugin } from '../../src/plugin';
+import { createPermissionsPackage } from '../../src/plugin';
 
 type MockBus = {
   handlers: Map<string, Array<(data: unknown) => Promise<void>>>;
@@ -108,15 +108,15 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(typeof adapter.createGrant).toBe('function');
   });
 
-  test('createPermissionsPlugin rejects redis as a permissions store', async () => {
+  test('createPermissionsPackage rejects redis as a permissions store', async () => {
     const app = new Hono();
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     await expect(
-      plugin.setupMiddleware?.(
+      pkg.setupMiddleware?.(
         asNever({
           app,
           config: {
@@ -129,14 +129,14 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     ).rejects.toThrow('Redis is not supported as a permissions store');
   });
 
-  test('createPermissionsPlugin seeds frozen permissions state into pluginState', async () => {
+  test('createPermissionsPackage seeds frozen permissions state into pluginState', async () => {
     const app = new Hono();
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
-    await plugin.setupMiddleware?.(
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: {
@@ -148,7 +148,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     );
 
     const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as Record<string, unknown> | undefined;
-    expect(plugin.name).toBe('slingshot-permissions');
+    expect(pkg.name).toBe('slingshot-permissions');
     expect(state).toBeDefined();
     expect(Object.isFrozen(state)).toBe(true);
     expect(typeof state?.evaluator).toBe('object');
@@ -156,7 +156,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(typeof state?.adapter).toBe('object');
   });
 
-  test('createPermissionsPlugin is idempotent when permissions state already exists', async () => {
+  test('createPermissionsPackage is idempotent when permissions state already exists', async () => {
     const app = new Hono();
     // Pre-seed the contract slot with a valid `{ evaluator, registry, adapter }` shape —
     // the plugin's idempotent check treats any well-formed permissions state as
@@ -169,9 +169,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]) };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
-    await plugin.setupMiddleware?.(
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: {
@@ -185,7 +185,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(sentinel);
   });
 
-  test('createPermissionsPlugin reflects a pre-seeded adapter in health', async () => {
+  test('createPermissionsPackage preserves a pre-seeded slot unchanged', async () => {
     const app = new Hono();
     const adapter = { name: 'preseeded-adapter' };
     const sentinel = Object.freeze({
@@ -196,9 +196,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]) };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
-    await plugin.setupMiddleware?.(
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: {
@@ -209,19 +209,12 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       }),
     );
 
+    // Externally-seeded slot is left untouched — the package's setupMiddleware
+    // short-circuits when permissions state is already present.
     expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(sentinel);
-    expect(plugin.getHealth()).toEqual({
-      status: 'healthy',
-      details: {
-        adapterAvailable: true,
-        adapterName: 'preseeded-adapter',
-        evaluator: null,
-        adapter: undefined,
-      },
-    });
   });
 
-  test('createPermissionsPlugin with no groupResolver disables group expansion', async () => {
+  test('createPermissionsPackage with no groupResolver disables group expansion', async () => {
     const app = new Hono();
     const ctx = {
       pluginState: new Map([
@@ -242,9 +235,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     attachContext(app, ctx as never);
 
     // No groupResolver — auth peer is ignored even though it's in pluginState
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
-    await plugin.setupMiddleware?.(
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
@@ -282,8 +275,8 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
-    await plugin.setupMiddleware?.(
+    const pkg = createPermissionsPackage();
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
@@ -303,7 +296,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       },
     };
 
-    plugin.setupPost?.(asNever({ app, bus }));
+    await pkg.setupPost?.(asNever({ app, bus }));
 
     const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
     const deleteAllSpy = mock(async (_subject: unknown) => {});
@@ -323,8 +316,8 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
-    await plugin.setupMiddleware?.(
+    const pkg = createPermissionsPackage();
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
@@ -344,7 +337,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       },
     };
 
-    plugin.setupPost?.(asNever({ app, bus }));
+    await pkg.setupPost?.(asNever({ app, bus }));
 
     const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
     state.adapter.deleteAllGrantsForSubject = mock(async () => {
@@ -360,7 +353,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     // setupMiddleware was NOT called, so 'slingshot:package:capabilities:slingshot-permissions' is absent
     const bus: MockBus = {
       handlers: new Map(),
@@ -374,7 +367,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       },
     };
     // Should not throw
-    expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
+    expect(() => pkg.setupPost?.(asNever({ app, bus }))).not.toThrow();
     // No handlers registered — bus is empty
     expect(bus.handlers.size).toBe(0);
   });
@@ -384,7 +377,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]) };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     const bus: MockBus = {
       handlers: new Map(),
       on(event, handler) {
@@ -397,7 +390,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       },
     };
 
-    expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
+    expect(() => pkg.setupPost?.(asNever({ app, bus }))).not.toThrow();
     expect(bus.handlers.size).toBe(0);
   });
 
@@ -406,10 +399,10 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]) };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     await expect(
-      plugin.seed?.(
+      pkg.seed?.(
         asNever({
           app,
           seedState: new Map([['superAdmin:admin@example.test', true]]),
@@ -439,11 +432,11 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     const warn = spyOn(console, 'warn').mockImplementation(() => {});
     const info = spyOn(console, 'info').mockImplementation(() => {});
 
-    await plugin.seed?.(
+    await pkg.seed?.(
       asNever({
         app,
         seedState: new Map<string, unknown>([
@@ -502,10 +495,10 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     const info = spyOn(console, 'info').mockImplementation(() => {});
 
-    await plugin.seed?.(
+    await pkg.seed?.(
       asNever({
         app,
         seedState: new Map<string, unknown>([
@@ -519,7 +512,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(info).toHaveBeenCalledWith(expect.stringContaining('already has super-admin'));
   });
 
-  test('createPermissionsPlugin with groupResolver wires auth-backed group expansion', async () => {
+  test('createPermissionsPackage with groupResolver wires auth-backed group expansion', async () => {
     const app = new Hono();
     const ctx = {
       pluginState: new Map([
@@ -539,12 +532,12 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin({
+    const pkg = createPermissionsPackage({
       groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     });
 
-    await plugin.setupMiddleware?.(
+    await pkg.setupMiddleware?.(
       asNever({
         app,
         config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },

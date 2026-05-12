@@ -9,7 +9,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
-import { createPermissionsPlugin } from '../../src/plugin';
+import { createPermissionsPackage } from '../../src/plugin';
 
 type MockBus = {
   handlers: Map<string, Array<(data: unknown) => Promise<void>>>;
@@ -29,16 +29,16 @@ afterEach(() => {
 // Invalid config rejection
 // ---------------------------------------------------------------------------
 
-describe('createPermissionsPlugin config validation', () => {
+describe('createPermissionsPackage config validation', () => {
   test('rejects config with null resolvedStores', async () => {
     const app = new Hono();
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     await expect(
-      plugin.setupMiddleware?.(
+      pkg.setupMiddleware?.(
         asNever({
           app,
           config: {
@@ -56,10 +56,10 @@ describe('createPermissionsPlugin config validation', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     await expect(
-      plugin.setupMiddleware?.(
+      pkg.setupMiddleware?.(
         asNever({
           app,
           config: {
@@ -77,11 +77,11 @@ describe('createPermissionsPlugin config validation', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     // Missing storeInfra is handled gracefully — plugin still initializes
     await expect(
-      plugin.setupMiddleware?.(
+      pkg.setupMiddleware?.(
         asNever({
           app,
           config: {
@@ -129,34 +129,25 @@ describe('permissionsAdapterFactories edge cases', () => {
 });
 
 // ---------------------------------------------------------------------------
-// getHealth edge cases
+// Package metadata
 // ---------------------------------------------------------------------------
 
-describe('createPermissionsPlugin getHealth edge cases', () => {
-  test('getHealth reflects available adapter before setup', () => {
-    const plugin = createPermissionsPlugin();
-    const health = plugin.getHealth?.();
-    expect(health).toBeDefined();
-    if (health) {
-      expect(typeof health.status).toBe('string');
-    }
+describe('createPermissionsPackage metadata', () => {
+  test('package name is slingshot-permissions', () => {
+    const pkg = createPermissionsPackage();
+    expect(pkg.name).toBe('slingshot-permissions');
   });
 
-  test('plugin name is slingshot-permissions', () => {
-    const plugin = createPermissionsPlugin();
-    expect(plugin.name).toBe('slingshot-permissions');
-  });
-
-  test('plugin has no dependencies', () => {
-    const plugin = createPermissionsPlugin();
-    expect(plugin.dependencies).toBeUndefined();
+  test('package has no dependencies', () => {
+    const pkg = createPermissionsPackage();
+    expect(pkg.dependencies).toEqual([]);
   });
 
   test('setupMiddleware without app context still handles gracefully', async () => {
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
 
     await expect(
-      plugin.setupMiddleware?.(
+      pkg.setupMiddleware?.(
         asNever({
           app: null,
           config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
@@ -177,7 +168,7 @@ describe('permissions plugin resilience', () => {
     const ctx = { pluginState: new Map() };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     // setupMiddleware not called — no adapter
     const bus: MockBus = {
       handlers: new Map(),
@@ -191,7 +182,7 @@ describe('permissions plugin resilience', () => {
       },
     };
 
-    expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
+    expect(() => pkg.setupPost?.(asNever({ app, bus }))).not.toThrow();
   });
 
   test('seed is a no-op when no seed data is provided', async () => {
@@ -210,9 +201,9 @@ describe('permissions plugin resilience', () => {
     };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     await expect(
-      plugin.seed?.(
+      pkg.seed?.(
         asNever({
           app,
           seedState: new Map(),
@@ -237,10 +228,10 @@ describe('permissions plugin resilience', () => {
     };
     attachContext(app, ctx as never);
 
-    const plugin = createPermissionsPlugin();
+    const pkg = createPermissionsPackage();
     const warn = spyOn(console, 'warn').mockImplementation(() => {});
 
-    await plugin.seed?.(
+    await pkg.seed?.(
       asNever({
         app,
         seedState: new Map<string, unknown>([['malformed:key:extra:parts', true]]),

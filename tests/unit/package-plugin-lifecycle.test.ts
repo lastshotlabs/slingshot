@@ -14,7 +14,7 @@ import {
   NotificationsBuilderFactory,
   createNotificationsPackage,
 } from '@lastshotlabs/slingshot-notifications';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 import { createTestApp } from '../setup';
 
 const createdApps: Array<{ destroy(): Promise<void> }> = [];
@@ -115,15 +115,15 @@ describe('package plugin lifecycle', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe(
-        '[slingshot-interactions] Permissions state not found. Register createPermissionsPlugin() first.',
+        '[slingshot-interactions] Permissions state not found. Register createPermissionsPackage() first.',
       );
     }
   });
 
   test('slingshot-interactions publishes plugin state and mounts the dispatch route', async () => {
     const app = await createTestApp({
-      plugins: [
-        createPermissionsPlugin(),
+      packages: [
+        createPermissionsPackage(),
         createInteractionsPackage({
           handlers: {},
           rateLimit: { windowMs: 60_000, max: 20 },

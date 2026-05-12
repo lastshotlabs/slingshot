@@ -1,15 +1,18 @@
 import type {
   GroupResolver,
   Logger,
+  PermissionRegistry,
+  PermissionsAdapter,
   PluginSeedContext,
   PluginSetupContext,
   PluginStateMap,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   SUPER_ADMIN_ROLE,
   createConsoleLogger,
+  definePackage,
   getContext,
   getPermissionsStateOrNull,
   getPluginState,
@@ -20,56 +23,21 @@ import {
 import {
   PermissionsAdapterCap,
   PermissionsEvaluatorCap,
+  PermissionsHealthCap,
   PermissionsRegistryCap,
 } from './public';
+import type { PermissionsHealth } from './public';
 import { permissionsAdapterFactories } from './factories';
 import {
-  type EvaluatorHealth,
   type EvaluatorWithHealth,
   createPermissionEvaluator,
 } from './lib/evaluator';
 import { createPermissionRegistry } from './lib/registry';
 
-/**
- * Aggregated health snapshot for `slingshot-permissions`. Returned by the
- * `getHealth()` method on the plugin instance.
- *
- * `status` is derived from the underlying signals:
- *   - `'unhealthy'` when no permissions adapter has been resolved yet (the
- *     plugin hasn't completed `setupMiddleware`, or another plugin pre-seeded
- *     state without an adapter).
- *   - `'degraded'` when the evaluator has observed any query timeouts or
- *     group-expansion errors since startup, or when the backing adapter
- *     reports a disconnected state.
- *   - `'healthy'` otherwise.
- */
-export interface PermissionsHealth {
-  readonly status: 'healthy' | 'degraded' | 'unhealthy';
-  readonly details: {
-    /** `true` when a `PermissionsAdapter` has been resolved into plugin state. */
-    readonly adapterAvailable: boolean;
-    /** Adapter implementation name (best-effort). `null` when unavailable. */
-    readonly adapterName: string | null;
-    /** Per-evaluator counters surfaced from the most recently created evaluator. */
-    readonly evaluator: EvaluatorHealth | null;
-    /**
-     * Adapter-level health snapshot. Present when the backing adapter
-     * exposes a `healthCheck()` method (currently the Postgres adapter).
-     * `undefined` for adapters that do not support health checks (memory,
-     * SQLite).
-     */
-    readonly adapter:
-      | {
-          readonly status: 'connected' | 'disconnected';
-        }
-      | undefined;
-    /** Unix timestamp (ms) of the last adapter health check. `undefined` if never checked. */
-    readonly adapterHealthLastChecked: number | undefined;
-  };
-}
+export type { PermissionsHealth } from './public';
 
 /**
- * Configuration for the permissions plugin wrapper.
+ * Configuration for the permissions package.
  *
  * Controls the backing adapter, optional group expansion, and evaluator limits
  * used when resolving role grants for user, group, and service-account subjects.
@@ -77,13 +45,13 @@ export interface PermissionsHealth {
 export interface PermissionsPluginConfig {
   /**
    * Override the store backend for the permissions adapter.
-   * When omitted the plugin falls back to `frameworkConfig.resolvedStores.authStore`.
+   * When omitted the package falls back to `frameworkConfig.resolvedStores.authStore`.
    */
   adapter?: 'sqlite' | 'postgres' | 'mongo' | 'memory';
 
   /**
    * Optional group resolver for expanding user → group membership during permission checks.
-   * Receives the plugin state map so it can lazily read peer plugin runtime.
+   * Receives the plugin state map so it can lazily read peer package runtime.
    *
    * When omitted, group expansion is disabled — grants to groups never apply to users.
    *
@@ -91,12 +59,12 @@ export interface PermissionsPluginConfig {
    * @example
    * ```ts
    * import {
-   *   createPermissionsPlugin,
+   *   createPermissionsPackage,
    *   createAuthGroupResolver,
    * } from '@lastshotlabs/slingshot-permissions';
    * import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
    *
-   * createPermissionsPlugin({
+   * createPermissionsPackage({
    *   groupResolver: (pluginState) =>
    *     createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
    * });
@@ -124,53 +92,54 @@ export interface PermissionsPluginConfig {
   failOpenOnGroupExpansionError?: boolean;
 
   /**
-   * Injected structured logger for plugin-level operational messages.
-   * When omitted, messages are silently discarded (noop logger).
+   * Injected structured logger for package-level operational messages.
+   * When omitted, messages go through the default console logger.
    * The logger is also forwarded to the evaluator for permission check warnings.
    */
   logger?: Logger;
 }
 
 /**
- * Creates the slingshot-permissions plugin.
+ * Creates the slingshot-permissions package.
  *
  * Resolves the permissions adapter from the active store type during
  * `setupMiddleware` and stores a frozen `PermissionsState`
- * (`{ evaluator, registry, adapter }`) in `ctx.pluginState` under
- * `PERMISSIONS_STATE_KEY`. Plugins that require permissions (e.g.
+ * (`{ evaluator, registry, adapter }`) in `ctx.pluginState` under the
+ * package capabilities slot. Packages that require permissions (e.g.
  * `slingshot-community`, `slingshot-content`) declare `'slingshot-permissions'`
- * as a dependency and read the shared state from `pluginState` instead of
+ * as a dependency and read the shared state from `pluginState` (or resolve via
+ * `ctx.capabilities.require(PermissionsEvaluatorCap)`) instead of
  * constructing their own instances.
  *
  * Group expansion is disabled by default. To resolve user → group membership
  * from `slingshot-auth`, pass a `groupResolver` factory via config.
  *
- * Registration order: declare this plugin before any consumer plugin so the
+ * Registration order: declare this package before any consumer package so the
  * framework's topological sort places its `setupMiddleware` first.
  *
- * @returns A `SlingshotPlugin` ready to register with `createApp()`.
+ * @returns A `SlingshotPackageDefinition` ready for `createApp({ packages })`.
  *
  * @example Standalone (no auth integration)
  * ```ts
- * import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+ * import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
  *
  * const { app } = await createApp({
- *   plugins: [createPermissionsPlugin()],
+ *   packages: [createPermissionsPackage()],
  * });
  * ```
  *
  * @example With slingshot-auth group resolution
  * ```ts
  * import {
- *   createPermissionsPlugin,
+ *   createPermissionsPackage,
  *   createAuthGroupResolver,
  * } from '@lastshotlabs/slingshot-permissions';
  * import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
  *
  * const { app } = await createApp({
- *   plugins: [
- *     createAuthPlugin({ auth: { roles: ['user', 'admin'] } }),
- *     createPermissionsPlugin({
+ *   plugins: [createAuthPlugin({ auth: { roles: ['user', 'admin'] } })],
+ *   packages: [
+ *     createPermissionsPackage({
  *       groupResolver: (pluginState) =>
  *         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
  *     }),
@@ -178,19 +147,19 @@ export interface PermissionsPluginConfig {
  * });
  * ```
  */
-export function createPermissionsPlugin(
+export function createPermissionsPackage(
   config?: PermissionsPluginConfig,
-): SlingshotPlugin & { getHealth(): PermissionsHealth } {
-  // Captured from setupMiddleware so getHealth() can return a non-trivial
-  // snapshot without re-resolving the adapter.
+): SlingshotPackageDefinition {
   const logger: Logger =
     config?.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-permissions' } });
+  // Captured from setupMiddleware so the health capability can return a
+  // non-trivial snapshot without re-resolving the adapter.
   let evaluatorRef: EvaluatorWithHealth | undefined;
   let adapterNameRef: string | null = null;
   let adapterAvailable = false;
   // Adapter-level health detail — populated when the adapter exposes a
   // healthCheck() method (e.g. the Postgres adapter). Refreshed lazily
-  // on getHealth() when the cached value is older than 30s.
+  // on the health capability when the cached value is older than 30s.
   let adapterHealth: PermissionsHealth['details']['adapter'] = undefined;
   let adapterHealthRef: {
     healthCheck: () => Promise<{ status: 'connected' | 'disconnected' }>;
@@ -198,56 +167,82 @@ export function createPermissionsPlugin(
   let lastAdapterHealthCheck = 0;
   const ADAPTER_HEALTH_TTL_MS = 30_000;
 
-  return {
+  function buildHealth(): PermissionsHealth {
+    const evaluatorHealth = evaluatorRef?.getHealth() ?? null;
+
+    // Refresh adapter health if the cached value is stale.
+    if (adapterHealthRef && Date.now() - lastAdapterHealthCheck > ADAPTER_HEALTH_TTL_MS) {
+      void adapterHealthRef
+        .healthCheck()
+        .then(aHealth => {
+          adapterHealth = aHealth;
+          lastAdapterHealthCheck = Date.now();
+        })
+        .catch(() => {
+          adapterHealth = { status: 'disconnected' as const };
+          lastAdapterHealthCheck = Date.now();
+        });
+    }
+
+    let status: PermissionsHealth['status'] = 'healthy';
+    if (!adapterAvailable) {
+      status = 'unhealthy';
+    } else if (
+      evaluatorHealth &&
+      (evaluatorHealth.queryTimeoutCount > 0 || evaluatorHealth.groupExpansionErrorCount > 0)
+    ) {
+      status = 'degraded';
+    } else if (adapterHealth && adapterHealth.status !== 'connected') {
+      status = 'degraded';
+    }
+    return {
+      status,
+      details: {
+        adapterAvailable,
+        adapterName: adapterNameRef,
+        evaluator: evaluatorHealth,
+        adapter: adapterHealth,
+        adapterHealthLastChecked: lastAdapterHealthCheck || undefined,
+      },
+    };
+  }
+
+  let registryRef: PermissionRegistry | undefined;
+  let adapterRef: PermissionsAdapter | undefined;
+
+  /**
+   * Publish the four package capabilities (evaluator, registry, adapter, health) into
+   * the package-capabilities slot. Called from both `setupMiddleware` (so consumer
+   * packages can read them in their own `setupMiddleware`) and `setupPost` (the
+   * framework re-runs its declarative `publishPackageRuntimeState` at the top of
+   * `setupPost` based on `definePackage({ capabilities.provides })`, which would
+   * otherwise wipe the slot for packages that publish capabilities imperatively).
+   */
+  async function publishCaps(app: object): Promise<void> {
+    if (!evaluatorRef || !registryRef || !adapterRef) return;
+    const evaluator = evaluatorRef;
+    const registry = registryRef;
+    const adapter = adapterRef;
+    await registerPluginCapabilities(getContext(app), 'slingshot-permissions', [
+      provideCapability(PermissionsEvaluatorCap, () => evaluator),
+      provideCapability(PermissionsRegistryCap, () => registry),
+      provideCapability(PermissionsAdapterCap, () => adapter),
+      provideCapability(PermissionsHealthCap, () => buildHealth),
+    ]);
+  }
+
+  return definePackage({
     name: 'slingshot-permissions',
-
-    getHealth(): PermissionsHealth {
-      const evaluatorHealth = evaluatorRef?.getHealth() ?? null;
-
-      // Refresh adapter health if the cached value is stale.
-      if (adapterHealthRef && Date.now() - lastAdapterHealthCheck > ADAPTER_HEALTH_TTL_MS) {
-        void adapterHealthRef
-          .healthCheck()
-          .then(aHealth => {
-            adapterHealth = aHealth;
-            lastAdapterHealthCheck = Date.now();
-          })
-          .catch(() => {
-            adapterHealth = { status: 'disconnected' as const };
-            lastAdapterHealthCheck = Date.now();
-          });
-      }
-
-      let status: PermissionsHealth['status'] = 'healthy';
-      if (!adapterAvailable) {
-        status = 'unhealthy';
-      } else if (
-        evaluatorHealth &&
-        (evaluatorHealth.queryTimeoutCount > 0 || evaluatorHealth.groupExpansionErrorCount > 0)
-      ) {
-        status = 'degraded';
-      } else if (adapterHealth && adapterHealth.status !== 'connected') {
-        status = 'degraded';
-      }
-      return {
-        status,
-        details: {
-          adapterAvailable,
-          adapterName: adapterNameRef,
-          evaluator: evaluatorHealth,
-          adapter: adapterHealth,
-          adapterHealthLastChecked: lastAdapterHealthCheck || undefined,
-        },
-      };
-    },
+    dependencies: [],
+    entities: [],
 
     async setupMiddleware({ app, config: frameworkConfig }: PluginSetupContext) {
       const pluginState = getPluginState(app);
-      // Idempotent — if another plugin (or a test fixture) already published the
+      // Idempotent — if another package (or a test fixture) already published the
       // permissions contract capabilities, skip re-publishing.
       const existing = getPermissionsStateOrNull(pluginState);
       if (existing) {
-        // Reflect the externally-seeded state so getHealth() doesn't lie.
+        // Reflect the externally-seeded state so the health capability doesn't lie.
         if (existing.adapter) {
           adapterAvailable = true;
           adapterNameRef =
@@ -282,6 +277,8 @@ export function createPermissionsPlugin(
       });
 
       evaluatorRef = evaluator;
+      registryRef = registry;
+      adapterRef = adapter;
       adapterAvailable = true;
       adapterNameRef = (adapter as { name?: string }).name ?? adapter.constructor?.name ?? null;
 
@@ -304,14 +301,16 @@ export function createPermissionsPlugin(
       // `ctx.capabilities.require(PermissionsEvaluatorCap)` etc., or fetch the
       // bundled `{ evaluator, registry, adapter }` shape via `getPermissionsState(...)`
       // (which resolves through the same contract slot internally).
-      await registerPluginCapabilities(getContext(app), 'slingshot-permissions', [
-        provideCapability(PermissionsEvaluatorCap, () => evaluator),
-        provideCapability(PermissionsRegistryCap, () => registry),
-        provideCapability(PermissionsAdapterCap, () => adapter),
-      ]);
+      await publishCaps(app);
     },
 
-    setupPost({ app, bus }: PluginSetupContext) {
+    async setupPost({ app, bus }: PluginSetupContext) {
+      // Re-publish capabilities so they survive the framework's declarative
+      // `publishPackageRuntimeState` pass at the top of `setupPost` (which would
+      // otherwise overwrite the slot to an empty object since this package
+      // doesn't declare any entries in `definePackage({ capabilities.provides })`).
+      await publishCaps(app);
+
       const permsState = getPermissionsStateOrNull(getPluginState(app));
       if (!permsState?.adapter) return;
       bus.on('auth:user.deleted', async ({ userId }) => {
@@ -368,5 +367,5 @@ export function createPermissionsPlugin(
         logger.info(`[slingshot-permissions seed] Granted super-admin to '${email}'.`);
       }
     },
-  };
+  });
 }

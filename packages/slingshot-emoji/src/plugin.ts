@@ -33,7 +33,7 @@ import { emojiPackageConfigSchema } from './types';
  * import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
  *
  * export default defineApp({
- *   plugins: [createPermissionsPlugin({ adapter: permissionsAdapter })],
+ *   packages: [createPermissionsPackage({ adapter: permissionsAdapter })],
  *   packages: [createEmojiPackage({})],
  * });
  * ```

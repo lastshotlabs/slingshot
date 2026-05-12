@@ -70,7 +70,7 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
       const permissions = getPermissionsStateOrNull(pluginState);
       if (!permissions) {
         throw new Error(
-          '[slingshot-interactions] Permissions state not found. Register createPermissionsPlugin() first.',
+          '[slingshot-interactions] Permissions state not found. Register createPermissionsPackage() first.',
         );
       }
 

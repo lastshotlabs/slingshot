@@ -8,7 +8,7 @@ import { createEmojiPackage } from '../../packages/slingshot-emoji/src/index.ts'
 import { createGifsPlugin } from '../../packages/slingshot-gifs/src/index.ts';
 import { createInteractionsPackage } from '../../packages/slingshot-interactions/src/index.ts';
 import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
-import { createPermissionsPlugin } from '../../packages/slingshot-permissions/src/index.ts';
+import { createPermissionsPackage } from '../../packages/slingshot-permissions/src/index.ts';
 import { createPollsPackage } from '../../packages/slingshot-polls/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
@@ -25,7 +25,6 @@ export default defineApp({
       auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createPermissionsPlugin(),
     createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
     createChatPlugin({
       storeType: 'memory',
@@ -49,6 +48,7 @@ export default defineApp({
     }),
   ],
   packages: [
+    createPermissionsPackage(),
     createAssetsPackage({
       storage: { adapter: 'memory' },
       presignedUrls: true,

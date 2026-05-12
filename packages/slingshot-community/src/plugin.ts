@@ -171,7 +171,7 @@ function buildInteractionsPeer(
  *
  * **Permissions resolution:** the plugin reads `PermissionsState` from
  * `ctx.pluginState` during `setupMiddleware`, which is populated by
- * `createPermissionsPlugin()`. Declare `'slingshot-permissions'` before
+ * `createPermissionsPackage()`. Declare `'slingshot-permissions'` before
  * community so the framework topological sort guarantees ordering.
  *
  * **Notifications resolution:** the plugin resolves the notifications builder
@@ -196,7 +196,7 @@ function buildInteractionsPeer(
  *
  * @throws {Error} If `rawConfig` fails the Zod schema validation.
  * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs —
- *   register `createPermissionsPlugin()` first.
+ *   register `createPermissionsPackage()` first.
  * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
  *   `setupPost` runs — register `createNotificationsPackage()` first.
  *
@@ -407,7 +407,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         getPermissionsStateOrNull(app) ??
         (() => {
           throw new Error(
-            '[slingshot-community] No permissions available. Register createPermissionsPlugin() before this plugin.',
+            '[slingshot-community] No permissions available. Register createPermissionsPackage() before this plugin.',
           );
         })();
 

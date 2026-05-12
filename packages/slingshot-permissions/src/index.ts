@@ -85,13 +85,13 @@ export { permissionsAdapterFactories } from './factories';
  */
 export type { PermissionsAdapterFactories } from './factories';
 /**
- * Create the permissions plugin wrapper.
+ * Create the permissions package.
  */
-export { createPermissionsPlugin } from './plugin';
+export { createPermissionsPackage } from './plugin';
 /**
- * Configuration accepted by `createPermissionsPlugin()`.
+ * Configuration accepted by `createPermissionsPackage()`.
  */
-export type { PermissionsPluginConfig } from './plugin';
+export type { PermissionsPluginConfig, PermissionsHealth } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
@@ -99,6 +99,7 @@ export {
   Permissions,
   PermissionsAdapterCap,
   PermissionsEvaluatorCap,
+  PermissionsHealthCap,
   PermissionsRegistryCap,
 } from './public';
 /**

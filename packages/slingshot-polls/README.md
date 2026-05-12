@@ -20,11 +20,12 @@ polls are attached to app content through source handlers and policy resolvers.
 
 ## What You Need Before Wiring It In
 
-The plugin depends on `slingshot-auth`.
+The package depends on `slingshot-auth`.
 
-To make polls useful, another package or app integration must register source handlers and policies
-for the content types that polls can attach to. The plugin registers the shared policy keys, but it
-does not know your domain-specific `sourceType` semantics on its own.
+To make polls useful, you must supply source handlers and policies for the content types that polls
+can attach to. The package registers the shared policy keys, but it does not know your
+domain-specific `sourceType` semantics on its own. Handlers are declared at package construction
+time via the `sourceHandlers` and `voteHandlers` config fields.
 
 ## Minimum Setup
 
@@ -48,7 +49,7 @@ top:
 - vote guards that enforce poll state and per-user voting rules
 - a manual `results` route with explicit policy resolution against the underlying poll record
 - an auto-close sweep that closes expired polls on an interval
-- plugin state published under `POLLS_PLUGIN_STATE_KEY`
+- package state published under `POLLS_PLUGIN_STATE_KEY`
 
 This package is intentionally content-agnostic. Source-policy hooks are the integration seam that
 lets other packages adopt it.
@@ -71,10 +72,22 @@ If you need to change behavior, start in:
 
 ## Gotchas
 
-- The package is not plug-and-play without source handler registration. If no domain registers poll
+- The package is not plug-and-play without source handler registration. If no domain supplies poll
   source policies, attach flows will have no meaningful authorization model.
-- Source handler registration is per-plugin-instance via `plugin.registerSourceHandler()` or via
-  plugin state, not a module-level function. Call it before `setupMiddleware` runs.
+- Source handlers are passed to `createPollsPackage({ sourceHandlers, voteHandlers })` at
+  construction time. The runtime `plugin.registerSourceHandler()` API is gone — build the handler
+  map upfront and hand it to the package factory:
+
+  ```ts
+  createPollsPackage({
+    sourceHandlers: {
+      'community-thread': communityThreadPollHandler,
+    },
+    voteHandlers: {
+      'community-thread': communityThreadVoteHandler,
+    },
+  });
+  ```
 - The auto-close sweep is real runtime behavior. It is not a dev-only task.
 - The results route is mounted separately from entity-generated routes because it needs cross-entity
   access and explicit policy checks.

@@ -3,11 +3,11 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-push
 ---
 
-`@lastshotlabs/slingshot-push` is Slingshot's multi-provider push delivery plugin. It manages
+`@lastshotlabs/slingshot-push` is Slingshot's multi-provider push delivery package. It manages
 device subscriptions, topic fan-out, delivery records, and provider dispatch for Web Push (VAPID),
 iOS (APNS), and Android (FCM).
 The push entities themselves follow the shared package-first/entity authoring model;
-`createPushPlugin()` is the runtime shell that composes routing, providers, and manifest wiring.
+`createPushPackage()` is the runtime shell that composes routing, providers, and entity wiring.
 
 ## What It Owns
 
@@ -15,7 +15,8 @@ The push entities themselves follow the shared package-first/entity authoring mo
 - Per-platform provider wiring (web-push, APNS, FCM)
 - Subscription management routes (`/topics/:name/subscribe`, `/topics/:name/unsubscribe`, `/ack/:deliveryId`)
 - VAPID public-key endpoint for web clients (`/vapid-public-key`)
-- A delivery adapter that auto-registers with `slingshot-notifications` when that plugin is present
+- A delivery adapter that auto-registers with `slingshot-notifications` when that package is present
+- `PushRuntimeCap` and `PushHealthCap` capabilities for cross-package consumers
 
 ## Dependencies
 
@@ -25,10 +26,20 @@ The push entities themselves follow the shared package-first/entity authoring mo
 ## Minimum Setup
 
 ```ts
-createPushPlugin({
+createPushPackage({
   enabledPlatforms: ['web'],
   web: { vapid: { publicKey: '...', privateKey: '...', subject: 'mailto:push@example.com' } },
 });
+```
+
+## Health
+
+Consumers resolve the aggregated health snapshot via the `PushHealthCap` capability:
+
+```ts
+import { PushHealthCap } from '@lastshotlabs/slingshot-push';
+
+const health = ctx.capabilities.require(PushHealthCap)();
 ```
 
 For iOS, add `ios: { auth: { kind: 'p8-token', keyPem: '...', keyId: 'ABC123', teamId: 'TEAM123456' } }`.
@@ -72,14 +83,14 @@ not a failure, just nothing to deliver. Per-subscription failures continue to su
 - VAPID keys should be generated once and stored durably. Rotating them invalidates all existing
   web-push subscriptions.
 - Push routes use `requireUserAuth` middleware that reads `actor.id` from the resolved auth context.
-  The push plugin does not expose a service-to-service push route — delivery is handled through
+  The push package does not expose a service-to-service push route — delivery is handled through
   the router, not the HTTP surface.
 - `slingshot-push` does not send push notifications directly on topic subscribe/unsubscribe. Those
   routes only manage membership records. Actual delivery is triggered through the notifications
   dispatcher or direct router calls.
 - Topic fan-out is capped at 10,000 members per publish call. Topics exceeding this threshold
   will log a warning and deliver only to the first 10,000. Use a cursor-paginated delivery loop
-  outside the plugin for topics that require full-membership delivery.
+  outside the package for topics that require full-membership delivery.
 - Each `provider.send()` call is bounded by `providerTimeoutMs` on `createPushRouter`
   (default 30000). A timed-out send is treated as a transient failure and retried under the
   configured retry policy, so a slow APNS / FCM endpoint cannot stall the queue worker

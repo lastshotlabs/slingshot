@@ -26,7 +26,7 @@ export type { CommunityInteractionsPeer } from './public';
 export { communityPluginConfigSchema, DEFAULT_SCORING_CONFIG } from './types/config';
 /**
  * Configuration shape, WS config, admin gates, moderation decisions/targets,
- * and scoring config types accepted by `createCommunityPlugin()`.
+ * and scoring config types accepted by `createCommunityPackage()`.
  */
 export type {
   CommunityPluginConfig,

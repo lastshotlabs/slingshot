@@ -1,7 +1,7 @@
 /**
  * Library package — does not implement SlingshotPlugin.
  * Import and wire directly: create an evaluator, registry, and adapter, then
- * pass them to plugins that require permissions (e.g. createCommunityPlugin).
+ * pass them to plugins that require permissions (e.g. createCommunityPackage).
  */
 export type {
   PermissionGrant,

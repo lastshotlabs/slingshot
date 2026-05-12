@@ -32,7 +32,6 @@ lives in `@lastshotlabs/slingshot-orchestration-plugin`.
 
 - No direct Slingshot plugin lifecycle in this package
 - No Hono HTTP router in this package
-- No manifest integration in this package
 - No Temporal or Trigger.dev support in this package
 
 Those concerns live in outer adapters or later phases.
@@ -112,7 +111,7 @@ const run = await runtime.getRun(handle.id);
 This package registers orchestration definitions, not application services.
 
 - Register tasks and workflows by passing them into `createOrchestrationRuntime({ tasks, workflows, adapter })`.
-- In Slingshot apps, pass the same definitions into `createOrchestrationPlugin()` or reference exported handler names from manifest config.
+- In Slingshot apps, pass the same definitions into `createOrchestrationPackage()`.
 - Keep quote engines, carrier clients, rating services, ordering services, and document generators as normal application dependencies. Call them inside task handlers instead of trying to register them with the orchestration runtime.
 
 ## Runtime surface

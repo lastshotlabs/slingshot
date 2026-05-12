@@ -6,9 +6,9 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-chat
 `@lastshotlabs/slingshot-chat` is Slingshot's chat domain package. It provides rooms,
 memberships, messages, reactions, read receipts, pins, blocks, favorites, invites, reminders,
 scheduled messages, and the WebSocket realtime surface — all driven by the shared
-package-first/entity authoring model. `createChatPlugin()` is the runtime shell that composes
-those entities, the manifest-driven runtime, message encryption hooks, and notification side
-effects into the live plugin.
+package-first/entity authoring model. `createChatPackage()` is the runtime shell that composes
+those entities, the entity adapter transforms and custom-op handlers, message encryption hooks,
+and notification side effects into the live package.
 
 ## When To Use It
 
@@ -26,7 +26,7 @@ domain, not a low-level socket primitive.
 
 ## Dependencies
 
-`createChatPlugin()` declares these dependencies. The framework topological sort uses the
+`createChatPackage()` declares these dependencies. The framework topological sort uses the
 declared list to enforce order, but the consumed capabilities have to actually be available —
 list them all in your app's `plugins` array before chat.
 
@@ -54,7 +54,7 @@ handle:
   dispatcher.
 
 Cross-package consumers resolve it through `ctx.capabilities.require(ChatInteractionsPeerCap)`
-instead of reaching into plugin state. The plugin also continues to write `interactionsPeer`
+instead of reaching into plugin state. The package also continues to write `interactionsPeer`
 into `pluginState` under `CHAT_PLUGIN_STATE_KEY` so legacy
 `getPublishedInteractionsPeerOrNull` callers keep working.
 
@@ -73,7 +73,7 @@ if (peer) {
 ```
 
 The full chat runtime — the bundled adapter set, evaluator, and config — is published
-separately under the typed `CHAT_RUNTIME_KEY` slot for in-package consumers (manifest runtime,
+separately under the typed `CHAT_RUNTIME_KEY` slot for in-package consumers (entity runtime,
 encryption router, WebSocket dispatch). Treat that slot as internal: cross-package code goes
 through the public contract.
 
@@ -84,9 +84,9 @@ through the public contract.
 ```ts title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
-import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createChatPackage } from '@lastshotlabs/slingshot-chat';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
   plugins: [
@@ -94,15 +94,17 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createPermissionsPlugin(),
-    createNotificationsPlugin(),
-    createChatPlugin({ storeType: 'memory', mountPath: '/chat' }),
+  ],
+  packages: [
+    createPermissionsPackage(),
+    createNotificationsPackage(),
+    createChatPackage({ storeType: 'memory', mountPath: '/chat' }),
   ],
 });
 ```
 
 The `slingshot-permissions` and `slingshot-notifications` registrations must come before
-`slingshot-chat` — the plugin throws during setup if either capability is unavailable.
+`slingshot-chat` — the package throws during setup if either capability is unavailable.
 
 ## Authoring Story
 
@@ -160,9 +162,9 @@ export function createChatAuditPlugin(): SlingshotPlugin {
 
 ### Extend with custom routes
 
-Chat itself is a plugin, not a `definePackage` package — its routes are generated from its
-entity manifest. To add custom chat-adjacent routes (an admin dashboard, a bot endpoint),
-define your own package and depend on chat:
+Chat itself is a `definePackage(...)` package — its routes are generated from its entity
+definitions. To add custom chat-adjacent routes (an admin dashboard, a bot endpoint), define
+your own package and depend on chat:
 
 ```ts
 // @skip-typecheck
@@ -202,7 +204,7 @@ implementation, or pre-shared keys.
 
 ```ts
 // @skip-typecheck
-createChatPlugin({
+createChatPackage({
   storeType: 'postgres',
   mountPath: '/chat',
   encryption: {
@@ -269,7 +271,7 @@ The last formatter registered for a given notification type wins, so this plugin
   `SlingshotContext.wsEndpoints[mountPath]` during `setupPost`
 - Notification hooks for message delivery and member invitations, routed through the shared
   `slingshot-notifications` builder
-- Unread-count and DM orchestration logic inside the manifest runtime
+- Unread-count and DM orchestration logic inside the entity runtime (adapter transforms + custom-op handlers)
 - An encryption router mounted at `${mountPath}/encryption` for key-bundle exchange (v1 stub
   shape)
 - Periodic schedulers (30 s tick) that drain due reminders and deliver scheduled messages
@@ -322,24 +324,24 @@ present).
 
 - Chat is config-driven by design. If you find yourself wrapping its routes with a large
   layer of bespoke handlers, that is usually a signal the abstraction boundary is wrong for
-  your domain — extend the manifest or contribute a config knob upstream rather than forking
-  the runtime.
+  your domain — extend the entity modules or contribute a config knob upstream rather than
+  forking the runtime.
 - The 30 s reminder/scheduled-message intervals run unconditionally during `setupPost` and
   are cleared in `teardown()`. They are guarded against re-entry; a long-running tick will
   not fire concurrently with itself.
-- The push-formatter and embeds integrations are opportunistic. When the corresponding plugin
+- The push-formatter and embeds integrations are opportunistic. When the corresponding package
   is not registered, the probes are no-ops — no error, no warning.
 - Encryption providers run at the storage boundary. If you switch providers in production,
   plan a migration: existing rows still hold ciphertext encrypted with the old key.
 
 ## Gotchas
 
-- Register `slingshot-permissions` and `slingshot-notifications` before chat. The plugin
+- Register `slingshot-permissions` and `slingshot-notifications` before chat. The package
   throws during setup if either capability is unavailable.
 - `tenantId` falls back to `'default'` when omitted. Multi-tenant apps should be deliberate
   about whether that is correct.
 - Omitting `encryption` does not produce encrypted storage. It means chat stores message
-  payloads without plugin-managed encryption.
+  payloads without package-managed encryption.
 - WebSocket incoming handlers are mounted onto `wsEndpoints[mountPath]`. If you also configure
   a separate `ws.wsEndpoint` elsewhere, the chat handlers and yours will share the same slot —
   configure carefully or let chat own that endpoint exclusively.
@@ -359,8 +361,8 @@ present).
 - `src/config.schema.ts`
 - `src/types.ts`
 - `src/state.ts`
-- `src/manifest/chatManifest.ts`
-- `src/manifest/runtime.ts`
+- `src/entities/modules.ts`
+- `src/entities/runtime.ts`
 - `src/ws/incoming.ts`
 - `src/encryption/provider.ts`
 - `src/events.ts`

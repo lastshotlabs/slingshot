@@ -72,7 +72,7 @@ export { createElasticsearchProvider } from './providers/elasticsearch';
 export { createAlgoliaProvider } from './providers/algolia';
 
 // --- Route constants ---
-/** Canonical route ids for the HTTP surface mounted by `createSearchPlugin()`. */
+/** Canonical route ids for the HTTP surface mounted by `createSearchPackage()`. */
 export { SEARCH_ROUTES } from './routes/index';
 /**
  * Route identifiers mounted by the search plugin.

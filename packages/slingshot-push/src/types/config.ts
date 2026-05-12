@@ -81,7 +81,7 @@ const pushFormatterTemplateSchema = z.object({
     ),
 });
 
-/** Manifest-safe config schema for `createPushPlugin()`. */
+/** Config schema for `createPushPackage()`. */
 export const pushPluginConfigSchema = z
   .object({
     web: z

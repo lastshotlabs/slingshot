@@ -12,13 +12,11 @@ without building and wiring that whole domain yourself.
 Community requires a `communityPrincipal` on the request context. The built-in `authBridge`
 config handles this automatically:
 
-```json
-{
-  "plugins": [{ "plugin": "slingshot-community", "config": { "authBridge": "auto" } }]
-}
+```typescript
+createCommunityPackage({ authBridge: 'auto' });
 ```
 
-When `authBridge` is `"auto"`, the plugin registers middleware that reads `actor.id` and
+When `authBridge` is `"auto"`, the package registers middleware that reads `actor.id` and
 `roles` from the framework auth context and sets `communityPrincipal` for community routes.
 This eliminates the most common handler file pattern. Use `"none"` (default) to wire the
 bridge yourself.
@@ -26,7 +24,7 @@ bridge yourself.
 **Example:**
 
 ```typescript
-createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' });
+createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' });
 ```
 
 ## When To Use It
@@ -35,37 +33,24 @@ Install this package when:
 
 - your app needs a forum, discussion, or member-generated content surface
 - you want the content model, route policy, and moderation behavior to come as one package
-- you are already using Slingshot plugins and want community to behave like a first-class domain
+- you are already using Slingshot packages and want community to behave like a first-class domain
 
 ## What You Need Before Wiring It In
 
 This package is not standalone. In practice, most apps need:
 
 1. An auth story so requests have a user identity.
-2. A `slingshot-permissions` plugin so shared permission state exists in `pluginState`.
-3. A small middleware bridge that sets `communityPrincipal` on the request context from your auth identity.
+2. A `slingshot-permissions` package so shared permission state exists in `pluginState`.
+3. A small middleware bridge that sets `communityPrincipal` on the request context from your auth identity (or `authBridge: 'auto'`).
 
 ## Minimum Setup Shape
-
-**Manifest (recommended):**
-
-```json
-{
-  "plugins": [
-    { "plugin": "slingshot-auth", "config": { ... } },
-    { "plugin": "slingshot-community", "config": { "authBridge": "auto", "containerCreation": "user" } }
-  ]
-}
-```
-
-**App config:**
 
 ```typescript title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
-import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
   plugins: [
@@ -73,9 +58,11 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createNotificationsPlugin(),
-    createPermissionsPlugin(),
-    createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
+  ],
+  packages: [
+    createNotificationsPackage(),
+    createPermissionsPackage(),
+    createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
   ],
 });
 ```
@@ -91,5 +78,5 @@ export default defineApp({
 ## Gotchas
 
 - Community expects `communityPrincipal` to exist for protected flows.
-- Register `createPermissionsPlugin()` before community so the shared permission state is available during setup.
+- Register `createPermissionsPackage()` before community so the shared permission state is available during setup.
 - This package is intentionally config-driven. If you find yourself reintroducing lots of bespoke route logic around it, that is usually a sign you want a different abstraction boundary.

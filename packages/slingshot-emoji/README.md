@@ -3,8 +3,9 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-emoji
 ---
 
-`@lastshotlabs/slingshot-emoji` adds custom emoji as a manifest-backed domain. It stores emoji
-metadata as entities and expects file upload bytes to be handled by the platform upload system.
+`@lastshotlabs/slingshot-emoji` adds custom emoji as an entity-backed domain package. It stores
+emoji metadata as entities and expects file upload bytes to be handled by the platform upload
+system.
 
 ## When To Use It
 
@@ -40,8 +41,9 @@ startup if the shared state is missing.
 
 ## What You Get
 
-The package uses `createEntityPlugin()` under the hood, so it provides the standard entity-backed
-emoji CRUD surface and publishes the manifest-defined schema and operations.
+The package is authored with `definePackage(...)` and contributes a single `emoji` entity, so it
+provides the standard entity-backed emoji CRUD surface with the package-defined schema and
+operations.
 
 It also adds package-specific behavior:
 
@@ -61,8 +63,8 @@ The main decisions are:
 
 If you need to modify behavior, start in:
 
-- `src/plugin.ts` for plugin composition, permissions resolution, and delete cascade logic
-- `src/emoji.ts` for the entity manifest
+- `src/plugin.ts` for package composition, permissions resolution, and delete cascade logic
+- `src/entities/emoji.ts` for the emoji entity definition and module
 - `src/types.ts` for config and API record contracts
 
 ## Gotchas
@@ -81,5 +83,5 @@ If you need to modify behavior, start in:
 
 - `src/index.ts`
 - `src/plugin.ts`
-- `src/emoji.ts`
+- `src/entities/emoji.ts`
 - `src/types.ts`

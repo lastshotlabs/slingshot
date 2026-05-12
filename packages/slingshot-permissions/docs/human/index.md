@@ -13,9 +13,10 @@ resource-type definitions instead of each package inventing its own policy engin
 
 ## Design Constraints
 
-- This package is a library, not a `SlingshotPlugin`. It should stay composable so packages like
-  admin, community, or organizations can consume permissions state without inheriting a route
-  surface they did not ask for.
+- This package ships both a library surface (`createPermissionEvaluator`, registry factories,
+  adapter factories) and a `createPermissionsPackage()` definition for app composition. Either
+  shape should stay composable so packages like admin, community, or organizations can consume
+  permissions state without inheriting a route surface they did not ask for.
 - The registry is intentionally immutable per resource type. Extending a domain should mean adding
   new resource types, not re-registering existing ones with extra actions.
 - Deny must always win over allow in evaluation. That rule is an important security invariant and
@@ -47,10 +48,26 @@ resource-type definitions instead of each package inventing its own policy engin
 - Resource ownership matters. If two packages want to act on the same resource namespace, that is
   an architecture discussion, not something the registry should silently allow.
 
+## Health
+
+Consumers resolve the aggregated permissions health snapshot via the `PermissionsHealthCap`
+capability:
+
+```ts
+import { PermissionsHealthCap } from '@lastshotlabs/slingshot-permissions';
+
+const health = ctx.capabilities.require(PermissionsHealthCap)();
+```
+
+`PermissionsEvaluatorCap`, `PermissionsRegistryCap`, and `PermissionsAdapterCap` are also
+published for evaluator, registry, and adapter access without reaching into plugin state.
+
 ## Key Files
 
 - `src/lib/registry.ts`
 - `src/lib/evaluator.ts`
 - `src/lib/bootstrap.ts`
 - `src/adapters/*`
+- `src/plugin.ts`
+- `src/public.ts`
 - `src/testing.ts`

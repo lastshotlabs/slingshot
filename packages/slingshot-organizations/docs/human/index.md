@@ -9,21 +9,21 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-organizations
 
 @lastshotlabs/slingshot-organizations is the feature package in the Slingshot workspace.
 
-Organizations and groups management plugin for Slingshot
+Organizations and groups management package for Slingshot.
 The organization and group entities themselves follow the shared package-first/entity authoring model;
-`createOrganizationsPlugin()` is the runtime shell that composes auth, invites, and membership flows.
+`createOrganizationsPackage()` is the runtime shell that composes auth, invites, and membership flows.
 
 ## Minimum Setup
 
-Pass the config to `createOrganizationsPlugin()` from `app.config.ts`:
+Pass the config to `createOrganizationsPackage()` from `app.config.ts`:
 
 ```ts title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
-import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
+import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
 
 export default defineApp({
-  plugins: [
-    createOrganizationsPlugin({
+  packages: [
+    createOrganizationsPackage({
       mountPath: '/orgs',
       organizations: {
         enabled: true,
@@ -38,12 +38,12 @@ export default defineApp({
 });
 ```
 
-The plugin depends on `slingshot-auth` being registered first.
+The package depends on `slingshot-auth` being registered first.
 
 ## Package Boundaries
 
 - Owns organization and group entity definitions, membership records, and invitation flows.
-- Owns the org service published to plugin state, accessible via `getOrganizationsOrgServiceOrNull`.
+- Owns the org service published as the `OrgServiceCap` capability (also accessible via the legacy `getOrganizationsOrgServiceOrNull` helper).
 - Depends on `slingshot-auth` for user auth middleware, route auth, and actor identity resolution.
 - Depends on `slingshot-entity` for entity-backed CRUD routes and config-driven runtime.
 - Does not own auth session management, user identity, or the permissions grant system.
@@ -54,8 +54,8 @@ The plugin depends on `slingshot-auth` being registered first.
 - Group-management mutations should fail closed for suspended or newly-unverified accounts. Apply the account-state check in the route handler before mutating groups or memberships.
 - Group management configuration must also fail closed. Reject `managementRoutes.middleware: []` at startup instead of mounting unprotected routes.
 - Generic organization list/get surfaces are administrative by default. Member-facing reads should come from explicitly scoped routes such as `/orgs/mine`, not from broad authenticated CRUD access.
-- **Rate limiting:** invite-sending and membership mutation endpoints apply the framework's rate-limit middleware. Configure per-endpoint limits via the `rateLimit` field on the plugin config. The default is 100 requests per minute per user for invite endpoints.
-- **Reconciliation:** the plugin does not automatically reconcile org/group membership when a user account is suspended or deleted. Downstream consumers should subscribe to `auth:user.suspended` and `auth:user.deleted` events and call the organization service to remove affected memberships.
+- **Rate limiting:** invite-sending and membership mutation endpoints apply the framework's rate-limit middleware. Configure per-endpoint limits via the `rateLimit` field on the package config. The default is 100 requests per minute per user for invite endpoints.
+- **Reconciliation:** the package does not automatically reconcile org/group membership when a user account is suspended or deleted. Downstream consumers should subscribe to `auth:user.suspended` and `auth:user.deleted` events and call the organization service to remove affected memberships.
 
 ## Gotchas
 

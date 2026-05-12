@@ -35,7 +35,7 @@ Typical composition:
 
 1. Define tasks and workflows in `@lastshotlabs/slingshot-orchestration`
 2. Create the BullMQ adapter in this package
-3. Pass that adapter into `createOrchestrationRuntime()` or `createOrchestrationPlugin()`
+3. Pass that adapter into `createOrchestrationRuntime()` or `createOrchestrationPackage()`
 
 ## Minimal setup
 
@@ -67,7 +67,7 @@ const runtime = createOrchestrationRuntime({
 
 Lifecycle notes:
 
-- `createOrchestrationPlugin()` starts and stops the adapter for you
+- `createOrchestrationPackage()` starts and stops the adapter for you
 - direct `createOrchestrationRuntime()` usage now lazy-starts the adapter on first use
 - step-level retry and timeout overrides are carried into BullMQ child jobs so workflow behavior
   stays aligned with the portable runtime contract

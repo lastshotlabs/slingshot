@@ -29,7 +29,7 @@ export { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
  */
 export { webhookPluginConfigSchema } from './types/config';
 /**
- * Configuration accepted by `createWebhookPlugin()`.
+ * Configuration accepted by `createWebhookPackage()`.
  */
 export type { WebhookPluginConfig } from './types/config';
 /**

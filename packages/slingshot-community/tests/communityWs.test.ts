@@ -114,7 +114,7 @@ describe('createCommunityPackage WS config acceptance', () => {
 
 // ---------------------------------------------------------------------------
 // Typing handler behavior (via buildEntityReceiveHandlers directly)
-// Tests the receive config that createCommunityPlugin injects for containers.
+// Tests the receive config that createCommunityPackage injects for containers.
 // ---------------------------------------------------------------------------
 
 describe('community container receive handlers', () => {

@@ -11,7 +11,7 @@ import type { ChatInteractionsPeer, CommunityInteractionsPeer } from './peers/ty
 /** Stable plugin-state key used in `ctx.pluginState`. */
 export const INTERACTIONS_PLUGIN_STATE_KEY = 'slingshot-interactions' as const;
 
-/** Runtime state published by `createInteractionsPlugin()`. */
+/** Runtime state published by `createInteractionsPackage()`. */
 export interface InteractionsPluginState {
   /** Compiled declarative handlers plus any runtime overlays. */
   readonly handlers: CompiledHandlerTable;

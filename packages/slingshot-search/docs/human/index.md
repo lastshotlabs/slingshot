@@ -17,8 +17,9 @@ entity registry, and keeps indexes in sync through post-setup event subscription
   config rather than requiring every searchable entity to be re-declared in plugin config.
 - Provider setup and route mounting belong in this package; entity authoring does not. Keep the
   boundary between `slingshot-entity` and `slingshot-search` explicit.
-- The plugin publishes runtime access through `pluginState` after initialization. Cross-package
-  consumers should use that runtime surface instead of reaching into search internals.
+- The package publishes runtime access through the `SearchRuntimeCap` capability after
+  initialization. Cross-package consumers should resolve that capability via
+  `ctx.capabilities.require(SearchRuntimeCap)` instead of reaching into search internals.
 
 ## Built-in Strategies
 

@@ -20,7 +20,7 @@ export interface CompiledPushFormatterTable {
   format(notification: NotificationRecord, defaults?: Partial<PushMessage>): PushMessage;
 }
 
-/** Runtime state published by `createPushPlugin()`. */
+/** Runtime state published by `createPushPackage()`. */
 export interface PushPluginState {
   /** Deep-frozen plugin config. */
   readonly config: Readonly<PushPluginConfig>;

@@ -3,28 +3,30 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration-plugin
 ---
 
-This package integrates the portable orchestration runtime into the Slingshot plugin model.
+This package integrates the portable orchestration runtime into the Slingshot package model.
 
 It owns:
 
-- `createOrchestrationPlugin()` for plugin lifecycle wiring
+- `createOrchestrationPackage()` for package lifecycle wiring
 - `getOrchestration()` and `getOrchestrationOrNull()` for runtime lookup via `ctx.pluginState`
+- `OrchestrationRuntimeCap` for capability-based runtime access
 - `createSlingshotEventSink()` for event bus bridging
 - optional HTTP routes under `/orchestration`
 
 ## What this package does
 
 - builds or accepts an `OrchestrationRuntime`
-- publishes that runtime under the `slingshot-orchestration` plugin-state key
+- publishes that runtime under the `slingshot-orchestration` plugin-state key and the
+  `OrchestrationRuntimeCap` capability
 - mounts orchestration HTTP endpoints when enabled
 - enforces route middleware when routes are enabled
-- starts and stops the concrete adapter when the plugin owns adapter lifecycle
+- starts and stops the concrete adapter when the package owns adapter lifecycle
 
 ## Basic setup
 
 ```ts
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 declare const resizeImage: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
 declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
@@ -32,7 +34,7 @@ declare const onboardUser: import('@lastshotlabs/slingshot-orchestration').AnyRe
 declare const requireAdmin: import('hono').MiddlewareHandler;
 declare const resolveRequestContext: import('@lastshotlabs/slingshot-orchestration-plugin').OrchestrationRequestContextResolver;
 
-const orchestrationPlugin = createOrchestrationPlugin({
+const orchestrationPackage = createOrchestrationPackage({
   adapter: createMemoryAdapter({ concurrency: 10 }),
   tasks: [resizeImage, sendWelcomeEmail],
   workflows: [onboardUser],
@@ -41,31 +43,6 @@ const orchestrationPlugin = createOrchestrationPlugin({
   routeMiddleware: [requireAdmin],
   resolveRequestContext,
 });
-```
-
-## Manifest setup
-
-Manifest mode supports orchestration route hooks too. Tasks and workflows are referenced by exported
-handler names, while route hooks are regular handler refs:
-
-```json
-{
-  "plugins": [
-    {
-      "plugin": "slingshot-orchestration",
-      "config": {
-        "adapter": { "type": "memory", "config": { "concurrency": 10 } },
-        "tasks": ["resizeImage", "sendWelcomeEmail"],
-        "workflows": ["onboardUser"],
-        "routes": true,
-        "routePrefix": "/orchestration",
-        "routeMiddleware": [{ "handler": "requireAdmin" }],
-        "resolveRequestContext": { "handler": "resolveOrchestrationRequestContext" },
-        "authorizeRun": { "handler": "authorizeOrchestrationRun" }
-      }
-    }
-  ]
-}
 ```
 
 ## What this package does not do
@@ -81,8 +58,7 @@ That separation is intentional. The portable runtime stays reusable outside Slin
 This package registers orchestration definitions and request hooks. It does not provide a service
 registry for arbitrary business services.
 
-- Pass `tasks` and `workflows` directly to `createOrchestrationPlugin()` in apps.
-- In manifest apps, export those definitions from your handlers module and reference them by name in the orchestration plugin config.
+- Pass `tasks` and `workflows` directly to `createOrchestrationPackage()` in apps.
 - Use `resolveRequestContext()` and `authorizeRun()` to wire request-scoped identity and access rules without coupling the router to actor-resolution internals.
 - Keep domain services such as quoting engines, carrier APIs, pricing rules, and ordering clients in your normal application composition. Inject or import them inside task handlers.
 
@@ -137,7 +113,7 @@ Pass explicit hooks when you want tenant scoping, actor metadata, or run-level a
 ```ts
 import type { Context } from 'hono';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 import type { OrchestrationRunAuthorizationInput } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 declare const adapter: import('@lastshotlabs/slingshot-orchestration').OrchestrationAdapter;
@@ -145,7 +121,7 @@ declare const tasks: import('@lastshotlabs/slingshot-orchestration').AnyResolved
 declare const workflows: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow[];
 declare const requireAdmin: import('hono').MiddlewareHandler;
 
-const orchestrationPlugin = createOrchestrationPlugin({
+const orchestrationPackage = createOrchestrationPackage({
   adapter,
   tasks,
   workflows,
@@ -226,6 +202,6 @@ bus.on('orchestration.workflow.completed', async ({ runId, workflow, durationMs 
 
 ## Handlers note
 
-Manifest-driven orchestration registration is supported through exported task/workflow handlers, and
-manifest route config can also reference `routeMiddleware`, `resolveRequestContext`, and
-`authorizeRun` handlers.
+Tasks and workflows are passed directly to `createOrchestrationPackage({ tasks, workflows })`.
+Route config (`routeMiddleware`, `resolveRequestContext`, `authorizeRun`) is supplied via the same
+package config and resolved at package construction time.

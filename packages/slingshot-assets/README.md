@@ -7,7 +7,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-assets
 adapter resolution, presigned-upload support, image-aware asset behavior, and the runtime wiring
 that keeps stored bytes and persisted asset records aligned.
 The asset entities themselves follow the shared package-first/entity authoring model;
-`createAssetsPlugin()` is the runtime shell that composes them into the live plugin.
+`createAssetsPackage()` is the runtime shell that composes them into the live package.
 
 ## When To Use It
 
@@ -21,7 +21,7 @@ Use this package when your app needs:
 
 ## What You Need Before Wiring It In
 
-This plugin declares these dependencies:
+This package declares these dependencies:
 
 - `slingshot-auth`
 - `slingshot-permissions`
@@ -31,7 +31,7 @@ It also requires a storage adapter configuration. `storage` is the only required
 You can provide storage as either:
 
 - a runtime adapter instance
-- a manifest-safe built-in adapter reference such as `s3`, `local`, or `memory`
+- a built-in adapter helper such as `s3Storage(...)`, `localStorage(...)`, or `memoryStorage(...)`
 
 ## Minimum Setup
 
@@ -49,18 +49,27 @@ Then layer on the optional controls as needed:
 - `registryTtlSeconds` for metadata caching
 - `image` for image-specific limits and cache behavior
 
-If `mountPath` is omitted, the plugin mounts at `/assets`.
+If `mountPath` is omitted, the package mounts at `/assets`.
 
 ## What You Get
 
 The package gives you both data and byte-storage plumbing:
 
-- an asset entity manifest and runtime wiring
+- an asset entity definition and runtime adapter wiring
 - storage adapter resolution for built-in or runtime-provided backends
-- asset routes mounted through the entity plugin
-- presign, image-serving, TTL, and delete-to-storage behavior through the manifest runtime
-- plugin state published under `slingshot-assets` with the resolved asset adapter, storage adapter,
-  and frozen config
+- asset routes mounted through the entity layer
+- presign, image-serving, TTL, and delete-to-storage behavior through the entity runtime
+- three capabilities published for cross-package consumers:
+  - `AssetsRuntimeCap` — bundled asset adapter, storage adapter, and resolved config
+  - `AssetsHealthCap` — aggregated health snapshot getter
+  - `AssetsOrphanedKeysCap` — bounded orphan-key registry for recovery flows
+
+```ts
+import { AssetsHealthCap, AssetsOrphanedKeysCap } from '@lastshotlabs/slingshot-assets';
+
+const health = ctx.capabilities.require(AssetsHealthCap)();
+const orphans = ctx.capabilities.require(AssetsOrphanedKeysCap)();
+```
 
 This makes it the right package to standardize uploads for the rest of the platform.
 
@@ -68,10 +77,11 @@ This makes it the right package to standardize uploads for the rest of the platf
 
 The first files to read when changing behavior are:
 
-- `src/plugin.ts` for lifecycle and dependency behavior
+- `src/plugin.ts` for package lifecycle and dependency behavior
 - `src/config.schema.ts` for supported config and validation rules
 - `src/adapters/index.ts` for storage resolution
-- `src/manifest/runtime.ts` for asset-specific runtime hooks
+- `src/entities/runtime.ts` for asset-specific runtime hooks (presign / serveImage / TTL transforms)
+- `src/middleware/deleteStorageFile.ts` for delete-cascade behavior and the orphan registry
 - `src/image/` for image-serving and caching behavior
 
 The most important configuration choices are:
@@ -97,7 +107,7 @@ itself. Pass a `AwsCredentialProvider` only when you load credentials from a
 backend the default chain doesn't cover.
 
 ```typescript
-import { createAssetsPlugin, s3Storage } from '@lastshotlabs/slingshot-assets';
+import { createAssetsPackage, s3Storage } from '@lastshotlabs/slingshot-assets';
 import type { AwsCredentialProvider } from '@lastshotlabs/slingshot-assets';
 
 // The SDK calls this whenever cached creds are within `expiration` of expiring,
@@ -125,7 +135,7 @@ const rotatingCredentialProvider: AwsCredentialProvider = async () => {
   };
 };
 
-createAssetsPlugin({
+createAssetsPackage({
   storage: s3Storage({
     bucket: 'my-app-assets',
     region: 'us-east-1',
@@ -145,12 +155,11 @@ already invalidates the cached value when the returned `expiration` is near.
   is missing.
 - Image behavior is opt-in. If `image` is omitted, the package does not apply image-specific
   overrides.
-- When `image` config is present but `image.cache` is not a runtime cache adapter, the plugin falls
-  back to an in-memory image cache.
-- Storage can be a manifest-safe ref or a runtime object. Do not document only one shape unless the
-  code has actually narrowed the supported contract.
-- Asset-record deletion and underlying storage cleanup are coordinated through middleware set up by
-  the manifest runtime. If you change delete behavior, trace both entity and storage paths.
+- When `image` config is present but `image.cache` is not a runtime cache adapter, the package
+  falls back to an in-memory image cache.
+- Asset-record deletion and underlying storage cleanup are coordinated through the delete-cascade
+  middleware in `src/middleware/deleteStorageFile.ts`. If you change delete behavior, trace both
+  the entity adapter and the storage path.
 
 ## Key Files
 
@@ -159,5 +168,6 @@ already invalidates the cached value when the returned `expiration` is near.
 - `src/config.schema.ts`
 - `src/types.ts`
 - `src/adapters/index.ts`
-- `src/manifest/runtime.ts`
+- `src/entities/runtime.ts`
+- `src/middleware/deleteStorageFile.ts`
 - `src/image/serve.ts`

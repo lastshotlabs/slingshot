@@ -22,12 +22,12 @@ dispatch.
 
 ## What You Need Before Wiring It In
 
-`createInteractionsPlugin()` depends on:
+`createInteractionsPackage()` depends on:
 
 - `slingshot-auth`
 - `slingshot-permissions`
 
-The plugin throws during setup if shared permissions state is missing.
+The package throws during setup if shared permissions state is missing.
 
 ## Minimum Setup
 
@@ -43,15 +43,15 @@ targets.
 
 ## What You Get
 
-The plugin mounts:
+The package mounts:
 
 - `POST {mountPath}/dispatch`
 - entity-backed read routes for `interactionEvents`
 
 It also:
 
-- compiles declarative handler templates once at plugin construction time
-- publishes plugin state under `INTERACTIONS_PLUGIN_STATE_KEY`
+- compiles declarative handler templates once at package construction time
+- publishes package state under `INTERACTIONS_PLUGIN_STATE_KEY`
 - registers client-safe bus events for `interactions:event.dispatched` and
   `interactions:event.failed`
 - probes chat and community peers when present so interactions can integrate cleanly with those
@@ -76,12 +76,12 @@ If you need to extend the system, start in:
 
 - The longest matching handler prefix wins. Action naming conventions matter because routing is
   prefix-based, not exact-match only.
-- The plugin owns an interaction-event entity surface in addition to the dispatch route. If you
+- The package owns an interaction-event entity surface in addition to the dispatch route. If you
   remove that entity layer, you also remove auditability.
 - Chat and community integrations are optional probes, not hard dependencies. Your handlers should
   still behave sensibly when those peers are absent.
 - Runtime handler registration overlays the compiled config. Treat that as an extension path, not a
-  substitute for keeping manifest config accurate.
+  substitute for keeping `createInteractionsPackage({ handlers })` accurate.
 
 ## Key Files
 

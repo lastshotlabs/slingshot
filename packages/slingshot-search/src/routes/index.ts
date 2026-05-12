@@ -6,9 +6,9 @@
  *
  * @example
  * ```ts
- * import { createSearchPlugin, SEARCH_ROUTES } from '@lastshotlabs/slingshot-search';
+ * import { createSearchPackage, SEARCH_ROUTES } from '@lastshotlabs/slingshot-search';
  *
- * const search = createSearchPlugin({
+ * const search = createSearchPackage({
  *   providers: { default: { provider: 'db-native' } },
  *   disableRoutes: [SEARCH_ROUTES.ADMIN, SEARCH_ROUTES.FEDERATED],
  * });

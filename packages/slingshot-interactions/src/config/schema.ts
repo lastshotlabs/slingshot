@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { deepFreeze } from '@lastshotlabs/slingshot-core';
 import { handlerTemplateSchema } from '../handlers/template';
 
-/** Manifest-safe config schema for `createInteractionsPlugin()`. */
+/** Config schema for `createInteractionsPackage()`. */
 export const interactionsPluginConfigSchema = z
   .object({
     mountPath: z.string().startsWith('/').min(1).default('/interactions'),

@@ -79,7 +79,7 @@ export const PollsPluginConfigSchema = z.object({
     ),
 });
 
-/** Input type accepted by `createPollsPlugin()`. */
+/** Input type accepted by `createPollsPackage()`. */
 export type PollsPluginConfigInput = z.input<typeof PollsPluginConfigSchema>;
 
 /** Resolved config after Zod parsing and defaults. */

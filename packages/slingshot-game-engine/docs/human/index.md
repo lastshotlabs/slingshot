@@ -4,8 +4,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-game-engine
 ---
 
 `@lastshotlabs/slingshot-game-engine` adds config-driven multiplayer game state management as a
-standard slingshot plugin. Games are defined declaratively via `defineGame()` and registered with
-the plugin at startup. The engine handles phases, channels, turns, scoring, timers, seeded RNG,
+standard Slingshot package. Games are defined declaratively via `defineGame()` and registered with
+the package at startup. The engine handles phases, channels, turns, scoring, timers, seeded RNG,
 replay logging, and disconnect recovery — all driven by configuration, not per-game boilerplate.
 
 ## When To Use It
@@ -25,12 +25,12 @@ multiplayer games, not twitch gameplay.
 
 ## What You Need Before Wiring It In
 
-The plugin depends on `slingshot-core` and `slingshot-entity`. Auth is expected to be wired in
+The package depends on `slingshot-core` and `slingshot-entity`. Auth is expected to be wired in
 separately via `slingshot-auth` — the engine's entity routes use `userAuth` as the default
 auth middleware.
 
 You need at least one game definition created via `defineGame()` and registered with the
-plugin config. Without a registered game type, session creation will fail with
+package config. Without a registered game type, session creation will fail with
 `GAME_TYPE_NOT_FOUND`.
 
 ## Minimum Setup
@@ -70,8 +70,8 @@ behavior on top:
 - nested (child) session support
 - session lease system for multi-instance deployments
 - replay log with in-memory default store and pluggable `ReplayStore` adapter
-- plugin state published under `GAME_ENGINE_PLUGIN_STATE_KEY`
-- a narrow `sessionControls` surface on plugin state for active-session inspection and host/app
+- package state published under `GAME_ENGINE_PLUGIN_STATE_KEY`
+- a narrow `sessionControls` surface on package state for active-session inspection and host/app
   orchestration without exposing mutable runtime internals
 - `sessionControls.submitInput()` for server-side injection of validated channel input through
   the normal realtime pipeline
@@ -91,9 +91,9 @@ The most important decisions are:
 
 If you need to change behavior, start in:
 
-- `src/plugin.ts` for lifecycle, route registration, WS wiring, and sweep startup
+- `src/plugin.ts` for package lifecycle, route registration, WS wiring, and sweep startup
 - `src/defineGame.ts` for game definition validation and defaults
-- `src/validation/config.ts` for plugin config schema
+- `src/validation/config.ts` for package config schema
 - `src/lib/phases.ts`, `src/lib/channels.ts`, `src/lib/turns.ts` for state machine internals
 - `src/lib/handlers.ts` for the `ProcessHandlerContext` API available to game handlers
 - `src/lib/hooks.ts` for lifecycle hook invocation (error-isolated dispatchers)
@@ -101,7 +101,7 @@ If you need to change behavior, start in:
 
 ## Gotchas
 
-- Every game type must be registered via the plugin config before any session of that type
+- Every game type must be registered via the package config before any session of that type
   can be created. Hot-registration at runtime is not supported.
 - The `defineGame()` call validates handler references at startup — referencing a phase or
   channel handler that doesn't exist in the definition will throw immediately.
@@ -115,7 +115,7 @@ If you need to change behavior, start in:
   for active-session lookup and orchestration. Use `advancePhase()` for manual phase transitions,
   `submitInput()` when you need to drive a channel as if input arrived over WebSocket, and
   `mutate()` when you need a controlled host/admin mutation with a fresh snapshot plus
-  `ProcessHandlerContext`. Do not treat plugin state as a source of mutable runtime references.
+  `ProcessHandlerContext`. Do not treat package state as a source of mutable runtime references.
 - The session lease system is opt-in. Without a `SessionLeaseAdapter`, the engine assumes
   single-instance mode and auto-succeeds all lease operations.
 - Content providers are called during game start. If your provider makes network requests,

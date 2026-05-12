@@ -19,7 +19,7 @@ export const COMMUNITY_PLUGIN_STATE_KEY = CORE_COMMUNITY_PLUGIN_STATE_KEY;
 export type { CommunityInteractionsPeer };
 
 /**
- * Plugin runtime state published by `createCommunityPlugin()`.
+ * Plugin runtime state published by `createCommunityPackage()`.
  *
  * `entityAdapters` is published into this same slot by the inner entity plugin
  * via `publishEntityAdaptersState` and is the canonical adapter surface

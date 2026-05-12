@@ -20,7 +20,7 @@ Use this package when your app needs:
 
 ## Minimum Setup
 
-`createSsrPlugin()` has three practical requirements:
+`createSsrPackage()` has three practical requirements:
 
 - a renderer that satisfies the `SlingshotSsrRenderer` contract
 - `serverRoutesDir`
@@ -45,13 +45,14 @@ optional polish.
 
 ## What You Get
 
-The plugin wires several surfaces at once:
+The package wires several surfaces at once:
 
 - draft-mode routes under `/api/draft` when `draftModeSecret` is configured
 - server action routing under `/_snapshot`
 - metadata route registration from the server route tree
 - SSR middleware that resolves routes, loads data, and renders HTML
-- optional ISR invalidators stored in plugin state under `slingshot-ssr:isr`
+- optional ISR invalidators exposed via `IsrInvalidatorsCap` (and the legacy
+  `slingshot-ssr:isr` plugin-state slot)
 - optional page-declaration support for renderer-owned shell/navigation experiences
 - entity-event subscriptions that revalidate ISR tags for referenced pages
 
@@ -80,7 +81,7 @@ The highest-leverage decisions are usually:
 - route resolution and exclusion behavior
 - ISR cache adapter choice
 - server action trust policy
-- whether pages are file-based, manifest-backed, or both
+- whether pages are file-based, declaration-driven, or both
 
 ## Gotchas
 
@@ -92,7 +93,7 @@ The highest-leverage decisions are usually:
   before passing them in.
 - `renderChain()` is required for layouts. If the renderer only implements `render()`, nested layout
   routing will not behave correctly.
-- When `pages` and ISR are both enabled, the plugin subscribes to CRUD events for referenced
+- When `pages` and ISR are both enabled, the package subscribes to CRUD events for referenced
   entities so tag revalidation works. Changing that path affects runtime invalidation semantics.
 - `staticDir` is a serving optimization for already-generated HTML, not a replacement for the SSR
   route tree.

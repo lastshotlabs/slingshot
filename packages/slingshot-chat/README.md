@@ -5,7 +5,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-chat
 
 `@lastshotlabs/slingshot-chat` is Slingshot's chat domain package. It uses the config-driven entity
 system to provide rooms, memberships, messages, reactions, receipts, pins, blocks, favorites,
-invites, reminders, and realtime chat event handling behind one plugin.
+invites, reminders, and realtime chat event handling behind one package.
 
 ## When To Use It
 
@@ -21,7 +21,7 @@ not a low-level socket primitive.
 
 ## What You Need Before Wiring It In
 
-This package is not standalone. `createChatPlugin()` declares these dependencies:
+This package is not standalone. `createChatPackage()` declares these dependencies:
 
 - `slingshot-auth`
 - `slingshot-notifications`
@@ -41,23 +41,26 @@ The required config is small but explicit:
 - `mountPath` defaults to `/chat`
 - `pageSize` defaults to `50`
 - `enablePresence` defaults to `true`
-- `encryption` is optional; omit it and the plugin does not apply package-managed at-rest encryption
+- `encryption` is optional; omit it and the package does not apply package-managed at-rest encryption
 
 ## What You Get
 
-The plugin owns more than route mounting:
+The package owns more than route mounting:
 
-- manifest-driven chat entities and their adapters
+- entity-backed chat domain (rooms, memberships, messages, reactions, receipts, pins, blocks,
+  favorites, invites, reminders, scheduled messages) and their adapters
 - permission-aware middleware for room creation, membership changes, archive/broadcast guards, and
   message side effects
 - WebSocket incoming handlers for chat events
 - notification hooks for message delivery and invitations
-- unread-count and DM orchestration logic inside the manifest runtime
-- plugin state published under `CHAT_PLUGIN_STATE_KEY`
+- unread-count and DM orchestration logic lifted into the entity-runtime adapter transforms and
+  custom-op handlers
+- plugin state published under `CHAT_PLUGIN_STATE_KEY` and the `ChatInteractionsPeerCap` capability
+  for cross-package consumers
 - an encryption router mounted at `${mountPath}/encryption`
 
-The published plugin state is the integration surface other packages should use. Do not reach into
-chat internals directly when the state object already exposes adapters and evaluator access.
+Cross-package consumers should resolve `ChatInteractionsPeerCap` via `ctx.capabilities.require(...)`
+rather than reading chat plugin state directly.
 
 ## Common Customization
 
@@ -72,19 +75,19 @@ The most important knobs are:
 
 If you need to change runtime behavior, start with:
 
-- `src/plugin.ts` for lifecycle and integrations
+- `src/plugin.ts` for package lifecycle and integrations
 - `src/config.schema.ts` for supported config
 - `src/ws/incoming.ts` for incoming realtime behavior
-- `src/manifest/runtime.ts` for manifest-backed orchestration
+- `src/entities/runtime.ts` for adapter transforms and custom-op handlers
 
 ## Gotchas
 
-- Register permissions and notifications before chat. The plugin throws during startup if either is
-  missing.
-- `tenantId` falls back to `'default'` in the plugin when omitted. Multi-tenant apps should be
+- Register permissions and notifications before chat. The package throws during startup if either
+  is missing.
+- `tenantId` falls back to `'default'` in the package when omitted. Multi-tenant apps should be
   deliberate about whether that is correct.
 - Omitting `encryption` does not produce encrypted storage. It means chat stores message payloads
-  without plugin-managed encryption.
+  without package-managed encryption.
 - The package starts reminder and scheduled-message loops on a 30-second interval during setup.
   That is expected runtime behavior, not test-only glue.
 - Chat opportunistically integrates with other packages such as embeds, push, and interactions when
@@ -94,8 +97,10 @@ If you need to change runtime behavior, start with:
 
 - `src/index.ts`
 - `src/plugin.ts`
+- `src/public.ts`
 - `src/config.schema.ts`
 - `src/types.ts`
 - `src/ws/incoming.ts`
-- `src/manifest/runtime.ts`
+- `src/entities/modules.ts`
+- `src/entities/runtime.ts`
 - `src/encryption/provider.ts`

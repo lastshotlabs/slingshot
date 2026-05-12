@@ -4,7 +4,7 @@ Source-backed example for `slingshot-organizations` on top of `slingshot-auth`.
 
 ## What it shows
 
-- `createOrganizationsPlugin()` wired with `createAuthPlugin()` (orgs depends on auth)
+- `createOrganizationsPackage()` wired with `createAuthPlugin()` (orgs depends on auth)
 - custom membership roles via `knownRoles` and `defaultMemberRole`
 - reserved-slug enforcement and the typed `SlugConflictError` (HTTP 409)
 - typed app config setup

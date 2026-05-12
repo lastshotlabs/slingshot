@@ -49,7 +49,7 @@ export interface SearchTransformRegistry {
 /**
  * Create a new search transform registry with closure-owned state.
  *
- * Each `createSearchPlugin()` call produces its own registry instance —
+ * Each `createSearchPackage()` call produces its own registry instance —
  * no module-level singletons.
  */
 export function createSearchTransformRegistry(): SearchTransformRegistry {

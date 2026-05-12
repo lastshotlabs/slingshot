@@ -1,7 +1,7 @@
 /**
  * Search plugin configuration types.
  *
- * `SearchPluginConfig` is passed to `createSearchPlugin()` and controls
+ * `SearchPluginConfig` is passed to `createSearchPackage()` and controls
  * provider setup, default sync mode, and plugin-level settings.
  */
 import type { Context } from 'hono';
@@ -29,7 +29,7 @@ function normalizeMountPath(value: string): string {
  *
  * Controls access to admin endpoints (rebuild index, health check) and
  * optionally logs audit entries for admin actions. Admin routes are only
- * mounted when this is passed to `createSearchPlugin()`.
+ * mounted when this is passed to `createSearchPackage()`.
  *
  * @remarks
  * Validated at plugin construction time via `validateAdapterShape`. The
@@ -55,10 +55,10 @@ export interface SearchAdminGate {
 }
 
 /**
- * Top-level configuration for `createSearchPlugin()`.
+ * Top-level configuration for `createSearchPackage()`.
  *
  * All fields are `readonly` — the plugin treats the config as frozen after
- * construction. Always pass to `createSearchPlugin()` rather than storing
+ * construction. Always pass to `createSearchPackage()` rather than storing
  * a reference directly.
  *
  * @remarks
@@ -97,7 +97,7 @@ export interface SearchAdminGate {
  *
  * @example
  * ```ts
- * import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+ * import { createSearchPackage } from '@lastshotlabs/slingshot-search';
  * import type { SearchPluginConfig } from '@lastshotlabs/slingshot-search';
  *
  * const config: SearchPluginConfig = {
@@ -113,7 +113,7 @@ export interface SearchAdminGate {
  *     flattenThread: doc => ({ ...doc, titleLower: String(doc.title).toLowerCase() }),
  *   },
  * };
- * const search = createSearchPlugin(config);
+ * const search = createSearchPackage(config);
  * ```
  */
 export interface SearchPluginConfig {

@@ -92,7 +92,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = Object.freeze({
  * custom integrations.
  *
  * @remarks
- * `createCommunityPlugin()` no longer accepts an `adminGate` config field on
+ * `createCommunityPackage()` no longer accepts an `adminGate` config field on
  * the manifest-safe path. This interface remains exported for the internal
  * moderation middleware/runtime contracts that power tests and package-owned
  * integrations.
@@ -141,7 +141,7 @@ export type ModerationDecision = 'allow' | 'flag' | 'reject';
  * written to the database.
  *
  * @remarks
- * `createCommunityPlugin()` no longer accepts an `autoModerationHook` config
+ * `createCommunityPackage()` no longer accepts an `autoModerationHook` config
  * field on the manifest-safe path. This type remains exported for the
  * package-owned moderation middleware/runtime contracts.
  */
@@ -174,7 +174,7 @@ export interface ModerationTarget {
  * @example
  * ```ts
  * // Manifest-compatible — only wsEndpoint is required:
- * createCommunityPlugin({
+ * createCommunityPackage({
  *   containerCreation: 'admin',
  *   ws: { wsEndpoint: 'community' },
  * });
@@ -192,7 +192,7 @@ export interface CommunityWsConfig {
 /**
  * Zod validation schema for {@link CommunityPluginConfig}.
  *
- * Used by `createCommunityPlugin()` to validate the raw config object at
+ * Used by `createCommunityPackage()` to validate the raw config object at
  * construction time via `validatePluginConfig()`. Exported so callers can
  * pre-validate config before passing it in, or use it to generate JSON Schema
  * for tooling.
@@ -282,7 +282,7 @@ export const communityPluginConfigSchema = z.object({
  * Fully-typed configuration for the community plugin.
  *
  * Inferred from {@link communityPluginConfigSchema}. Pass a value of this type
- * to `createCommunityPlugin()`. Only `containerCreation` is required — all
+ * to `createCommunityPackage()`. Only `containerCreation` is required — all
  * other fields are optional.
  *
  * @remarks

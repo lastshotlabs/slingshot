@@ -6,7 +6,7 @@
  * ```ts
  * import { WEBHOOK_ROUTES } from '@lastshotlabs/slingshot-webhooks';
  *
- * createWebhookPlugin({
+ * createWebhookPackage({
  *   ...,
  *   disableRoutes: [WEBHOOK_ROUTES.ENDPOINTS], // skip the management API
  * });

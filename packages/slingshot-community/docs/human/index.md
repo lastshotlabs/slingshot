@@ -7,8 +7,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-community
 containers, threads, replies, reactions, container memberships and rules, reports, bans, tags,
 invites, subscriptions, mutes, bookmarks, automod rules, warnings, audit log entries, and
 container settings — all driven by the shared package-first/entity authoring model.
-`createCommunityPlugin()` is the runtime shell that composes those entities, manifest-driven
-middleware, the WebSocket channel surface, and notification side effects into the live plugin.
+`createCommunityPackage()` is the runtime shell that composes those entities, package
+middleware, the WebSocket channel surface, and notification side effects into the live package.
 
 ## When To Use It
 
@@ -27,7 +27,7 @@ messaging and ephemeral conversation flows.
 
 ## Dependencies
 
-`createCommunityPlugin()` declares these dependencies. The framework topological sort uses
+`createCommunityPackage()` declares these dependencies. The framework topological sort uses
 the declared list to enforce order, but the consumed capabilities have to actually be
 available — list them all in your app's `plugins` array before community.
 
@@ -79,9 +79,9 @@ if (peer) {
 ```ts title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
-import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
   plugins: [
@@ -89,15 +89,17 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createPermissionsPlugin(),
-    createNotificationsPlugin(),
-    createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
+  ],
+  packages: [
+    createPermissionsPackage(),
+    createNotificationsPackage(),
+    createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
   ],
 });
 ```
 
 The `slingshot-permissions` and `slingshot-notifications` registrations must come before
-`slingshot-community` — the plugin throws during setup if either capability is unavailable.
+`slingshot-community` — the package throws during setup if either capability is unavailable.
 
 ## Authoring Story
 
@@ -155,9 +157,9 @@ export function createModerationPlugin(): SlingshotPlugin {
 
 ### Extend with custom routes
 
-Community itself is a plugin, not a `definePackage` package — its routes are generated from
-its entity manifest. To add custom community-adjacent routes (a moderation dashboard, a
-custom search endpoint), define your own package and depend on community:
+Community itself is a `definePackage(...)` package — its routes are generated from its entity
+definitions. To add custom community-adjacent routes (a moderation dashboard, a custom search
+endpoint), define your own package and depend on community:
 
 ```ts
 // @skip-typecheck
@@ -257,7 +259,7 @@ Community augments `SlingshotEventMap` so every event below is fully typed when 
 | Event                                  | Notes                                                  |
 | -------------------------------------- | ------------------------------------------------------ |
 | `community:container.created`          | new container created                                  |
-| `community:container.deleted`          | container deleted (cascades through entity manifest)   |
+| `community:container.deleted`          | container deleted (cascades through entity definitions) |
 | `community:thread.created`             | new thread; payload includes `format`                  |
 | `community:thread.updated`             | thread fields updated                                  |
 | `community:thread.deleted`             | thread deleted                                         |
@@ -296,7 +298,7 @@ Community routes expect a `communityPrincipal` on the request context. The built
 `authBridge` config wires this automatically:
 
 ```ts
-createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' });
+createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' });
 ```
 
 When `authBridge` is `'auto'`, the plugin installs middleware on `${mountPath}/*` that reads
@@ -309,12 +311,12 @@ surface.
 
 - Community is config-driven by design. If you find yourself wrapping its routes with a large
   layer of bespoke handlers, that is usually a signal the abstraction boundary is wrong for
-  your domain — extend the manifest or contribute a config knob upstream rather than forking
-  the runtime.
+  your domain — extend the entity modules or contribute a config knob upstream rather than
+  forking the runtime.
 - Adapter-dependent middleware (banCheck, autoMod, threadStateGuard, banNotify) is initialised
-  inside `setupMiddleware` once the manifest runtime captures the entity adapters. The
-  middleware refs start as no-ops; treat early-route requests during setup as expected
-  no-op-pass-through, not an error.
+  inside `setupMiddleware` once the entity runtime captures the adapters. The middleware refs
+  start as no-ops; treat early-route requests during setup as expected no-op-pass-through, not
+  an error.
 - The push-formatter integration is opportunistic. When `slingshot-push` is not registered,
   the probe is a no-op — no error, no warning.
 - The `authBridge: 'auto'` middleware sets `communityPrincipal` only when `actor.id` is
@@ -323,7 +325,7 @@ surface.
 
 ## Gotchas
 
-- Register `slingshot-permissions` and `slingshot-notifications` before community. The plugin
+- Register `slingshot-permissions` and `slingshot-notifications` before community. The package
   throws during setup if either capability is unavailable.
 - Community expects a `communityPrincipal` on the request context for protected flows. Either
   use `authBridge: 'auto'` or install equivalent middleware before community routes run.
@@ -347,8 +349,8 @@ surface.
 - `src/plugin.ts`
 - `src/types/config.ts`
 - `src/types/state.ts`
-- `src/manifest/communityManifest.ts`
-- `src/manifest/runtime.ts`
+- `src/entities/modules.ts`
+- `src/entities/runtime.ts`
 - `src/middleware/`
 - `src/lib/mentions.ts`
 - `src/events.ts`

@@ -720,7 +720,7 @@ describe('Webhook plugin — custom mountPath', () => {
 
   beforeEach(async () => {
     const queue = createWebhookMemoryQueue();
-    const plugin = createWebhookPlugin({
+    const plugin = createWebhookPackage({
       queue,
       events: ['user.*'],
       mountPath: '/api/hooks',

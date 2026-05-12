@@ -8,7 +8,7 @@ notification records, user notification preferences, dispatcher scheduling, rate
 preference resolution, and the builder/runtime surface that other packages use to enqueue or
 deliver notifications.
 The notification entities themselves follow the shared package-first/entity authoring model;
-`createNotificationsPlugin()` is the runtime shell that wires storage, dispatch, and delivery.
+`createNotificationsPackage()` is the runtime shell that wires storage, dispatch, and delivery.
 
 ## When To Use It
 
@@ -25,15 +25,15 @@ shared notification backbone instead of private per-feature notification tables.
 
 ## What You Need Before Wiring It In
 
-The plugin declares `slingshot-auth` as a dependency. It expects the auth layer to be present before
-notification routes and user-scoped SSE behavior are used.
+The package declares `slingshot-auth` as a dependency. It expects the auth layer to be present
+before notification routes and user-scoped SSE behavior are used.
 
-The config is intentionally easy to start with. `createNotificationsPlugin()` accepts a partial
+The config is intentionally easy to start with. `createNotificationsPackage()` accepts a partial
 config object and fills in defaults.
 
 ## Minimum Setup
 
-With no config, the plugin already gives you:
+With no config, the package already gives you:
 
 - route mount path `/notifications`
 - SSE endpoint `/notifications/sse`
@@ -58,25 +58,33 @@ The package provides:
 
 - notification and notification-preference entities
 - adapters resolved for the active store backend
-- a notification builder surface created from plugin state
+- a notification builder surface created from package state
 - a dispatcher that can poll and deliver queued notifications
 - SSE routing for user-scoped notification streams
 - a registration point for delivery adapters
 
-At runtime, the plugin publishes state under `NOTIFICATIONS_PLUGIN_STATE_KEY`. That state includes:
+At runtime, the package publishes typed capabilities:
 
-- notification and preference adapters
-- the dispatcher
-- `createBuilder()`
-- `registerDeliveryAdapter()`
+- `NotificationsBuilderFactory` — `({ source }) => NotificationBuilder` for building source-scoped
+  notification builders
+- `NotificationsDeliveryRegistry` — `.register(adapter)` for registering delivery adapters
+- `NotificationsHealthCap` — `() => NotificationsHealth` for the aggregated health snapshot
 
-Other feature packages should use that published state instead of reaching through notification internals.
+```ts
+import { NotificationsHealthCap } from '@lastshotlabs/slingshot-notifications';
+
+const health = ctx.capabilities.require(NotificationsHealthCap)();
+```
+
+Internal state remains published under `NOTIFICATIONS_PLUGIN_STATE_KEY` for legacy consumers, but
+new code should resolve the capabilities above.
 
 ## Common Customization
 
 The first files to read are:
 
-- `src/plugin.ts` for lifecycle and runtime state
+- `src/plugin.ts` for package lifecycle and runtime state
+- `src/public.ts` for the contract and capabilities
 - `src/types/config.ts` for defaults and configuration
 - `src/builder.ts` for builder behavior
 - `src/dispatcher.ts` for queue draining and delivery
@@ -96,8 +104,8 @@ The highest-value changes are usually:
   polling loop that drains queued notifications.
 - Delivery adapters are opt-in. Persisted notifications exist without them, but external delivery
   will not happen until another package registers an adapter.
-- The plugin state is only complete after setup has resolved the entity adapters. If those adapters
-  are missing, the plugin throws during setup instead of continuing in a half-wired state.
+- Package state is only complete after setup has resolved the entity adapters. If those adapters
+  are missing, the package throws during setup instead of continuing in a half-wired state.
 - SSE can be disabled independently from storage and dispatch. Treat it as a delivery surface, not
   the whole notification system.
 

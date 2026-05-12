@@ -1,15 +1,15 @@
 // ---------------------------------------------------------------------------
 // @lastshotlabs/slingshot-organizations/testing — Test utilities
 // ---------------------------------------------------------------------------
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { createOrganizationsPlugin } from './plugin';
+import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
+import { createOrganizationsPackage } from './plugin';
 import type { OrganizationsPluginConfig, OrganizationsPluginDeps } from './plugin';
 
-export function createTestOrganizationsPlugin(
+export function createTestOrganizationsPackage(
   opts?: Partial<OrganizationsPluginConfig>,
   deps?: OrganizationsPluginDeps,
-): SlingshotPlugin {
-  return createOrganizationsPlugin(opts, deps);
+): SlingshotPackageDefinition {
+  return createOrganizationsPackage(opts, deps);
 }
 
 export type { OrganizationsPluginConfig, OrganizationsPluginDeps } from './plugin';

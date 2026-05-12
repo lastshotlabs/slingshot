@@ -1,5 +1,5 @@
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
-import { createOrganizationsPlugin } from '../../packages/slingshot-organizations/src/index.ts';
+import { createOrganizationsPackage } from '../../packages/slingshot-organizations/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
 /**
@@ -23,7 +23,9 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createOrganizationsPlugin({
+  ],
+  packages: [
+    createOrganizationsPackage({
       organizations: {
         enabled: true,
         // Custom membership-role vocabulary — every member, invite, and
@@ -32,7 +34,7 @@ export default defineApp({
         defaultMemberRole: 'member',
         // App-specific reserved slugs in addition to the framework defaults.
         // Attempts to create an org with one of these surface as
-        // `SlugConflictError` (HTTP 409) from `createOrgsPlugin`'s slug guard.
+        // `SlugConflictError` (HTTP 409) from the organizations slug guard.
         reservedSlugs: ['admin', 'api', 'billing', 'support', 'www'],
         invitationTtlSeconds: 7 * 24 * 60 * 60,
       },

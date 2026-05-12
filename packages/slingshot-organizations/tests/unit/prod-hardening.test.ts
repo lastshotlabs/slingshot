@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
 import { SlugConflictError, isUniqueViolationError } from '../../src/errors';
-import { createOrganizationsPlugin } from '../../src/plugin';
+import { createOrganizationsPackage } from '../../src/plugin';
 import { type OrgPluginTestHarness, setupOrgPluginHarness } from './helpers/setupOrgPlugin';
 
 describe('prod hardening — error propagation', () => {
@@ -137,28 +137,28 @@ describe('prod hardening — HTTP error responses', () => {
 });
 
 describe('prod hardening — plugin config validation', () => {
-  test('createOrganizationsPlugin with invalid mountPath throws', () => {
+  test('createOrganizationsPackage with invalid mountPath throws', () => {
     // mountPath without leading /
     expect(() =>
-      createOrganizationsPlugin({
+      createOrganizationsPackage({
         mountPath: 'no-leading-slash',
-      } as Parameters<typeof createOrganizationsPlugin>[0]),
+      } as Parameters<typeof createOrganizationsPackage>[0]),
     ).toThrow(/must start with '\/'/);
   });
 
-  test('createOrganizationsPlugin with just slash as mountPath throws', () => {
+  test('createOrganizationsPackage with just slash as mountPath throws', () => {
     // mountPath that normalizes to '/' (empty after trimming trailing slashes)
     expect(() =>
-      createOrganizationsPlugin({
+      createOrganizationsPackage({
         mountPath: '/',
-      } as Parameters<typeof createOrganizationsPlugin>[0]),
+      } as Parameters<typeof createOrganizationsPackage>[0]),
     ).toThrow(/must not be '\//);
   });
 
-  test('createOrganizationsPlugin handles missing config gracefully', () => {
+  test('createOrganizationsPackage handles missing config gracefully', () => {
     // No config or undefined config should not throw at construction
-    expect(() => createOrganizationsPlugin()).not.toThrow();
-    expect(() => createOrganizationsPlugin(undefined)).not.toThrow();
+    expect(() => createOrganizationsPackage()).not.toThrow();
+    expect(() => createOrganizationsPackage(undefined)).not.toThrow();
   });
 });
 

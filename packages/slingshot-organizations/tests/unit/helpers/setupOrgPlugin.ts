@@ -35,11 +35,19 @@ import type {
   ResolvedEntityConfig,
   RouteAuthRegistry,
   SlingshotFrameworkConfig,
+  SlingshotPackageDefinition,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import { type OrganizationsPluginConfig, createOrganizationsPlugin } from '../../../src/plugin';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type {
+  BareEntityAdapter,
+  EntityPluginEntry,
+} from '@lastshotlabs/slingshot-entity';
+import {
+  type OrganizationsPluginConfig,
+  createOrganizationsPackage,
+} from '../../../src/plugin';
 
 function createFrameworkConfig(): SlingshotFrameworkConfig & {
   registeredEntities: ResolvedEntityConfig[];
@@ -338,12 +346,20 @@ export interface OrgPluginTestHarness {
   app: Hono<AppEnv>;
   bus: InProcessAdapter;
   pluginState: Map<string, unknown>;
+  frameworkConfig: SlingshotFrameworkConfig & { registeredEntities: ResolvedEntityConfig[] };
   adminId: string;
   memberId: string;
-  plugin: ReturnType<typeof createOrganizationsPlugin>;
+  pkg: SlingshotPackageDefinition;
   teardown(): Promise<void>;
 }
 
+/**
+ * Drive the package + a manually mounted entity-plugin through their setup
+ * lifecycles. This helper bypasses `createApp/compilePackages` so each
+ * entity's `wiring.buildAdapter` (manual mode) is what populates the
+ * package's closure-owned adapter refs. Mirrors the pattern in
+ * `slingshot-polls/src/testing.ts`.
+ */
 export async function setupOrgPluginHarness(
   pluginConfig: OrganizationsPluginConfig = {
     organizations: { enabled: true, invitationTtlSeconds: 3600 },
@@ -370,21 +386,88 @@ export async function setupOrgPluginHarness(
     }),
   );
 
-  const plugin = createOrganizationsPlugin(pluginConfig);
+  const pkg = createOrganizationsPackage(pluginConfig);
+
+  // Manually mount the package's entity modules via `createEntityPlugin`.
+  // Each `buildAdapter` here delegates to the corresponding entity module's
+  // `wiring.buildAdapter`, which performs the per-entity adapter-transform
+  // chain AND populates the package's closure-owned adapter refs. This is
+  // the same dual-population pattern used in `slingshot-polls/src/testing.ts`.
+  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+    const impl = (entityModule as { implementation?: unknown }).implementation as {
+      config: ResolvedEntityConfig;
+      operations?: Record<string, unknown>;
+      extraRoutes?: unknown;
+      overrides?: unknown;
+      routePath?: string;
+      parentPath?: string;
+      wiring: { mode: string; buildAdapter?: unknown };
+    };
+    const buildAdapter = impl.wiring.buildAdapter as
+      | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
+      | undefined;
+    if (impl.wiring.mode !== 'manual' || !buildAdapter) {
+      throw new Error(
+        `[organizations test harness] expected manual wiring on entity '${entityModule.entityName}', got '${impl.wiring.mode}'`,
+      );
+    }
+    return {
+      config: impl.config,
+      operations: impl.operations as never,
+      extraRoutes: impl.extraRoutes as never,
+      overrides: impl.overrides as never,
+      ...(impl.routePath ? { routePath: impl.routePath } : {}),
+      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+      buildAdapter,
+    };
+  });
+
+  const entityPlugin = createEntityPlugin({
+    name: 'slingshot-organizations',
+    mountPath: pkg.mountPath ?? '',
+    entities: entityEntries,
+    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+  });
+
   const setupContext: PluginSetupContext = { app, bus, config: frameworkConfig };
-  await plugin.setupMiddleware?.(setupContext);
-  await plugin.setupRoutes?.(setupContext);
-  await plugin.setupPost?.(setupContext);
+  // Lifecycle order matches the framework path:
+  //   1. package setupMiddleware     — resolves auth runtime + admin guards
+  //   2. entity setupMiddleware      — entity-plugin policy hooks
+  //   3. entity setupRoutes          — mounts CRUD + named-op routes (runs
+  //                                    buildAdapter, populates package refs)
+  //   4. package setupRoutes (none)  — organizations has no extra setupRoutes
+  //   5. entity setupPost / package setupPost — capability/state publish
+  await pkg.setupMiddleware?.(setupContext);
+  await entityPlugin.setupMiddleware?.(setupContext);
+  await entityPlugin.setupRoutes?.(setupContext);
+  await pkg.setupRoutes?.(setupContext);
+  await entityPlugin.setupPost?.(setupContext);
+  await pkg.setupPost?.(setupContext);
+
+  // `createApp` would do this; the test harness bypasses that path so we
+  // manually publish the org service capability through plugin state for
+  // legacy `getOrganizationsOrgServiceOrNull` consumers.
+  for (const provider of pkg.capabilities.provides) {
+    const value = await provider.resolve({ packageName: pkg.name });
+    const slotKey = `slingshot:package:capabilities:${pkg.name}`;
+    const existing = (pluginState.get(slotKey) as Record<string, unknown>) ?? {};
+    pluginState.set(
+      slotKey,
+      Object.freeze({ ...existing, [provider.capability.name]: value }),
+    );
+  }
 
   return {
     app,
     bus,
     pluginState,
+    frameworkConfig,
     adminId: authRuntime.adminId,
     memberId: authRuntime.memberId,
-    plugin,
+    pkg,
     async teardown() {
-      await plugin.teardown?.();
+      await pkg.teardown?.();
+      await entityPlugin.teardown?.();
     },
   };
 }

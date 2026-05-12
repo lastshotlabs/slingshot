@@ -1,38 +1,52 @@
+/**
+ * Organizations package factory.
+ *
+ * Creates a `SlingshotPackageDefinition` that mounts the Organization,
+ * OrganizationMember, OrganizationInvite, Group, and GroupMembership entities
+ * (conditionally enabled by config), wires the invite rate-limit middleware
+ * and admin-role guards, and publishes the org service + reconcile service
+ * for cross-package consumers.
+ *
+ * Every adapter ref, middleware closure, and rate-limit backend is owned by
+ * the factory's closure (Rule 3) — multiple package instances in the same
+ * process do not share state.
+ */
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import type {
   PluginSeedContext,
   PluginSetupContext,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   createConsoleLogger,
   deepFreeze,
+  definePackage,
   getActorId,
-  getContext,
   getPluginState,
   getPluginStateOrNull,
   getRouteAuthOrNull,
   provideCapability,
   publishPluginState,
-  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { OrgServiceCap } from './public';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import {
+  type BuildOrganizationsEntityModulesArgs,
+  buildOrganizationsEntityModules,
+} from './entities/modules';
+import { type OrganizationsAdapterRefs, reconcileOrphanedOrgRecords } from './entities/runtime';
 import { getOrganizationsAuthRuntime } from './lib/authRuntime';
 import {
   type OrganizationsRateLimitStore,
   createMemoryOrganizationsRateLimitStore,
 } from './lib/rateLimit';
 import { DEFAULT_RESERVED_ORG_SLUGS, createOrgSlugSchema } from './lib/slugValidation';
-import { organizationsManifest } from './manifest/organizationsManifest';
-import { type OrganizationsRuntime, createOrganizationsManifestRuntime } from './manifest/runtime';
 import {
   type OrganizationsOrgService,
   getOrganizationsOrgServiceOrNull,
 } from './orgService';
+import { OrgServiceCap } from './public';
 import { ORGANIZATIONS_RECONCILE_STATE_KEY, type OrganizationsReconcileService } from './reconcile';
 
 const memberRoleSchema = z.string().min(1);
@@ -44,12 +58,10 @@ function normalizeMountPath(value: string): string {
   if (!trimmed.startsWith('/')) {
     throw new Error("mountPath must start with '/'");
   }
-
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
     throw new Error("mountPath must not be '/'");
   }
-
   return normalized;
 }
 
@@ -179,23 +191,19 @@ const organizationsPluginConfigSchema = z.object({
 });
 
 /**
- * Optional non-JSON dependencies the organizations plugin accepts at construction time.
- *
- * These cannot be expressed in the manifest and so are passed via the second
- * argument of `createOrganizationsPlugin()`.
+ * Optional non-JSON dependencies the organizations package accepts at construction time.
  */
 export interface OrganizationsPluginDeps {
   /**
-   * Backing store for the invitation rate-limit middleware.
-   *
-   * Defaults to a process-local in-memory store. Provide a Redis-backed
-   * implementation in production for shared rate limiting.
+   * Backing store for the invitation rate-limit middleware. Defaults to a
+   * process-local in-memory store. Provide a Redis-backed implementation in
+   * production for shared rate limiting.
    */
   rateLimitStore?: OrganizationsRateLimitStore;
 }
 
 /**
- * JSON-safe organizations plugin configuration.
+ * JSON-safe organizations package configuration.
  */
 export type OrganizationsPluginConfig = z.infer<typeof organizationsPluginConfigSchema>;
 
@@ -212,16 +220,12 @@ function composeAuthenticatedGuard(
 ): MiddlewareHandler {
   return async (c, next) => {
     const authResponse = await userAuthMiddleware(c, async () => {});
-    if (authResponse) {
-      return authResponse;
-    }
+    if (authResponse) return authResponse;
     return guard(c, next);
   };
 }
 
 function getClientIp(c: Parameters<MiddlewareHandler>[0]): string {
-  // Only trust x-forwarded-for — single-hop headers (x-real-ip, cf-connecting-ip)
-  // are trivially spoofed by clients without a trusted proxy in front.
   const fwd = c.req.header('x-forwarded-for');
   if (typeof fwd === 'string' && fwd.length > 0) {
     return fwd.split(',')[0]?.trim() ?? 'unknown';
@@ -272,16 +276,20 @@ function createInviteLookupRateLimit(args: {
 const logger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-organizations' } });
 
 /**
- * Create the organizations plugin using the manifest-driven entity system.
+ * Create the organizations package using the `definePackage` authoring path.
  *
- * The plugin mounts organization, membership, invitation, and optional group
- * management routes while publishing organization services into plugin state
- * for peer packages.
+ * The five organizations entities are mounted via the package's `entities: [...]`
+ * declaration; their adapters are wrapped with per-entity transforms (slug
+ * validation, cascade-delete, scoped membership ids, invite token lifecycle)
+ * inside each entity module's `wiring.buildAdapter` callback. The package
+ * factory captures the resolved adapters in a shared
+ * {@link OrganizationsAdapterRefs} bag so the custom-op handlers, the org
+ * service, and the reconcile service all use the same instance per entity.
  */
-export function createOrganizationsPlugin(
+export function createOrganizationsPackage(
   rawConfig: OrganizationsPluginConfig = {},
   deps: OrganizationsPluginDeps = {},
-): SlingshotPlugin {
+): SlingshotPackageDefinition {
   const config = deepFreeze(
     validatePluginConfig('slingshot-organizations', rawConfig, organizationsPluginConfigSchema),
   );
@@ -301,6 +309,14 @@ export function createOrganizationsPlugin(
 
   const reservedSlugs = config.organizations?.reservedSlugs ?? DEFAULT_RESERVED_ORG_SLUGS;
   const orgSlugSchema = createOrgSlugSchema(reservedSlugs);
+  const knownRoles = config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES];
+  const defaultMemberRole = config.organizations?.defaultMemberRole ?? 'member';
+  const invitationTtlSeconds = config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60;
+
+  // Closure-owned adapter refs populated by the entity modules' `wiring.buildAdapter`
+  // callbacks during bootstrap. Custom-op handlers, the org service, and the
+  // reconcile service all read through these refs.
+  const refs: OrganizationsAdapterRefs = {};
 
   const rateLimitStore = deps.rateLimitStore ?? createMemoryOrganizationsRateLimitStore();
   if (
@@ -319,170 +335,150 @@ export function createOrganizationsPlugin(
   const inviteLookupLimit = config.organizations?.inviteRateLimit?.lookup?.limit ?? 30;
   const inviteLookupWindow = config.organizations?.inviteRateLimit?.lookup?.windowMs ?? 60_000;
 
-  let innerPlugin: ReturnType<typeof createEntityPlugin> | undefined;
-  let orgsRuntime: OrganizationsRuntime | undefined;
-  let orgAdapterRef:
-    | {
-        create(input: Record<string, unknown>): Promise<{ id: string }>;
-        list(opts: { filter?: Record<string, unknown>; limit?: number }): Promise<{
-          items: ReadonlyArray<Record<string, unknown>>;
-        }>;
-      }
-    | undefined;
-  let memberAdapterRef:
-    | {
-        create(input: Record<string, unknown>): Promise<unknown>;
-      }
-    | undefined;
+  // Auth-runtime-derived guards are resolved during `setupMiddleware`. The
+  // framework copies the middleware bundle at entity-plugin construction
+  // time (`{ ...pkg.middleware }`), so each entry must close over a mutable
+  // ref the framework re-reads at request time. The thunks below do exactly
+  // that — the entity plugin captures the thunk reference, and the thunk
+  // delegates to the resolved guard once `setupMiddleware` populates it.
+  const orgAdminGuardRef: { current: MiddlewareHandler } = {
+    current: async (_c, next) => next(),
+  };
+  const groupAdminGuardRef: { current: MiddlewareHandler } = {
+    current: async (_c, next) => next(),
+  };
 
-  return {
-    name: 'slingshot-organizations',
-    dependencies: ['slingshot-auth'],
-    tenantExemptPaths,
-
-    async setupMiddleware(ctx: PluginSetupContext) {
-      const manifest = {
-        ...organizationsManifest,
-        entities: Object.fromEntries(
-          Object.entries(organizationsManifest.entities).filter(([key]) => {
-            if (
-              !organizationsEnabled &&
-              (key === 'Organization' ||
-                key === 'OrganizationMember' ||
-                key === 'OrganizationInvite')
-            ) {
-              return false;
-            }
-            if (!groupsEnabled && (key === 'Group' || key === 'GroupMembership')) {
-              return false;
-            }
-            return true;
-          }),
-        ),
-      };
-
-      const authRuntime = getOrganizationsAuthRuntime(getPluginStateOrNull(ctx.app));
-      const routeAuth = getRouteAuthOrNull(ctx.app);
-      if (!routeAuth) {
-        throw new Error(
-          '[slingshot-organizations] RouteAuthRegistry is not available. Ensure slingshot-auth setupMiddleware runs before slingshot-organizations.',
-        );
-      }
-      const invitationTtlSeconds = config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60;
-      orgsRuntime = createOrganizationsManifestRuntime({
-        authRuntime,
-        invitationTtlSeconds,
-        defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
-        knownRoles: config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES],
-        slugSchema: orgSlugSchema,
-        onAdaptersCaptured(adapters) {
-          orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
-          memberAdapterRef = adapters.members as typeof memberAdapterRef;
-        },
-      });
-      innerPlugin = createEntityPlugin({
-        name: 'slingshot-organizations',
-        mountPath,
-        manifest,
-        manifestRuntime: orgsRuntime,
-        middleware: {
-          inviteCreateDefaults: async (c, next) => {
-            const setContextValue = c.set as (key: string, value: string) => void;
-            setContextValue(
-              'inviteExpiresAt',
-              new Date(Date.now() + invitationTtlSeconds * 1000).toISOString(),
-            );
-            await next();
-          },
-          organizationsAdminGuard: composeAuthenticatedGuard(
-            routeAuth.userAuth,
-            routeAuth.requireRole('admin'),
-          ),
-          groupsAdminGuard: composeAuthenticatedGuard(
-            routeAuth.userAuth,
-            routeAuth.requireRole(groupAdminRole),
-          ),
-          inviteCreateRateLimit: createInviteCreateRateLimit({
-            store: rateLimitStore,
-            limit: inviteCreateLimit,
-            windowMs: inviteCreateWindow,
-          }),
-          inviteLookupRateLimit: createInviteLookupRateLimit({
-            store: rateLimitStore,
-            limit: inviteLookupLimit,
-            windowMs: inviteLookupWindow,
-          }),
-        },
-      });
-      await innerPlugin.setupMiddleware?.(ctx);
+  const middleware: Record<string, MiddlewareHandler> = {
+    inviteCreateDefaults: async (c, next) => {
+      const setContextValue = c.set as (key: string, value: string) => void;
+      setContextValue(
+        'inviteExpiresAt',
+        new Date(Date.now() + invitationTtlSeconds * 1000).toISOString(),
+      );
+      await next();
     },
+    organizationsAdminGuard: (c, next) => orgAdminGuardRef.current(c, next),
+    groupsAdminGuard: (c, next) => groupAdminGuardRef.current(c, next),
+    inviteCreateRateLimit: createInviteCreateRateLimit({
+      store: rateLimitStore,
+      limit: inviteCreateLimit,
+      windowMs: inviteCreateWindow,
+    }),
+    inviteLookupRateLimit: createInviteLookupRateLimit({
+      store: rateLimitStore,
+      limit: inviteLookupLimit,
+      windowMs: inviteLookupWindow,
+    }),
+  };
 
-    async setupRoutes(ctx: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.(ctx);
-    },
+  // Resolve auth-runtime-derived middleware. The entity routes capture the
+  // thunk above at boot; this just swaps the inner handler in place.
+  function resolveAuthGuards(ctx: PluginSetupContext): void {
+    const routeAuth = getRouteAuthOrNull(ctx.app);
+    if (!routeAuth) {
+      throw new Error(
+        '[slingshot-organizations] RouteAuthRegistry is not available. Ensure slingshot-auth setupMiddleware runs before slingshot-organizations.',
+      );
+    }
+    orgAdminGuardRef.current = composeAuthenticatedGuard(
+      routeAuth.userAuth,
+      routeAuth.requireRole('admin'),
+    );
+    groupAdminGuardRef.current = composeAuthenticatedGuard(
+      routeAuth.userAuth,
+      routeAuth.requireRole(groupAdminRole),
+    );
+  }
 
-    async setupPost(ctx: PluginSetupContext) {
-      await innerPlugin?.setupPost?.(ctx);
-      if (!orgAdapterRef || !memberAdapterRef) {
-        return;
-      }
-      const orgAdapter = orgAdapterRef;
-      const memberAdapter = memberAdapterRef;
-
-      const orgService: OrganizationsOrgService = {
-        async getOrgBySlug(slug, tenantId) {
-          const filter: Record<string, unknown> = { slug };
-          if (tenantId !== undefined) filter.tenantId = tenantId;
-          const page = await orgAdapter.list({ filter, limit: 1 });
-          const org = page.items[0];
-          return org && typeof org.id === 'string' ? { id: org.id } : null;
-        },
-        async createOrg(data) {
-          const validatedSlug = orgSlugSchema.parse(data.slug);
-          const created = await orgAdapter.create({
-            name: data.name,
-            slug: validatedSlug,
-            ...(data.tenantId !== undefined ? { tenantId: data.tenantId } : {}),
-            ...(data.metadata !== undefined ? { metadata: data.metadata } : {}),
-          });
-          return { id: created.id };
-        },
-        async addOrgMember(orgId, userId, roles, invitedBy) {
-          const knownRoles = config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES];
-          const role = roles?.find(
-            (candidate): candidate is string =>
-              typeof candidate === 'string' && knownRoles.includes(candidate),
+  // Build the entity modules eagerly so the framework can declare them on
+  // `definePackage({ entities })`. The auth runtime isn't resolvable yet (it
+  // lives on the framework context that's wired during `setupMiddleware`),
+  // so we expose a delegating Proxy whose targets are filled in at
+  // `setupMiddleware` time. Routes never run before `setupMiddleware`
+  // completes, so the redeem handler always sees a resolved runtime by the
+  // time it dereferences `authRuntime.adapter.*` at request time.
+  const authRuntimeRef: { current?: BuildOrganizationsEntityModulesArgs['authRuntime'] } = {};
+  const authRuntimeProxy = new Proxy(
+    {} as BuildOrganizationsEntityModulesArgs['authRuntime'],
+    {
+      get(_target, prop) {
+        if (!authRuntimeRef.current) {
+          throw new Error(
+            '[slingshot-organizations] auth runtime accessed before setupMiddleware resolved it',
           );
-          return memberAdapter.create({
-            orgId,
-            userId,
-            role: role ?? config.organizations?.defaultMemberRole ?? 'member',
-            ...(invitedBy ? { invitedBy } : {}),
-          });
-        },
-      };
+        }
+        return Reflect.get(authRuntimeRef.current as object, prop);
+      },
+    },
+  );
 
-      // Contract-bound capability publish. The legacy `getOrganizationsOrgService(...)`
-      // helper resolves through the same slot internally, so direct callers continue to
-      // work without the dual state-key publish.
-      await registerPluginCapabilities(getContext(ctx.app), 'slingshot-organizations', [
-        provideCapability(OrgServiceCap, () => orgService),
-      ]);
+  const {
+    organizationModule,
+    organizationMemberModule,
+    organizationInviteModule,
+    groupModule,
+    groupMembershipModule,
+  } = buildOrganizationsEntityModules({
+    refs,
+    invitationTtlSeconds,
+    defaultMemberRole,
+    knownRoles,
+    slugSchema: orgSlugSchema,
+    authRuntime: authRuntimeProxy,
+    organizationsEnabled,
+    groupsEnabled,
+  });
 
-      // Publish the reconcile service so operator tooling (CLI, admin route)
-      // can call `reconcileOrphanedOrgRecords(orgId)` to clean up after a
-      // partial cascade-delete on non-atomic adapters.
-      if (orgsRuntime) {
-        const runtime = orgsRuntime;
-        const reconcileService: OrganizationsReconcileService = {
-          reconcileOrphanedOrgRecords: orgId => runtime.reconcileOrphanedOrgRecords(orgId),
-        };
-        publishPluginState(
-          getPluginState(ctx.app),
-          ORGANIZATIONS_RECONCILE_STATE_KEY,
-          reconcileService,
+  const entities = [
+    organizationModule,
+    organizationMemberModule,
+    organizationInviteModule,
+    groupModule,
+    groupMembershipModule,
+  ].filter((m): m is NonNullable<typeof m> => m !== null);
+
+  return definePackage({
+    name: 'slingshot-organizations',
+    mountPath: config.mountPath,
+    dependencies: ['slingshot-auth'],
+    entities,
+    middleware,
+    tenantExemptPaths,
+    capabilities: {
+      provides: [provideCapability(OrgServiceCap, () => createOrgService())],
+    },
+
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupMiddleware(ctx: PluginSetupContext) {
+      // Resolve auth runtime + route-auth so middleware closures point at the
+      // real guards before any route is mounted in `setupRoutes`.
+      authRuntimeRef.current = getOrganizationsAuthRuntime(getPluginStateOrNull(ctx.app));
+      resolveAuthGuards(ctx);
+    },
+
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupPost(ctx: PluginSetupContext) {
+      if (organizationsEnabled && (!refs.organizations || !refs.members)) {
+        // The package's entities all use manual wiring and populate `refs`
+        // inside `buildAdapter`. If we reach `setupPost` without them
+        // populated, the entity routes never mounted — surface that as an
+        // error rather than silently no-op.
+        throw new Error(
+          '[slingshot-organizations] organization adapters were not captured during entity setup',
         );
       }
+
+      // Reconcile service for operator tooling (CLI, admin route). Published
+      // through plugin state because it's a non-cross-package recovery hook
+      // rather than a typed cross-package capability.
+      const reconcileService: OrganizationsReconcileService = {
+        reconcileOrphanedOrgRecords: orgId => reconcileOrphanedOrgRecords(refs, orgId),
+      };
+      publishPluginState(
+        getPluginState(ctx.app),
+        ORGANIZATIONS_RECONCILE_STATE_KEY,
+        reconcileService,
+      );
     },
 
     async seed({ app, manifestSeed, seedState }: PluginSeedContext) {
@@ -533,9 +529,62 @@ export function createOrganizationsPlugin(
         }
       }
     },
+  });
 
-    async teardown() {
-      await innerPlugin?.teardown?.();
-    },
-  };
+  /**
+   * Build the org service from the captured adapters. Called from the
+   * capability factory; safe to call multiple times — each invocation closes
+   * over the same `refs` bag.
+   */
+  function createOrgService(): OrganizationsOrgService {
+    return {
+      async getOrgBySlug(slug, tenantId) {
+        const orgAdapter = refs.organizations;
+        if (!orgAdapter) {
+          throw new Error(
+            '[slingshot-organizations] orgService.getOrgBySlug called before adapters were captured',
+          );
+        }
+        const filter: Record<string, unknown> = { slug };
+        if (tenantId !== undefined) filter.tenantId = tenantId;
+        const page = await orgAdapter.list({ filter, limit: 1 });
+        const org = page.items[0] as { id?: unknown } | undefined;
+        return org && typeof org.id === 'string' ? { id: org.id } : null;
+      },
+      async createOrg(data) {
+        const orgAdapter = refs.organizations;
+        if (!orgAdapter) {
+          throw new Error(
+            '[slingshot-organizations] orgService.createOrg called before adapters were captured',
+          );
+        }
+        const validatedSlug = orgSlugSchema.parse(data.slug);
+        const created = (await orgAdapter.create({
+          name: data.name,
+          slug: validatedSlug,
+          ...(data.tenantId !== undefined ? { tenantId: data.tenantId } : {}),
+          ...(data.metadata !== undefined ? { metadata: data.metadata } : {}),
+        })) as { id: string };
+        return { id: created.id };
+      },
+      async addOrgMember(orgId, userId, roles, invitedBy) {
+        const memberAdapter = refs.members;
+        if (!memberAdapter) {
+          throw new Error(
+            '[slingshot-organizations] orgService.addOrgMember called before adapters were captured',
+          );
+        }
+        const role = roles?.find(
+          (candidate): candidate is string =>
+            typeof candidate === 'string' && knownRoles.includes(candidate),
+        );
+        return memberAdapter.create({
+          orgId,
+          userId,
+          role: role ?? defaultMemberRole,
+          ...(invitedBy ? { invitedBy } : {}),
+        });
+      },
+    };
+  }
 }

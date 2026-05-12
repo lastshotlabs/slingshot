@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
   SlugConflictError,
-  createTestOrganizationsPlugin,
+  createTestOrganizationsPackage,
   isUniqueViolationError,
 } from '../../src/testing';
 
 describe('organizations testing entrypoint', () => {
   test('exports plugin factory and error helpers', () => {
-    const plugin = createTestOrganizationsPlugin();
+    const plugin = createTestOrganizationsPackage();
     const nestedDuplicate = new Error('outer', {
       cause: Object.assign(new Error('duplicate key'), { code: '23505' }),
     });

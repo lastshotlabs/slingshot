@@ -1029,6 +1029,14 @@ function createPackagePlugin(
       await pkg.setupPost?.(ctx);
     },
 
+    ...(pkg.seed
+      ? {
+          async seed(ctx) {
+            await pkg.seed?.(ctx);
+          },
+        }
+      : {}),
+
     async teardown() {
       await pkg.teardown?.();
       await entityPlugin?.teardown?.();

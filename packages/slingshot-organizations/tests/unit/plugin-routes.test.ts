@@ -1,23 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { createOrganizationsPlugin } from '../../src/plugin';
+import { createOrganizationsPackage } from '../../src/plugin';
 import { type OrgPluginTestHarness, setupOrgPluginHarness } from './helpers/setupOrgPlugin';
 
 describe('plugin metadata', () => {
   test('has correct name and dependencies', () => {
-    const p = createOrganizationsPlugin();
+    const p = createOrganizationsPackage();
     expect(p.name).toBe('slingshot-organizations');
     expect(p.dependencies).toEqual(['slingshot-auth']);
   });
 
   test('tenantExemptPaths includes orgs and groups with default mountPath', () => {
-    const p = createOrganizationsPlugin();
+    const p = createOrganizationsPackage();
     for (const path of ['/orgs', '/orgs/*', '/groups', '/groups/*']) {
       expect(p.tenantExemptPaths).toContain(path);
     }
   });
 
   test('tenantExemptPaths respects mountPath prefix', () => {
-    const p = createOrganizationsPlugin({ mountPath: '/api' });
+    const p = createOrganizationsPackage({ mountPath: '/api' });
     for (const path of ['/api/orgs', '/api/orgs/*', '/api/groups', '/api/groups/*']) {
       expect(p.tenantExemptPaths).toContain(path);
     }

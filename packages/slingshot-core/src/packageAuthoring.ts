@@ -8,7 +8,7 @@ import type {
   RouteRateLimitConfig,
 } from './entityRouteConfig';
 import type { Actor } from './identity';
-import type { PluginSetupContext } from './plugin';
+import type { PluginSeedContext, PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';
 import { publishPluginState } from './pluginState';
 
@@ -502,6 +502,13 @@ export interface SlingshotPackageDefinition {
    * for unsubscribing event handlers, closing queues, and releasing other resources.
    */
   readonly teardown?: () => void | Promise<void>;
+  /**
+   * Manifest-seed lifecycle hook. Invoked after the server is fully started when
+   * manifest seed data is present. Mirrors `SlingshotPlugin.seed` — packages that
+   * own seedable resources (orgs, users, etc.) read their slice from
+   * `manifestSeed` and publish cross-package references via `seedState`.
+   */
+  readonly seed?: (ctx: PluginSeedContext) => void | Promise<void>;
   /** Contract metadata when the package was produced through `definePackageContract`. */
   readonly contract?: PackageContractMetadata;
 }
@@ -558,6 +565,13 @@ export interface DefinePackageInput {
    * for unsubscribing event handlers, closing queues, and releasing other resources.
    */
   readonly teardown?: () => void | Promise<void>;
+  /**
+   * Manifest-seed lifecycle hook. Invoked after the server is fully started when
+   * manifest seed data is present. Mirrors `SlingshotPlugin.seed` — packages that
+   * own seedable resources read their slice from `manifestSeed` and publish
+   * cross-package references via `seedState`.
+   */
+  readonly seed?: (ctx: PluginSeedContext) => void | Promise<void>;
   /**
    * Contract metadata, populated automatically when the package is produced through
    * `definePackageContract`. Direct callers of `definePackage` should leave this
@@ -1304,6 +1318,7 @@ export function definePackage(input: DefinePackageInput): SlingshotPackageDefini
     setupRoutes: input.setupRoutes,
     setupPost: input.setupPost,
     teardown: input.teardown,
+    seed: input.seed,
     contract: input.contract,
   });
 }

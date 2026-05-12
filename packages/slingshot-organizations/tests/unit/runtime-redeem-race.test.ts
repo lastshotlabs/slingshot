@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import type {
-  BareEntityAdapter,
-  EntityPluginAfterAdaptersContext,
-} from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import {
+  type OrganizationsAdapterRefs,
+  applyDeleteCascadeTransform,
+  applyGroupMembershipIdentityTransform,
+  applyInviteRuntimeTransform,
+  applyMemberIdentityTransform,
+  createInviteIdempotencyDefaults,
+  createRedeemHandler,
+  createRoleResolver,
+  reconcileOrphanedOrgRecords,
+} from '../../src/entities/runtime';
 import type { OrganizationsAuthRuntime } from '../../src/lib/authRuntime';
-import { createOrganizationsManifestRuntime } from '../../src/manifest/runtime';
 
 /**
  * Unit tests that drive the runtime's `invite.redeem` and cascade-delete
@@ -120,65 +127,46 @@ async function setup(args?: { authUser?: { email?: string; suspended?: boolean }
     },
   };
 
-  const runtime = createOrganizationsManifestRuntime({
-    authRuntime,
-    invitationTtlSeconds: 3600,
+  const refs: OrganizationsAdapterRefs = {};
+  const resolveRole = createRoleResolver({
+    knownRoles: ['owner', 'admin', 'member'],
     defaultMemberRole: 'member',
   });
+  const idempotencyDefaults = createInviteIdempotencyDefaults();
 
-  // Apply the registered adapter transforms in the order the entity layer
-  // would, so each captured adapter gains the runtime helpers (token hashing,
-  // findPendingByToken, deleteCascade, etc.). The runtime transforms in this
-  // package are all synchronous and ignore the second `ctx` argument; a stub
-  // context is enough for tests.
-  const adapterTransforms = runtime.adapterTransforms!;
-  const stubCtx = {} as Parameters<ReturnType<typeof adapterTransforms.resolve>>[1];
-  const transformed = {
-    Organization: (await runtime.adapterTransforms!.resolve(
-      'organizations.organization.deleteCascade',
-    )(baseAdapters.Organization, stubCtx)) as BareEntityAdapter,
-    OrganizationMember: (await runtime.adapterTransforms!.resolve('organizations.member.identity')(
-      baseAdapters.OrganizationMember,
-      stubCtx,
-    )) as BareEntityAdapter,
-    OrganizationInvite: (await runtime.adapterTransforms!.resolve('organizations.invite.runtime')(
-      baseAdapters.OrganizationInvite,
-      stubCtx,
-    )) as BareEntityAdapter,
-    Group: baseAdapters.Group,
-    GroupMembership: (await runtime.adapterTransforms!.resolve(
-      'organizations.groupMembership.identity',
-    )(baseAdapters.GroupMembership, stubCtx)) as BareEntityAdapter,
+  refs.organizations = applyDeleteCascadeTransform(baseAdapters.Organization, refs);
+  refs.members = applyMemberIdentityTransform(baseAdapters.OrganizationMember, { resolveRole });
+  refs.invites = applyInviteRuntimeTransform(baseAdapters.OrganizationInvite, {
+    invitationTtlSeconds: 3600,
+    resolveRole,
+    inviteIdempotencyAdapter: idempotencyDefaults.adapter,
+    inviteIdempotencyTtlMs: idempotencyDefaults.ttlMs,
+  });
+  refs.groups = baseAdapters.Group;
+  refs.groupMemberships = applyGroupMembershipIdentityTransform(baseAdapters.GroupMembership, {
+    resolveRole,
+  });
+
+  const adapters = {
+    Organization: refs.organizations,
+    OrganizationMember: refs.members,
+    OrganizationInvite: refs.invites,
+    Group: refs.groups,
+    GroupMembership: refs.groupMemberships,
   };
 
-  // Run the captureAdapters hook so the runtime's internal `refs` point at the
-  // transformed adapters (the cascade delete and redeem handlers consume those
-  // refs to do their work).
-  const captureHook = runtime.hooks!.resolve('organizations.captureAdapters');
-  captureHook({
-    adapters: transformed,
-  } as unknown as EntityPluginAfterAdaptersContext);
-
-  // Resolve the redeem custom handler. `resolve()` invokes the outer factory
-  // with the optional manifest params, so the returned value is the
-  // `(backendDriver) => async (input) => {...}` function. Call it with an
-  // unused driver to get the actual async handler.
-  type Handler = (input: Record<string, unknown>) => Promise<unknown>;
-  const driverArrow = runtime.customHandlers!.resolve('organizations.invite.redeem') as (
-    driver: unknown,
-  ) => Handler;
-  const redeem = driverArrow(undefined);
+  const redeem = createRedeemHandler({ refs, authRuntime });
 
   return {
-    runtime,
-    adapters: transformed,
+    adapters,
     state: { orgs, members, invites, groups, groupMemberships },
     redeem,
+    reconcile: (orgId: string) => reconcileOrphanedOrgRecords(refs, orgId),
     createOrgRow(row: OrgRow) {
       orgs.push(row);
     },
     createInviteRow: async (input: Record<string, unknown>) =>
-      transformed.OrganizationInvite.create(input),
+      (refs.invites as BareEntityAdapter).create(input),
   };
 }
 
@@ -356,13 +344,13 @@ describe('organizations runtime — invite redemption', () => {
     expect(status).toBe(500);
 
     // Reconcile while the patch is still active still reports the failure.
-    const stillFailing = await env.runtime.reconcileOrphanedOrgRecords('org-3');
+    const stillFailing = await env.reconcile('org-3');
     expect(stillFailing.orgGone).toBe(true);
     expect(stillFailing.failed).toContain('memberships');
 
     // Restore the adapter, then reconcile cleans everything up.
     memberAdapter.delete = originalDelete;
-    const cleanResult = await env.runtime.reconcileOrphanedOrgRecords('org-3');
+    const cleanResult = await env.reconcile('org-3');
     expect(cleanResult.orgGone).toBe(true);
     expect(cleanResult.failed).toEqual([]);
     expect(env.state.members.filter(m => m.orgId === 'org-3')).toHaveLength(0);
@@ -399,7 +387,7 @@ describe('organizations runtime — invite redemption', () => {
     });
     let caught: unknown;
     try {
-      await env.runtime.reconcileOrphanedOrgRecords('org-live');
+      await env.reconcile('org-live');
     } catch (err) {
       caught = err;
     }
@@ -445,7 +433,7 @@ describe('organizations runtime — invite redemption', () => {
     expect((caught as { status?: number }).status).toBe(500);
 
     gmAdapter.delete = originalGmDelete;
-    const result = await env.runtime.reconcileOrphanedOrgRecords('org-gm');
+    const result = await env.reconcile('org-gm');
     expect(result.orgGone).toBe(true);
     expect(result.failed).toEqual([]);
     expect(env.state.groupMemberships.filter(m => m.groupId === 'g1')).toHaveLength(0);

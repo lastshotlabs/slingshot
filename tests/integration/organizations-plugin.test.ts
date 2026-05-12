@@ -1,13 +1,13 @@
 import { addUserRole } from '@auth/lib/roles';
 import { describe, expect, test } from 'bun:test';
-import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
+import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
 import { authHeader, createMemoryAuthAdapter, createTestApp } from '../setup';
 
 type OpenApiSpec = {
   paths?: Record<string, Record<string, unknown>>;
 };
 
-describe('organizations plugin bootstrap', () => {
+describe('organizations package bootstrap', () => {
   test('auto-exempts org routes from tenant resolution and registers them in OpenAPI', async () => {
     const authAdapter = createMemoryAuthAdapter();
     const app = await createTestApp(
@@ -17,8 +17,8 @@ describe('organizations plugin bootstrap', () => {
           headerName: 'x-ledger-id',
           onResolve: async tenantId => ({ id: tenantId }),
         },
-        plugins: [
-          createOrganizationsPlugin({
+        packages: [
+          createOrganizationsPackage({
             organizations: { enabled: true },
             groups: { managementRoutes: true },
           }),

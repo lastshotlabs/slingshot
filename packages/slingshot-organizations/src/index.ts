@@ -1,26 +1,24 @@
 /**
- * Create the organizations plugin with org services, manifests, and reconciliation hooks.
+ * Create the organizations package with org services, entity adapters, and
+ * reconciliation hooks. Authored via `definePackage(...)` and consumed
+ * through `createApp({ packages: [createOrganizationsPackage(...)] })`.
  */
-export { createOrganizationsPlugin } from './plugin';
+export { createOrganizationsPackage } from './plugin';
 /**
- * Configuration accepted by `createOrganizationsPlugin()`.
+ * Configuration accepted by `createOrganizationsPackage()`.
  */
-export type { OrganizationsPluginConfig } from './plugin';
+export type { OrganizationsPluginConfig, OrganizationsPluginDeps } from './plugin';
 /**
  * Organization slug conflict error and unique-constraint classifier.
  */
 export { SlugConflictError, isUniqueViolationError } from './errors';
 /**
- * Entity manifest describing organization resources.
- */
-export { organizationsManifest } from './manifest/organizationsManifest';
-/**
- * Accessors for the organization service registered by the plugin (resolves
+ * Accessors for the organization service registered by the package (resolves
  * through the typed `OrgServiceCap` capability under the hood).
  */
 export { getOrganizationsOrgService, getOrganizationsOrgServiceOrNull } from './orgService';
 /**
- * Organization service contract exposed by the plugin state.
+ * Organization service contract exposed by the package state.
  */
 export type { OrganizationsOrgService } from './orgService';
 /**

@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import type { EntityPluginAfterAdaptersContext } from '@lastshotlabs/slingshot-entity';
+import {
+  type OrganizationsAdapterRefs,
+  applyDeleteCascadeTransform,
+  applyInviteRuntimeTransform,
+  applyMemberIdentityTransform,
+  createFindByTokenHandler,
+  createInviteIdempotencyDefaults,
+  createRedeemHandler,
+  createRevokeHandler,
+  createRoleResolver,
+} from '../../src/entities/runtime';
 import type { OrganizationsAuthRuntime } from '../../src/lib/authRuntime';
-import { createOrganizationsManifestRuntime } from '../../src/manifest/runtime';
 
 /**
  * Minimal adapter-based tests for the invite lifecycle that exercise the
@@ -98,58 +107,35 @@ async function setupInviteEnv(opts?: { inviteIdempotencyAdapter?: OperationIdemp
     },
   };
 
-  const runtime = createOrganizationsManifestRuntime({
-    authRuntime,
-    invitationTtlSeconds: 3600,
+  const refs: OrganizationsAdapterRefs = {};
+  const resolveRole = createRoleResolver({
+    knownRoles: ['owner', 'admin', 'member'],
     defaultMemberRole: 'member',
-    ...(opts?.inviteIdempotencyAdapter
-      ? { inviteIdempotencyAdapter: opts.inviteIdempotencyAdapter }
-      : {}),
+  });
+  const idempotencyDefaults = createInviteIdempotencyDefaults(opts?.inviteIdempotencyAdapter);
+
+  refs.organizations = applyDeleteCascadeTransform(baseAdapters.Organization, refs);
+  refs.members = applyMemberIdentityTransform(baseAdapters.OrganizationMember, { resolveRole });
+  refs.invites = applyInviteRuntimeTransform(baseAdapters.OrganizationInvite, {
+    invitationTtlSeconds: 3600,
+    resolveRole,
+    inviteIdempotencyAdapter: idempotencyDefaults.adapter,
+    inviteIdempotencyTtlMs: idempotencyDefaults.ttlMs,
   });
 
-  const stubCtx = {} as Parameters<ReturnType<typeof runtime.adapterTransforms.resolve>>[1];
-  const transformed = {
-    Organization: (await runtime.adapterTransforms.resolve(
-      'organizations.organization.deleteCascade',
-    )(baseAdapters.Organization, stubCtx)) as BareEntityAdapter,
-    OrganizationMember: (await runtime.adapterTransforms.resolve('organizations.member.identity')(
-      baseAdapters.OrganizationMember,
-      stubCtx,
-    )) as BareEntityAdapter,
-    OrganizationInvite: (await runtime.adapterTransforms.resolve('organizations.invite.runtime')(
-      baseAdapters.OrganizationInvite,
-      stubCtx,
-    )) as BareEntityAdapter & {
-      findPendingByToken: (t: string) => Promise<InviteRow | null>;
-      reveal: (id: string) => Promise<InviteRow | null>;
-    },
+  const redeem = createRedeemHandler({ refs, authRuntime });
+  const revoke = createRevokeHandler(refs);
+  const findByToken = createFindByTokenHandler(refs);
+
+  const transformedInviteAdapter = refs.invites as BareEntityAdapter & {
+    findPendingByToken: (t: string) => Promise<InviteRow | null>;
+    reveal: (id: string) => Promise<InviteRow | null>;
   };
 
-  const captureHook = runtime.hooks.resolve('organizations.captureAdapters');
-  captureHook({
-    adapters: transformed,
-  } as unknown as EntityPluginAfterAdaptersContext);
-
-  const driverArrow = runtime.customHandlers.resolve('organizations.invite.redeem') as (
-    driver: unknown,
-  ) => (input: Record<string, unknown>) => Promise<unknown>;
-  const redeem = driverArrow(undefined);
-
-  const revokeHandler = runtime.customHandlers.resolve('organizations.invite.revoke') as (
-    driver: unknown,
-  ) => (input: Record<string, unknown>) => Promise<unknown>;
-  const revoke = revokeHandler(undefined);
-
-  const findByTokenHandler = runtime.customHandlers.resolve('organizations.invite.findByToken') as (
-    driver: unknown,
-  ) => (input: Record<string, unknown>) => Promise<unknown>;
-  const findByToken = findByTokenHandler(undefined);
-
   return {
-    runtime,
-    inviteAdapter: transformed.OrganizationInvite,
-    memberAdapter: transformed.OrganizationMember,
-    orgAdapter: transformed.Organization,
+    inviteAdapter: transformedInviteAdapter,
+    memberAdapter: refs.members,
+    orgAdapter: refs.organizations,
     state: { orgs, members, invites },
     redeem,
     revoke,
@@ -164,7 +150,7 @@ async function setupInviteEnv(opts?: { inviteIdempotencyAdapter?: OperationIdemp
       });
     },
     async createInvite(orgId: string, overrides?: Record<string, unknown>) {
-      return transformed.OrganizationInvite.create({
+      return transformedInviteAdapter.create({
         orgId,
         invitedBy: 'admin',
         role: 'member',

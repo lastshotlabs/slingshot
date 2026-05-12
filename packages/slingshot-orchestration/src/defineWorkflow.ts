@@ -119,7 +119,7 @@ export function sleep<TWorkflowInput = unknown>(
  * Define an ordered workflow of steps, parallel groups, and sleep entries.
  *
  * Workflows are transport-neutral definitions. They are only executable after being
- * registered with `createOrchestrationRuntime()` or `createOrchestrationPlugin()`.
+ * registered with `createOrchestrationRuntime()` or `createOrchestrationPackage()`.
  */
 export function defineWorkflow<TInput, TOutput>(
   config: WorkflowDefinition<TInput, TOutput>,

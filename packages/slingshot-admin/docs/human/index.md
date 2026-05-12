@@ -40,7 +40,7 @@ import {
   createSlingshotAuthManagedUserProvider,
 } from '@lastshotlabs/slingshot-admin/providers';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
   plugins: [
@@ -48,15 +48,15 @@ export default defineApp({
       auth: { roles: ['user', 'super-admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createPermissionsPlugin(),
     createAdminPlugin({
       accessProvider: createSlingshotAuthAccessProvider(),
       managedUserProvider: createSlingshotAuthManagedUserProvider(),
       auditLog: createMemoryAuditLog(),
       // permissions can be omitted — the plugin will read it from
-      // slingshot-permissions plugin state at runtime.
+      // slingshot-permissions state at runtime.
     }),
   ],
+  packages: [createPermissionsPackage()],
 });
 ```
 

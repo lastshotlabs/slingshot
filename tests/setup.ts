@@ -53,7 +53,7 @@ export function createTestPermissions() {
   const adapter = createMemoryPermissionsAdapter();
   const registry = createPermissionRegistry();
   registerAdminResourceTypes(registry);
-  // Community resource types are registered by createCommunityPlugin() via
+  // Community resource types are registered by createCommunityPackage() via
   // entity config during setupPost -- no pre-registration needed.
   const evaluator = createPermissionEvaluator({ registry, adapter });
   return { evaluator, registry, adapter };

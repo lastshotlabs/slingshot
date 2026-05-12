@@ -57,7 +57,6 @@ import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { webhookPluginConfigSchema } from './types/config';
 import type { InboundProvider } from './types/inbound';
-import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
@@ -424,9 +423,9 @@ async function resolveTestDelivery(
  * uses the caller-provided adapter directly — the entity modules and routes
  * remain unmounted in that mode.
  */
-export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotPackageDefinition {
+export function createWebhooksPackage(rawConfig: WebhookPluginConfig): SlingshotPackageDefinition {
   const config = deepFreeze(
-    validatePluginConfig(WEBHOOKS_PLUGIN_STATE_KEY, rawConfig, webhookPluginConfigSchema),
+    validatePluginConfig('slingshot-webhooks', rawConfig, webhookPluginConfigSchema),
   );
 
   const queue: WebhookQueue =
@@ -486,7 +485,7 @@ export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotP
     : [entityModules.webhookEndpointModule, entityModules.webhookDeliveryModule];
 
   return definePackage({
-    name: WEBHOOKS_PLUGIN_STATE_KEY,
+    name: 'slingshot-webhooks',
     mountPath,
     dependencies: useExternalAdapter ? [] : ['slingshot-auth'],
     entities,
@@ -506,7 +505,7 @@ export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotP
       ],
     },
 
-    async setupMiddleware(): Promise<void> {
+    async setupMiddleware() {
       if (useExternalAdapter) {
         runtimeAdapter = config.adapter;
         return;
@@ -540,7 +539,7 @@ export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotP
       }
     },
 
-    async setupRoutes({ app, bus }: PluginSetupContext): Promise<void> {
+    async setupRoutes({ app, bus }: PluginSetupContext) {
       const adapterIsReady = (): WebhookAdapter | undefined => runtimeAdapter ?? refs.runtime;
 
       if (!endpointsRouteGroupDisabled) {
@@ -657,7 +656,7 @@ export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotP
       }
     },
 
-    async setupPost({ app, bus, events }: PluginSetupContext): Promise<void> {
+    async setupPost({ app, bus, events }: PluginSetupContext) {
       // When using a caller-supplied adapter the runtime is already in place
       // — skip entity-adapter resolution and governance init.
       if (!useExternalAdapter) {

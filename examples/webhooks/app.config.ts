@@ -4,7 +4,7 @@ import {
   defineEvent,
   getContext,
 } from '../../packages/slingshot-core/src/index.ts';
-import { createWebhookPackage } from '../../packages/slingshot-webhooks/src/index.ts';
+import { createWebhooksPackage } from '../../packages/slingshot-webhooks/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
 declare module '@lastshotlabs/slingshot-core' {
@@ -74,7 +74,7 @@ export default defineApp({
     createOrdersPlugin(),
   ],
   packages: [
-    createWebhookPackage({
+    createWebhooksPackage({
       // Package-wide default delivery timeout. Per-endpoint
       // `deliveryTimeoutMs` overrides this when set on the endpoint record.
       deliveryTimeoutMs: 10_000,

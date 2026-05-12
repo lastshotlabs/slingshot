@@ -9,10 +9,6 @@ export { Push, PushRuntimeCap, PushHealthCap } from './public';
 /** Aggregated health snapshot type for the push package. */
 export type { PushPluginHealth } from './public';
 /**
- * Plugin state key used to retrieve push runtime state from app context.
- */
-export { PUSH_PLUGIN_STATE_KEY } from './state';
-/**
  * Runtime state and compiled formatter table exposed by the push plugin.
  */
 export type { PushPluginState, CompiledPushFormatterTable } from './state';

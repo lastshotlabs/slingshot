@@ -51,7 +51,7 @@ import { pushSubscriptionOperations } from '../../src/entities/pushSubscription'
 import { pushTopicOperations } from '../../src/entities/pushTopic';
 import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
 import { createPushPackage } from '../../src/plugin';
-import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
+import { type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
 
 // ---------------------------------------------------------------------------
@@ -255,9 +255,9 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   await plugin.setupPost?.(setupContext);
 
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as
-    | { pushRuntime?: PushPluginState }
+    | { runtime?: PushPluginState }
     | undefined;
-  const state = slot?.pushRuntime as PushPluginState;
+  const state = slot?.runtime as PushPluginState;
   return { app, pluginState: state };
 }
 

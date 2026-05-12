@@ -46,7 +46,7 @@ import { pushSubscriptionOperations } from '../../src/entities/pushSubscription'
 import { pushTopicOperations } from '../../src/entities/pushTopic';
 import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
 import { createPushPackage } from '../../src/plugin';
-import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
+import { type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
 import type { PushPluginConfig } from '../../src/types/config';
 
@@ -379,9 +379,9 @@ async function createPushHarness(opts?: {
   await runPushPackageLifecycle(plugin, setupContext);
 
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as
-    | { pushRuntime?: PushPluginState }
+    | { runtime?: PushPluginState }
     | undefined;
-  const state = slot?.pushRuntime as PushPluginState;
+  const state = slot?.runtime as PushPluginState;
 
   return {
     app,
@@ -472,14 +472,10 @@ describe('createPushPackage — plugin state', () => {
     harness = await createPushHarness();
   });
 
-  test('PUSH_PLUGIN_STATE_KEY is present in pluginState after setup', () => {
+  test('runtime state is present in pluginState after setup', () => {
     expect(harness.pluginState).toBeDefined();
     expect(typeof harness.pluginState.router).toBe('object');
     expect(typeof harness.pluginState.formatters).toBe('object');
-  });
-
-  test('plugin name matches PUSH_PLUGIN_STATE_KEY', () => {
-    expect(PUSH_PLUGIN_STATE_KEY).toBe('slingshot-push');
   });
 });
 

@@ -31,7 +31,7 @@ import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import { createMemoryWebhookAdapter } from './adapters/memory';
 import { WebhookRuntimeError } from './errors/webhookErrors';
-import { createWebhookPackage } from './plugin';
+import { createWebhooksPackage } from './plugin';
 import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 
@@ -160,7 +160,7 @@ export async function createWebhooksTestApp(
       ? { adapter: createMemoryWebhookAdapter() }
       : {}),
   };
-  const pkg: SlingshotPackageDefinition = createWebhookPackage(pluginConfig);
+  const pkg: SlingshotPackageDefinition = createWebhooksPackage(pluginConfig);
 
   const app = new OpenAPIHono<AppEnv>();
   const bus = new InProcessAdapter();

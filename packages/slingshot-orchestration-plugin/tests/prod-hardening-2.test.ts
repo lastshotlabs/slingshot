@@ -281,7 +281,7 @@ describe('plugin — event sink integration with bus', () => {
     // After setupRoutes, the runtime is published as a contract capability under the
     // PACKAGE_CAPABILITIES_PREFIX slot for slingshot-orchestration.
     const slot = pluginState.get(
-      'slingshot:package:capabilities:slingshot-orchestration',
+      'slingshot:package:capabilities:slingshot-orchestration-plugin',
     ) as Record<string, unknown> | undefined;
     expect(slot).toBeDefined();
     const runtime = slot?.runtime as Record<string, unknown> | undefined;
@@ -305,7 +305,7 @@ describe('plugin — event sink integration with bus', () => {
     await plugin.setupRoutes?.(makeSetupContext(app));
 
     const slot = pluginState.get(
-      'slingshot:package:capabilities:slingshot-orchestration',
+      'slingshot:package:capabilities:slingshot-orchestration-plugin',
     ) as Record<string, unknown>;
     const runtime = slot.runtime as {
       runTask: (task: unknown, input: unknown) => Promise<{ result: () => Promise<unknown> }>;

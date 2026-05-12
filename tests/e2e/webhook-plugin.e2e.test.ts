@@ -15,7 +15,7 @@ import {
   createEventEnvelope,
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
-import { createWebhookPackage } from '@lastshotlabs/slingshot-webhooks';
+import { createWebhooksPackage } from '@lastshotlabs/slingshot-webhooks';
 import { createWebhookMemoryQueue } from '@lastshotlabs/slingshot-webhooks/testing';
 import type { E2EServerHandle } from '../../src/testing';
 import { authHeader, createMemoryAuthAdapter } from '../setup';
@@ -99,7 +99,7 @@ function makeWebhookPlugin(
 ) {
   const queue = createWebhookMemoryQueue({ maxAttempts: 1 });
 
-  const plugin = createWebhookPackage({
+  const plugin = createWebhooksPackage({
     queue,
     events: opts.events ?? ['user.*', 'order.*'],
     managementRole: opts.requireAuth ? 'admin' : undefined,
@@ -720,7 +720,7 @@ describe('Webhook plugin — custom mountPath', () => {
 
   beforeEach(async () => {
     const queue = createWebhookMemoryQueue();
-    const plugin = createWebhookPackage({
+    const plugin = createWebhooksPackage({
       queue,
       events: ['user.*'],
       mountPath: '/api/hooks',

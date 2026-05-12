@@ -73,7 +73,7 @@ describe('createOrchestrationPackage — metadata', () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPackage({ adapter, tasks: [noopTask], routes: false });
     expect(plugin.name).toBe(ORCHESTRATION_PLUGIN_KEY);
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 
   test('plugin has empty dependencies array', () => {
@@ -166,7 +166,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
 
     await plugin.setupRoutes?.(ctx);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
   });
 });
 
@@ -200,7 +200,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: false', () => 
 
     await plugin.setupRoutes?.(ctx);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
   });
 });
 

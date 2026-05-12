@@ -38,9 +38,14 @@ describe('getOrchestrationOrNull — missing plugin state', () => {
     // capability name is returned as-is.
     const ctx = {
       pluginState: new Map([
-        ['slingshot:package:capabilities:slingshot-orchestration', { runtime: 'not-a-runtime' }],
+        [
+          'slingshot:package:capabilities:slingshot-orchestration-plugin',
+          { runtime: 'not-a-runtime' },
+        ],
       ]),
-      capabilityProviders: new Map([['slingshot-orchestration:runtime', 'slingshot-orchestration']]),
+      capabilityProviders: new Map([
+        ['slingshot-orchestration-plugin:runtime', 'slingshot-orchestration-plugin'],
+      ]),
     } as never;
     const result = getOrchestrationOrNull(ctx);
     expect(result).toBe('not-a-runtime');
@@ -145,11 +150,11 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
 });
 
 describe('ORCHESTRATION_PLUGIN_KEY', () => {
-  test('is the string slingshot-orchestration', () => {
-    expect(ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration');
+  test('is the string slingshot-orchestration-plugin', () => {
+    expect(ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
   });
 
   test('is exported from the package index', () => {
-    expect(pluginIndex.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration');
+    expect(pluginIndex.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
   });
 });

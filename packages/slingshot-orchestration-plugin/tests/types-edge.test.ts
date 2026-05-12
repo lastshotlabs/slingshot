@@ -41,7 +41,7 @@ describe('plugin public exports', () => {
   });
 
   test('exports ORCHESTRATION_PLUGIN_KEY', () => {
-    expect(pluginExports.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration');
+    expect(pluginExports.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
   });
 
   test('exports InvalidResolverResultError', () => {
@@ -128,7 +128,7 @@ describe('OrchestrationPluginOptions — discriminated union', () => {
       tasks: [noopTask],
       routes: false,
     });
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 
   test('runtime-provided options work without adapter', () => {
@@ -139,7 +139,7 @@ describe('OrchestrationPluginOptions — discriminated union', () => {
       tasks: [noopTask],
       routes: false,
     });
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 });
 
@@ -163,7 +163,7 @@ describe('ConfigurableOrchestrationPluginOptions — route options combine with 
       ],
       routeTimeoutMs: 5000,
     });
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 
   test('accepts all route options alongside runtime', () => {
@@ -182,6 +182,6 @@ describe('ConfigurableOrchestrationPluginOptions — route options combine with 
       resolveRequestContext: () => ({ tenantId: 't1' }),
       authorizeRun: () => true,
     });
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 });

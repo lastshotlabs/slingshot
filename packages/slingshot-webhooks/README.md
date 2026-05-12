@@ -11,7 +11,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-webhooks
 inbound provider intake. It does not own the event universe. Event owners define what is externally
 deliverable through the registry, and this package projects those definitions onto subscribers.
 The webhook entities themselves follow the shared package-first/entity authoring model;
-`createWebhookPackage()` is the runtime shell that composes delivery and intake wiring.
+`createWebhooksPackage()` is the runtime shell that composes delivery and intake wiring.
 
 ## Package Boundaries
 

@@ -4,7 +4,7 @@ Source-backed example for `slingshot-webhooks` outbound delivery.
 
 ## What it shows
 
-- `createWebhookPackage()` wired into the app
+- `createWebhooksPackage()` wired into the app
 - a small "orders" plugin that publishes a registered event the webhook package subscribes to
 - a per-endpoint `deliveryTimeoutMs` override (the package-wide default is 10s; each endpoint can override)
 - HMAC-SHA256 signing with timestamped headers and a recipe for verifying signatures

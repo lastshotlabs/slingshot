@@ -12,7 +12,14 @@ import type { ResolvedEntityConfig } from './entityConfig';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 import { getPluginStateOrNull } from './pluginState';
 
-/** Stable plugin-state key published by `slingshot-search`. */
+/**
+ * Stable plugin-state key published by `slingshot-search`.
+ *
+ * @deprecated Resolve the search runtime via `SearchRuntimeCap` (from
+ * `@lastshotlabs/slingshot-search`) using `ctx.capabilities.require(SearchRuntimeCap)`.
+ * This plugin-state slot is preserved for back-compat with the legacy
+ * `getPluginState(app).get(SEARCH_PLUGIN_STATE_KEY)` access pattern.
+ */
 export const SEARCH_PLUGIN_STATE_KEY = 'slingshot-search' as const;
 
 /**

@@ -8,7 +8,6 @@ import type { Redis } from 'ioredis';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { HookServices, Logger } from '@lastshotlabs/slingshot-core';
 import { WebhookConfigError, WebhookStateError } from '../errors/webhookErrors';
-import { WEBHOOKS_PLUGIN_STATE_KEY } from '../types/public';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
 
@@ -38,7 +37,7 @@ interface BullMQWebhookQueueConfig {
    * a Redis URL string (e.g. `"redis://localhost:6379"`).
    */
   redis: { host: string; port?: number; password?: string } | string;
-  /** BullMQ queue name. Default: `WEBHOOKS_PLUGIN_STATE_KEY`. */
+  /** BullMQ queue name. Default: `'slingshot-webhooks'`. */
   queueName?: string;
   /**
    * Maximum number of delivery attempts before a job is dead-lettered.
@@ -196,7 +195,7 @@ async function loadIORedisModule(): Promise<typeof Redis> {
  * ```
  */
 export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): WebhookQueue {
-  const queueName = config.queueName ?? WEBHOOKS_PLUGIN_STATE_KEY;
+  const queueName = config.queueName ?? 'slingshot-webhooks';
   const maxAttempts = config.maxAttempts ?? 5;
   const retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
   let queue: BullQueue | null = null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createWebhookPackage } from '../../src/plugin';
+import { createWebhooksPackage } from '../../src/plugin';
 import { WEBHOOK_ROUTES } from '../../src/routes';
 import type { InboundProvider } from '../../src/types/inbound';
 
@@ -8,16 +8,16 @@ const provider: InboundProvider = {
   verify: async () => ({ verified: true, payload: {} }),
 };
 
-describe('createWebhookPackage', () => {
+describe('createWebhooksPackage', () => {
   it('does not expose inbound paths when no inbound providers are configured', () => {
-    const pkg = createWebhookPackage({});
+    const pkg = createWebhooksPackage({});
 
     expect(pkg.publicPaths).toEqual([]);
     expect(pkg.csrfExemptPaths).toEqual([]);
   });
 
   it('does not expose inbound paths when inbound routes are disabled', () => {
-    const pkg = createWebhookPackage({
+    const pkg = createWebhooksPackage({
       inbound: [provider],
       disableRoutes: [WEBHOOK_ROUTES.INBOUND],
     });
@@ -27,7 +27,7 @@ describe('createWebhookPackage', () => {
   });
 
   it('normalizes trailing slashes in mountPath before building inbound paths', () => {
-    const pkg = createWebhookPackage({
+    const pkg = createWebhooksPackage({
       inbound: [provider],
       mountPath: '/custom/hooks/',
     });
@@ -38,7 +38,7 @@ describe('createWebhookPackage', () => {
 
   it('rejects mountPath values without a leading slash', () => {
     expect(() =>
-      createWebhookPackage({
+      createWebhooksPackage({
         mountPath: 'custom/hooks',
       }),
     ).toThrow(/mountPath must start with '\//i);
@@ -46,7 +46,7 @@ describe('createWebhookPackage', () => {
 
   it('requires a durable bus subscription name when durability is enabled', () => {
     expect(() =>
-      createWebhookPackage({
+      createWebhooksPackage({
         busSubscription: {
           durable: true,
         },
@@ -58,7 +58,7 @@ describe('createWebhookPackage', () => {
     const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const pkg = createWebhookPackage({});
+      const pkg = createWebhooksPackage({});
       await expect(
         pkg.setupMiddleware?.({
           app: {} as never,

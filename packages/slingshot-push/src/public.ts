@@ -18,7 +18,7 @@ export const Push = definePackageContract('slingshot-push');
  * Cross-package consumers (notably `slingshot-chat` for formatter registration) resolve
  * it through `ctx.capabilities.require(PushRuntimeCap)`.
  */
-export const PushRuntimeCap = Push.capability<PushPluginState>('pushRuntime');
+export const PushRuntimeCap = Push.capability<PushPluginState>('runtime');
 
 /**
  * Aggregated health snapshot for `slingshot-push`.

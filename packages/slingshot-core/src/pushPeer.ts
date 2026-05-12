@@ -35,13 +35,13 @@ export function getPushFormatterPeerOrNull(
 ): PushFormatterPeer | null {
   const pluginState = getPluginStateOrNull(input);
   // Read the contract slot the slingshot-push plugin writes via `registerPluginCapabilities`.
-  // The capability name used inside slingshot-push for the bundled runtime is `pushRuntime`;
+  // The capability name used inside slingshot-push for the bundled runtime is `runtime`;
   // we duck-check `registerFormatter` so older legacy publishes (state-key only) still work
   // when test fixtures use the old shape.
   const slot = pluginState?.get('slingshot:package:capabilities:slingshot-push') as
     | Record<string, unknown>
     | undefined;
-  const runtime = (slot?.pushRuntime ?? slot) as
+  const runtime = (slot?.runtime ?? slot?.pushRuntime ?? slot) as
     | { registerFormatter?: PushFormatterPeer['registerFormatter'] }
     | undefined;
   if (runtime && typeof runtime.registerFormatter === 'function') {

@@ -169,7 +169,7 @@ describe('createOrchestrationPackage — task and workflow registration', () => 
       routes: false,
     });
 
-    expect(plugin.name).toBe('slingshot-orchestration');
+    expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 });
 

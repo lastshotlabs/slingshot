@@ -3,7 +3,7 @@
 Inbound and outbound webhook **package** with entity-backed endpoints + deliveries,
 signing helpers, queue-backed retries, and provider-driven intake. Authored via
 `definePackage(...)` and consumed through
-`createApp({ packages: [createWebhookPackage(...)] })`. Cross-package consumers
+`createApp({ packages: [createWebhooksPackage(...)] })`. Cross-package consumers
 resolve the unified runtime adapter via `WebhookAdapterCap`.
 
 ## Key Files
@@ -11,7 +11,7 @@ resolve the unified runtime adapter via `WebhookAdapterCap`.
 | File                       | What                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------- |
 | src/index.ts               | Public API surface for package, entities, queues, adapters, and signing helpers     |
-| src/plugin.ts              | `createWebhookPackage()` factory (`SlingshotPackageDefinition`)                     |
+| src/plugin.ts              | `createWebhooksPackage()` factory (`SlingshotPackageDefinition`)                     |
 | src/entities/modules.ts    | `buildWebhookEntityModules(...)` — entity modules with manual adapter wiring        |
 | src/entities/runtime.ts    | Lifted adapter transforms, secret cipher, governed runtime adapter, delivery state  |
 | src/entities/webhookEndpoint.ts | WebhookEndpoint entity definition                                              |

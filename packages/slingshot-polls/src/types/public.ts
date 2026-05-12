@@ -265,7 +265,13 @@ export interface PollsPluginState {
   readonly sweepHandle: { stop(): void } | null;
 }
 
-/** Typed plugin-state key for the polls runtime slot. */
+/**
+ * Typed plugin-state key for the polls runtime slot.
+ *
+ * @deprecated Resolve the polls runtime via `PollsRuntimeCap` (from
+ * `@lastshotlabs/slingshot-polls`) using `ctx.capabilities.require(PollsRuntimeCap)`.
+ * This plugin-state slot is preserved for back-compat.
+ */
 export const POLLS_RUNTIME_KEY = definePluginStateKey<PollsPluginState>(POLLS_PLUGIN_STATE_KEY);
 
 // --- Vote guard error codes ---

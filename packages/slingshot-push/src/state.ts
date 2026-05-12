@@ -1,12 +1,8 @@
 import type { DeliveryAdapter, NotificationRecord } from '@lastshotlabs/slingshot-core';
-import { PUSH_PLUGIN_STATE_KEY as CORE_PUSH_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
 import type { PushProvider } from './providers/provider';
 import type { PushRouter } from './router';
 import type { PushFormatterFn, PushFormatterTemplate, PushPluginConfig } from './types/config';
 import type { PushMessage } from './types/models';
-
-/** Stable plugin-state key used in `ctx.pluginState`. */
-export const PUSH_PLUGIN_STATE_KEY = CORE_PUSH_PLUGIN_STATE_KEY;
 
 /** Compiled formatter registry used by the push delivery adapter. */
 export interface CompiledPushFormatterTable {

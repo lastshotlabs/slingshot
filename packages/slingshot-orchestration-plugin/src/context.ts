@@ -7,7 +7,7 @@ import { OrchestrationRuntimeCap } from './public';
 /**
  * Plugin name used for registration, dependency declarations, and event ownership.
  */
-export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration';
+export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration-plugin';
 
 /**
  * Read the orchestration runtime published by `createOrchestrationPackage()`.

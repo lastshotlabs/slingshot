@@ -31,7 +31,7 @@ import { createFcmProvider } from './providers/fcm';
 import type { PushProvider } from './providers/provider';
 import { createWebPushProvider } from './providers/web';
 import { type PushRouterRepos, createPushRouter } from './router';
-import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from './state';
+import { type PushPluginState } from './state';
 import {
   type FirebaseServiceAccount,
   type PushPluginConfig,
@@ -170,7 +170,7 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
   }
 
   return definePackage({
-    name: PUSH_PLUGIN_STATE_KEY,
+    name: 'slingshot-push',
     mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
     entities: [

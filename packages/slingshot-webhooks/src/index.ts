@@ -6,7 +6,7 @@ import './events';
 /**
  * Create the webhooks package with endpoint management, signing, queues, and delivery.
  */
-export { createWebhookPackage } from './plugin';
+export { createWebhooksPackage } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
@@ -20,16 +20,11 @@ export { WEBHOOK_ROUTES } from './routes/index';
  */
 export type { WebhookRoute } from './routes/index';
 /**
- * Plugin state key used to retrieve webhooks runtime state from app context.
- */
-export { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
-
-/**
  * Zod schema used to validate webhooks plugin configuration.
  */
 export { webhookPluginConfigSchema } from './types/config';
 /**
- * Configuration accepted by `createWebhookPackage()`.
+ * Configuration accepted by `createWebhooksPackage()`.
  */
 export type { WebhookPluginConfig } from './types/config';
 /**

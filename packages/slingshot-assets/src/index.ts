@@ -24,11 +24,6 @@ export {
   AssetsRuntimeCap,
 } from './public';
 /**
- * Plugin state key used to retrieve the assets runtime state from app context.
- */
-export { ASSETS_PLUGIN_STATE_KEY } from './types';
-
-/**
  * Public asset records, adapter contracts, plugin config, and storage input types.
  */
 export type {

@@ -45,7 +45,6 @@ import {
   createOrphanedKeyRegistry,
 } from './middleware/deleteStorageFile';
 import {
-  ASSETS_PLUGIN_STATE_KEY,
   type AssetAdapter,
   type AssetsHealth,
   type AssetsHealthDetails,
@@ -105,7 +104,7 @@ export function createAssetsPackage(
   deps: AssetsPackageDeps = {},
 ): SlingshotPackageDefinition {
   const config = Object.freeze(
-    validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
+    validatePluginConfig('slingshot-assets', rawConfig, assetsPluginConfigSchema),
   );
   const logger: Logger = deps.logger ?? noopLogger;
 
@@ -250,7 +249,7 @@ export function createAssetsPackage(
   };
 
   return definePackage({
-    name: ASSETS_PLUGIN_STATE_KEY,
+    name: 'slingshot-assets',
     mountPath: config.mountPath ?? '/assets',
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
     entities: [assetModule],
@@ -264,7 +263,7 @@ export function createAssetsPackage(
       if (!events.get('asset:storageDeleteFailed')) {
         events.register(
           defineEvent('asset:storageDeleteFailed', {
-            ownerPlugin: ASSETS_PLUGIN_STATE_KEY,
+            ownerPlugin: 'slingshot-assets',
             exposure: ['internal'],
             resolveScope() {
               return null;

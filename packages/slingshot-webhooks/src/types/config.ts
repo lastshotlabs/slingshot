@@ -297,6 +297,6 @@ export const webhookPluginConfigSchema = z.object({
 });
 
 /**
- * Configuration object accepted by `createWebhookPackage`.
+ * Configuration object accepted by `createWebhooksPackage`.
  */
 export type WebhookPluginConfig = z.infer<typeof webhookPluginConfigSchema>;

@@ -8,6 +8,6 @@ describe('orchestration plugin public entrypoint', () => {
     expect(typeof orchestrationPlugin.getOrchestrationOrNull).toBe('function');
     expect(typeof orchestrationPlugin.createSlingshotEventSink).toBe('function');
     expect(orchestrationPlugin.orchestrationPluginConfigSchema).toBeDefined();
-    expect(orchestrationPlugin.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration');
+    expect(orchestrationPlugin.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
   });
 });

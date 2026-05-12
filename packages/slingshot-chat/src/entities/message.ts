@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/entities/message.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a chat message.
@@ -367,4 +367,15 @@ export const messageOperations = defineOperations(Message, {
 
   /** Internal: atomic batch claim of due scheduled messages. No HTTP route. */
   claimDueScheduledMessages: op.custom({}),
+});
+
+/**
+ * Package-authoring module for the Message entity. Used by the public
+ * contract (`Chat.publicEntity(messageModule)`) to derive the typed adapter
+ * surface for cross-package consumers. The production package builds its
+ * own wired module inside `buildChatEntityModules(...)`.
+ */
+export const messageModule = entity({
+  config: Message,
+  operations: messageOperations,
 });

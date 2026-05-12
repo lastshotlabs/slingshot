@@ -645,6 +645,30 @@ export type {
   OperationConfig,
   ResolvedOperations,
   InferOperationMethods,
+  // Concrete method types referenced by `InferOperationMethods`. Re-exporting
+  // them here is what lets downstream packages (e.g. slingshot-community's
+  // `CommunityEntities`) emit a portable `.d.ts` — without these, TS infers
+  // a return type that points at `slingshot-core/dist/src/operations` and
+  // raises TS2742.
+  LookupOneMethod,
+  LookupManyMethod,
+  ExistsMethod,
+  TransitionBooleanMethod,
+  TransitionEntityMethod,
+  FieldUpdateMethod,
+  AggregateMethod,
+  ComputedAggregateMethod,
+  BatchMethod,
+  UpsertWithCreatedFlagMethod,
+  UpsertMethod,
+  SearchPaginatedMethod,
+  SearchArrayMethod,
+  ConsumeBooleanMethod,
+  ConsumeEntityMethod,
+  DeriveMethod,
+  TransactionMethod,
+  PipeMethod,
+  CollectionMethod,
 } from './operations';
 
 // --- Entity route config types ---

@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/entities/room.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a chat room.
@@ -220,4 +220,17 @@ export const roomOperations = defineOperations(Room, {
     match: { id: 'param:id' },
     set: ['archived', 'archivedAt'],
   }),
+});
+
+/**
+ * Package-authoring module for the Room entity. Used by the public contract
+ * (`Chat.publicEntity(roomModule)`) to derive the typed adapter surface for
+ * cross-package consumers. The production package builds its own wired
+ * module inside `buildChatEntityModules(...)` — this standalone export
+ * carries the entity metadata only, so the readonly slice in `public.ts`
+ * gets the right adapter type at compile time.
+ */
+export const roomModule = entity({
+  config: Room,
+  operations: roomOperations,
 });

@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/entities/room-member.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Entity definition for a room membership record.
@@ -170,4 +170,15 @@ export const roomMemberOperations = defineOperations(RoomMember, {
   unreadCount: op.custom({
     http: { method: 'get', path: 'unread-count' },
   }),
+});
+
+/**
+ * Package-authoring module for the RoomMember entity. Used by the public
+ * contract (`Chat.publicEntity(roomMemberModule)`) to derive the typed
+ * adapter surface for cross-package consumers. The production package
+ * builds its own wired module inside `buildChatEntityModules(...)`.
+ */
+export const roomMemberModule = entity({
+  config: RoomMember,
+  operations: roomMemberOperations,
 });

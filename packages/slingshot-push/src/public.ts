@@ -7,6 +7,7 @@
 
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { PushPluginState } from './state';
+import type { PushProviderHealth } from './providers/provider';
 
 /** Provider-owned package contract for `slingshot-push`. */
 export const Push = definePackageContract('slingshot-push');
@@ -18,3 +19,36 @@ export const Push = definePackageContract('slingshot-push');
  * it through `ctx.capabilities.require(PushRuntimeCap)`.
  */
 export const PushRuntimeCap = Push.capability<PushPluginState>('pushRuntime');
+
+/**
+ * Aggregated health snapshot for `slingshot-push`.
+ *
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when any provider's circuit breaker is `open`, or when the
+ *     router-level breaker is `open`.
+ *   - `'degraded'` when any provider's circuit is `half-open`, any provider
+ *     has accumulated `consecutiveFailures > 0`, or the router-level breaker
+ *     is `half-open`.
+ *   - `'healthy'` otherwise.
+ */
+export interface PushPluginHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    readonly providers: Readonly<
+      Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>>
+    >;
+    readonly routerCircuitBreaker?: {
+      readonly state: 'closed' | 'open' | 'half-open';
+      readonly consecutiveFailures: number;
+    };
+  };
+}
+
+/**
+ * Capability for reading the aggregated push health snapshot.
+ *
+ * Consumers resolve via `ctx.capabilities.require(PushHealthCap)()` and
+ * receive a `PushPluginHealth` representing provider and router state at call
+ * time.
+ */
+export const PushHealthCap = Push.capability<() => PushPluginHealth>('health');

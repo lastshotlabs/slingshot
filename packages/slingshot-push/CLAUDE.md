@@ -1,22 +1,23 @@
 # slingshot-push
 
-Multi-provider push delivery plugin with manifest wiring, formatter compilation, entity-backed
-subscriptions, and provider dispatch.
-Push entities follow the shared package-first/entity model; `createPushPlugin()` is the runtime shell
-that composes routing, providers, and manifest wiring.
+Multi-provider push delivery **package** with formatter compilation, entity-backed
+subscriptions/topics/deliveries, and provider dispatch. Authored via `definePackage(...)`
+and consumed through `createApp({ packages: [createPushPackage(...)] })`. Cross-package
+consumers resolve the runtime via `PushRuntimeCap` and the aggregated health snapshot
+via `PushHealthCap`.
 
 ## Key Files
 
-| File                      | What                                                                   |
-| ------------------------- | ---------------------------------------------------------------------- |
-| src/index.ts              | Public API surface for plugin, entities, providers, and router helpers |
-| src/plugin.ts             | `createPushPlugin()` factory                                           |
-| src/types/config.ts       | Push plugin config schema and config types                             |
-| src/router.ts             | Push router assembly                                                   |
-| src/formatter.ts          | Push formatter compilation                                             |
-| src/providers/provider.ts | Shared push provider contract                                          |
-| src/manifest/runtime.ts   | Manifest-aware runtime helpers                                         |
-| docs/human/index.md       | Package guide synced into the docs site                                |
+| File                       | What                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| src/index.ts               | Public API surface for package, entities, providers, and router helpers           |
+| src/plugin.ts              | `createPushPackage()` factory (`SlingshotPackageDefinition`)                      |
+| src/entities/modules.ts    | `buildPushEntityModules(...)` — entity modules with `factories`-mode adapter wiring |
+| src/types/config.ts        | Push package config schema and config types                                       |
+| src/router.ts              | Push router assembly                                                              |
+| src/formatter.ts           | Push formatter compilation                                                        |
+| src/providers/provider.ts  | Shared push provider contract                                                     |
+| docs/human/index.md        | Package guide synced into the docs site                                           |
 
 ## Connections
 

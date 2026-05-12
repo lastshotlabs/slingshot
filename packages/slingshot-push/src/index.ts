@@ -1,15 +1,13 @@
 /**
- * Create the push plugin with subscriptions, topics, delivery tracking, and providers.
+ * Create the push package with subscriptions, topics, delivery tracking, and providers.
  */
-export { createPushPlugin } from './plugin';
+export { createPushPackage } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
-export { Push, PushRuntimeCap } from './public';
-/**
- * Entity manifest describing push subscriptions, topics, memberships, and deliveries.
- */
-export { pushManifest } from './manifest/pushManifest';
+export { Push, PushRuntimeCap, PushHealthCap } from './public';
+/** Aggregated health snapshot type for the push package. */
+export type { PushPluginHealth } from './public';
 /**
  * Plugin state key used to retrieve push runtime state from app context.
  */
@@ -85,10 +83,6 @@ export {
  * Push provider contract and health payload shape.
  */
 export type { PushProvider, PushProviderHealth } from './providers/provider';
-/**
- * Health payload returned by the push plugin runtime.
- */
-export type { PushPluginHealth } from './plugin';
 /**
  * Create the push router used by routes and programmatic sends.
  */

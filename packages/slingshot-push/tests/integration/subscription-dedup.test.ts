@@ -33,8 +33,24 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import { createPushPlugin } from '../../src/plugin';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { PushDelivery } from '../../src/entities/pushDelivery';
+import { PushSubscription } from '../../src/entities/pushSubscription';
+import { PushTopic } from '../../src/entities/pushTopic';
+import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
+import {
+  pushDeliveryFactories,
+  pushSubscriptionFactories,
+  pushTopicFactories,
+  pushTopicMembershipFactories,
+} from '../../src/entities/factories';
+import { pushDeliveryOperations } from '../../src/entities/pushDelivery';
+import { pushSubscriptionOperations } from '../../src/entities/pushSubscription';
+import { pushTopicOperations } from '../../src/entities/pushTopic';
+import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
+import { createPushPackage } from '../../src/plugin';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
 
@@ -117,7 +133,7 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   const frameworkConfig = createFrameworkConfig();
   const pluginState = new Map<string, unknown>();
 
-  const plugin = createPushPlugin({
+  const plugin = createPushPackage({
     enabledPlatforms: ['web'],
     web: { vapid: TEST_VAPID },
     mountPath: '/push',
@@ -168,8 +184,74 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
     bus,
     events,
   } as unknown as import('@lastshotlabs/slingshot-core').PluginSetupContext;
+
+  // Manual entity-route mounting that bypasses createApp/compilePackages.
+  // Delegate adapter construction to each entity module's own wiring so the
+  // package's onAdapter / manual-wiring buildAdapter closures all fire and
+  // the entity routes share state with the package's internal refs.
+  function buildAdapterForEntity(
+    entityName: string,
+  ): EntityPluginEntry['buildAdapter'] {
+    const entityModule = plugin.entities.find(e => e.entityName === entityName);
+    if (!entityModule) throw new Error(`entity ${entityName} not found on plugin`);
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      wiring: {
+        mode: string;
+        buildAdapter?: EntityPluginEntry['buildAdapter'];
+        factories?: unknown;
+        onAdapter?: (a: BareEntityAdapter) => void;
+      };
+    };
+    const wiring = impl.wiring;
+    if (wiring.mode === 'manual' && wiring.buildAdapter) {
+      return wiring.buildAdapter;
+    }
+    if (wiring.mode === 'factories' && wiring.factories) {
+      const factories = wiring.factories as Record<string, (infra: never) => BareEntityAdapter>;
+      return (storeType, infra) => {
+        const adapter = factories[storeType](infra as never);
+        wiring.onAdapter?.(adapter);
+        return adapter;
+      };
+    }
+    throw new Error(`unsupported wiring mode for ${entityName}: ${wiring.mode}`);
+  }
+
+  const entityEntries: EntityPluginEntry[] = [
+    {
+      config: PushSubscription,
+      operations: pushSubscriptionOperations.operations,
+      routePath: 'subscriptions',
+      buildAdapter: buildAdapterForEntity('PushSubscription'),
+    },
+    {
+      config: PushTopic,
+      operations: pushTopicOperations.operations,
+      buildAdapter: buildAdapterForEntity('PushTopic'),
+    },
+    {
+      config: PushTopicMembership,
+      operations: pushTopicMembershipOperations.operations,
+      buildAdapter: buildAdapterForEntity('PushTopicMembership'),
+    },
+    {
+      config: PushDelivery,
+      operations: pushDeliveryOperations.operations,
+      routePath: 'deliveries',
+      buildAdapter: buildAdapterForEntity('PushDelivery'),
+    },
+  ];
+  const entityPlugin = createEntityPlugin({
+    name: 'slingshot-push',
+    mountPath: plugin.mountPath ?? '/push',
+    entities: entityEntries,
+  });
+
   await plugin.setupMiddleware?.(setupContext);
+  await entityPlugin.setupMiddleware?.(setupContext);
+  await entityPlugin.setupRoutes?.(setupContext);
   await plugin.setupRoutes?.(setupContext);
+  await entityPlugin.setupPost?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as

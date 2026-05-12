@@ -28,7 +28,24 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import { createPushPlugin } from '../../src/plugin';
+import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { PushDelivery } from '../../src/entities/pushDelivery';
+import { PushSubscription } from '../../src/entities/pushSubscription';
+import { PushTopic } from '../../src/entities/pushTopic';
+import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
+import {
+  pushDeliveryFactories,
+  pushSubscriptionFactories,
+  pushTopicFactories,
+  pushTopicMembershipFactories,
+} from '../../src/entities/factories';
+import { pushDeliveryOperations } from '../../src/entities/pushDelivery';
+import { pushSubscriptionOperations } from '../../src/entities/pushSubscription';
+import { pushTopicOperations } from '../../src/entities/pushTopic';
+import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
+import { createPushPackage } from '../../src/plugin';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
 import type { PushPluginConfig } from '../../src/types/config';
@@ -141,6 +158,94 @@ function toSetupContext(args: {
   return args as unknown as import('@lastshotlabs/slingshot-core').PluginSetupContext;
 }
 
+/**
+ * Run the full package lifecycle, including manual entity-route mounting.
+ *
+ * Mirrors the polls testing helper: the test bypasses `createApp()` /
+ * `compilePackages()`, so we drive the package's lifecycle hooks side-by-side
+ * with a manually-constructed `createEntityPlugin` that mounts the four push
+ * entity routes (subscriptions, topics, topic memberships, deliveries). The
+ * adapter instances built by the entity-plugin step are fed back through the
+ * package's per-entity-module `onAdapter` hooks so the bespoke routes
+ * (topic-subscribe, ack) and the router share state with the entity routes.
+ */
+async function runPushPackageLifecycle(
+  plugin: ReturnType<typeof createPushPackage>,
+  ctx: import('@lastshotlabs/slingshot-core').PluginSetupContext,
+): Promise<void> {
+  // Delegate adapter construction to each entity module's own wiring so the
+  // package's internal `onSubscriptions` / `onTopics` / ... closures fire as
+  // they would under the framework's createApp path. For manual-mode modules
+  // (PushSubscription) this means the upsert-wrapped adapter is what both the
+  // entity routes and the package state see.
+  function buildAdapterForEntity(
+    entityName: string,
+  ): EntityPluginEntry['buildAdapter'] {
+    const entityModule = plugin.entities.find(e => e.entityName === entityName);
+    if (!entityModule) throw new Error(`entity ${entityName} not found on plugin`);
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      wiring: { mode: string; buildAdapter?: EntityPluginEntry['buildAdapter']; factories?: unknown; onAdapter?: (a: BareEntityAdapter) => void };
+    };
+    const wiring = impl.wiring;
+    if (wiring.mode === 'manual' && wiring.buildAdapter) {
+      return wiring.buildAdapter;
+    }
+    if (wiring.mode === 'factories' && wiring.factories) {
+      const factories = wiring.factories as Record<string, (infra: never) => BareEntityAdapter>;
+      return (storeType, infra) => {
+        const adapter = factories[storeType](infra as never);
+        wiring.onAdapter?.(adapter);
+        return adapter;
+      };
+    }
+    throw new Error(`unsupported wiring mode for ${entityName}: ${wiring.mode}`);
+  }
+
+  const sharedAdapters: {
+    sub?: BareEntityAdapter;
+    topic?: BareEntityAdapter;
+    membership?: BareEntityAdapter;
+    delivery?: BareEntityAdapter;
+  } = {};
+  const entityEntries: EntityPluginEntry[] = [
+    {
+      config: PushSubscription,
+      operations: pushSubscriptionOperations.operations,
+      routePath: 'subscriptions',
+      buildAdapter: buildAdapterForEntity('PushSubscription'),
+    },
+    {
+      config: PushTopic,
+      operations: pushTopicOperations.operations,
+      buildAdapter: buildAdapterForEntity('PushTopic'),
+    },
+    {
+      config: PushTopicMembership,
+      operations: pushTopicMembershipOperations.operations,
+      buildAdapter: buildAdapterForEntity('PushTopicMembership'),
+    },
+    {
+      config: PushDelivery,
+      operations: pushDeliveryOperations.operations,
+      routePath: 'deliveries',
+      buildAdapter: buildAdapterForEntity('PushDelivery'),
+    },
+  ];
+  void sharedAdapters;
+  const entityPlugin = createEntityPlugin({
+    name: 'slingshot-push',
+    mountPath: plugin.mountPath ?? '/push',
+    entities: entityEntries,
+  });
+
+  await plugin.setupMiddleware?.(ctx);
+  await entityPlugin.setupMiddleware?.(ctx);
+  await entityPlugin.setupRoutes?.(ctx);
+  await plugin.setupRoutes?.(ctx);
+  await entityPlugin.setupPost?.(ctx);
+  await plugin.setupPost?.(ctx);
+}
+
 async function createPushHarness(opts?: {
   userId?: string;
   withNotificationsPlugin?: boolean;
@@ -187,7 +292,7 @@ async function createPushHarness(opts?: {
     pluginState.set('slingshot-auth', opts.authRuntime);
   }
 
-  const plugin = createPushPlugin({
+  const plugin = createPushPackage({
     enabledPlatforms: ['web'],
     web: { vapid: TEST_VAPID },
     mountPath: '/push',
@@ -271,9 +376,7 @@ async function createPushHarness(opts?: {
     ...toSetupContext({ app, config: frameworkConfig, bus: runtime.bus }),
     events: runtime.events,
   } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
-  await plugin.setupMiddleware?.(setupContext);
-  await plugin.setupRoutes?.(setupContext);
-  await plugin.setupPost?.(setupContext);
+  await runPushPackageLifecycle(plugin, setupContext);
 
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as
     | { pushRuntime?: PushPluginState }
@@ -362,7 +465,7 @@ async function json(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('createPushPlugin — plugin state', () => {
+describe('createPushPackage — plugin state', () => {
   let harness: PushHarness;
 
   beforeEach(async () => {
@@ -380,7 +483,7 @@ describe('createPushPlugin — plugin state', () => {
   });
 });
 
-describe('createPushPlugin — subscription upsert', () => {
+describe('createPushPackage — subscription upsert', () => {
   let harness: PushHarness;
 
   beforeEach(async () => {
@@ -436,7 +539,7 @@ describe('createPushPlugin — subscription upsert', () => {
   });
 });
 
-describe('createPushPlugin — topic subscribe / unsubscribe', () => {
+describe('createPushPackage — topic subscribe / unsubscribe', () => {
   let harness: PushHarness;
 
   beforeEach(async () => {
@@ -500,7 +603,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       });
       await next();
     });
-    const plugin = createPushPlugin({
+    const plugin = createPushPackage({
       enabledPlatforms: ['web'],
       web: { vapid: TEST_VAPID },
       mountPath: '/push',
@@ -509,9 +612,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       ...toSetupContext({ app, config: fc, bus: runtime.bus }),
       events: runtime.events,
     } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
-    await plugin.setupMiddleware?.(setupContext);
-    await plugin.setupRoutes?.(setupContext);
-    await plugin.setupPost?.(setupContext);
+    await runPushPackageLifecycle(plugin, setupContext);
 
     const res = await app.request('/push/topics/test/subscribe', {
       method: 'POST',
@@ -549,7 +650,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
   });
 });
 
-describe('createPushPlugin — delivery ack', () => {
+describe('createPushPackage — delivery ack', () => {
   let harness: PushHarness;
 
   beforeEach(async () => {
@@ -661,7 +762,7 @@ describe('createPushPlugin — delivery ack', () => {
   });
 });
 
-describe('createPushPlugin — provider fan-out resilience', () => {
+describe('createPushPackage — provider fan-out resilience', () => {
   test('continues sending later subscriptions when one provider call throws', async () => {
     const harness = await createPushHarness({
       pluginConfig: { retries: { maxAttempts: 1, initialDelayMs: 0 } },
@@ -722,7 +823,7 @@ describe('createPushPlugin — provider fan-out resilience', () => {
   });
 });
 
-describe('createPushPlugin — notifications delivery adapter wiring', () => {
+describe('createPushPackage — notifications delivery adapter wiring', () => {
   test('registers delivery adapter with slingshot-notifications when present', async () => {
     let registeredAdapter: unknown = null;
     const runtime = createRuntime();
@@ -762,7 +863,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       await next();
     });
 
-    const plugin = createPushPlugin({
+    const plugin = createPushPackage({
       enabledPlatforms: ['web'],
       web: { vapid: TEST_VAPID },
       mountPath: '/push',
@@ -771,9 +872,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       ...toSetupContext({ app, config: fc, bus: runtime.bus }),
       events: runtime.events,
     } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
-    await plugin.setupMiddleware?.(setupContext);
-    await plugin.setupRoutes?.(setupContext);
-    await plugin.setupPost?.(setupContext);
+    await runPushPackageLifecycle(plugin, setupContext);
 
     expect(registeredAdapter).toBeDefined();
     expect(typeof (registeredAdapter as { deliver?: unknown }).deliver).toBe('function');
@@ -798,7 +897,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       await next();
     });
 
-    const plugin = createPushPlugin({
+    const plugin = createPushPackage({
       enabledPlatforms: ['web'],
       web: { vapid: TEST_VAPID },
       mountPath: '/push',
@@ -808,14 +907,12 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
         ...toSetupContext({ app, config: fc, bus: runtime.bus }),
         events: runtime.events,
       } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
-      await plugin.setupMiddleware?.(setupContext);
-      await plugin.setupRoutes?.(setupContext);
-      await plugin.setupPost?.(setupContext);
+      await runPushPackageLifecycle(plugin, setupContext);
     }).not.toThrow();
   });
 });
 
-describe('createPushPlugin — JSON-config boot', () => {
+describe('createPushPackage — JSON-config boot', () => {
   test('boots from plain JSON-serializable config object', async () => {
     JSON.parse(
       JSON.stringify({
@@ -838,7 +935,7 @@ describe('createPushPlugin — JSON-config boot', () => {
 
   test('rejects mountPath values without a leading slash', () => {
     expect(() =>
-      createPushPlugin({
+      createPushPackage({
         enabledPlatforms: ['web'],
         web: { vapid: TEST_VAPID },
         mountPath: 'push',
@@ -847,7 +944,7 @@ describe('createPushPlugin — JSON-config boot', () => {
   });
 });
 
-describe('createPushPlugin — path-param validation', () => {
+describe('createPushPackage — path-param validation', () => {
   let harness: PushHarness;
 
   beforeEach(async () => {

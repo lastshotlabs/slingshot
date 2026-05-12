@@ -4,11 +4,12 @@ import { z } from 'zod';
 import type {
   MetricsEmitter,
   PluginSetupContext,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   createNoopMetricsEmitter,
   deepFreeze,
+  definePackage,
   getActorId,
   getActorTenantId,
   getContext,
@@ -19,17 +20,15 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
-import { PushRuntimeCap } from './public';
+import { PushHealthCap, PushRuntimeCap } from './public';
+import type { PushPluginHealth } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
+import { buildPushEntityModules } from './entities/modules';
 import { compilePushFormatters } from './formatter';
-import { pushManifest } from './manifest/pushManifest';
-import { createPushManifestRuntime } from './manifest/runtime';
 import { ApnsTokenAuth, createApnsProvider } from './providers/apns';
 import { createFcmProvider } from './providers/fcm';
-import type { PushProvider, PushProviderHealth } from './providers/provider';
+import type { PushProvider } from './providers/provider';
 import { createWebPushProvider } from './providers/web';
 import { type PushRouterRepos, createPushRouter } from './router';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from './state';
@@ -39,52 +38,7 @@ import {
   pushPluginConfigSchema,
 } from './types/config';
 
-/**
- * Aggregated health snapshot for `slingshot-push`. Returned by the
- * `getHealth()` method attached to the plugin instance.
- *
- * `status` is derived from the underlying signals:
- *   - `'unhealthy'` when any provider's circuit breaker is `open`.
- *   - `'degraded'` when any provider's circuit breaker is `half-open` or any
- *     provider has accumulated `consecutiveFailures > 0`.
- *   - `'healthy'` otherwise.
- */
-export interface PushPluginHealth {
-  readonly status: 'healthy' | 'degraded' | 'unhealthy';
-  readonly details: {
-    /**
-     * Per-platform provider health snapshots. Missing platforms are not
-     * enabled. Built-in providers (web / APNS / FCM) all implement
-     * `getHealth()`, so when a platform is enabled and its provider has been
-     * resolved (post `setupPost`) the value is always a snapshot — never
-     * `null`. The `| null` branch remains for forward-compatibility with
-     * custom providers that omit `getHealth()`.
-     */
-    readonly providers: Readonly<
-      Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>>
-    >;
-    /**
-     * Router-level circuit breaker snapshot. Present when the router has been
-     * created (post `setupMiddleware`). The breaker tracks consecutive
-     * fan-out-level failures across all providers.
-     */
-    readonly routerCircuitBreaker?: {
-      readonly state: 'closed' | 'open' | 'half-open';
-      readonly consecutiveFailures: number;
-    };
-  };
-}
-
-/**
- * Path-param validators for the push HTTP surface.
- *
- * Topic names are user-visible identifiers — we accept letters, digits, and a
- * small set of separators (`-`, `_`, `:`, `.`) within a 1..256-char window.
- * Delivery IDs are persisted entity ids (UUIDs by default) — we keep the
- * character set conservative but accept any non-UUID value within bounds so
- * adapters that mint custom ids continue to work; oversized or empty inputs
- * are rejected before they reach the adapter layer.
- */
+// Path-param validators for the push HTTP surface.
 const topicNameParamSchema = z
   .string()
   .min(1, 'topicName is required')
@@ -113,42 +67,30 @@ function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseSe
 }
 
 /**
- * Create the multi-provider push plugin.
+ * Create the multi-provider push package.
  *
- * Validates `rawConfig` via `pushPluginConfigSchema`, registers push entities
- * (subscriptions, topics, topic memberships, deliveries), mounts push routes,
- * wires Web Push / APNS / FCM providers, and registers a delivery adapter with
- * `slingshot-notifications` when that plugin is present.
+ * Validates `rawConfig` via `pushPluginConfigSchema`, mounts the four push
+ * entities (subscriptions, topics, topic memberships, deliveries) through the
+ * declarative package authoring path, wires Web Push / APNS / FCM providers,
+ * mounts the bespoke topic-subscribe / unsubscribe / ack routes, and registers
+ * a delivery adapter with `slingshot-notifications` when present.
  *
- * @param rawConfig - Manifest-safe push plugin config. Validated against
- *   `pushPluginConfigSchema`.
- * @returns A Slingshot plugin that registers push entities, routes, providers,
- *   router state, and optional notifications delivery wiring.
+ * Cross-package consumers resolve the runtime via `PushRuntimeCap` and the
+ * aggregated health snapshot via `PushHealthCap`.
  *
- * @example
- * ```ts
- * import { createPushPlugin } from '@lastshotlabs/slingshot-push';
- *
- * const plugin = createPushPlugin({
- *   enabledPlatforms: ['web', 'ios', 'android'],
- *   mountPath: '/push',
- *   web: { vapid: { publicKey: '...', privateKey: '...', subject: 'mailto:push@example.com' } },
- *   ios: { auth: { kind: 'p8-token', keyPem: '...', keyId: 'ABC123', teamId: 'TEAM123456' } },
- *   android: { serviceAccount: { project_id: 'my-project', client_email: '...', private_key: '...' } },
- *   notifications: { icon: '/icon-192.png', badge: '/badge-72.png', defaultUrl: '/' },
- *   retries: { maxAttempts: 3, initialDelayMs: 1000 },
- * });
- * ```
+ * @param rawConfig - Package config. Validated against `pushPluginConfigSchema`.
+ * @returns A `SlingshotPackageDefinition` ready for `createApp({ packages })`.
  */
-export function createPushPlugin(
-  rawConfig: PushPluginConfig,
-): SlingshotPlugin & { getHealth(): PushPluginHealth } {
+export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackageDefinition {
   const config = deepFreeze(
     validatePluginConfig('slingshot-push', rawConfig, pushPluginConfigSchema),
   );
   const enabledPlatforms = new Set(config.enabledPlatforms);
 
-  let innerPlugin: EntityPlugin | undefined;
+  // Closure-owned adapter refs populated by the entity modules' `onAdapter`
+  // callbacks during bootstrap. Sharing a single adapter instance per entity
+  // between the entity routes and the package's imperative router/route work
+  // is critical for memory-store correctness.
   let subscriptionsRef: PushRouterRepos['subscriptions'] | undefined;
   let topicsRef: PushRouterRepos['topics'] | undefined;
   let membershipsRef: PushRouterRepos['topicMemberships'] | undefined;
@@ -167,15 +109,31 @@ export function createPushPlugin(
     gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
     timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
   };
-  const manifestRuntime = createPushManifestRuntime(adapters => {
-    subscriptionsRef = adapters.subscriptions;
-    topicsRef = adapters.topics;
-    membershipsRef = adapters.topicMemberships;
-    deliveriesRef = adapters.deliveries;
+
+  const {
+    pushSubscriptionModule,
+    pushTopicModule,
+    pushTopicMembershipModule,
+    pushDeliveryModule,
+  } = buildPushEntityModules({
+    onSubscriptions: adapter => {
+      subscriptionsRef = adapter as unknown as PushRouterRepos['subscriptions'];
+    },
+    onTopics: adapter => {
+      topicsRef = adapter as unknown as PushRouterRepos['topics'];
+    },
+    onTopicMemberships: adapter => {
+      membershipsRef = adapter as unknown as PushRouterRepos['topicMemberships'];
+    },
+    onDeliveries: adapter => {
+      deliveriesRef = adapter as unknown as PushRouterRepos['deliveries'];
+    },
   });
 
   function getHealth(): PushPluginHealth {
-    const providers: Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>> = {};
+    const providers: Partial<
+      Record<'web' | 'ios' | 'android', PushPluginHealth['details']['providers']['web']>
+    > = {};
     let worst: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
     for (const platform of ['web', 'ios', 'android'] as const) {
       const provider = providersRef[platform];
@@ -211,27 +169,21 @@ export function createPushPlugin(
     return { status: worst, details: { providers, routerCircuitBreaker } };
   }
 
-  return {
+  return definePackage({
     name: PUSH_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
+    entities: [
+      pushSubscriptionModule,
+      pushTopicModule,
+      pushTopicMembershipModule,
+      pushDeliveryModule,
+    ],
     publicPaths: enabledPlatforms.has('web') ? [`${config.mountPath}/vapid-public-key`] : [],
     csrfExemptPaths: [`${config.mountPath}/*`],
-    getHealth,
 
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      innerPlugin = createEntityPlugin({
-        name: PUSH_PLUGIN_STATE_KEY,
-        mountPath: config.mountPath,
-        manifest: pushManifest,
-        manifestRuntime,
-      });
-
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
-    },
-
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupRoutes({ app, bus }: PluginSetupContext) {
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
         const slingshotCtx = c.get('slingshotCtx') as { routeAuth?: RouteAuthRegistry } | undefined;
         const routeAuth = slingshotCtx?.routeAuth;
@@ -378,14 +330,10 @@ export function createPushPlugin(
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
-
+    async setupPost({ app, bus }: PluginSetupContext) {
       // Resolve the framework-owned metrics emitter so the router publishes
-      // counters/gauges/timings on hot paths. The proxy above ensures the
-      // router constructed below sees this emitter without re-wiring. Test
-      // harnesses may attach a context without a metricsEmitter — keep the
-      // default no-op in that case.
+      // counters/gauges/timings on hot paths. Test harnesses may attach a
+      // context without a metricsEmitter — keep the default no-op then.
       const ctx = getContextOrNull(app);
       if (ctx?.metricsEmitter) resolvedMetricsEmitter = ctx.metricsEmitter;
 
@@ -397,7 +345,7 @@ export function createPushPlugin(
 
       if (!subscriptionsRef || !topicsRef || !membershipsRef || !deliveriesRef) {
         throw new Error(
-          '[slingshot-push] Push entity adapters were not resolved during setupRoutes',
+          '[slingshot-push] Push entity adapters were not resolved during bootstrap',
         );
       }
 
@@ -417,8 +365,6 @@ export function createPushPlugin(
           serviceAccount: parseServiceAccount(config.android.serviceAccount),
         });
       }
-      // Capture the resolved providers so the plugin's getHealth() method can
-      // surface per-provider circuit-breaker / failure-count snapshots.
       providersRef = providers;
 
       const router = createPushRouter({
@@ -462,6 +408,7 @@ export function createPushPlugin(
 
       await registerPluginCapabilities(getContext(app), 'slingshot-push', [
         provideCapability(PushRuntimeCap, () => state),
+        provideCapability(PushHealthCap, () => getHealth),
       ]);
 
       // Consume the slingshot-notifications contract: register our delivery adapter
@@ -475,6 +422,7 @@ export function createPushPlugin(
         deliveryRegistry.register(state.createDeliveryAdapter());
       }
     },
+
     teardown(): void {
       // P-PUSH-6: abort in-flight retry sleeps so a graceful shutdown unwinds
       // promptly instead of running attempts past teardown.
@@ -487,5 +435,5 @@ export function createPushPlugin(
         routerRef = null;
       }
     },
-  };
+  });
 }

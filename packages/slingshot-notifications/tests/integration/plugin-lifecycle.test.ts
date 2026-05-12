@@ -37,6 +37,34 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
   attachContext(app, ctx as never);
 }
 
+/**
+ * Drive each entity module's `factories`-mode `onAdapter` callback with an
+ * adapter built from its own factory bundle. The package's adapter refs are
+ * populated as a side effect — equivalent to what `compilePackages()` does
+ * during `createApp()`, just inlined for this test harness.
+ */
+function resolveEntityAdapters(
+  plugin: ReturnType<typeof createNotificationsPackage>,
+  storeType: 'memory',
+  infra: Record<string, unknown>,
+): void {
+  for (const entityModule of plugin.entities) {
+    const impl = (entityModule as { implementation?: unknown }).implementation as
+      | {
+          wiring?: {
+            mode?: string;
+            factories?: Record<string, (i: never) => unknown>;
+            onAdapter?: (adapter: unknown) => void;
+          };
+        }
+      | undefined;
+    const wiring = impl?.wiring;
+    if (wiring?.mode !== 'factories' || !wiring.factories) continue;
+    const adapter = wiring.factories[storeType](infra as never);
+    wiring.onAdapter?.(adapter);
+  }
+}
+
 describe('createNotificationsPackage lifecycle', () => {
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
     const enabledBus = new InProcessAdapter();
@@ -109,6 +137,7 @@ describe('createNotificationsPackage lifecycle', () => {
       },
     });
 
+
     await plugin.setupMiddleware?.({
       app: app as never,
       config: createFrameworkConfig(),
@@ -121,6 +150,7 @@ describe('createNotificationsPackage lifecycle', () => {
       bus,
       events,
     });
+    resolveEntityAdapters(plugin, 'memory', {});
     await plugin.setupPost?.({
       app: app as never,
       config: createFrameworkConfig(),
@@ -190,6 +220,7 @@ describe('createNotificationsPackage lifecycle', () => {
       bus,
       events,
     });
+    resolveEntityAdapters(plugin, 'memory', {});
     await plugin.setupPost?.({
       app: app as never,
       config: createFrameworkConfig(),

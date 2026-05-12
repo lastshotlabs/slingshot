@@ -277,7 +277,10 @@ export function createAssetsPackage(
       publisher = events;
     },
 
-    setupPost() {
+    // Returns a Promise to match the `setupPost?: (ctx) => void | Promise<void>`
+    // hook contract — callers (including unit tests) await the result.
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupPost() {
       if (!assetAdapterRef) {
         // The entity module uses manual wiring and populates `assetAdapterRef`
         // inside `buildAdapter`. If we reach `setupPost` without it being

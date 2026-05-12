@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 import type { NotificationPreferenceRecord } from '../types';
 
 function extractMemoryRow(value: Record<string, unknown>): Record<string, unknown> {
@@ -141,10 +141,4 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
         return (await target.find({ userId }).toArray()) as NotificationPreferenceRecord[];
       },
   }),
-});
-
-/** Package-authoring module for NotificationPreference. */
-export const notificationPreferenceModule = entity({
-  config: NotificationPreference,
-  operations: notificationPreferenceOperations,
 });

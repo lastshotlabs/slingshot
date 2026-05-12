@@ -2,8 +2,6 @@ import type {
   MetricsEmitter,
   PluginSetupContext,
   SlingshotPackageDefinition,
-  StoreInfra,
-  StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   createConsoleLogger,
@@ -14,16 +12,13 @@ import {
   getContextOrNull,
   provideCapability,
   registerPluginCapabilities,
-  resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from './builder';
 import { createIntervalDispatcher } from './dispatcher';
 import type { DispatcherAdapter } from './dispatcher';
-import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
-import { notificationModule } from './entities/notification';
-import { notificationPreferenceModule } from './entities/preference';
+import { buildNotificationsEntityModules } from './entities/modules';
 import {
   NotificationsBuilderFactory,
   NotificationsDeliveryRegistry,
@@ -222,12 +217,27 @@ export function createNotificationsPackage(
     validatePluginConfig('slingshot-notifications', rawConfig, notificationsPluginConfigSchema),
   );
 
+  // Closure-owned adapter refs populated by the entity modules' `onAdapter`
+  // callbacks during bootstrap. The dispatcher, TTL sweep, and builder factory
+  // ALL read from these refs — sharing a single adapter instance per entity
+  // between the entity routes and the package's imperative work is critical
+  // for memory-store correctness (a separate `resolveRepo` call would create
+  // a divergent in-memory store).
   let notificationsAdapter: NotificationAdapter | undefined;
   let preferencesAdapter: NotificationPreferenceAdapter | undefined;
   let teardown: (() => Promise<void>) | undefined;
   const deliveryAdapters = new Set<DeliveryAdapter>();
   // Hoisted so the health capability can reference it. Assigned in setupPost.
   let dispatcher!: DispatcherAdapter;
+
+  const { notificationModule, notificationPreferenceModule } = buildNotificationsEntityModules({
+    onNotificationAdapter: adapter => {
+      notificationsAdapter = validateNotificationAdapter(adapter);
+    },
+    onPreferenceAdapter: adapter => {
+      preferencesAdapter = validateNotificationPreferenceAdapter(adapter);
+    },
+  });
 
   // The unified metrics emitter is owned by the framework context and not
   // available until `setupPost` runs. Resolve lazily through this proxy so the
@@ -270,22 +280,12 @@ export function createNotificationsPackage(
     dependencies: ['slingshot-auth'],
     entities: [notificationModule, notificationPreferenceModule],
 
-    setupMiddleware({ config: frameworkConfig, events }: PluginSetupContext) {
-      // Resolve the entity adapters imperatively so the dispatcher and SSE
-      // wrappers (mounted later in setupPost / setupRoutes) have stable refs.
-      // The entity modules themselves go through the framework's
-      // entity-plugin path, which resolves the same factories again for their
-      // CRUD routes — two cheap resolutions of the same factory are simpler
-      // than threading refs through the entity plugin's onAdapter callback.
-      const storeType: StoreType = frameworkConfig.resolvedStores.authStore;
-      const infra: StoreInfra = frameworkConfig.storeInfra;
-      notificationsAdapter = validateNotificationAdapter(
-        resolveRepo(notificationFactories, storeType, infra),
-      );
-      preferencesAdapter = validateNotificationPreferenceAdapter(
-        resolveRepo(notificationPreferenceFactories, storeType, infra),
-      );
-
+    setupMiddleware({ events }: PluginSetupContext) {
+      // Entity adapters are populated by the entity modules' `onAdapter`
+      // callbacks during the framework's entity-bootstrap step (which runs
+      // alongside setupMiddleware). The closures that consume them
+      // (dispatcher, builder, TTL sweep) are wired in setupPost — by then
+      // both refs are guaranteed populated.
       if (!events.get('notifications:notification.created')) {
         events.register(
           defineEvent('notifications:notification.created', {

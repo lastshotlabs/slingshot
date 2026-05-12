@@ -1,6 +1,6 @@
 import { createConsoleLogger, defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 import type { NotificationRecord } from '../types';
 
 const logger: Logger = createConsoleLogger({
@@ -847,10 +847,4 @@ export const notificationOperations = defineOperations(Notification, {
         await target.updateOne({ id }, { $set: { dispatched: true, dispatchedAt } });
       },
   }),
-});
-
-/** Package-authoring module for Notification. */
-export const notificationModule = entity({
-  config: Notification,
-  operations: notificationOperations,
 });

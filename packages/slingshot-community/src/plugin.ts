@@ -36,6 +36,7 @@ import {
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import type { MiddlewareHandler } from 'hono';
@@ -232,23 +233,21 @@ export function createCommunityPackage(
   // inside `setupPost` once entity adapters have been captured. Permission-
   // dependent refs (containerCreationGuard, grantManager) are populated in
   // `setupMiddleware` once permissions are resolved.
-  type LazyMiddleware = { handler: MiddlewareHandler };
-  const noop: MiddlewareHandler = async (_c, next) => next();
-  const banCheckRef: LazyMiddleware = { handler: noop };
-  const autoModRef: LazyMiddleware = { handler: noop };
-  const threadStateGuardRef: LazyMiddleware = { handler: noop };
-  const publishedThreadGuardRef: LazyMiddleware = { handler: noop };
-  const targetVisibilityGuardRef: LazyMiddleware = { handler: noop };
-  const reportTargetGuardRef: LazyMiddleware = { handler: noop };
-  const memberJoinPolicyGuardRef: LazyMiddleware = { handler: noop };
-  const solutionReplyGuardRef: LazyMiddleware = { handler: noop };
-  const banNotifyRef: LazyMiddleware = { handler: noop };
-  const containerCreationGuardRef: LazyMiddleware = { handler: noop };
-  const containerCreatorGrantRef: LazyMiddleware = { handler: noop };
-  const grantManagerRef: LazyMiddleware = { handler: noop };
-  const replyCountUpdateRef: LazyMiddleware = { handler: noop };
-  const replyCountDecrementRef: LazyMiddleware = { handler: noop };
-  const auditLogRef: LazyMiddleware = { handler: noop };
+  const banCheckRef = createLazyMiddleware();
+  const autoModRef = createLazyMiddleware();
+  const threadStateGuardRef = createLazyMiddleware();
+  const publishedThreadGuardRef = createLazyMiddleware();
+  const targetVisibilityGuardRef = createLazyMiddleware();
+  const reportTargetGuardRef = createLazyMiddleware();
+  const memberJoinPolicyGuardRef = createLazyMiddleware();
+  const solutionReplyGuardRef = createLazyMiddleware();
+  const banNotifyRef = createLazyMiddleware();
+  const containerCreationGuardRef = createLazyMiddleware();
+  const containerCreatorGrantRef = createLazyMiddleware();
+  const grantManagerRef = createLazyMiddleware();
+  const replyCountUpdateRef = createLazyMiddleware();
+  const replyCountDecrementRef = createLazyMiddleware();
+  const auditLogRef = createLazyMiddleware();
 
   // Permissions resolved in setupMiddleware — used for adapter wiring later.
   let permissionsRef: PermissionsState | undefined;
@@ -338,9 +337,9 @@ export function createCommunityPackage(
   }
 
   // App-dependent middleware refs (built once `app` is on hand).
-  const roleAssignmentGuardRef: LazyMiddleware = { handler: noop };
-  const pollRequiredGuardRef: LazyMiddleware = { handler: noop };
-  const attachmentRequiredGuardRef: LazyMiddleware = { handler: noop };
+  const roleAssignmentGuardRef = createLazyMiddleware();
+  const pollRequiredGuardRef = createLazyMiddleware();
+  const attachmentRequiredGuardRef = createLazyMiddleware();
 
   return definePackage({
     name: COMMUNITY_PLUGIN_STATE_KEY,

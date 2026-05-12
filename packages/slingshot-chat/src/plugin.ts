@@ -37,6 +37,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
 import { buildChatEntityModules } from './entities/modules';
 import {
@@ -132,20 +133,18 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   // Notification-dependent refs (messageNotify, memberInviteNotify) are
   // populated in `setupPost` once `NotificationsBuilderFactory` is
   // resolvable through the capability system.
-  type LazyMiddleware = { handler: MiddlewareHandler };
-  const noop: MiddlewareHandler = async (_c, next) => next();
-  const archiveGuardRef: LazyMiddleware = { handler: noop };
-  const broadcastGuardRef: LazyMiddleware = { handler: noop };
-  const dmRoomGuardRef: LazyMiddleware = { handler: noop };
-  const roomCreatorGrantRef: LazyMiddleware = { handler: noop };
-  const memberGrantRef: LazyMiddleware = { handler: noop };
-  const messagePostCreateRef: LazyMiddleware = { handler: noop };
-  const messageNotifyRef: LazyMiddleware = { handler: noop };
-  const memberInviteNotifyRef: LazyMiddleware = { handler: noop };
-  const replyCountUpdateRef: LazyMiddleware = { handler: noop };
-  const replyCountDecrementRef: LazyMiddleware = { handler: noop };
-  const pollRequiredGuardRef: LazyMiddleware = { handler: noop };
-  const attachmentRequiredGuardRef: LazyMiddleware = { handler: noop };
+  const archiveGuardRef = createLazyMiddleware();
+  const broadcastGuardRef = createLazyMiddleware();
+  const dmRoomGuardRef = createLazyMiddleware();
+  const roomCreatorGrantRef = createLazyMiddleware();
+  const memberGrantRef = createLazyMiddleware();
+  const messagePostCreateRef = createLazyMiddleware();
+  const messageNotifyRef = createLazyMiddleware();
+  const memberInviteNotifyRef = createLazyMiddleware();
+  const replyCountUpdateRef = createLazyMiddleware();
+  const replyCountDecrementRef = createLazyMiddleware();
+  const pollRequiredGuardRef = createLazyMiddleware();
+  const attachmentRequiredGuardRef = createLazyMiddleware();
 
   // Permissions resolved in `setupMiddleware`; consumed in `setupPost` to
   // wire the contained adapter-dependent middleware.

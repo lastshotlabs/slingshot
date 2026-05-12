@@ -233,3 +233,13 @@ export { resolvePolicy, policyAppliesToOp, buildPolicyAction, safeReadJsonBody }
 export { definePolicyDispatch } from './policy';
 /** Entity policy resolution and dispatch contracts used by permission-aware routes. */
 export type { ResolvePolicyArgs, PolicyDispatchConfig } from './policy';
+
+// Lazy middleware helper
+/**
+ * Helper for packages whose adapter- or capability-dependent middleware can
+ * only be wired after lifecycle hooks run. Returns a mutable ref starting as
+ * a pass-through `next()` no-op; replace `ref.handler` from setupMiddleware /
+ * setupPost once dependencies are resolved.
+ */
+export { createLazyMiddleware } from './lazyMiddleware';
+export type { LazyMiddlewareRef } from './lazyMiddleware';

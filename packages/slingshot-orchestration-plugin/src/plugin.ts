@@ -87,14 +87,25 @@ export function createOrchestrationPackage(
     dependencies: [],
     capabilities: {
       provides: [
-        provideCapability(OrchestrationRuntimeCap, () => {
-          if (!runtime) {
-            throw new Error(
-              '[slingshot-orchestration-plugin] runtime requested before setupRoutes constructed it; consumers must read OrchestrationRuntimeCap from setupPost or later.',
-            );
-          }
-          return runtime;
-        }),
+        // Return a Proxy: the framework eagerly resolves capability values at
+        // setupMiddleware time, before our setupRoutes constructs `runtime`
+        // from the provided adapter. Field access throws a clear error if
+        // reached before the runtime is wired.
+        provideCapability(
+          OrchestrationRuntimeCap,
+          () =>
+            new Proxy({} as OrchestrationRuntime, {
+              get(_target, prop, receiver) {
+                if (typeof prop === 'symbol' || prop === 'then') return undefined;
+                if (!runtime) {
+                  throw new Error(
+                    `[slingshot-orchestration-plugin] runtime.${String(prop)} accessed before setupRoutes constructed it; resolve OrchestrationRuntimeCap from setupPost or later.`,
+                  );
+                }
+                return Reflect.get(runtime, prop, receiver);
+              },
+            }),
+        ),
       ],
     },
 

@@ -184,23 +184,42 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
     csrfExemptPaths: [`${config.mountPath}/*`],
     capabilities: {
       provides: [
-        provideCapability(PushRuntimeCap, () => {
-          if (!runtimeStateRef) {
-            throw new Error(
-              '[slingshot-push] runtime requested before setupPost completed; consumers must read PushRuntimeCap from setupPost or later.',
-            );
-          }
-          return runtimeStateRef;
-        }),
+        // The framework eagerly resolves capability values at setupMiddleware
+        // time, before our setupPost populates `runtimeStateRef`. Return a
+        // Proxy that defers field access to the live ref so the resolver
+        // succeeds at boot and failures surface only when a consumer actually
+        // touches the runtime before setupPost has run.
+        provideCapability(
+          PushRuntimeCap,
+          () =>
+            new Proxy({} as PushPluginState, {
+              get(_target, prop, receiver) {
+                // Skip symbol probes (the framework awaits resolve() and the
+                // Promise machinery probes `.then`) so the Proxy is await-safe.
+                if (typeof prop === 'symbol' || prop === 'then') return undefined;
+                if (!runtimeStateRef) {
+                  throw new Error(
+                    `[slingshot-push] runtime.${String(prop)} accessed before setupPost completed; resolve PushRuntimeCap from setupPost or later.`,
+                  );
+                }
+                return Reflect.get(runtimeStateRef, prop, receiver);
+              },
+            }),
+        ),
         provideCapability(PushHealthCap, () => getHealth),
-        provideCapability(PushFormatterRegistryCap, () => {
-          if (!runtimeStateRef) {
-            throw new Error(
-              '[slingshot-push] formatter registry requested before setupPost completed; consumers must read PushFormatterRegistryCap from setupPost or later.',
-            );
-          }
-          return runtimeStateRef;
-        }),
+        provideCapability(
+          PushFormatterRegistryCap,
+          () => ({
+            registerFormatter(type, formatter) {
+              if (!runtimeStateRef) {
+                throw new Error(
+                  '[slingshot-push] formatter registry used before setupPost completed; resolve PushFormatterRegistryCap from setupPost or later.',
+                );
+              }
+              runtimeStateRef.registerFormatter(type, formatter);
+            },
+          }),
+        ),
       ],
     },
 

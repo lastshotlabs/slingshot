@@ -289,13 +289,18 @@ export function createNotificationsPackage(
     entities: [notificationModule, notificationPreferenceModule],
     capabilities: {
       provides: [
-        provideCapability(NotificationsBuilderFactory, () => {
+        // The framework eagerly resolves capability values at setupMiddleware
+        // time, before our setupPost populates `builderFactoryRef`. Return a
+        // deferring closure so the resolver succeeds at boot and the failure
+        // is surfaced only if a consumer actually invokes the factory before
+        // setupPost has run.
+        provideCapability(NotificationsBuilderFactory, () => (opts: { source: string }) => {
           if (!builderFactoryRef) {
             throw new Error(
-              '[slingshot-notifications] builder factory requested before setupPost completed; consumers must read NotificationsBuilderFactory from setupPost or later.',
+              '[slingshot-notifications] builder factory invoked before setupPost completed; resolve NotificationsBuilderFactory from setupPost or later.',
             );
           }
-          return builderFactoryRef;
+          return builderFactoryRef(opts);
         }),
         provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
         provideCapability(NotificationsHealthCap, () => buildHealth),

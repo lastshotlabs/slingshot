@@ -100,13 +100,22 @@ export function createSearchPackage(
       provides: [
         {
           capability: SearchRuntimeCap,
+          // Return a Proxy: the framework eagerly resolves capability values
+          // at setupMiddleware time, before our setupPost populates the
+          // runtime. Field access throws a clear error if reached before
+          // setupPost has run.
           resolve() {
-            if (!runtime) {
-              throw new Error(
-                '[slingshot-search] runtime requested before setupPost completed; consumers must read SearchRuntimeCap from setupPost or later.',
-              );
-            }
-            return runtime;
+            return new Proxy({} as SearchPluginRuntime, {
+              get(_target, prop, receiver) {
+                if (typeof prop === 'symbol' || prop === 'then') return undefined;
+                if (!runtime) {
+                  throw new Error(
+                    `[slingshot-search] runtime.${String(prop)} accessed before setupPost completed; resolve SearchRuntimeCap from setupPost or later.`,
+                  );
+                }
+                return Reflect.get(runtime, prop, receiver);
+              },
+            });
           },
         },
       ],

@@ -24,9 +24,11 @@ import {
   deepFreeze,
   definePackage,
   getPluginState,
+  provideCapability,
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { PollsRuntimeCap } from './public';
 import {
   getEntityPolicyResolver,
   registerEntityPolicy,
@@ -100,6 +102,10 @@ export function createPollsPackage(
   let pollAdapter: PollAdapter | undefined;
   let pollVoteAdapter: PollVoteAdapter | undefined;
   let sweepHandle: { stop(): void } | undefined;
+  // Hoisted runtime ref read by the declarative `PollsRuntimeCap` resolver.
+  // Populated in setupPost; resolver throws a clear "not ready" error when
+  // read earlier.
+  let runtimeStateRef: PollsPluginState | undefined;
 
   const { pollModule, pollVoteModule } = buildPollEntityModules({
     onPollAdapter: adapter => {
@@ -171,6 +177,18 @@ export function createPollsPackage(
     dependencies: ['slingshot-auth'],
     entities: [pollModule, pollVoteModule],
     middleware,
+    capabilities: {
+      provides: [
+        provideCapability(PollsRuntimeCap, () => {
+          if (!runtimeStateRef) {
+            throw new Error(
+              '[slingshot-polls] runtime requested before setupPost completed; consumers must read PollsRuntimeCap from setupPost or later.',
+            );
+          }
+          return runtimeStateRef;
+        }),
+      ],
+    },
 
     setupMiddleware(ctx: PluginSetupContext) {
       // Register dispatched policy resolvers before entity routes are mounted.
@@ -261,7 +279,13 @@ export function createPollsPackage(
         pollVoteAdapter,
         sweepHandle,
       });
+      // Legacy plugin-state slot — preserved for back-compat with consumers
+      // that read the runtime via `getPluginState(app).get(POLLS_RUNTIME_KEY)`.
+      // New code should resolve `PollsRuntimeCap` through `ctx.capabilities`.
       publishPluginState(getPluginState(app), POLLS_RUNTIME_KEY, state);
+      // Populate the hoisted ref so the declarative PollsRuntimeCap resolver
+      // stops throwing.
+      runtimeStateRef = state;
     },
 
     teardown() {

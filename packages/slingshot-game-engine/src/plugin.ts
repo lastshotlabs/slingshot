@@ -26,9 +26,11 @@ import {
   definePackage,
   getContext,
   getPluginState,
+  provideCapability,
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { GameEngineRuntimeCap } from './public';
 import { registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
 import { buildGameEngineEntityModules } from './entities/modules';
 import type { GameEngineAdapterRefs } from './entities/modules';
@@ -112,6 +114,11 @@ export function createGameEnginePackage(
     null;
   let busRef: SlingshotEventBus | null = null;
 
+  // Hoisted runtime ref read by the declarative `GameEngineRuntimeCap`
+  // resolver. Populated in setupPost; resolver throws a clear "not ready"
+  // error when read earlier.
+  let runtimeStateRef: import('./types/state').GameEnginePluginState | undefined;
+
   // Lazy accessor closures for middleware that runs before adapters are resolved.
   const getSessionAdapter = (): SessionAdapterShape => {
     if (!refs.session) {
@@ -172,6 +179,18 @@ export function createGameEnginePackage(
     mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
     entities: [sessionModule, playerModule],
+    capabilities: {
+      provides: [
+        provideCapability(GameEngineRuntimeCap, () => {
+          if (!runtimeStateRef) {
+            throw new Error(
+              '[slingshot-game-engine] runtime requested before setupPost completed; consumers must read GameEngineRuntimeCap from setupPost or later.',
+            );
+          }
+          return runtimeStateRef;
+        }),
+      ],
+    },
     middleware,
 
     async setupMiddleware({ app }: PluginSetupContext) {
@@ -359,7 +378,13 @@ export function createGameEnginePackage(
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
         sessionControls: createSessionControls(activeRuntimes),
       });
+      // Legacy plugin-state slot — preserved for back-compat with consumers
+      // that read the runtime via `getPluginState(app).get(GAME_ENGINE_PLUGIN_STATE_KEY)`.
+      // New code should resolve `GameEngineRuntimeCap` through `ctx.capabilities`.
       publishPluginState(getPluginState(app), GAME_ENGINE_PLUGIN_STATE_KEY, state);
+      // Populate the hoisted ref so the declarative GameEngineRuntimeCap
+      // resolver stops throwing.
+      runtimeStateRef = state;
     },
 
     teardown() {

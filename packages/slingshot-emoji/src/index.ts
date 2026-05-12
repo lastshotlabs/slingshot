@@ -23,3 +23,7 @@ export { EmojiEntity, emojiOperations, emojiModule } from './entities/emoji';
 export { shortcodeGuard } from './middleware/shortcodeGuard';
 export { emojiPackageConfigSchema } from './types';
 export type { EmojiPackageConfig, EmojiRecord } from './types';
+/**
+ * Provider-owned package contract for cross-package consumers.
+ */
+export { Emoji } from './public';

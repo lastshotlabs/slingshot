@@ -29,6 +29,11 @@ export { pollOperations, pollVoteOperations } from './operations/index';
 // Plugin state key
 export { POLLS_PLUGIN_STATE_KEY, POLL_VOTE_ERRORS, CLIENT_SAFE_POLL_EVENTS } from './types/public';
 
+/**
+ * Provider-owned package contract and capability for cross-package consumers.
+ */
+export { Polls, PollsRuntimeCap } from './public';
+
 // Config schema
 export { PollsPluginConfigSchema } from './validation/config';
 

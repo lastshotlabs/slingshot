@@ -70,6 +70,11 @@ export { GameEnginePluginConfigSchema } from './validation/config';
 /** Stable key for reading or publishing the game-engine plugin state. */
 export { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
 
+/**
+ * Provider-owned package contract and capability for cross-package consumers.
+ */
+export { GameEngine, GameEngineRuntimeCap } from './public';
+
 // ── Types ───────────────────────────────────────────────────────
 
 /** Package configuration accepted by `createGameEnginePackage()`. */

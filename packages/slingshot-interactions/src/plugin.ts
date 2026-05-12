@@ -10,9 +10,11 @@ import {
   getPermissionsStateOrNull,
   getPluginState,
   getRateLimitAdapter,
+  provideCapability,
   publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
+import { InteractionsRuntimeCap } from './public';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { interactionsPluginConfigSchema } from './config/schema';
 import type { InteractionsPluginConfig } from './config/types';
@@ -50,6 +52,18 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
     mountPath: config.mountPath,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
     entities: [interactionEventModule],
+    capabilities: {
+      provides: [
+        provideCapability(InteractionsRuntimeCap, () => {
+          if (!stateRef) {
+            throw new Error(
+              '[slingshot-interactions] runtime requested before setupMiddleware completed; consumers must read InteractionsRuntimeCap from setupRoutes or later.',
+            );
+          }
+          return stateRef;
+        }),
+      ],
+    },
 
     async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       // Resolve the InteractionEvent adapter imperatively so the dispatch route

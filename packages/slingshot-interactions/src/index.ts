@@ -3,6 +3,10 @@ import './events';
 export { createInteractionsPackage } from './plugin';
 export { INTERACTIONS_PLUGIN_STATE_KEY } from './state';
 export type { InteractionsPluginState } from './state';
+/**
+ * Provider-owned package contract and capability for cross-package consumers.
+ */
+export { Interactions, InteractionsRuntimeCap } from './public';
 export { interactionsPluginConfigSchema } from './config/schema';
 export type { InteractionsPluginConfig } from './config/types';
 export type {

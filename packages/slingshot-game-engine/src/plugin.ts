@@ -1,38 +1,37 @@
 /**
- * Game engine plugin factory.
+ * Game engine package factory.
  *
- * Creates a `SlingshotPlugin` that registers GameSession and GamePlayer
- * entities, mounts game-specific middleware, registers the WS endpoint,
- * and manages the game registry and session lifecycle.
+ * Creates a `SlingshotPackageDefinition` that registers the GameSession and
+ * GamePlayer entities, wires game-specific guard middleware, mounts the
+ * game-registry and session routes, registers the WS endpoint, and manages
+ * the closure-owned game registry, active session runtimes, replay store,
+ * and cleanup sweep.
  *
- * Every adapter, middleware, registry, and timer is closure-owned (Rule 3).
- * Multiple plugin instances in the same process do not share state.
+ * Every adapter ref, middleware closure, registry, and timer is owned by the
+ * factory's closure (Rule 3) — multiple package instances in the same process
+ * do not share state.
  *
- * @param rawConfig - Plugin configuration. See {@link GameEnginePluginConfig}.
- * @returns A `SlingshotPlugin` ready to pass to `createApp({ plugins: [...] })`.
+ * @param rawConfig - Package configuration. See {@link GameEnginePluginConfig}.
+ * @returns A `SlingshotPackageDefinition` ready to pass to
+ *   `createApp({ packages: [...] })`.
  */
 import type { MiddlewareHandler } from 'hono';
 import type {
   PluginSetupContext,
   SlingshotEventBus,
-  SlingshotPlugin,
-  StoreInfra,
-  StoreType,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  definePackage,
   getContext,
   getPluginState,
   publishPluginState,
-  resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin, registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { gamePlayerFactories, gameSessionFactories } from './entities/factories';
-import { GamePlayer } from './entities/gamePlayer';
-import { GameSession } from './entities/gameSession';
+import { registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
+import { buildGameEngineEntityModules } from './entities/modules';
+import type { GameEngineAdapterRefs } from './entities/modules';
 import { listAdapterRecords } from './lib/adapterQuery';
 import { createCleanupState, startCleanupSweep, stopCleanupSweep } from './lib/cleanup';
 import { createInMemoryReplayStore } from './lib/replay';
@@ -50,8 +49,6 @@ import { buildPlayerLeaveGuard } from './middleware/playerLeaveGuard';
 import { buildRulesValidationGuard } from './middleware/rulesValidationGuard';
 import { buildSessionCreateGuard } from './middleware/sessionCreateGuard';
 import { buildStartGameGuard } from './middleware/startGameGuard';
-import { gamePlayerOperations } from './operations/player';
-import { gameSessionOperations } from './operations/session';
 import {
   type PlayerAdapterShape,
   type SessionAdapterShape,
@@ -66,57 +63,24 @@ import { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
 import { GameEnginePluginConfigSchema } from './validation/config';
 
 /**
- * Cast a typed entity adapter to a minimal adapter shape.
- *
- * The typed adapter from `resolveRepo()` has strongly-typed method signatures
- * while the shape interfaces use `Record<string, unknown>` for interop with
- * middleware closures. The adapter is structurally compatible at runtime — all
- * required methods exist and accept the wider parameter types. This is a safe
- * single-step cast (not through `unknown`), narrowing to the subset used.
- */
-function asSessionAdapter(adapter: object): SessionAdapterShape {
-  return adapter as SessionAdapterShape;
-}
-
-function asPlayerAdapter(adapter: object): PlayerAdapterShape {
-  return adapter as PlayerAdapterShape;
-}
-
-/**
- * Widen a typed entity adapter to `BareEntityAdapter` by copying enumerable
- * properties into a fresh object with an index signature.
- *
- * `BareEntityAdapter` requires `{ [key: string]: unknown }`, but typed adapters
- * from `resolveRepo()` don't declare one. Copying into a `Record<string, unknown>`
- * satisfies the structural constraint without going through `unknown`.
- */
-function toBareAdapter(adapter: object): BareEntityAdapter {
-  const bare: Record<string, unknown> = {};
-  for (const key of Object.keys(adapter)) {
-    bare[key] = (adapter as Record<string, unknown>)[key];
-  }
-  return bare as BareEntityAdapter;
-}
-
-/**
- * Create the game engine plugin.
+ * Create the game engine package.
  *
  * @example
  * ```ts
- * import { createGameEnginePlugin, defineGame } from 'slingshot-game-engine';
+ * import { createGameEnginePackage, defineGame } from 'slingshot-game-engine';
  *
  * const trivia = defineGame({ ... });
  *
- * const gameEngine = createGameEnginePlugin({
+ * const gameEngine = createGameEnginePackage({
  *   games: [trivia],
  *   mountPath: '/game',
  * });
- * const app = createApp({ plugins: [gameEngine] });
+ * const app = createApp({ packages: [gameEngine] });
  * ```
  */
-export function createGameEnginePlugin(
+export function createGameEnginePackage(
   rawConfig: Partial<GameEnginePluginConfig> & { games?: GameDefinition[] } = {},
-): SlingshotPlugin {
+): SlingshotPackageDefinition {
   // Extract games from config before validation (not part of plugin config schema)
   const { games: gameDefs = [], ...configInput } = rawConfig;
 
@@ -125,10 +89,8 @@ export function createGameEnginePlugin(
     validatePluginConfig(GAME_ENGINE_PLUGIN_STATE_KEY, configInput, GameEnginePluginConfigSchema),
   );
 
-  // Closure-owned state — no module-level singletons (Rule 3).
-  let sessionAdapter: SessionAdapterShape | undefined;
-  let playerAdapter: PlayerAdapterShape | undefined;
-  let innerPlugin: EntityPlugin | undefined;
+  // ─── Closure-owned adapter refs (Rule 3 — no globals) ─────────────────────
+  const refs: GameEngineAdapterRefs = {};
 
   // Closure-owned game registry (not a module-level Map).
   const gameRegistry = new Map<string, GameDefinition>();
@@ -151,22 +113,22 @@ export function createGameEnginePlugin(
   let busRef: SlingshotEventBus | null = null;
 
   // Lazy accessor closures for middleware that runs before adapters are resolved.
-  const getSessionAdapter = () => {
-    if (!sessionAdapter) {
+  const getSessionAdapter = (): SessionAdapterShape => {
+    if (!refs.session) {
       throw new Error(
         '[slingshot-game-engine] Session adapter not resolved — middleware called before entity setup.',
       );
     }
-    return sessionAdapter;
+    return refs.session;
   };
 
-  const getPlayerAdapter = () => {
-    if (!playerAdapter) {
+  const getPlayerAdapter = (): PlayerAdapterShape => {
+    if (!refs.player) {
       throw new Error(
         '[slingshot-game-engine] Player adapter not resolved — middleware called before entity setup.',
       );
     }
-    return playerAdapter;
+    return refs.player;
   };
 
   const getRegistry = () => gameRegistry as ReadonlyMap<string, GameDefinition>;
@@ -202,51 +164,25 @@ export function createGameEnginePlugin(
     }),
   };
 
-  // Entity entries for createEntityPlugin.
-  const entities: EntityPluginEntry[] = [
-    {
-      config: GameSession,
-      operations: gameSessionOperations.operations,
-      routePath: 'sessions',
-      buildAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter {
-        const adapter = resolveRepo(gameSessionFactories, storeType, infra);
-        sessionAdapter = asSessionAdapter(adapter);
-        return toBareAdapter(adapter);
-      },
-    },
-    {
-      config: GamePlayer,
-      operations: gamePlayerOperations.operations,
-      routePath: 'players',
-      parentPath: '/sessions/:sessionId',
-      buildAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter {
-        const adapter = resolveRepo(gamePlayerFactories, storeType, infra);
-        playerAdapter = asPlayerAdapter(adapter);
-        return toBareAdapter(adapter);
-      },
-    },
-  ];
+  // Build entity modules eagerly.
+  const { sessionModule, playerModule } = buildGameEngineEntityModules({ refs });
 
-  return {
+  return definePackage({
     name: GAME_ENGINE_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
+    entities: [sessionModule, playerModule],
+    middleware,
 
-    async setupMiddleware(ctx: PluginSetupContext) {
+    async setupMiddleware({ app }: PluginSetupContext) {
       // Register dispatched policy resolver before entity routes are mounted.
-      registerEntityPolicy(ctx.app, GAME_SESSION_POLICY_KEY, createGameSessionPolicy());
-      innerPlugin ??= createEntityPlugin({
-        name: GAME_ENGINE_PLUGIN_STATE_KEY,
-        mountPath: config.mountPath,
-        entities,
-        middleware,
-      });
-      await innerPlugin?.setupMiddleware?.(ctx);
+      registerEntityPolicy(app, GAME_SESSION_POLICY_KEY, createGameSessionPolicy());
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
-      // Route registration is delegated to pluginRoutes.ts for maintainability.
+    async setupRoutes({ app }: PluginSetupContext) {
+      // Mount the package-level routes (registry endpoints + session
+      // routes). The entity routes themselves are mounted by the framework's
+      // package compiler once `wiring.buildAdapter` returns.
       const routeDeps = {
         mountPath: config.mountPath,
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
@@ -260,16 +196,14 @@ export function createGameEnginePlugin(
       mountGameSessionRoutes(app, routeDeps);
     },
 
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
-
-      if (!sessionAdapter || !playerAdapter) {
+    async setupPost({ app, bus }: PluginSetupContext) {
+      if (!refs.session || !refs.player) {
         throw new Error('[slingshot-game-engine] Adapters not resolved after entity plugin setup.');
       }
 
       // Capture adapter refs for callback closures.
-      const capturedSessionAdapter = sessionAdapter;
-      const capturedPlayerAdapter = playerAdapter;
+      const capturedSessionAdapter = refs.session;
+      const capturedPlayerAdapter = refs.player;
 
       // Shared log object for runtime and WS callbacks.
       const log: SessionRuntime['log'] = {
@@ -311,8 +245,7 @@ export function createGameEnginePlugin(
 
       // Listen for game start events to initialize the session runtime.
       // Entity after-response middleware emits this after startGame op.transition
-      // succeeds (gameSession.ts:88-92, applyRouteConfig.ts:336-367).
-      // Payload shape: { tenantId, actorId, id, gameType } — picked from entity record.
+      // succeeds. Payload shape: { tenantId, actorId, id, gameType }.
       const onSessionStarted = async (payload: Record<string, unknown>) => {
         const sessionId = payload.id as string | undefined;
         const gameType = payload.gameType as string | undefined;
@@ -421,8 +354,8 @@ export function createGameEnginePlugin(
       // Register plugin state (Rule 16 — instance-scoped context).
       const state = deepFreeze({
         config,
-        sessionAdapter,
-        playerAdapter,
+        sessionAdapter: capturedSessionAdapter,
+        playerAdapter: capturedPlayerAdapter,
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
         sessionControls: createSessionControls(activeRuntimes),
       });
@@ -441,21 +374,23 @@ export function createGameEnginePlugin(
         destroySessionRuntime(activeRuntimes, sessionId);
       }
     },
-  };
+  });
 }
 
 /**
- * Register a game definition with an existing game engine plugin instance.
+ * Register a game definition with an existing game engine package instance.
  *
- * Call this during application setup, before the plugin's `setupRoutes` runs.
+ * Call this during application setup, before the package's `setupRoutes` runs.
+ * For the primary registration path, pass games via
+ * `createGameEnginePackage({ games: [...] })`.
+ *
+ * @deprecated Use `createGameEnginePackage({ games: [...] })` instead.
  */
 export function registerGame(
-  plugin: SlingshotPlugin & { _registry?: Map<string, GameDefinition> },
+  pkg: SlingshotPackageDefinition & { _registry?: Map<string, GameDefinition> },
   definition: GameDefinition,
 ): void {
-  // This is a convenience API. For the primary registration path,
-  // pass games via `createGameEnginePlugin({ games: [...] })`.
-  if (plugin._registry) {
-    plugin._registry.set(definition.name, definition);
+  if (pkg._registry) {
+    pkg._registry.set(definition.name, definition);
   }
 }

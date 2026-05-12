@@ -1,5 +1,5 @@
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
-import { createGameEnginePlugin } from '../../packages/slingshot-game-engine/src/index.ts';
+import { createGameEnginePackage } from '../../packages/slingshot-game-engine/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 import { blackjack } from './src/blackjack.ts';
 import { drawing } from './src/drawing.ts';
@@ -18,7 +18,9 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createGameEnginePlugin({
+  ],
+  packages: [
+    createGameEnginePackage({
       games: [trivia, drawing, blackjack],
       mountPath: '/game',
     }),

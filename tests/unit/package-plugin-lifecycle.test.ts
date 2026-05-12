@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import {
   GAME_ENGINE_PLUGIN_STATE_KEY,
-  createGameEnginePlugin,
+  createGameEnginePackage,
   defineGame,
 } from '@lastshotlabs/slingshot-game-engine';
 import {
@@ -44,8 +44,8 @@ const lifecycleGame = defineGame({
 describe('package plugin lifecycle', () => {
   test('slingshot-game-engine publishes session controls instead of raw active runtime state', async () => {
     const app = await createTestApp({
-      plugins: [
-        createGameEnginePlugin({
+      packages: [
+        createGameEnginePackage({
           games: [lifecycleGame],
         }),
       ],

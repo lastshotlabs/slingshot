@@ -165,7 +165,7 @@ export const GameEnginePluginConfigSchema = z.object({
     .describe('Routes to disable. Keys are entityName.operationOrAction strings.'),
 });
 
-/** Input type accepted by `createGameEnginePlugin()`. */
+/** Input type accepted by `createGameEnginePackage()`. */
 export type GameEnginePluginConfigInput = z.input<typeof GameEnginePluginConfigSchema>;
 
 /** Resolved config after Zod parsing and defaults. */

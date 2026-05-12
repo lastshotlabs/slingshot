@@ -17,8 +17,6 @@ import {
   releaseAllLeases,
   releaseLease,
 } from '../../src/lib/sessionLease';
-import { gameEngineManifest } from '../../src/manifest/gameEngineManifest';
-import { createGameEngineManifestRuntime } from '../../src/manifest/runtime';
 import {
   LobbyUpdateInputSchema,
   PlayerKickInputSchema,
@@ -198,41 +196,6 @@ describe('session leases', () => {
 
     setIntervalSpy.mockRestore();
     clearIntervalSpy.mockRestore();
-  });
-});
-
-describe('manifest/runtime wiring', () => {
-  test('declares game entities and captures adapters through the manifest hook registry', async () => {
-    expect(gameEngineManifest.manifestVersion).toBe(1);
-    expect(gameEngineManifest.namespace).toBe('game');
-    expect(gameEngineManifest.hooks?.afterAdapters).toEqual([{ handler: 'game.captureAdapters' }]);
-    expect(Object.keys(gameEngineManifest.entities)).toEqual(['GameSession', 'GamePlayer']);
-
-    let captured: { sessionAdapter: unknown; playerAdapter: unknown } | null = null;
-    const runtime = createGameEngineManifestRuntime({
-      onAdaptersCaptured(adapters) {
-        captured = adapters;
-      },
-    });
-
-    expect(runtime.customHandlers.list()).toEqual([]);
-    const hook = runtime.hooks.resolve('game.captureAdapters');
-
-    await hook({
-      app: {} as any,
-      bus: {} as any,
-      pluginName: 'game-engine',
-      adapters: {
-        GameSession: { kind: 'session' } as any,
-        GamePlayer: { kind: 'player' } as any,
-      },
-      permissions: null,
-    });
-
-    expect(captured).toEqual({
-      sessionAdapter: { kind: 'session' },
-      playerAdapter: { kind: 'player' },
-    });
   });
 });
 

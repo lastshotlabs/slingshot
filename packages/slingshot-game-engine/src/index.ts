@@ -14,10 +14,10 @@ import './events';
  * - `slingshot-game-engine/testing` — test harness and helpers
  */
 
-// ── Plugin ───────────────────────────────────────────────────────
+// ── Package ──────────────────────────────────────────────────────
 
-/** Plugin factory — call once to create the game engine plugin instance. */
-export { createGameEnginePlugin } from './plugin';
+/** Package factory — call once to create the game engine package instance. */
+export { createGameEnginePackage } from './plugin';
 
 // ── Game Definition DSL ──────────────────────────────────────────
 
@@ -72,7 +72,7 @@ export { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
 
 // ── Types ───────────────────────────────────────────────────────
 
-/** Plugin configuration accepted by `createGameEnginePlugin()`. */
+/** Package configuration accepted by `createGameEnginePackage()`. */
 export type { GameEnginePluginConfig } from './types/config';
 
 /** Runtime state stored in `getContext(app).pluginState`. */

@@ -90,11 +90,12 @@ describe('public plugin surface', () => {
       wsEndpoint: 'game',
     });
 
-    const plugin = mod.createGameEnginePlugin({ games: [gameDef] });
-    expect(plugin.name).toBe('slingshot-game-engine');
-    expect(plugin.dependencies).toContain('slingshot-auth');
+    const pkg = mod.createGameEnginePackage({ games: [gameDef] });
+    expect(pkg.name).toBe('slingshot-game-engine');
+    expect(pkg.dependencies).toContain('slingshot-auth');
+    expect(pkg.kind).toBe('package');
 
-    expect(() => mod.createGameEnginePlugin({ mountPath: 'game' as any })).toThrow();
+    expect(() => mod.createGameEnginePackage({ mountPath: 'game' as any })).toThrow();
   });
 });
 

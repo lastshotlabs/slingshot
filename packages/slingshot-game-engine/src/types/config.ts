@@ -5,7 +5,7 @@
  * and frozen via `deepFreeze()` (Rule 10).
  */
 
-/** Configuration options for `createGameEnginePlugin()`. */
+/** Configuration options for `createGameEnginePackage()`. */
 export interface GameEnginePluginConfig {
   /** Mount path for game engine REST routes. Default: `'/game'`. */
   readonly mountPath: string;

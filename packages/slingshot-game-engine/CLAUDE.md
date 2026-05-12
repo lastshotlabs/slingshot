@@ -1,26 +1,29 @@
 # slingshot-game-engine
 
-Multiplayer game state engine. Config-driven phases, channels, turns, scoring,
-timers, seeded RNG, replay log, and disconnect recovery — all as a standard
-slingshot plugin. Factory pattern with closure-owned state, no singletons.
+Multiplayer game state **package**. Config-driven phases, channels, turns,
+scoring, timers, seeded RNG, replay log, and disconnect recovery. Authored via
+`definePackage(...)` and consumed through
+`createApp({ packages: [createGameEnginePackage(...)] })`. Factory pattern with
+closure-owned state, no singletons.
 
 ## Key Files
 
-### Plugin and Entry
+### Package and Entry
 
-| File              | What                                                     |
-| ----------------- | -------------------------------------------------------- |
-| src/index.ts      | Public API surface (plugin, defineGame, entities, types) |
-| src/plugin.ts     | `createGameEnginePlugin()` factory                       |
-| src/defineGame.ts | `defineGame()` DSL + validation                          |
+| File              | What                                                       |
+| ----------------- | ---------------------------------------------------------- |
+| src/index.ts      | Public API surface (package, defineGame, entities, types)  |
+| src/plugin.ts     | `createGameEnginePackage()` factory                        |
+| src/defineGame.ts | `defineGame()` DSL + validation                            |
 
 ### Entities
 
-| File                        | What                                          |
-| --------------------------- | --------------------------------------------- |
-| src/entities/gameSession.ts | GameSession entity definition                 |
-| src/entities/gamePlayer.ts  | GamePlayer entity definition                  |
-| src/entities/factories.ts   | Entity repository factory wiring by StoreType |
+| File                        | What                                                       |
+| --------------------------- | ---------------------------------------------------------- |
+| src/entities/gameSession.ts | GameSession entity definition                              |
+| src/entities/gamePlayer.ts  | GamePlayer entity definition                               |
+| src/entities/factories.ts   | Entity repository factory wiring by StoreType              |
+| src/entities/modules.ts     | `buildGameEngineEntityModules(...)` — manual adapter wiring |
 
 ### Operations
 
@@ -93,13 +96,6 @@ slingshot plugin. Factory pattern with closure-owned state, no singletons.
 | src/ws/incoming.ts | WS incoming handlers (game:input, subscribe, reconnect, stream) |
 | src/ws/hostOnly.ts | WS-level host-only guard for privileged events                  |
 
-### Manifest
-
-| File                               | What                                                                    |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| src/manifest/gameEngineManifest.ts | Multi-entity manifest declaration for config-driven bootstrap           |
-| src/manifest/runtime.ts            | Manifest-mode runtime wiring (handler/hook registries, adapter capture) |
-
 ### Policy
 
 | File                | What                                              |
@@ -149,8 +145,8 @@ slingshot plugin. Factory pattern with closure-owned state, no singletons.
 
 ## Connections
 
-- **Imports from**: `slingshot-core` (plugin contract, entities, WS, context), `slingshot-entity` (operations, factories, policy)
-- **Imported by**: application code via `createGameEnginePlugin()` + `defineGame()`
+- **Imports from**: `slingshot-core` (package authoring, entities, WS, context), `slingshot-entity` (operations, factories, policy)
+- **Imported by**: application code via `createGameEnginePackage()` + `defineGame()`
 
 ## Common Tasks
 

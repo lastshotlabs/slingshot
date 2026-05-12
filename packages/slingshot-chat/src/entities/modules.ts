@@ -34,6 +34,7 @@ import type {
   EntityRouteExecutorOverrides,
 } from '@lastshotlabs/slingshot-entity';
 import type { ChatEncryptionProvider } from '../encryption/types';
+import type { MessageAdapter, ReminderAdapter, RoomInviteAdapter } from '../types';
 import { Block, blockOperations } from './block';
 import { FavoriteRoom, favoriteRoomOperations } from './favorite-room';
 import { Message, messageOperations } from './message';
@@ -240,11 +241,17 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
           storeType,
           infra,
         });
-        const withEdited = applyEditedAtTransform(base);
-        const withCipher = applyCipherTransform(withEdited, encryptionProvider, refs);
+        const withEdited = applyEditedAtTransform(asAdapter<MessageAdapter>(base));
+        const withCipher = applyCipherTransform(
+          asAdapter<MessageAdapter>(withEdited),
+          encryptionProvider,
+          refs,
+        );
         // Attach the `claimDueScheduledMessages` method so the
         // scheduled-delivery interval and tests can call it directly.
-        const wrapped = applyClaimDueScheduledMessagesMethod(withCipher);
+        const wrapped = applyClaimDueScheduledMessagesMethod(
+          asAdapter<MessageAdapter>(withCipher),
+        );
         refs.messages = asAdapter(wrapped);
         return wrapped;
       },
@@ -368,7 +375,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
           storeType,
           infra,
         });
-        const wrapped = applyInviteSlotMethods(base);
+        const wrapped = applyInviteSlotMethods(asAdapter<RoomInviteAdapter>(base));
         refs.invites = asAdapter(wrapped);
         return wrapped;
       },
@@ -395,7 +402,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
           storeType,
           infra,
         });
-        const wrapped = applyClaimDueRemindersMethod(base);
+        const wrapped = applyClaimDueRemindersMethod(asAdapter<ReminderAdapter>(base));
         refs.reminders = asAdapter(wrapped);
         return wrapped;
       },

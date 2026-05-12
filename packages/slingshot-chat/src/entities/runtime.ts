@@ -84,11 +84,16 @@ function withEditedAtInput(input: UpdateMessageInput): UpdateMessageInput {
  * Wrap the resolved Message adapter to auto-stamp `editedAt` whenever the
  * caller updates the message body. Mirrors the legacy
  * `chat.message.editedAt` manifest transform.
+ *
+ * Callers pass the typed `MessageAdapter` view of the resolved adapter so
+ * this wrapper can call typed methods directly. The return is widened to
+ * `BareEntityAdapter` to satisfy the manual-wiring contract — the bare
+ * shape's loosely-typed CRUD is structurally a supertype of `MessageAdapter`
+ * but TS can't see the assignment, so a single boundary cast remains.
  */
-export function applyEditedAtTransform(adapter: BareEntityAdapter): BareEntityAdapter {
-  const messageAdapter = adapter as unknown as MessageAdapter;
+export function applyEditedAtTransform(messageAdapter: MessageAdapter): BareEntityAdapter {
   return {
-    ...adapter,
+    ...messageAdapter,
     update: async (id: string, input: unknown) => {
       const typedInput = input as UpdateMessageInput;
       return messageAdapter.update(id, withEditedAtInput(typedInput));
@@ -105,19 +110,18 @@ export function applyEditedAtTransform(adapter: BareEntityAdapter): BareEntityAd
  * the encryption layer always sees the latest Room adapter.
  */
 export function applyCipherTransform(
-  adapter: BareEntityAdapter,
+  messageAdapter: MessageAdapter,
   provider: ChatEncryptionProvider | null,
   refs: ChatAdapterRefs,
 ): BareEntityAdapter {
   if (!provider) {
-    return adapter;
+    return messageAdapter as unknown as BareEntityAdapter;
   }
-  const messageAdapter = adapter as unknown as MessageAdapter;
   const getRoom = (roomId: string) =>
     refs.rooms?.getById(roomId) ?? Promise.resolve(null);
 
   return {
-    ...adapter,
+    ...messageAdapter,
     create: async (input: unknown) => {
       const typedInput = input as CreateMessageInput;
       const room = await getRoom(typedInput.roomId);
@@ -352,11 +356,11 @@ export function createClaimDueScheduledMessagesHandler(refs: ChatAdapterRefs) {
  * and by test fixtures that exercise the adapter without going through HTTP).
  */
 export function applyClaimDueScheduledMessagesMethod(
-  adapter: BareEntityAdapter,
+  messageAdapter: MessageAdapter,
 ): BareEntityAdapter {
-  const claim = buildClaimDueScheduledMessagesOp(adapter as unknown as MessageAdapter);
+  const claim = buildClaimDueScheduledMessagesOp(messageAdapter);
   return {
-    ...adapter,
+    ...messageAdapter,
     claimDueScheduledMessages: (params: { limit: number }) => claim(params),
   } as unknown as BareEntityAdapter;
 }
@@ -585,12 +589,11 @@ export function createReleaseInviteSlotHandler(refs: ChatAdapterRefs) {
  * by tests/fixtures that exercise the slot lifecycle without going
  * through HTTP.
  */
-export function applyInviteSlotMethods(adapter: BareEntityAdapter): BareEntityAdapter {
-  const typed = adapter as unknown as RoomInviteAdapter;
-  const claim = buildClaimInviteSlotOp(typed);
-  const release = buildReleaseInviteSlotOp(typed);
+export function applyInviteSlotMethods(inviteAdapter: RoomInviteAdapter): BareEntityAdapter {
+  const claim = buildClaimInviteSlotOp(inviteAdapter);
+  const release = buildReleaseInviteSlotOp(inviteAdapter);
   return {
-    ...adapter,
+    ...inviteAdapter,
     claimInviteSlot: (params: { id: string }) => claim(params),
     releaseInviteSlot: (params: { id: string }) => release(params),
   } as unknown as BareEntityAdapter;
@@ -638,10 +641,12 @@ export function createClaimDueRemindersHandler(refs: ChatAdapterRefs) {
  * the resolved adapter — used by the reminder-delivery interval and by
  * test fixtures exercising the claim lifecycle without going through HTTP.
  */
-export function applyClaimDueRemindersMethod(adapter: BareEntityAdapter): BareEntityAdapter {
-  const claim = buildClaimDueRemindersOp(adapter as unknown as ReminderAdapter);
+export function applyClaimDueRemindersMethod(
+  reminderAdapter: ReminderAdapter,
+): BareEntityAdapter {
+  const claim = buildClaimDueRemindersOp(reminderAdapter);
   return {
-    ...adapter,
+    ...reminderAdapter,
     claimDueReminders: (params: { limit: number }) => claim(params),
   } as unknown as BareEntityAdapter;
 }

@@ -1,29 +1,29 @@
 /**
  * JSON-bootability test for slingshot-assets.
  *
- * Verifies that the plugin can be instantiated from a JSON-serializable
+ * Verifies that the package can be instantiated from a JSON-serializable
  * config object — no function references, no class instances — so
- * config-driven bootstrap succeeds for any tooling that loads plugin
+ * config-driven bootstrap succeeds for any tooling that loads package
  * configs from a serialized blob.
  */
 import { describe, expect, test } from 'bun:test';
-import { createAssetsPlugin } from '../../src/plugin';
+import { createAssetsPackage } from '../../src/plugin';
 import type { AssetsPluginConfig } from '../../src/types';
 
-describe('slingshot-assets manifest bootability', () => {
+describe('slingshot-assets package bootability', () => {
   const config: AssetsPluginConfig = {
     storage: { adapter: 'memory' },
   };
 
-  test('createAssetsPlugin returns a plugin object without errors', () => {
-    const plugin = createAssetsPlugin(config);
-    expect(plugin).toBeDefined();
-    expect(typeof plugin).toBe('object');
+  test('createAssetsPackage returns a package object without errors', () => {
+    const pkg = createAssetsPackage(config);
+    expect(pkg).toBeDefined();
+    expect(typeof pkg).toBe('object');
   });
 
-  test('plugin.name is slingshot-assets', () => {
-    const plugin = createAssetsPlugin(config);
-    expect(plugin.name).toBe('slingshot-assets');
+  test('pkg.name is slingshot-assets', () => {
+    const pkg = createAssetsPackage(config);
+    expect(pkg.name).toBe('slingshot-assets');
   });
 
   test('config survives JSON round-trip (no function references)', () => {
@@ -31,18 +31,17 @@ describe('slingshot-assets manifest bootability', () => {
     expect(roundTripped).toEqual(config);
   });
 
-  test('plugin.dependencies includes slingshot-entity dependency chain', () => {
-    const plugin = createAssetsPlugin(config);
-    // slingshot-assets depends on slingshot-auth and slingshot-permissions,
-    // which transitively require slingshot-entity via the schema registry.
-    expect(plugin.dependencies).toBeDefined();
-    expect(plugin.dependencies).toContain('slingshot-auth');
-    expect(plugin.dependencies).toContain('slingshot-permissions');
+  test('pkg.dependencies includes auth and permissions', () => {
+    const pkg = createAssetsPackage(config);
+    // slingshot-assets depends on slingshot-auth and slingshot-permissions.
+    expect(pkg.dependencies).toBeDefined();
+    expect(pkg.dependencies).toContain('slingshot-auth');
+    expect(pkg.dependencies).toContain('slingshot-permissions');
   });
 
   test('rejects mountPath values without a leading slash', () => {
     expect(() =>
-      createAssetsPlugin({
+      createAssetsPackage({
         storage: { adapter: 'memory' },
         mountPath: 'assets',
       } as AssetsPluginConfig),
@@ -64,7 +63,7 @@ describe('slingshot-assets image cache fallback', () => {
         return logger;
       },
     };
-    createAssetsPlugin(
+    createAssetsPackage(
       {
         storage: { adapter: 'memory' },
         image: { cache: { notAnAdapter: true } as unknown },
@@ -93,7 +92,7 @@ describe('slingshot-assets image cache fallback', () => {
         return logger;
       },
     };
-    createAssetsPlugin(
+    createAssetsPackage(
       {
         storage: { adapter: 'memory' },
         image: {
@@ -124,7 +123,7 @@ describe('slingshot-assets image cache fallback', () => {
         return logger;
       },
     };
-    createAssetsPlugin(
+    createAssetsPackage(
       {
         storage: { adapter: 'memory' },
         image: { maxWidth: 800, maxHeight: 600 },

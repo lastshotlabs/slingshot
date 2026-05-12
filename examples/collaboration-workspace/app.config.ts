@@ -1,4 +1,4 @@
-import { createAssetsPlugin } from '../../packages/slingshot-assets/src/index.ts';
+import { createAssetsPackage } from '../../packages/slingshot-assets/src/index.ts';
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createChatPlugin } from '../../packages/slingshot-chat/src/index.ts';
 import { createCommunityPlugin } from '../../packages/slingshot-community/src/index.ts';
@@ -34,12 +34,6 @@ export default defineApp({
         sendMessage: ['user', 'moderator', 'admin'],
       },
     }),
-    createAssetsPlugin({
-      storage: { adapter: 'memory' },
-      presignedUrls: true,
-      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-      image: { allowedOrigins: ['localhost'] },
-    }),
     createEmbedsPlugin({}),
     createGifsPlugin({
       provider: 'tenor',
@@ -55,6 +49,12 @@ export default defineApp({
     }),
   ],
   packages: [
+    createAssetsPackage({
+      storage: { adapter: 'memory' },
+      presignedUrls: true,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+      image: { allowedOrigins: ['localhost'] },
+    }),
     createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
     }),

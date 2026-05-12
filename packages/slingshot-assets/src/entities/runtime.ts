@@ -1,22 +1,23 @@
+/**
+ * Asset entity runtime helpers.
+ *
+ * Lifted from the legacy `src/manifest/runtime.ts`. Exposes plain adapter
+ * transforms (TTL) and plain async custom-op handlers (presignUpload,
+ * presignDownload, serveImage) consumed by `entities/modules.ts`. No
+ * manifest registries — the package's entity-module `wiring.buildAdapter`
+ * applies the TTL transform inline, and the custom-op handlers are bound
+ * to entity-route executor overrides on the corresponding module.
+ *
+ * @internal
+ */
 import { HTTPException } from 'hono/http-exception';
 import type { Logger, SlingshotEvents, StorageAdapter } from '@lastshotlabs/slingshot-core';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
-import type { EntityManifestRuntime } from '@lastshotlabs/slingshot-entity';
-import {
-  createEntityAdapterTransformRegistry,
-  createEntityHandlerRegistry,
-  createEntityPluginHookRegistry,
-} from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import { DEFAULT_ASSET_REGISTRY_TTL_SECONDS, withAssetTtl } from '../entities/factories';
+import { DEFAULT_ASSET_REGISTRY_TTL_SECONDS, withAssetTtl } from './factories';
 import { createServeImageResponse } from '../image/serve';
 import type { ResolvedImageConfig } from '../image/serve';
 import type { ImageCacheAdapter } from '../image/types';
 import { generateUploadKeyFromFilename } from '../lib/upload';
-import {
-  type OrphanedKeyRegistry,
-  createDeleteStorageFileMiddleware,
-} from '../middleware/deleteStorageFile';
 import type { AssetAdapter, AssetsPluginConfig } from '../types';
 
 /**
@@ -135,54 +136,53 @@ function isAssetAdapter(value: BareEntityAdapter): value is BareEntityAdapter & 
   );
 }
 
-function requireAssetAdapter(value: BareEntityAdapter, message: string): AssetAdapter {
-  if (!isAssetAdapter(value)) {
-    throw new Error(message);
+/**
+ * Wrap a resolved bare adapter with the lazy asset-TTL transform. Mirrors the
+ * legacy manifest's `assets.asset.ttl` adapter transform.
+ */
+export function applyAssetTtlTransform(
+  adapter: BareEntityAdapter,
+  ttlSeconds: number,
+): BareEntityAdapter {
+  if (!isAssetAdapter(adapter)) {
+    throw new Error(
+      '[slingshot-assets] Asset adapter does not expose the full assets runtime contract',
+    );
   }
-  return value;
+  return {
+    ...withAssetTtl(adapter, ttlSeconds ?? DEFAULT_ASSET_REGISTRY_TTL_SECONDS),
+  } as BareEntityAdapter;
+}
+
+/** Shared dependencies for the custom-op handlers. */
+export interface AssetsHandlerDeps {
+  readonly config: Readonly<AssetsPluginConfig>;
+  readonly storage: StorageAdapter;
+  readonly imageCache: ImageCacheAdapter | null;
+  readonly imageConfig: ResolvedImageConfig | null;
+  readonly getAssetAdapter: () => AssetAdapter | undefined;
+  readonly logger: Logger;
+  readonly events?: SlingshotEvents | undefined;
+  readonly getEvents?: () => SlingshotEvents | undefined;
+}
+
+function requireAssetAdapter(deps: AssetsHandlerDeps): AssetAdapter {
+  const adapter = deps.getAssetAdapter();
+  if (!adapter) {
+    throw new Error(
+      '[slingshot-assets] Asset adapter is not ready during package handler execution',
+    );
+  }
+  return adapter;
 }
 
 /**
- * Build the manifest runtime for `assetManifest`.
- *
- * @param config - Frozen plugin config.
- * @param storage - Resolved storage adapter for file bytes.
- * @param imageCache - Optional image-cache adapter.
- * @param imageConfig - Optional resolved image config.
- * @param setDeleteStorageMiddleware - Setter used to populate the delete middleware before routes mount.
- * @param setAssetAdapter - Setter used to capture the resolved asset adapter.
- * @param logger - Optional structured logger. Defaults to no-op.
- * @param events - Optional registry-backed event publisher used for emitting `asset:storageDeleteFailed`.
- * @param orphanRegistry - Optional bounded registry that captures orphaned-key records for the recovery API.
- * @returns Runtime registries passed to `createEntityPlugin({ manifestRuntime })`.
+ * Build the `presignUpload` handler. Returns the same shape as the legacy
+ * manifest custom-handler — caller invokes with `(input)` extracted from the
+ * route executor's params.
  */
-export function createAssetsManifestRuntime(args: {
-  config: Readonly<AssetsPluginConfig>;
-  storage: StorageAdapter;
-  imageCache: ImageCacheAdapter | null;
-  imageConfig: ResolvedImageConfig | null;
-  setDeleteStorageMiddleware: (handler: import('hono').MiddlewareHandler) => void;
-  setAssetAdapter: (adapter: AssetAdapter) => void;
-  logger?: Logger;
-  events?: SlingshotEvents;
-  orphanRegistry?: OrphanedKeyRegistry;
-  getEvents?: () => SlingshotEvents | undefined;
-}): EntityManifestRuntime {
-  const {
-    config,
-    storage,
-    imageCache,
-    imageConfig,
-    setDeleteStorageMiddleware,
-    setAssetAdapter,
-    orphanRegistry,
-    getEvents,
-  } = args;
-  const logger = args.logger ?? noopLogger;
-  const customHandlers = createEntityHandlerRegistry();
-  const adapterTransforms = createEntityAdapterTransformRegistry();
-  const hooks = createEntityPluginHookRegistry();
-  let assetAdapterRef: AssetAdapter | undefined;
+export function createPresignUploadHandler(deps: AssetsHandlerDeps) {
+  const { config, storage, logger } = deps;
   // P-ASSETS-7: per-(user, idempotencyKey) cache of in-flight + recently
   // completed presignUpload requests so concurrent retries with the same
   // logical file don't generate distinct keys/records. Bounded by removing
@@ -199,51 +199,10 @@ export function createAssetsManifestRuntime(args: {
     }
   }
 
-  adapterTransforms.register('assets.asset.ttl', adapter => {
-    const assetAdapter = requireAssetAdapter(
-      adapter,
-      '[slingshot-assets] Asset adapter does not expose the full assets runtime contract',
-    );
-    const transformed: BareEntityAdapter = {
-      ...withAssetTtl(
-        assetAdapter,
-        config.registryTtlSeconds ?? DEFAULT_ASSET_REGISTRY_TTL_SECONDS,
-      ),
-    };
-    return Promise.resolve(transformed);
-  });
-
-  hooks.register('assets.captureAssetAdapter', ({ adapters }) => {
-    const assetAdapter = requireAssetAdapter(
-      adapters.Asset,
-      '[slingshot-assets] Manifest resolved Asset adapter is missing required asset operations',
-    );
-    assetAdapterRef = assetAdapter;
-    setAssetAdapter(assetAdapter);
-    setDeleteStorageMiddleware(
-      createDeleteStorageFileMiddleware({
-        storage,
-        assetAdapter,
-        logger,
-        // Resolve events lazily — at hook time the host plugin may have a
-        // captured publisher that wasn't yet available when the runtime was
-        // built (config-driven setup ordering).
-        events: args.events ?? getEvents?.(),
-        orphanRegistry,
-        ...(config.onOrphanedKey ? { onOrphanedKey: config.onOrphanedKey } : {}),
-      }),
-    );
-  });
-
-  customHandlers.register('assets.asset.presignUpload', () => () => async (input: unknown) => {
+  return async (input: unknown): Promise<{ url: string; key: string; assetId: string }> => {
     const params = (input ?? {}) as Record<string, unknown>;
     assertPresignedUrlsEnabled(config, storage, 'presignPut');
-    const assetAdapter = assetAdapterRef;
-    if (!assetAdapter) {
-      throw new Error(
-        '[slingshot-assets] Asset adapter is not ready during manifest handler setup',
-      );
-    }
+    const assetAdapter = requireAssetAdapter(deps);
 
     const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
     const filename = readOptionalString(params, 'filename');
@@ -271,15 +230,7 @@ export function createAssetsManifestRuntime(args: {
       }
     }
 
-    // P-ASSETS-7: idempotency key path. Concurrent (or retried) calls with
-    // the same (userId, idempotencyKey) tuple must return the SAME record /
-    // URL — we never want a second `assets.create()` against a logically-
-    // identical request. We support two cases:
-    //   1. A concurrent in-flight request — share its promise.
-    //   2. A recently-completed request still inside the retention window —
-    //      return the cached record directly.
-    // Apps that want stronger guarantees (idempotency across processes) can
-    // prefix the key with their own request id and use a durable backend.
+    // P-ASSETS-7: idempotency key path.
     const cacheKey = idempotencyKey ? `${userId}:${idempotencyKey}` : null;
     if (cacheKey) {
       purgePresignIdempotency();
@@ -355,8 +306,7 @@ export function createAssetsManifestRuntime(args: {
       });
       return result;
     } catch (err) {
-      // Failed presigns are not cached — the caller can retry without
-      // poisoning the slot.
+      // Failed presigns are not cached — the caller can retry without poisoning the slot.
       presignUploadIdempotencyCache.delete(cacheKey);
       logger.error('[slingshot-assets] presignUpload (idempotent) failed', {
         component: 'slingshot-assets.runtime',
@@ -368,17 +318,19 @@ export function createAssetsManifestRuntime(args: {
         ? err
         : new HTTPException(502, { message: 'Storage operation failed during presign upload' });
     }
-  });
+  };
+}
 
-  customHandlers.register('assets.asset.presignDownload', () => () => async (input: unknown) => {
+/**
+ * Build the `presignDownload` handler. Returns the same shape as the legacy
+ * manifest custom-handler.
+ */
+export function createPresignDownloadHandler(deps: AssetsHandlerDeps) {
+  const { config, storage, logger } = deps;
+  return async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
     assertPresignedUrlsEnabled(config, storage, 'presignGet');
-    const assetAdapter = assetAdapterRef;
-    if (!assetAdapter) {
-      throw new Error(
-        '[slingshot-assets] Asset adapter is not ready during manifest handler setup',
-      );
-    }
+    const assetAdapter = requireAssetAdapter(deps);
 
     const key = readRequiredString(params, 'key', 'key is required');
     const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
@@ -407,9 +359,7 @@ export function createAssetsManifestRuntime(args: {
       throw new HTTPException(403, { message: 'Forbidden' });
     }
 
-    // P-ASSETS-9: ownership / creator binding. Default behavior: actor.id
-    // must match asset.ownerUserId. Apps that need bypass (admin, support
-    // tools, batch processors) wire `presignDownloadAuthorize` to allow it.
+    // P-ASSETS-9: ownership / creator binding.
     const isOwner = asset.ownerUserId != null && asset.ownerUserId === userId;
     let authorized = isOwner;
     if (!authorized && config.presignDownloadAuthorize) {
@@ -433,10 +383,7 @@ export function createAssetsManifestRuntime(args: {
     }
 
     // P-ASSETS-10: refuse to issue presigned URLs for assets whose stored
-    // mimeType is in the blocklist. The bucket can't enforce response-side
-    // safety headers from Slingshot, so the safest action is to refuse the
-    // download outright. Apps with legitimate use cases for those MIME types
-    // must configure their bucket to override the response content-type.
+    // mimeType is in the blocklist.
     const storedMime = asset.mimeType ?? null;
     if (storedMime && BLOCKED_MIME_TYPES.has(storedMime)) {
       throw new HTTPException(415, {
@@ -459,11 +406,6 @@ export function createAssetsManifestRuntime(args: {
       });
     }
     const expiresAt = Math.floor(Date.now() / 1000) + expirySeconds;
-    // Surface the safe response-header recommendation in the JSON payload so
-    // operators using a custom edge / proxy can apply it to the download
-    // response. Always include `nosniff`; for blocked-but-unenforceable MIMEs
-    // (above we already throw, so this branch is defensive) advise the
-    // attachment disposition.
     return {
       url,
       expiresAt,
@@ -477,16 +419,18 @@ export function createAssetsManifestRuntime(args: {
           : {}),
       },
     };
-  });
+  };
+}
 
-  customHandlers.register('assets.asset.serveImage', () => () => async (input: unknown) => {
+/**
+ * Build the `serveImage` handler. Returns a `Response` (binary stream) which
+ * the route executor passes through directly.
+ */
+export function createServeImageHandler(deps: AssetsHandlerDeps) {
+  const { storage, imageCache, imageConfig, logger } = deps;
+  return async (input: unknown): Promise<Response> => {
     const params = (input ?? {}) as Record<string, unknown>;
-    const assetAdapter = assetAdapterRef;
-    if (!assetAdapter) {
-      throw new Error(
-        '[slingshot-assets] Asset adapter is not ready during manifest handler setup',
-      );
-    }
+    const assetAdapter = requireAssetAdapter(deps);
     if (!imageConfig || !imageCache) {
       throw new HTTPException(501, { message: 'Image transforms are not enabled' });
     }
@@ -541,11 +485,5 @@ export function createAssetsManifestRuntime(args: {
         ? err
         : new HTTPException(502, { message: 'Image creation failed' });
     }
-  });
-
-  return {
-    customHandlers,
-    adapterTransforms,
-    hooks,
   };
 }

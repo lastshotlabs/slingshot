@@ -7,17 +7,22 @@
 import './events';
 
 /**
- * Create the slingshot-assets plugin.
+ * Create the slingshot-assets package.
  */
-export { createAssetsPlugin } from './plugin';
+export { createAssetsPackage } from './plugin';
 /**
- * Provider-owned package contract for cross-package consumers.
+ * Optional non-JSON dependencies accepted by {@link createAssetsPackage}.
  */
-export { Assets, AssetsRuntimeCap } from './public';
+export type { AssetsPackageDeps } from './plugin';
 /**
- * Entity manifest describing the asset resources owned by the assets plugin.
+ * Provider-owned package contract and capabilities for cross-package consumers.
  */
-export { assetManifest } from './manifest/assetManifest';
+export {
+  Assets,
+  AssetsHealthCap,
+  AssetsOrphanedKeysCap,
+  AssetsRuntimeCap,
+} from './public';
 /**
  * Plugin state key used to retrieve the assets runtime state from app context.
  */

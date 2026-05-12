@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { edgeRuntime } from '../../packages/runtime-edge/src/index.ts';
 import { type KvNamespace, createKvIsrCache } from '../../packages/runtime-edge/src/kv-isr.ts';
-import { createAssetsPlugin } from '../../packages/slingshot-assets/src/index.ts';
+import { createAssetsPackage } from '../../packages/slingshot-assets/src/index.ts';
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createCommunityPlugin } from '../../packages/slingshot-community/src/index.ts';
 import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
@@ -45,11 +45,6 @@ export default defineApp({
     }),
     createPermissionsPlugin(),
     createCommunityPlugin({ containerCreation: 'admin' }),
-    createAssetsPlugin({
-      storage: { adapter: 'memory' },
-      presignedUrls: true,
-      image: { allowedOrigins: ['assets.example.com'] },
-    }),
     createDeepLinksPlugin({
       fallbackBaseUrl: 'https://content.example.com',
       fallbackRedirects: {
@@ -66,6 +61,11 @@ export default defineApp({
     }),
   ],
   packages: [
+    createAssetsPackage({
+      storage: { adapter: 'memory' },
+      presignedUrls: true,
+      image: { allowedOrigins: ['assets.example.com'] },
+    }),
     createNotificationsPackage({
       dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
     }),

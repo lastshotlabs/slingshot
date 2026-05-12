@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
-import { createAssetsPlugin } from '../../src/plugin';
+import { createAssetsPackage } from '../../src/plugin';
 
 /**
  * Build a minimal `PluginSetupContext` shape good enough to call `setupPost`
@@ -16,14 +16,15 @@ function makeStubContext(): PluginSetupContext {
   };
 }
 
-describe('createAssetsPlugin startup orphan-delete guard', () => {
+describe('createAssetsPackage startup orphan-delete guard', () => {
   it('throws ASSETS_DELETE_MIDDLEWARE_MISSING when delete middleware was not wired', async () => {
-    const plugin = createAssetsPlugin({ storage: { adapter: 'memory' } });
-    // Skip setupMiddleware/setupRoutes so the manifest runtime never wires
-    // the storage-delete middleware. setupPost must refuse to start.
+    const pkg = createAssetsPackage({ storage: { adapter: 'memory' } });
+    // Skip setupMiddleware/setupRoutes so the entity buildAdapter never runs
+    // and the asset adapter ref is never captured. setupPost must refuse to
+    // start.
     let captured: unknown = null;
     try {
-      await plugin.setupPost?.(makeStubContext());
+      await pkg.setupPost?.(makeStubContext());
     } catch (err) {
       captured = err;
     }
@@ -46,29 +47,29 @@ describe('createAssetsPlugin startup orphan-delete guard', () => {
         return logger;
       },
     };
-    const plugin = createAssetsPlugin(
+    const pkg = createAssetsPackage(
       {
         storage: { adapter: 'memory' },
         allowOrphanedStorage: true,
       },
       { logger },
     );
-    await expect(plugin.setupPost?.(makeStubContext())).resolves.toBeUndefined();
+    await expect(pkg.setupPost?.(makeStubContext())).resolves.toBeUndefined();
     // Confirm the warning was logged.
     const warnedAboutOrphans = warnings.some(m => m.includes('allowOrphanedStorage'));
     expect(warnedAboutOrphans).toBe(true);
   });
 
-  it('plugin construction succeeds with allowOrphanedStorage: true', () => {
+  it('package construction succeeds with allowOrphanedStorage: true', () => {
     expect(() =>
-      createAssetsPlugin({
+      createAssetsPackage({
         storage: { adapter: 'memory' },
         allowOrphanedStorage: true,
       }),
     ).not.toThrow();
   });
 
-  it('plugin construction succeeds with allowOrphanedStorage omitted (default false)', () => {
-    expect(() => createAssetsPlugin({ storage: { adapter: 'memory' } })).not.toThrow();
+  it('package construction succeeds with allowOrphanedStorage omitted (default false)', () => {
+    expect(() => createAssetsPackage({ storage: { adapter: 'memory' } })).not.toThrow();
   });
 });

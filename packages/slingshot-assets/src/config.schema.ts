@@ -226,7 +226,7 @@ export const assetsPluginConfigSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      'Allow asset deletes to leave behind storage objects when the manifest runtime ' +
+      'Allow asset deletes to leave behind storage objects when the entity bootstrap ' +
         "doesn't wire a delete-storage middleware. Default false. Only set true as a " +
         'migration opt-out where cleanup runs elsewhere.',
     ),

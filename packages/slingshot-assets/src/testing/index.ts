@@ -24,7 +24,11 @@ import {
   publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type {
+  BareEntityAdapter,
+  EntityPluginEntry,
+} from '@lastshotlabs/slingshot-entity';
 import {
   createMemoryPermissionsAdapter,
   createPermissionRegistry,
@@ -32,7 +36,16 @@ import {
 import { resolveStorageAdapter } from '../adapters/index';
 import { memoryStorage } from '../adapters/memory';
 import { createAssetFactories } from '../entities/factories';
-import { createAssetsPlugin } from '../plugin';
+import {
+  createPresignDownloadHandler,
+  createPresignUploadHandler,
+  createServeImageHandler,
+} from '../entities/runtime';
+import { resolveImageConfig } from '../image/serve';
+import { createMemoryImageCache } from '../image/cache';
+import type { ImageCacheAdapter } from '../image/types';
+import { createAssetsPackage } from '../plugin';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import {
   type Asset,
   type AssetAdapter,
@@ -140,15 +153,22 @@ export function createMemoryAssetsState(
 }
 
 /**
- * Create a Hono test app with the assets plugin mounted through its real lifecycle.
+ * Create a Hono test app with the assets package mounted through its real lifecycle.
  *
- * @param configOverrides - Optional assets plugin config overrides.
- * @returns The configured app and the resolved plugin state.
+ * The package's `entities: [...]` declaration is processed by the framework's
+ * `compilePackages()` during `createApp(...)`. This test helper bypasses that
+ * path, so we mount the entity routes manually via `createEntityPlugin`,
+ * delegating per-entity `buildAdapter` to each entity module's own wiring so
+ * the package's adapter-ref closures fire as they would under the framework
+ * path. Mirrors the polls / push / organizations testing helpers.
+ *
+ * @param configOverrides - Optional assets package config overrides.
+ * @returns The configured app and the resolved package runtime state.
  */
 export async function createAssetsTestApp(
   configOverrides: Partial<AssetsPluginConfig> = {},
 ): Promise<{ app: Hono; state: AssetsPluginState }> {
-  const plugin = createAssetsPlugin({
+  const pkg = createAssetsPackage({
     mountPath: '/assets',
     storage: resolveStorageAdapter(configOverrides.storage ?? memoryStorage()),
     presignedUrls: true,
@@ -212,19 +232,123 @@ export async function createAssetsTestApp(
     events,
   } as unknown as import('@lastshotlabs/slingshot-core').PluginSetupContext;
 
-  await plugin.setupMiddleware?.(setupContext);
-  await plugin.setupRoutes?.(setupContext);
-  await plugin.setupPost?.(setupContext);
+  // Manually mount the package's entity module via `createEntityPlugin`.
+  // The `buildAdapter` here delegates to each entity module's
+  // `wiring.buildAdapter`, which TTL-wraps the resolved adapter AND populates
+  // the package's closure-owned adapter ref. Same dual-population pattern used
+  // by slingshot-polls / slingshot-push / slingshot-organizations.
+  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      config: ResolvedEntityConfig;
+      operations?: Record<string, unknown>;
+      extraRoutes?: unknown;
+      overrides?: unknown;
+      routePath?: string;
+      parentPath?: string;
+      wiring: { mode: string; buildAdapter?: unknown };
+    };
+    const buildAdapter = impl.wiring.buildAdapter as
+      | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
+      | undefined;
+    if (impl.wiring.mode !== 'manual' || !buildAdapter) {
+      throw new Error(
+        `[assets test harness] expected manual wiring on entity '${entityModule.entityName}', got '${impl.wiring.mode}'`,
+      );
+    }
+    return {
+      config: impl.config,
+      operations: impl.operations as never,
+      extraRoutes: impl.extraRoutes as never,
+      overrides: impl.overrides as never,
+      ...(impl.routePath ? { routePath: impl.routePath } : {}),
+      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+      buildAdapter,
+    };
+  });
 
-  const slot = pluginState.get('slingshot:package:capabilities:slingshot-assets') as
-    | { runtime?: import('../types').AssetsPluginState }
-    | undefined;
-  const state = slot?.runtime;
-  if (!state) {
-    throw new Error('Assets plugin did not register state');
+  const entityPlugin = createEntityPlugin({
+    name: 'slingshot-assets',
+    mountPath: pkg.mountPath ?? '/assets',
+    entities: entityEntries,
+    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+  });
+
+  // Lifecycle order matches the framework path:
+  //   1. package setupMiddleware     — registers events, captures publisher
+  //   2. entity setupMiddleware      — entity-plugin policy hooks
+  //   3. entity setupRoutes          — mounts CRUD + named-op routes (runs
+  //                                    buildAdapter, populates package refs)
+  //   4. package setupRoutes (none)  — assets has no extra setupRoutes
+  //   5. entity setupPost / package setupPost — final wiring
+  await pkg.setupMiddleware?.(setupContext);
+  await entityPlugin.setupMiddleware?.(setupContext);
+  await entityPlugin.setupRoutes?.(setupContext);
+  await pkg.setupRoutes?.(setupContext);
+  await entityPlugin.setupPost?.(setupContext);
+  await pkg.setupPost?.(setupContext);
+
+  // `createApp` would do this; the test harness bypasses that path so we
+  // manually publish the package's capabilities through plugin state.
+  const capabilitySlotKey = `slingshot:package:capabilities:${pkg.name}`;
+  const slot: Record<string, unknown> = {};
+  for (const provider of pkg.capabilities.provides) {
+    const value = await provider.resolve({ packageName: pkg.name });
+    slot[provider.capability.name] = value;
+  }
+  publishPluginState(pluginState, capabilitySlotKey, Object.freeze(slot));
+
+  const runtime = slot.runtime as AssetsPluginState | undefined;
+  if (!runtime) {
+    throw new Error('Assets package did not publish AssetsRuntimeCap');
   }
 
-  return { app, state };
+  // The package's custom-op handlers (presignUpload, presignDownload,
+  // serveImage) live behind entity-route executor overrides — they aren't
+  // methods on the adapter. Tests that invoke them directly via
+  // `getAssetsRuntimeAdapter(state).serveImage(...)` need synthetic methods
+  // on the adapter; we build them here using the same handler factories the
+  // package uses internally, sharing the resolved asset adapter and storage.
+  const resolvedConfig: Readonly<AssetsPluginConfig> = runtime.config;
+  const imageConfig = resolveImageConfig(resolvedConfig.image);
+  let testImageCache: ImageCacheAdapter | null = null;
+  if (imageConfig != null) {
+    const candidate = resolvedConfig.image?.cache;
+    const isImageCacheAdapter =
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      typeof Reflect.get(candidate, 'get') === 'function' &&
+      typeof Reflect.get(candidate, 'set') === 'function';
+    if (isImageCacheAdapter) {
+      testImageCache = candidate as ImageCacheAdapter;
+    } else {
+      const cacheOpts: { maxEntries?: number; ttlMs?: number } = {};
+      if (resolvedConfig.image?.cacheMaxEntries !== undefined) {
+        cacheOpts.maxEntries = resolvedConfig.image.cacheMaxEntries;
+      }
+      if (resolvedConfig.image?.cacheTtlMs !== undefined) {
+        cacheOpts.ttlMs = resolvedConfig.image.cacheTtlMs;
+      }
+      testImageCache = createMemoryImageCache(cacheOpts);
+    }
+  }
+  const handlerDeps = {
+    config: resolvedConfig,
+    storage: runtime.storage,
+    imageCache: testImageCache,
+    imageConfig,
+    logger: noopLogger,
+    getAssetAdapter: () => runtime.assets,
+  };
+  const adapterWithHandlers = runtime.assets as AssetAdapter & {
+    presignUpload?: (input: unknown) => Promise<unknown>;
+    presignDownload?: (input: unknown) => Promise<unknown>;
+    serveImage?: (input: unknown) => Promise<Response>;
+  };
+  adapterWithHandlers.presignUpload = createPresignUploadHandler(handlerDeps);
+  adapterWithHandlers.presignDownload = createPresignDownloadHandler(handlerDeps);
+  adapterWithHandlers.serveImage = createServeImageHandler(handlerDeps);
+
+  return { app, state: runtime };
 }
 
 /**

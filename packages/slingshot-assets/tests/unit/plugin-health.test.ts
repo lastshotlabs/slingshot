@@ -24,12 +24,33 @@ mock.module('@aws-sdk/client-s3', () => {
   return { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand };
 });
 
-const { createAssetsPlugin } = await import('../../src/plugin');
+const { createAssetsPackage } = await import('../../src/plugin');
+const { AssetsHealthCap } = await import('../../src/public');
 const { s3Storage } = await import('../../src/adapters/s3');
 const { createMemoryImageCache } = await import('../../src/image/cache');
+import type { AssetsHealth } from '../../src/types';
+import type {
+  PackageCapabilityHandle,
+  PublishedPackageCapability,
+} from '@lastshotlabs/slingshot-core';
 
 const fakeData = Buffer.from([1, 2, 3]);
 const fakeMeta = { mimeType: 'application/octet-stream', size: 3 };
+
+/**
+ * Resolve the package's published `AssetsHealthCap` value directly off the
+ * `SlingshotPackageDefinition` — bypasses createApp / capabilities registry.
+ */
+async function resolveHealthCap(pkg: ReturnType<typeof createAssetsPackage>): Promise<() => AssetsHealth> {
+  const provider = pkg.capabilities.provides.find(
+    (p: PublishedPackageCapability<unknown>) =>
+      (p.capability as PackageCapabilityHandle<unknown>).name ===
+      (AssetsHealthCap as PackageCapabilityHandle<unknown>).name,
+  );
+  if (!provider) throw new Error('AssetsHealthCap not published by package');
+  const value = await provider.resolve({ packageName: pkg.name });
+  return value as () => AssetsHealth;
+}
 
 beforeEach(() => {
   sendShouldFail = false;
@@ -40,10 +61,11 @@ afterEach(() => {
   mock.restore();
 });
 
-describe('createAssetsPlugin getHealth()', () => {
-  it('reports healthy with a memory adapter and no image cache', () => {
-    const plugin = createAssetsPlugin({ storage: { adapter: 'memory' } });
-    const health = plugin.getHealth();
+describe('createAssetsPackage AssetsHealthCap', () => {
+  it('reports healthy with a memory adapter and no image cache', async () => {
+    const pkg = createAssetsPackage({ storage: { adapter: 'memory' } });
+    const getHealth = await resolveHealthCap(pkg);
+    const health = getHealth();
     expect(health.status).toBe('healthy');
     expect(health.details.storageAdapter).toBe('memory');
     expect(health.details.storageConfigured).toBe(true);
@@ -55,13 +77,14 @@ describe('createAssetsPlugin getHealth()', () => {
 
   it('includes image cache size and eviction count when image transforms are enabled', async () => {
     const cache = createMemoryImageCache({ maxEntries: 1 });
-    const plugin = createAssetsPlugin({
+    const pkg = createAssetsPackage({
       storage: { adapter: 'memory' },
       image: { maxWidth: 1024, maxHeight: 1024, cache },
     });
+    const getHealth = await resolveHealthCap(pkg);
 
     // Initial state: empty cache, no evictions
-    let health = plugin.getHealth();
+    let health = getHealth();
     expect(health.details.imageCache?.size).toBe(0);
     expect(health.details.imageCache?.evictionCount).toBe(0);
     expect(health.details.imageCache?.ttlEvictionCount).toBe(0);
@@ -75,12 +98,12 @@ describe('createAssetsPlugin getHealth()', () => {
     await cache.set('a', entry);
     await cache.set('b', entry);
 
-    health = plugin.getHealth();
+    health = getHealth();
     expect(health.details.imageCache?.size).toBe(1);
     expect(health.details.imageCache?.evictionCount).toBe(1);
   });
 
-  test('bubbles S3 circuit breaker state through getHealth()', async () => {
+  test('bubbles S3 circuit breaker state through AssetsHealthCap', async () => {
     sendShouldFail = true;
     let nowMs = 1_000_000;
     const adapter = s3Storage({
@@ -91,10 +114,11 @@ describe('createAssetsPlugin getHealth()', () => {
       now: () => nowMs,
     });
 
-    const plugin = createAssetsPlugin({ storage: adapter });
+    const pkg = createAssetsPackage({ storage: adapter });
+    const getHealth = await resolveHealthCap(pkg);
 
     // Closed initially
-    let health = plugin.getHealth();
+    let health = getHealth();
     expect(health.status).toBe('healthy');
     expect(health.details.storageAdapter).toBe('custom');
     expect(health.details.storageCircuitBreaker?.state).toBe('closed');
@@ -106,7 +130,7 @@ describe('createAssetsPlugin getHealth()', () => {
       nowMs += 10;
     }
 
-    health = plugin.getHealth();
+    health = getHealth();
     expect(health.status).toBe('unhealthy');
     expect(health.details.storageCircuitBreaker?.state).toBe('open');
     expect(health.details.storageCircuitBreaker?.consecutiveFailures).toBe(3);

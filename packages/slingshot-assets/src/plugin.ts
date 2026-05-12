@@ -1,34 +1,47 @@
+/**
+ * Assets package factory.
+ *
+ * Creates a `SlingshotPackageDefinition` that mounts the `Asset` entity through
+ * the `definePackage` authoring path, wires storage / image cache / S3 circuit
+ * breaker, registers the storage-delete middleware that cascades to the object
+ * store on entity delete, and publishes capabilities for the runtime, health
+ * snapshot, and orphaned-key recovery API.
+ *
+ * Every adapter ref, middleware closure, and registry instance is owned by the
+ * factory's closure (Rule 3) — multiple package instances in the same process
+ * do not share state.
+ */
+import type { MiddlewareHandler } from 'hono';
 import type {
   Logger,
-  PermissionsState,
   PluginSetupContext,
   SlingshotEvents,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
   StorageAdapter,
 } from '@lastshotlabs/slingshot-core';
 import {
   defineEvent,
-  getContext,
-  getPermissionsStateOrNull,
-  getPluginState,
+  definePackage,
   noopLogger,
   provideCapability,
-  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { AssetsRuntimeCap } from './public';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
+import {
+  AssetsHealthCap,
+  AssetsOrphanedKeysCap,
+  AssetsRuntimeCap,
+} from './public';
 import { resolveStorageAdapter } from './adapters/index';
 import type { S3CircuitBreakerHealth, S3StorageAdapter } from './adapters/s3';
 import { assetsPluginConfigSchema } from './config.schema';
+import { buildAssetsEntityModules } from './entities/modules';
+import type { AssetsHandlerDeps } from './entities/runtime';
 import { createMemoryImageCache } from './image/cache';
 import { resolveImageConfig } from './image/serve';
 import type { ImageCacheAdapter } from './image/types';
-import { assetManifest } from './manifest/assetManifest';
-import { createAssetsManifestRuntime } from './manifest/runtime';
 import {
   type OrphanedKeyRegistry,
+  createDeleteStorageFileMiddleware,
   createOrphanedKeyRegistry,
 } from './middleware/deleteStorageFile';
 import {
@@ -38,7 +51,6 @@ import {
   type AssetsHealthDetails,
   type AssetsPluginConfig,
   type AssetsPluginState,
-  type OrphanedKeyRecord,
   type StorageAdapterRef,
 } from './types';
 
@@ -68,36 +80,34 @@ function describeStorageKind(
 }
 
 /**
- * Create the manifest-driven assets plugin.
- *
- * Asset persistence is owned by `assetManifest`. Package-specific runtime
- * behavior such as presign operations, image serving, TTL decoration, and
- * delete-to-storage cleanup is resolved through the manifest runtime.
- *
- * @param rawConfig - Assets plugin configuration.
- * @returns A Slingshot plugin instance for app registration.
+ * Optional non-JSON dependencies the assets package accepts at construction time.
  */
-export function createAssetsPlugin(
+export interface AssetsPackageDeps {
+  /** Structured logger handle. Defaults to {@link noopLogger}. */
+  logger?: Logger;
+}
+
+/**
+ * Create the assets package using the `definePackage` authoring path.
+ *
+ * The `Asset` entity is mounted through the package's `entities: [...]`
+ * declaration; its adapter is TTL-wrapped inside the entity module's
+ * `wiring.buildAdapter` callback and captured into the package's closure-owned
+ * ref so the storage-delete middleware and the published capabilities all use
+ * the same adapter instance per package.
+ *
+ * @param rawConfig - Assets package configuration.
+ * @param deps - Optional non-JSON dependencies.
+ * @returns A `SlingshotPackageDefinition` ready to pass to `createApp({ packages: [...] })`.
+ */
+export function createAssetsPackage(
   rawConfig: AssetsPluginConfig,
-  options?: {
-    /** Structured logger handle. Defaults to noopLogger. */
-    logger?: Logger;
-  },
-): SlingshotPlugin & {
-  getHealth(): AssetsHealth;
-  /**
-   * Snapshot of orphaned-storage records the delete-cascade middleware has
-   * recorded since startup (or `since`, when provided). The list is bounded
-   * in memory; durable retention is the operator's responsibility via
-   * `onOrphanedKey`.
-   */
-  listOrphanedKeys(since?: Date): ReadonlyArray<OrphanedKeyRecord>;
-} {
+  deps: AssetsPackageDeps = {},
+): SlingshotPackageDefinition {
   const config = Object.freeze(
     validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
-  const mountPath = config.mountPath ?? '/assets';
-  const logger: Logger = options?.logger ?? noopLogger;
+  const logger: Logger = deps.logger ?? noopLogger;
 
   const storage = resolveStorageAdapter(config.storage, {
     storageRetryAttempts: config.storageRetryAttempts,
@@ -131,48 +141,37 @@ export function createAssetsPlugin(
           })()
       : null;
 
-  type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
-  // The manifest runtime is responsible for wiring the real handler before
-  // routes mount. If it never does, we throw at setupPost rather than letting
-  // entity deletes silently orphan storage objects (unless the operator has
-  // explicitly opted in to orphans via `allowOrphanedStorage`).
-  let deleteMiddlewareWired = false;
-  const allowOrphanedStorage = config.allowOrphanedStorage === true;
-  const unwiredHandler: import('hono').MiddlewareHandler = allowOrphanedStorage
-    ? async (_c, next) => next()
-    : async () => {
-        throw new Error(
-          '[slingshot-assets] delete cascade fired but storage-delete middleware was never wired. ' +
-            'This indicates a manifest runtime bug — refusing to silently orphan storage objects.',
-        );
-      };
-  const deleteStorageFileRef: LazyMiddleware = { handler: unwiredHandler };
-
+  // Closure-owned adapter ref populated by the entity module's `wiring.buildAdapter`
+  // callback during bootstrap. The storage-delete middleware, the custom-op
+  // handlers (via `handlerDeps.getAssetAdapter`), and the published capabilities
+  // all read through this ref.
   let assetAdapterRef: AssetAdapter | undefined;
-  let innerPlugin: EntityPlugin | undefined;
 
   const orphanRegistry: OrphanedKeyRegistry = createOrphanedKeyRegistry();
-  // `events` is populated lazily during setupMiddleware once the host has
-  // initialised the registry-backed publisher. The manifest runtime captures
-  // a getter so the delete-cascade middleware can be wired before the
-  // publisher exists.
+
+  // `events` is populated lazily during `setupMiddleware` once the host has
+  // initialised the registry-backed publisher. The delete-cascade middleware
+  // captures the getter so it can emit `asset:storageDeleteFailed` once routes
+  // start running.
   let publisher: SlingshotEvents | undefined;
 
-  const manifestRuntime = createAssetsManifestRuntime({
+  // Shared handler deps for the custom-op handlers (presignUpload, etc.).
+  const handlerDeps: AssetsHandlerDeps = {
     config,
     storage,
     imageCache,
     imageConfig,
     logger,
-    orphanRegistry,
+    getAssetAdapter: () => assetAdapterRef,
     getEvents: () => publisher,
-    setDeleteStorageMiddleware(handler) {
-      deleteStorageFileRef.handler = handler;
-      deleteMiddlewareWired = true;
-    },
-    setAssetAdapter(adapter) {
+  };
+
+  const { assetModule } = buildAssetsEntityModules({
+    registryTtlSeconds: config.registryTtlSeconds,
+    onAdapter: adapter => {
       assetAdapterRef = adapter;
     },
+    handlerDeps,
   });
 
   const storageKind = describeStorageKind(config.storage);
@@ -221,16 +220,47 @@ export function createAssetsPlugin(
     return { status, details };
   }
 
-  return {
+  // The storage-delete middleware needs the asset adapter to look up the
+  // storage key before the entity delete runs. Captured via `assetAdapterRef`
+  // and dispatched lazily so it survives boot-order shifts. If the entity
+  // module's `buildAdapter` hasn't run by the time a delete fires, the
+  // middleware fails with a structured error rather than silently orphaning
+  // storage objects.
+  const allowOrphanedStorage = config.allowOrphanedStorage === true;
+  const deleteStorageFile: MiddlewareHandler = async (c, next) => {
+    const adapter = assetAdapterRef;
+    if (!adapter) {
+      if (allowOrphanedStorage) {
+        return next();
+      }
+      throw new Error(
+        '[slingshot-assets] delete cascade fired but storage-delete middleware adapter was not resolved. ' +
+          'This indicates a package bootstrap bug — refusing to silently orphan storage objects.',
+      );
+    }
+    const inner = createDeleteStorageFileMiddleware({
+      storage,
+      assetAdapter: adapter,
+      logger,
+      events: publisher,
+      orphanRegistry,
+      ...(config.onOrphanedKey ? { onOrphanedKey: config.onOrphanedKey } : {}),
+    });
+    return inner(c, next);
+  };
+
+  return definePackage({
     name: ASSETS_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath ?? '/assets',
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
-    getHealth,
-    listOrphanedKeys(since?: Date) {
-      return orphanRegistry.listOrphanedKeys(since);
+    entities: [assetModule],
+    middleware: {
+      deleteStorageFile,
     },
 
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      // Register the operational events the assets plugin emits before any
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupMiddleware({ events }: PluginSetupContext) {
+      // Register the operational events the assets package emits before any
       // route can fire them (delete-cascade-cleanup, presign retry exhaustion).
       if (!events.get('asset:storageDeleteFailed')) {
         events.register(
@@ -243,52 +273,18 @@ export function createAssetsPlugin(
           }),
         );
       }
-      // Hand the publisher to the manifest runtime via the captured getter.
+      // Hand the publisher to the runtime so the delete-cascade middleware can
+      // emit through it on retry exhaustion.
       publisher = events;
-
-      const permissions: PermissionsState =
-        getPermissionsStateOrNull(getPluginState(app)) ??
-        (() => {
-          throw new Error(
-            '[slingshot-assets] No permissions available. Register createPermissionsPlugin() ' +
-              'before this plugin.',
-          );
-        })();
-
-      innerPlugin = createEntityPlugin({
-        name: ASSETS_PLUGIN_STATE_KEY,
-        mountPath,
-        manifest: assetManifest,
-        manifestRuntime,
-        middleware: {
-          deleteStorageFile: async (c, next) => deleteStorageFileRef.handler(c, next),
-        },
-        permissions,
-      });
-
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
-      if (assetAdapterRef) {
-        const state: AssetsPluginState = Object.freeze({
-          assets: assetAdapterRef,
-          storage,
-          config,
-        });
-        await registerPluginCapabilities(getContext(app), 'slingshot-assets', [
-          provideCapability(AssetsRuntimeCap, () => state),
-        ]);
-      }
-    },
-
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
-
-      const hasAssetEntities = Object.keys(assetManifest.entities ?? {}).length > 0;
-      if (!deleteMiddlewareWired && hasAssetEntities) {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupPost(_ctx: PluginSetupContext) {
+      if (!assetAdapterRef) {
+        // The entity module uses manual wiring and populates `assetAdapterRef`
+        // inside `buildAdapter`. If we reach `setupPost` without it being
+        // populated, the entity routes never mounted — surface that as an
+        // error rather than silently no-op.
         if (allowOrphanedStorage) {
           logger.warn(
             '[slingshot-assets] storage-delete middleware was not wired and ' +
@@ -297,7 +293,7 @@ export function createAssetsPlugin(
           );
         } else {
           const error = new Error(
-            '[slingshot-assets] storage-delete middleware was not wired by the manifest runtime. ' +
+            '[slingshot-assets] storage-delete middleware was not wired by the entity bootstrap. ' +
               'Asset deletes would orphan storage objects. Refusing to start. ' +
               'Set `allowOrphanedStorage: true` to opt out (e.g. during a migration).',
           );
@@ -306,5 +302,27 @@ export function createAssetsPlugin(
         }
       }
     },
-  };
+
+    capabilities: {
+      provides: [
+        provideCapability(AssetsRuntimeCap, () => {
+          if (!assetAdapterRef) {
+            throw new Error(
+              '[slingshot-assets] AssetsRuntimeCap resolved before the asset adapter was captured',
+            );
+          }
+          const state: AssetsPluginState = Object.freeze({
+            assets: assetAdapterRef,
+            storage,
+            config,
+          });
+          return state;
+        }),
+        provideCapability(AssetsHealthCap, () => getHealth),
+        provideCapability(AssetsOrphanedKeysCap, () => (since?: Date) =>
+          orphanRegistry.listOrphanedKeys(since),
+        ),
+      ],
+    },
+  });
 }

@@ -61,7 +61,7 @@ export interface ImageConfig {
 }
 
 /**
- * Configuration for `createAssetsPlugin()`.
+ * Configuration for `createAssetsPackage()`.
  */
 export interface AssetsPluginConfig {
   /** URL prefix for all asset routes. Defaults to `'/assets'`. */
@@ -107,8 +107,8 @@ export interface AssetsPluginConfig {
    */
   readonly storageCircuitBreakerCooldownMs?: number;
   /**
-   * Permit asset deletes to leave behind storage objects when the manifest
-   * runtime did not wire a delete-storage middleware. Defaults to `false`.
+   * Permit asset deletes to leave behind storage objects when the entity
+   * bootstrap did not wire a delete-storage middleware. Defaults to `false`.
    *
    * When `false` (default), the plugin refuses to start if any asset entity
    * is declared without a wired delete-cascade — failing fast with the error

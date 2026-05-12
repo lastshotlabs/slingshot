@@ -5,9 +5,14 @@ export { createPushPackage } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
-export { Push, PushRuntimeCap, PushHealthCap } from './public';
+export {
+  Push,
+  PushRuntimeCap,
+  PushHealthCap,
+  PushFormatterRegistryCap,
+} from './public';
 /** Aggregated health snapshot type for the push package. */
-export type { PushPluginHealth } from './public';
+export type { PushPluginHealth, PushFormatterRegistry } from './public';
 /**
  * Runtime state and compiled formatter table exposed by the push plugin.
  */

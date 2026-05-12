@@ -7,7 +7,7 @@
  *
  * @module
  */
-import type { PushFormatterRegistry } from '../peers/push';
+import type { PushFormatterRegistry } from '@lastshotlabs/slingshot-push';
 import { CHAT_NOTIFICATION_TYPES } from './notifications';
 
 /**

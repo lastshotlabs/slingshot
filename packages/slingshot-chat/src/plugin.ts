@@ -59,7 +59,7 @@ import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecr
 import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
 import { createRoomCreatorGrantMiddleware } from './middleware/roomCreatorGrant';
 import { probeEmbedsPeer } from './peers/embeds';
-import { probePushFormatterRegistry } from './peers/push';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { ChatInteractionsPeerCap } from './public';
 import type { ChatInteractionsPeer } from './public';
 import { CHAT_PLUGIN_STATE_KEY, CHAT_RUNTIME_KEY } from './state';
@@ -424,7 +424,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       });
 
       // ─── Push formatter registration (optional peer integration) ────────
-      const pushState = probePushFormatterRegistry(app);
+      const pushState = resolveCapabilityValue(getContext(app), PushFormatterRegistryCap);
       if (pushState) {
         registerChatPushFormatters(pushState);
       }

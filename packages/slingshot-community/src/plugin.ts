@@ -67,7 +67,7 @@ import { createSolutionReplyGuardMiddleware } from './middleware/solutionReplyGu
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
 import { createThreadStateGuardMiddleware } from './middleware/threadStateGuard';
 import { probeEmbedsPeer } from './peers/embeds';
-import { probePushFormatterRegistrar } from './peers/push';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { CommunityInteractionsPeerCap } from './public';
 import type { CommunityInteractionsPeer } from './public';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
@@ -615,7 +615,7 @@ export function createCommunityPackage(
       });
 
       // ─── Push formatter registration (optional integration) ─────────────────
-      const maybePushState = probePushFormatterRegistrar(pluginState);
+      const maybePushState = resolveCapabilityValue(getContext(app), PushFormatterRegistryCap);
       if (maybePushState) {
         const truncate = (text: unknown, max = 100): string => {
           const str = typeof text === 'string' ? text : '';

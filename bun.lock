@@ -267,6 +267,7 @@
         "@lastshotlabs/slingshot-entity": "workspace:*",
         "@lastshotlabs/slingshot-notifications": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",
+        "@lastshotlabs/slingshot-push": "workspace:*",
       },
       "peerDependencies": {
         "@lastshotlabs/slingshot-permissions": "workspace:*",
@@ -281,6 +282,7 @@
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
         "@lastshotlabs/slingshot-notifications": "workspace:*",
+        "@lastshotlabs/slingshot-push": "workspace:*",
       },
       "peerDependencies": {
         "@hono/zod-openapi": ">=0.18",
@@ -705,6 +707,8 @@
       "name": "@lastshotlabs/slingshot-ssr-tanstack",
       "version": "0.0.1",
       "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-permissions": "workspace:*",
         "@lastshotlabs/slingshot-ssr": "workspace:*",
       },
       "peerDependencies": {

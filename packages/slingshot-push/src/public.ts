@@ -6,8 +6,26 @@
  */
 
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
+import type { NotificationRecord } from '@lastshotlabs/slingshot-core';
 import type { PushPluginState } from './state';
 import type { PushProviderHealth } from './providers/provider';
+import type { PushMessage } from './types/models';
+
+/**
+ * Minimum surface peer plugins (community, chat) need from the push runtime
+ * to install per-source formatters. Intentionally narrower than the full
+ * `PushPluginState` so consumers don't pull in router / providers.
+ */
+export interface PushFormatterRegistry {
+  /** Register or replace a runtime formatter for one notification type. */
+  registerFormatter(
+    type: string,
+    formatter: (
+      notification: NotificationRecord,
+      defaults?: Partial<PushMessage>,
+    ) => PushMessage,
+  ): void;
+}
 
 /** Provider-owned package contract for `slingshot-push`. */
 export const Push = definePackageContract('slingshot-push');
@@ -52,3 +70,14 @@ export interface PushPluginHealth {
  * time.
  */
 export const PushHealthCap = Push.capability<() => PushPluginHealth>('health');
+
+/**
+ * Capability handle for the push formatter registry.
+ *
+ * Cross-package consumers (notably `slingshot-chat` and `slingshot-community`
+ * during their setupPost hooks) resolve it via
+ * `ctx.capabilities.require(PushFormatterRegistryCap)` to install per-source
+ * formatters without reaching into push's full runtime state.
+ */
+export const PushFormatterRegistryCap =
+  Push.capability<PushFormatterRegistry>('formatterRegistry');

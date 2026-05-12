@@ -90,18 +90,30 @@ describe('createChatPackage', () => {
 
   it('registers chat push formatters through the optional peer boundary', async () => {
     const registered = new Map<string, unknown>();
+    // Mock the typed `PushFormatterRegistryCap` slot directly so chat's
+    // `resolveCapabilityValue(ctx, PushFormatterRegistryCap)` returns the stub.
     const peersPluginState = new Map<string, unknown>([
       [
-        'slingshot-push',
+        'slingshot:package:capabilities:slingshot-push',
         {
-          registerFormatter(type: string, formatter: unknown) {
-            registered.set(type, formatter);
+          formatterRegistry: {
+            registerFormatter(type: string, formatter: unknown) {
+              registered.set(type, formatter);
+            },
           },
         },
       ],
     ]);
 
-    await createChatTestApp({}, { peersPluginState });
+    await createChatTestApp(
+      {},
+      {
+        peersPluginState,
+        peersCapabilityProviders: [
+          ['slingshot-push:formatterRegistry', 'slingshot-push'],
+        ],
+      },
+    );
 
     expect(registered.has('chat:mention')).toBe(true);
     expect(registered.has('chat:reply')).toBe(true);

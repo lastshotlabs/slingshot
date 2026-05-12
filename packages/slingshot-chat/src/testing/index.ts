@@ -461,6 +461,12 @@ export async function createChatTestApp(
      * Use this to mock optional peer plugins (e.g. `slingshot-embeds`, `slingshot-push`).
      */
     peersPluginState?: Map<string, unknown>;
+    /**
+     * Additional `[capabilityKey, providerPackageName]` pairs registered on the
+     * shared capabilities providers map. Use this when a mocked peer publishes
+     * its runtime through a typed `definePackageContract` capability slot.
+     */
+    peersCapabilityProviders?: ReadonlyArray<readonly [string, string]>;
   },
 ): Promise<{
   app: Hono<AppEnv>;
@@ -522,6 +528,7 @@ export async function createChatTestApp(
       ['slingshot-permissions:evaluator', 'slingshot-permissions'],
       ['slingshot-permissions:registry', 'slingshot-permissions'],
       ['slingshot-permissions:adapter', 'slingshot-permissions'],
+      ...(options?.peersCapabilityProviders ?? []),
     ]),
   } as unknown as Parameters<typeof attachContext>[1]);
 

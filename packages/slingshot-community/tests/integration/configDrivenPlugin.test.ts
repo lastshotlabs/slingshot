@@ -358,8 +358,21 @@ async function createCommunityHarness(opts?: {
       },
     ],
   ];
+  const capabilityProviderEntries: Array<readonly [string, string]> = [
+    ['slingshot-permissions:evaluator', 'slingshot-permissions'],
+    ['slingshot-permissions:registry', 'slingshot-permissions'],
+    ['slingshot-permissions:adapter', 'slingshot-permissions'],
+    ['slingshot-notifications:builderFactory', 'slingshot-notifications'],
+    ['slingshot-notifications:deliveryRegistry', 'slingshot-notifications'],
+  ];
   if (opts?.pushRegistry) {
-    pluginStateEntries.push(['slingshot-push', opts.pushRegistry]);
+    // Mock the typed `PushFormatterRegistryCap` slot so community's
+    // `resolveCapabilityValue(ctx, PushFormatterRegistryCap)` returns the stub.
+    pluginStateEntries.push([
+      'slingshot:package:capabilities:slingshot-push',
+      { formatterRegistry: opts.pushRegistry },
+    ]);
+    capabilityProviderEntries.push(['slingshot-push:formatterRegistry', 'slingshot-push']);
   }
   attachContext(app, {
     app,
@@ -368,13 +381,7 @@ async function createCommunityHarness(opts?: {
     wsEndpoints: {},
     wsPublish: null,
     bus,
-    capabilityProviders: new Map<string, string>([
-      ['slingshot-permissions:evaluator', 'slingshot-permissions'],
-      ['slingshot-permissions:registry', 'slingshot-permissions'],
-      ['slingshot-permissions:adapter', 'slingshot-permissions'],
-      ['slingshot-notifications:builderFactory', 'slingshot-notifications'],
-      ['slingshot-notifications:deliveryRegistry', 'slingshot-notifications'],
-    ]),
+    capabilityProviders: new Map<string, string>(capabilityProviderEntries),
   } as unknown as Parameters<typeof attachContext>[1]);
 
   // Install a tiny slingshotCtx middleware so applyRouteConfig's userAuth

@@ -18,7 +18,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
-import { PushHealthCap, PushRuntimeCap } from './public';
+import { PushFormatterRegistryCap, PushHealthCap, PushRuntimeCap } from './public';
 import type { PushPluginHealth } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
@@ -193,6 +193,14 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
           return runtimeStateRef;
         }),
         provideCapability(PushHealthCap, () => getHealth),
+        provideCapability(PushFormatterRegistryCap, () => {
+          if (!runtimeStateRef) {
+            throw new Error(
+              '[slingshot-push] formatter registry requested before setupPost completed; consumers must read PushFormatterRegistryCap from setupPost or later.',
+            );
+          }
+          return runtimeStateRef;
+        }),
       ],
     },
 

@@ -37,7 +37,8 @@
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-entity": "workspace:*",
     "@lastshotlabs/slingshot-notifications": "workspace:*",
-    "@lastshotlabs/slingshot-permissions": "workspace:*"
+    "@lastshotlabs/slingshot-permissions": "workspace:*",
+    "@lastshotlabs/slingshot-push": "workspace:*"
   },
   "peerDependencies": {
     "@lastshotlabs/slingshot-permissions": "workspace:*",

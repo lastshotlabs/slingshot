@@ -21,25 +21,36 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  resolveRepo as resolveStandardRepo,
 } from '@lastshotlabs/slingshot-core';
 import type {
+  AppEnv,
   CoreRegistrar,
   EntityRegistry,
   PermissionEvaluator,
   PermissionGrant,
   PermissionRegistry,
   PermissionsAdapter,
+  PluginSetupContext,
   ResolvedEntityConfig,
   ResourceTypeDefinition,
   RouteAuthRegistry,
   SlingshotFrameworkConfig,
+  SlingshotPackageDefinition,
   StoreType,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import {
+  createEntityFactories,
+  createEntityPlugin,
+} from '@lastshotlabs/slingshot-entity';
+import type {
+  BareEntityAdapter,
+  EntityPluginEntry,
+} from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
-import { createCommunityPlugin } from '../../src/plugin';
+import { createCommunityPackage } from '../../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Permission stubs with configurable behavior
@@ -244,9 +255,76 @@ interface Harness {
   teardown: () => Promise<void>;
 }
 
-type PluginApp = Parameters<
-  NonNullable<ReturnType<typeof createCommunityPlugin>['setupMiddleware']>
->[0]['app'];
+type PluginApp = Hono<AppEnv>;
+
+async function mountCommunityPackage(
+  pkg: SlingshotPackageDefinition,
+  ctx: PluginSetupContext,
+): Promise<{ teardown(): Promise<void> }> {
+  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      config: ResolvedEntityConfig;
+      operations?: Record<string, unknown>;
+      extraRoutes?: unknown;
+      overrides?: unknown;
+      channels?: unknown;
+      routePath?: string;
+      parentPath?: string;
+      wiring: { mode: string; buildAdapter?: unknown };
+    };
+    let buildAdapter: ((storeType: StoreType, infra: unknown) => BareEntityAdapter) | undefined;
+    if (impl.wiring.mode === 'manual') {
+      buildAdapter = impl.wiring.buildAdapter as
+        | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
+        | undefined;
+    } else if (impl.wiring.mode === 'standard') {
+      buildAdapter = (storeType, infra) => {
+        const factories = createEntityFactories(
+          impl.config,
+          impl.operations as Parameters<typeof createEntityFactories>[1],
+        );
+        return resolveStandardRepo(
+          factories,
+          storeType,
+          infra,
+        ) as unknown as BareEntityAdapter;
+      };
+    }
+    if (!buildAdapter) {
+      throw new Error(
+        `[community test harness] cannot resolve buildAdapter for entity '${entityModule.entityName}' (wiring mode '${impl.wiring.mode}')`,
+      );
+    }
+    return {
+      config: impl.config,
+      operations: impl.operations as never,
+      extraRoutes: impl.extraRoutes as never,
+      overrides: impl.overrides as never,
+      channels: impl.channels as never,
+      ...(impl.routePath ? { routePath: impl.routePath } : {}),
+      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+      buildAdapter,
+    };
+  });
+  const entityPlugin = createEntityPlugin({
+    name: pkg.name,
+    mountPath: pkg.mountPath ?? '/community',
+    entities: entityEntries,
+    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+  });
+  await pkg.setupMiddleware?.(ctx);
+  await entityPlugin.setupMiddleware?.(ctx);
+  await entityPlugin.setupRoutes?.(ctx);
+  await pkg.setupRoutes?.(ctx);
+  await entityPlugin.setupPost?.(ctx);
+  await pkg.setupPost?.(ctx);
+  return {
+    async teardown() {
+      await pkg.teardown?.();
+      await entityPlugin.teardown?.();
+    },
+  };
+}
 
 async function createCommunityHarness(opts?: {
   userId?: string;
@@ -265,11 +343,11 @@ async function createCommunityHarness(opts?: {
   });
   const frameworkConfig = createFrameworkConfig();
 
-  const plugin = createCommunityPlugin({
+  const pkg = createCommunityPackage({
     containerCreation: opts?.containerCreation ?? 'user',
   });
 
-  const app = new Hono() as unknown as PluginApp;
+  const app = new Hono<AppEnv>();
   const pluginStateEntries: Array<readonly [string, unknown]> = [
     ['slingshot:package:capabilities:slingshot-permissions', { evaluator, registry, adapter: permAdapter }] as const,
     [
@@ -328,13 +406,12 @@ async function createCommunityHarness(opts?: {
     await next();
   });
 
-  // Trace middleware execution order so tests can assert invariants like
-  // banCheck runs before autoMod. We intercept `app.route` at the community
-  // mount path: since plugin middleware runs before route handlers, we
-  // observe order through the underlying wrappers below.
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-  await plugin.setupPost?.({ app, config: frameworkConfig, bus, events });
+  const mounted = await mountCommunityPackage(pkg, {
+    app,
+    config: frameworkConfig,
+    bus,
+    events,
+  });
 
   return {
     app,
@@ -345,7 +422,7 @@ async function createCommunityHarness(opts?: {
     notifications: notifications.notifications,
     async teardown() {
       await notifications.clear();
-      await plugin.teardown?.();
+      await mounted.teardown();
     },
   };
 }
@@ -354,29 +431,31 @@ async function createCommunityHarness(opts?: {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('createCommunityPlugin — smoke', () => {
-  test('returns a valid SlingshotPlugin structure', () => {
-    const plugin = createCommunityPlugin({
+describe('createCommunityPackage — smoke', () => {
+  test('returns a valid SlingshotPackageDefinition structure', () => {
+    const pkg = createCommunityPackage({
       containerCreation: 'user',
     });
 
-    expect(plugin.name).toBe('slingshot-community');
-    expect(plugin.dependencies).toContain('slingshot-auth');
-    expect(typeof plugin.setupRoutes).toBe('function');
-    expect(typeof plugin.setupPost).toBe('function');
+    expect(pkg.name).toBe('slingshot-community');
+    expect(pkg.dependencies).toContain('slingshot-auth');
+    expect(typeof pkg.setupMiddleware).toBe('function');
+    expect(typeof pkg.setupPost).toBe('function');
+    expect(Array.isArray(pkg.entities)).toBe(true);
+    expect(pkg.entities.length).toBe(19);
   });
 
   test('rejects invalid config at validation boundary', () => {
     expect(() =>
-      createCommunityPlugin({
+      createCommunityPackage({
         // missing required containerCreation + permissions
         // missing required containerCreation
-      } as unknown as Parameters<typeof createCommunityPlugin>[0]),
+      } as unknown as Parameters<typeof createCommunityPackage>[0]),
     ).toThrow();
   });
 
   test('accepts disableRoutes config without throwing', () => {
-    const plugin = createCommunityPlugin({
+    const plugin = createCommunityPackage({
       containerCreation: 'admin',
       disableRoutes: ['reports', 'bans'],
     });
@@ -402,7 +481,7 @@ describe('createCommunityPlugin — smoke', () => {
   });
 });
 
-describe('createCommunityPlugin — route generation', () => {
+describe('createCommunityPackage — route generation', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -459,7 +538,7 @@ describe('createCommunityPlugin — route generation', () => {
   });
 });
 
-describe('createCommunityPlugin — permission enforcement', () => {
+describe('createCommunityPackage — permission enforcement', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -536,7 +615,7 @@ describe('createCommunityPlugin — permission enforcement', () => {
   });
 });
 
-describe('createCommunityPlugin — content visibility guards', () => {
+describe('createCommunityPackage — content visibility guards', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -643,7 +722,7 @@ describe('createCommunityPlugin — content visibility guards', () => {
   });
 });
 
-describe('createCommunityPlugin — container join policy', () => {
+describe('createCommunityPackage — container join policy', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -674,7 +753,7 @@ describe('createCommunityPlugin — container join policy', () => {
   });
 });
 
-describe('createCommunityPlugin — membership grant reconciliation', () => {
+describe('createCommunityPackage — membership grant reconciliation', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -765,7 +844,7 @@ describe('createCommunityPlugin — membership grant reconciliation', () => {
   });
 });
 
-describe('createCommunityPlugin — cascades on auth:user.deleted', () => {
+describe('createCommunityPackage — cascades on auth:user.deleted', () => {
   let harness: Harness;
 
   beforeEach(async () => {
@@ -831,7 +910,7 @@ describe('createCommunityPlugin — cascades on auth:user.deleted', () => {
   });
 });
 
-describe('createCommunityPlugin — middleware execution order', () => {
+describe('createCommunityPackage — middleware execution order', () => {
   test('banCheck middleware runs before autoMod for thread.create', async () => {
     // The Thread entity declares middleware: ['banCheck', 'autoMod'] for create.
     // applyRouteConfig uses router.use() which registers in declaration order,
@@ -891,7 +970,7 @@ describe('createCommunityPlugin — middleware execution order', () => {
   });
 });
 
-describe('createCommunityPlugin â€” shared notifications wiring', () => {
+describe('createCommunityPackage â€” shared notifications wiring', () => {
   test('ban creation writes to slingshot-notifications instead of a local entity', async () => {
     const harness = await createCommunityHarness();
     harness.evaluator.grant('community:container.apply-ban');

@@ -17,7 +17,7 @@ import type {
 import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { buildEntityReceiveHandlers } from '@lastshotlabs/slingshot-entity';
 import type { WsPublishFn } from '@lastshotlabs/slingshot-entity';
-import { createCommunityPlugin } from '../src/plugin';
+import { createCommunityPackage } from '../src/plugin';
 import type { CommunityPluginConfig } from '../src/types/config';
 
 // ---------------------------------------------------------------------------
@@ -86,55 +86,29 @@ const containerChannel: EntityChannelConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// createCommunityPlugin WS wiring
+// createCommunityPackage WS wiring smoke
+//
+// The package-tier API no longer exposes `buildSubscribeGuard` /
+// `buildReceiveIncoming` directly on the returned definition (channels are
+// forwarded through the entity modules instead). The block below kept the
+// smoke checks that still apply: the package must accept the `ws` config
+// without throwing.
 // ---------------------------------------------------------------------------
 
-describe('createCommunityPlugin WS wiring', () => {
-  it('buildReceiveIncoming returns {} when ws not configured', () => {
-    const plugin = createCommunityPlugin(baseConfig);
-    const result = plugin.buildReceiveIncoming();
-    expect(result).toEqual({});
+describe('createCommunityPackage WS config acceptance', () => {
+  it('accepts the package without ws config', () => {
+    const pkg = createCommunityPackage(baseConfig);
+    expect(pkg.name).toBe('slingshot-community');
   });
 
-  it('buildReceiveIncoming is callable (returns object) when ws is configured', () => {
-    const plugin = createCommunityPlugin({
+  it('accepts the package with ws config set', () => {
+    const pkg = createCommunityPackage({
       ...baseConfig,
       ws: {
         wsEndpoint: 'community',
       },
     });
-    // innerPlugin is created in setupMiddleware; before that, returns {}.
-    // This validates the method exists on the returned interface.
-    const result = plugin.buildReceiveIncoming();
-    expect(typeof result).toBe('object');
-  });
-
-  it('buildSubscribeGuard returns a function that resolves true when ws not configured', async () => {
-    const plugin = createCommunityPlugin(baseConfig);
-    const guard = plugin.buildSubscribeGuard({
-      getActor: () => null,
-      checkPermission: async () => false,
-      middleware: {},
-    });
-    expect(typeof guard).toBe('function');
-    // Before setupMiddleware, innerPlugin is undefined — no-op guard
-    const result = await guard({}, 'containers:abc:live');
-    expect(result).toBe(true);
-  });
-
-  it('buildSubscribeGuard returns a function when ws is configured', () => {
-    const plugin = createCommunityPlugin({
-      ...baseConfig,
-      ws: {
-        wsEndpoint: 'community',
-      },
-    });
-    const guard = plugin.buildSubscribeGuard({
-      getActor: () => null,
-      checkPermission: async () => false,
-      middleware: {},
-    });
-    expect(typeof guard).toBe('function');
+    expect(pkg.name).toBe('slingshot-community');
   });
 });
 

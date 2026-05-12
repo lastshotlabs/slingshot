@@ -1,16 +1,11 @@
 import './events';
 
 /**
- * Create the community plugin with containers, threads, replies, reactions,
+ * Create the community package with containers, threads, replies, reactions,
  * moderation, reports, bans, invites, subscriptions, and notification hooks.
+ * Returns a `SlingshotPackageDefinition` ready for `createApp({ packages: [...] })`.
  */
-export { createCommunityPlugin } from './plugin';
-/**
- * Plugin instance returned by `createCommunityPlugin()`. Extends `SlingshotPlugin`
- * with the WebSocket subscribe-guard and incoming-handler builders that callers
- * can use when wiring the WS endpoint manually.
- */
-export type { CommunityPlugin } from './plugin';
+export { createCommunityPackage } from './plugin';
 
 /**
  * Provider-owned package contract. Cross-package consumers resolve
@@ -23,11 +18,6 @@ export { Community, CommunityEntities, CommunityInteractionsPeerCap } from './pu
  * apply component updates returned by interaction dispatchers.
  */
 export type { CommunityInteractionsPeer } from './public';
-
-/**
- * Entity manifest describing the community entities and their wiring graph.
- */
-export { communityManifest } from './manifest/communityManifest';
 
 /**
  * Zod schema and the default scoring config used to validate community plugin

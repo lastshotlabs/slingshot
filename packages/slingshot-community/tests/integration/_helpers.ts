@@ -13,25 +13,36 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  resolveRepo as resolveStandardRepo,
 } from '@lastshotlabs/slingshot-core';
 import type {
+  AppEnv,
   CoreRegistrar,
   EntityRegistry,
   PermissionEvaluator,
   PermissionGrant,
   PermissionRegistry,
   PermissionsAdapter,
+  PluginSetupContext,
   ResolvedEntityConfig,
   ResourceTypeDefinition,
   RouteAuthRegistry,
   SlingshotFrameworkConfig,
+  SlingshotPackageDefinition,
   StoreType,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import {
+  createEntityFactories,
+  createEntityPlugin,
+} from '@lastshotlabs/slingshot-entity';
+import type {
+  BareEntityAdapter,
+  EntityPluginEntry,
+} from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
-import { createCommunityPlugin } from '../../src/plugin';
+import { createCommunityPackage } from '../../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Permission helpers
@@ -214,10 +225,96 @@ export interface CommunityHarness {
   teardown(): Promise<void>;
 }
 
-type PluginApp = Parameters<
-  NonNullable<ReturnType<typeof createCommunityPlugin>['setupMiddleware']>
->[0]['app'];
+type PluginApp = Hono<AppEnv>;
 type RequestApp = Pick<PluginApp, 'request'>;
+
+/**
+ * Mount a community package's entity modules through `createEntityPlugin`,
+ * mirroring the framework's `compilePackages` path so each module's
+ * `wiring.buildAdapter` populates the package's closure-owned refs.
+ */
+async function mountCommunityPackage(
+  pkg: SlingshotPackageDefinition,
+  ctx: PluginSetupContext,
+): Promise<{ teardown(): Promise<void> }> {
+  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      config: ResolvedEntityConfig;
+      operations?: Record<string, unknown>;
+      extraRoutes?: unknown;
+      overrides?: unknown;
+      channels?: unknown;
+      routePath?: string;
+      parentPath?: string;
+      wiring: {
+        mode: string;
+        buildAdapter?: unknown;
+        factories?: unknown;
+      };
+    };
+
+    // Resolve the entity's buildAdapter. Manual wiring brings its own;
+    // standard wiring falls back to the framework factory path, just like
+    // `compilePackages` would.
+    let buildAdapter: ((storeType: StoreType, infra: unknown) => BareEntityAdapter) | undefined;
+    if (impl.wiring.mode === 'manual') {
+      buildAdapter = impl.wiring.buildAdapter as
+        | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
+        | undefined;
+    } else if (impl.wiring.mode === 'standard') {
+      buildAdapter = (storeType, infra) => {
+        const factories = createEntityFactories(
+          impl.config,
+          impl.operations as Parameters<typeof createEntityFactories>[1],
+        );
+        return resolveStandardRepo(
+          factories,
+          storeType,
+          infra,
+        ) as unknown as BareEntityAdapter;
+      };
+    }
+    if (!buildAdapter) {
+      throw new Error(
+        `[community test harness] cannot resolve buildAdapter for entity '${entityModule.entityName}' (wiring mode '${impl.wiring.mode}')`,
+      );
+    }
+    return {
+      config: impl.config,
+      operations: impl.operations as never,
+      extraRoutes: impl.extraRoutes as never,
+      overrides: impl.overrides as never,
+      channels: impl.channels as never,
+      ...(impl.routePath ? { routePath: impl.routePath } : {}),
+      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+      buildAdapter,
+    };
+  });
+
+  const entityPlugin = createEntityPlugin({
+    name: pkg.name,
+    mountPath: pkg.mountPath ?? '/community',
+    entities: entityEntries,
+    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+  });
+
+  // Lifecycle order matches the framework path. Note: entity setupRoutes is
+  // what runs buildAdapter and populates the package refs — must happen
+  // BEFORE the package's setupPost reads the refs.
+  await pkg.setupMiddleware?.(ctx);
+  await entityPlugin.setupMiddleware?.(ctx);
+  await entityPlugin.setupRoutes?.(ctx);
+  await pkg.setupRoutes?.(ctx);
+  await entityPlugin.setupPost?.(ctx);
+  await pkg.setupPost?.(ctx);
+
+  return {
+    async teardown() {
+      await pkg.teardown?.();
+      await entityPlugin.teardown?.();
+    },
+  };
+}
 
 export async function createHarness(opts?: {
   userId?: string;
@@ -238,11 +335,11 @@ export async function createHarness(opts?: {
   const frameworkConfig = createFrameworkConfig();
 
   const permissionsState = { evaluator, registry, adapter: permAdapter };
-  const plugin = createCommunityPlugin({
+  const pkg = createCommunityPackage({
     containerCreation: opts?.containerCreation ?? 'user',
   });
 
-  const app = new Hono() as unknown as PluginApp;
+  const app = new Hono<AppEnv>();
 
   attachContext(app, {
     app,
@@ -307,9 +404,12 @@ export async function createHarness(opts?: {
     await next();
   });
 
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-  await plugin.setupPost?.({ app, config: frameworkConfig, bus, events });
+  const mounted = await mountCommunityPackage(pkg, {
+    app,
+    config: frameworkConfig,
+    bus,
+    events,
+  });
 
   if (opts?.grantAll) {
     for (const action of [
@@ -338,7 +438,7 @@ export async function createHarness(opts?: {
     notifications: notifications.notifications,
     async teardown() {
       await notifications.clear();
-      await plugin.teardown?.();
+      await mounted.teardown();
     },
   };
 }

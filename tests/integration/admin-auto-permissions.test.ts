@@ -10,7 +10,8 @@ import { describe, expect, test } from 'bun:test';
 import { createSlingshotAdminPlugin } from '../../src/framework/admin';
 import {
   adminPlugin,
-  communityPlugin,
+  communityPackage,
+  communityPermissionsPlugin,
   createTestApp,
   createTestPermissions,
   notificationsPackage,
@@ -22,10 +23,9 @@ import {
 
 describe('admin auto-discovery — permissions from community plugin pluginState', () => {
   test('createSlingshotAdminPlugin({}) works when community has registered permissions', async () => {
-    // community plugin registers permissions in pluginState during setupRoutes
     const app = await createTestApp({
-      plugins: [communityPlugin(), createSlingshotAdminPlugin({})],
-      packages: [notificationsPackage()],
+      plugins: [communityPermissionsPlugin(), createSlingshotAdminPlugin({})],
+      packages: [notificationsPackage(), communityPackage()],
     });
 
     // Admin routes are reachable (401 = auth guard ran, not an init error)
@@ -35,8 +35,8 @@ describe('admin auto-discovery — permissions from community plugin pluginState
 
   test('GET /admin/capabilities is reachable when permissions auto-discovered', async () => {
     const app = await createTestApp({
-      plugins: [communityPlugin(), createSlingshotAdminPlugin({})],
-      packages: [notificationsPackage()],
+      plugins: [communityPermissionsPlugin(), createSlingshotAdminPlugin({})],
+      packages: [notificationsPackage(), communityPackage()],
     });
 
     const res = await app.request('/admin/capabilities');
@@ -85,10 +85,10 @@ describe('admin auto-discovery — explicit permissions take precedence', () => 
     // Both community and admin have permissions; explicit ones should win
     const app = await createTestApp({
       plugins: [
-        communityPlugin(),
+        communityPermissionsPlugin(),
         createSlingshotAdminPlugin({ permissions: explicitPermissions }),
       ],
-      packages: [notificationsPackage()],
+      packages: [notificationsPackage(), communityPackage()],
     });
 
     // Plugin wired successfully with explicit permissions

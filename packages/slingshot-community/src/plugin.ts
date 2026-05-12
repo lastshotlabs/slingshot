@@ -1,49 +1,72 @@
+/**
+ * Community package factory.
+ *
+ * Creates a `SlingshotPackageDefinition` that mounts all 19 community
+ * entities (Container, Thread, Reply, Reaction, ContainerMember,
+ * ContainerRule, Report, Ban, Tag, ThreadTag, ContainerInvite,
+ * ContainerSubscription, ThreadSubscription, UserMute, Bookmark,
+ * AutoModRule, Warning, AuditLogEntry, ContainerSetting), wires adapter-
+ * dependent middleware (banCheck, autoMod, threadStateGuard, banNotify,
+ * containerCreationGuard, grantManager, …), publishes the
+ * `CommunityInteractionsPeerCap` capability, and registers push formatters.
+ *
+ * Every adapter ref, middleware closure, and lazy ref is owned by the
+ * factory's closure (Rule 3) — multiple package instances in the same
+ * process do not share state.
+ */
 import type {
-  ChannelIncomingEventDeclaration,
   NotificationRecord,
   PermissionsState,
   PluginSetupContext,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
   deepFreeze,
   defineEvent,
+  definePackage,
   getActor,
   getContext,
-  getContextOrNull,
   getPermissionsStateOrNull,
   getPluginStateOrNull,
   parseBody,
   provideCapability,
   publishPluginState,
   readPluginState,
-  registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { ChannelConfigDeps, EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import type { MiddlewareHandler } from 'hono';
+import { buildCommunityEntityModules } from './entities/modules';
+import type { CommunityAdapterRefs } from './entities/runtime';
 import { notifyMentions } from './lib/mentions';
 import type { NotifyMentionsDeps } from './lib/mentions';
 import { extractUrls } from './lib/urls';
-import { probeEmbedsPeer } from './peers/embeds';
-import { communityManifest } from './manifest/communityManifest';
-import { createCommunityManifestRuntime } from './manifest/runtime';
+import { createAuditLogMiddleware } from './middleware/auditLog';
+import { createAutoModMiddleware } from './middleware/autoMod';
+import { createBanCheckMiddleware } from './middleware/banCheck';
 import { createBanNotifyMiddleware } from './middleware/banNotify';
 import { createContainerCreationGuardMiddleware } from './middleware/containerCreationGuard';
 import {
   createContainerCreatorGrantMiddleware,
   type ContainerMemberCreator,
 } from './middleware/containerCreatorGrant';
+import { createContentTargetGuardMiddleware } from './middleware/contentTargetGuard';
 import { createGrantManagerMiddleware } from './middleware/grantManager';
 import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
+import { createMemberJoinPolicyGuardMiddleware } from './middleware/memberJoinPolicyGuard';
 import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middleware/peerGuards';
+import { createPublishedThreadGuardMiddleware } from './middleware/publishedThreadGuard';
+import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecrement';
+import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
 import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
 import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
+import { createSolutionReplyGuardMiddleware } from './middleware/solutionReplyGuard';
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
+import { createThreadStateGuardMiddleware } from './middleware/threadStateGuard';
+import { probeEmbedsPeer } from './peers/embeds';
 import { probePushFormatterRegistrar } from './peers/push';
 import { CommunityInteractionsPeerCap } from './public';
 import type { CommunityInteractionsPeer } from './public';
@@ -93,11 +116,6 @@ function hasAttachMentions(adapter: AdapterResult | undefined): adapter is Adapt
   );
 }
 
-/**
- * Runtime check that an object behaves like an EventBus with an `on` method.
- * The entity plugin's `setupPost` bus may not carry full type information, so
- * this verifies the shape at runtime instead of using `as unknown as`.
- */
 function hasBusOn(bus: unknown): bus is {
   on(event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>): void;
 } {
@@ -120,37 +138,42 @@ function notificationData(notification: NotificationRecord): Record<string, unkn
 }
 
 /**
- * Build the interactions peer from live adapter references.
+ * Build the cross-package interactions peer from adapter refs.
  *
- * Factored out of the plugin body to avoid duplicating the
- * `updateComponents` cast pattern between `setupMiddleware` and
- * `setupRoutes`.
+ * The closure captures the refs bag, so it always reflects the latest
+ * resolved adapters — even though the peer is built before the package's
+ * entity modules have run `wiring.buildAdapter`.
  */
-function buildInteractionsPeer(
-  threadRef: () => AdapterResult | undefined,
-  replyRef: () => AdapterResult | undefined,
-): CommunityInteractionsPeer {
+function buildInteractionsPeer(refs: CommunityAdapterRefs): CommunityInteractionsPeer {
   return {
     peerKind: 'community',
     async resolveMessageByKindAndId(kind, id) {
       if (kind === 'community:thread') {
-        return (await threadRef()?.getById(id)) ?? null;
+        const record = (await refs.thread?.getById(id)) as
+          | { components?: unknown }
+          | null
+          | undefined;
+        return record ?? null;
       }
       if (kind === 'community:reply') {
-        return (await replyRef()?.getById(id)) ?? null;
+        const record = (await refs.reply?.getById(id)) as
+          | { components?: unknown }
+          | null
+          | undefined;
+        return record ?? null;
       }
       return null;
     },
     async updateComponents(kind, id, components) {
       if (kind === 'community:thread') {
-        const adapter = threadRef();
+        const adapter = refs.thread as unknown as AdapterResult | undefined;
         if (hasUpdateComponents(adapter)) {
           await adapter.updateComponents({ id }, { components });
         }
         return;
       }
       if (kind === 'community:reply') {
-        const adapter = replyRef();
+        const adapter = refs.reply as unknown as AdapterResult | undefined;
         if (hasUpdateComponents(adapter)) {
           await adapter.updateComponents({ id }, { components });
         }
@@ -160,132 +183,57 @@ function buildInteractionsPeer(
 }
 
 /**
- * Create the community plugin using the config-driven entity system.
+ * Create the community package using the `definePackage` authoring path.
  *
- * Wires all community entities — Container, Thread, Reply, Reaction,
- * ContainerMember, ContainerRule, Report, Ban, Tag, ThreadTag, ContainerInvite,
- * ContainerSubscription, ThreadSubscription, UserMute, Bookmark, AutoModRule,
- * Warning, AuditLogEntry, ContainerSetting — through `createEntityPlugin()`. No
- * hand-written routes, no service layer: route configuration on each entity
- * drives auth, permissions, events, cascades, and middleware.
+ * Wires all 19 community entities — each entity module uses
+ * `wiring: { mode: 'manual', buildAdapter }` so the package factory can
+ * capture the resolved adapter into a closure-owned {@link CommunityAdapterRefs}
+ * bag for adapter-dependent middleware and event subscribers.
  *
- * **Permissions resolution:** the plugin reads `PermissionsState` from
- * `ctx.pluginState` during `setupMiddleware`, which is populated by
- * `createPermissionsPackage()`. Declare `'slingshot-permissions'` before
- * community so the framework topological sort guarantees ordering.
+ * **Cross-package contracts:**
+ * - Requires `slingshot-permissions` for `PermissionsState`.
+ * - Requires `slingshot-notifications` for `NotificationsBuilderFactory`.
+ * - Publishes `CommunityInteractionsPeerCap` for consumers (notably
+ *   `slingshot-interactions`).
  *
- * **Notifications resolution:** the plugin resolves the notifications builder
- * factory through `ctx.capabilities.require(NotificationsBuilderFactory)` in
- * `setupPost` and uses it to emit `community:reply`, `community:mention`,
- * `community:ban`, `community:warning`, and `community:thread.subscribed_reply`
- * notifications.
+ * **Optional integrations (duck-typed):**
+ * - `slingshot-push` — when present, registers push formatters for community
+ *   notification types.
+ * - `slingshot-embeds` — when present, unfurls links in thread/reply bodies
+ *   and writes the resolved embeds back via `attachEmbeds`.
  *
- * **Public contract:** the plugin publishes `CommunityInteractionsPeerCap`
- * (the `Community` package contract handle) so cross-package consumers — notably
- * `slingshot-interactions` for component-tree resolution — can resolve the peer
- * via `ctx.capabilities.require(CommunityInteractionsPeerCap)` instead of
- * reaching into plugin state. The plugin also continues to write
- * `interactionsPeer` into `pluginState` under `COMMUNITY_PLUGIN_STATE_KEY` so
- * legacy `getPublishedInteractionsPeerOrNull` consumers keep working.
+ * @param rawConfig - Package configuration. Validated at construction time.
+ * @returns A `SlingshotPackageDefinition` suitable for `createApp({ packages: [...] })`.
  *
- * @param rawConfig - Plugin configuration. Validated against the Zod schema at
- *   construction time; throws if any required field is missing or mis-typed.
- * @returns A `SlingshotPlugin` suitable for passing to `createApp()`. When
- *   `ws.wsEndpoint` is set, the returned plugin also exposes
- *   `buildSubscribeGuard` and `buildReceiveIncoming` for explicit WS wiring.
- *
- * @throws {Error} If `rawConfig` fails the Zod schema validation.
- * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs —
- *   register `createPermissionsPackage()` first.
+ * @throws {Error} If `rawConfig` fails Zod schema validation.
+ * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs.
  * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
- *   `setupPost` runs — register `createNotificationsPackage()` first.
- *
- * @remarks
- * The plugin declares dependencies on `'slingshot-auth'`,
- * `'slingshot-notifications'`, and `'slingshot-permissions'`.
- *
- * Adapter-dependent middleware (banCheck, autoMod, threadStateGuard,
- * banNotify, replyCountUpdate/Decrement, auditLog) is initialised inside
- * `setupMiddleware` once the manifest runtime captures the entity adapters via
- * its `onAdaptersCaptured` callback. The middleware refs start as no-ops so the
- * middleware map type is satisfied throughout boot.
- *
- * **WebSocket self-wiring:** When `ws.wsEndpoint` is configured, the plugin
- * self-registers its `onRoomSubscribe` guard and `incoming` handlers onto
- * `SlingshotContext.wsEndpoints[wsEndpoint]` during `setupPost`. No caller-side
- * wiring is required.
- *
- * **Push integration:** When `slingshot-push` is registered, the plugin
- * registers formatter functions for each community notification type so push
- * delivery produces meaningful titles, bodies, and deep-link URLs. The
- * integration is duck-typed — community does not import `slingshot-push`.
- *
- * @example
- * ```ts
- * import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
- *
- * const community = createCommunityPlugin({
- *   authBridge: 'auto',
- *   containerCreation: 'user',
- *   ws: { wsEndpoint: 'community' },
- * });
- * ```
+ *   `setupPost` runs.
  */
-/**
- * A community plugin with WebSocket channel helpers.
- *
- * Returned by `createCommunityPlugin()` when `ws` config is provided. Extends
- * `SlingshotPlugin` with `buildSubscribeGuard` and `buildReceiveIncoming` for
- * declarative WebSocket wiring.
- *
- * @example
- * ```ts
- * const community = createCommunityPlugin({ ..., ws: { wsEndpoint: 'community' } });
- *
- * // In app WS config:
- * endpoints: {
- *   community: {
- *     presence: true,
- *     onRoomSubscribe: community.buildSubscribeGuard(deps),
- *     incoming: community.buildReceiveIncoming(),
- *   }
- * }
- * ```
- */
-export interface CommunityPlugin extends SlingshotPlugin {
-  /**
-   * Build the WebSocket subscribe guard for community channels.
-   * Returns a no-op guard (`() => Promise<true>`) when the plugin is created without `ws` config.
-   *
-   * Wire into the WS endpoint's `onRoomSubscribe`.
-   */
-  buildSubscribeGuard(deps: ChannelConfigDeps): (ws: unknown, room: string) => Promise<boolean>;
-
-  /**
-   * Build the WebSocket incoming event handler map for community channels.
-   * Returns `{}` when the plugin is created without `ws` config.
-   *
-   * Wire into the WS endpoint's `incoming`.
-   */
-  buildReceiveIncoming(): Record<string, ChannelIncomingEventDeclaration>;
-}
-
-export function createCommunityPlugin(rawConfig: CommunityPluginConfig): CommunityPlugin {
+export function createCommunityPackage(
+  rawConfig: CommunityPluginConfig,
+): SlingshotPackageDefinition {
   const config = deepFreeze(
     validatePluginConfig(COMMUNITY_PLUGIN_STATE_KEY, rawConfig, communityPluginConfigSchema),
   );
 
-  // ---------------------------------------------------------------------------
-  // Lazy middleware refs — all start as no-ops.
-  //
-  // Adapter-dependent refs (banCheck, autoMod, threadStateGuard, banNotify) are
-  // populated during setupRoutes once entity adapters are resolved.
-  //
-  // Permission-dependent refs (containerCreationGuard, grantManager) are
-  // populated in setupMiddleware once permissions are resolved.
-  // ---------------------------------------------------------------------------
-  type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
-  const noop: import('hono').MiddlewareHandler = async (_c, next) => next();
+  // The `scoring` config is parsed and frozen here purely for validation —
+  // the dormant reaction `updateScore` op.custom in the entity has no HTTP
+  // route and no caller, so no runtime wiring consumes it. Read it once to
+  // make the dependence on `DEFAULT_SCORING_CONFIG` explicit.
+  void (config.scoring ?? DEFAULT_SCORING_CONFIG);
+
+  // Closure-owned adapter refs populated by each entity module's
+  // `wiring.buildAdapter` during bootstrap (Rule 3 — no globals).
+  const refs: CommunityAdapterRefs = {};
+
+  // Lazy middleware refs — all start as no-ops. Adapter-dependent refs
+  // (banCheck, autoMod, threadStateGuard, banNotify, etc.) are populated
+  // inside `setupPost` once entity adapters have been captured. Permission-
+  // dependent refs (containerCreationGuard, grantManager) are populated in
+  // `setupMiddleware` once permissions are resolved.
+  type LazyMiddleware = { handler: MiddlewareHandler };
+  const noop: MiddlewareHandler = async (_c, next) => next();
   const banCheckRef: LazyMiddleware = { handler: noop };
   const autoModRef: LazyMiddleware = { handler: noop };
   const threadStateGuardRef: LazyMiddleware = { handler: noop };
@@ -302,35 +250,109 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
   const replyCountDecrementRef: LazyMiddleware = { handler: noop };
   const auditLogRef: LazyMiddleware = { handler: noop };
 
-  // Adapter references for setupPost event handlers.
-  let threadAdapterRef: AdapterResult | undefined;
-  let replyAdapterRef: AdapterResult | undefined;
-  let memberAdapterRef: AdapterResult | undefined;
+  // Permissions resolved in setupMiddleware — used for adapter wiring later.
+  let permissionsRef: PermissionsState | undefined;
   let notificationsBuilderFactoryRef:
     | ((opts: { source: string }) => import('@lastshotlabs/slingshot-core').NotificationBuilder)
     | undefined;
 
-  // Inner entity plugin — created in setupMiddleware after permissions are resolved.
-  let innerPlugin: EntityPlugin | undefined;
+  // Cross-package interactions peer — built once, captures `refs` by closure
+  // so it always sees the latest adapters.
+  const interactionsPeer = buildInteractionsPeer(refs);
 
-  // Permissions resolved in setupMiddleware — retained for setupPost WS self-wiring.
-  let permissionsRef: PermissionsState | undefined;
+  // ─── Permissions probe + admission adapter (used by redeemInvite) ──────────
+  // The redeemInvite handler needs a permissions adapter at module-build time
+  // (entity modules are built before `setupMiddleware` runs). We expose a
+  // delegating wrapper whose target is filled in inside `setupMiddleware`.
+  const permissionsAdapterRef: { current?: PermissionsState['adapter'] } = {};
+  const permissionsAdapterProxy = {
+    createGrant: (input: Record<string, unknown>) => {
+      if (!permissionsAdapterRef.current) {
+        throw new Error(
+          '[slingshot-community] Permissions adapter accessed before setupMiddleware resolved it',
+        );
+      }
+      return permissionsAdapterRef.current.createGrant(input as never);
+    },
+  };
 
-  // Interactions peer — built once in setupMiddleware, reused in setupRoutes
-  // for pluginState updates. Captures adapter refs by closure so it always
-  // resolves against the latest adapters.
-  const interactionsPeer = buildInteractionsPeer(
-    () => threadAdapterRef,
-    () => replyAdapterRef,
-  );
+  // Build entity modules eagerly — `definePackage` needs the entities up-front.
+  const entityModules = buildCommunityEntityModules({
+    refs,
+    permissionsAdapter: permissionsAdapterProxy,
+  });
 
-  const scoringConfig = config.scoring ?? DEFAULT_SCORING_CONFIG;
+  const entities = [
+    entityModules.containerModule,
+    entityModules.threadModule,
+    entityModules.replyModule,
+    entityModules.reactionModule,
+    entityModules.containerMemberModule,
+    entityModules.containerRuleModule,
+    entityModules.reportModule,
+    entityModules.banModule,
+    entityModules.tagModule,
+    entityModules.threadTagModule,
+    entityModules.containerInviteModule,
+    entityModules.containerSubscriptionModule,
+    entityModules.threadSubscriptionModule,
+    entityModules.userMuteModule,
+    entityModules.bookmarkModule,
+    entityModules.autoModRuleModule,
+    entityModules.warningModule,
+    entityModules.auditLogEntryModule,
+    entityModules.containerSettingModule,
+  ];
 
-  return {
+  // Named middleware map referenced by entity routes (entity middleware names
+  // → handlers). The framework copies this map into the entity-plugin at
+  // boot, so each entry must close over a stable ref the framework re-reads
+  // at request time.
+  function buildMiddleware(): Record<string, MiddlewareHandler> {
+    return {
+      banCheck: async (c, next) => banCheckRef.handler(c, next),
+      autoMod: async (c, next) => autoModRef.handler(c, next),
+      threadStateGuard: async (c, next) => threadStateGuardRef.handler(c, next),
+      publishedThreadGuard: async (c, next) => publishedThreadGuardRef.handler(c, next),
+      targetVisibilityGuard: async (c, next) => targetVisibilityGuardRef.handler(c, next),
+      reportTargetGuard: async (c, next) => reportTargetGuardRef.handler(c, next),
+      memberJoinPolicyGuard: async (c, next) => memberJoinPolicyGuardRef.handler(c, next),
+      solutionReplyGuard: async (c, next) => solutionReplyGuardRef.handler(c, next),
+      auditLog: async (c, next) => auditLogRef.handler(c, next),
+      grantManager: async (c, next) => grantManagerRef.handler(c, next),
+      containerCreationGuard: async (c, next) => containerCreationGuardRef.handler(c, next),
+      containerCreatorGrant: async (c, next) => containerCreatorGrantRef.handler(c, next),
+      banNotify: async (c, next) => banNotifyRef.handler(c, next),
+      memberJoinGuard: createMemberJoinGuardMiddleware(),
+      // roleAssignmentGuard + pollRequiredGuard + attachmentRequiredGuard
+      // need `app`/`permissions` at build time, so they're materialised in
+      // `setupMiddleware` and re-assigned via these refs.
+      roleAssignmentGuard: async (c, next) => roleAssignmentGuardRef.handler(c, next),
+      pollRequiredGuard: async (c, next) => pollRequiredGuardRef.handler(c, next),
+      attachmentRequiredGuard: async (c, next) => attachmentRequiredGuardRef.handler(c, next),
+      threadPostCreate: createThreadPostCreateMiddleware(),
+      replyPostCreate: createReplyPostCreateMiddleware(),
+      replyCountUpdate: async (c, next) => replyCountUpdateRef.handler(c, next),
+      replyCountDecrement: async (c, next) => replyCountDecrementRef.handler(c, next),
+    };
+  }
+
+  // App-dependent middleware refs (built once `app` is on hand).
+  const roleAssignmentGuardRef: LazyMiddleware = { handler: noop };
+  const pollRequiredGuardRef: LazyMiddleware = { handler: noop };
+  const attachmentRequiredGuardRef: LazyMiddleware = { handler: noop };
+
+  return definePackage({
     name: COMMUNITY_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath ?? '/community',
     dependencies: ['slingshot-auth', 'slingshot-notifications', 'slingshot-permissions'],
+    entities,
+    middleware: buildMiddleware(),
+    capabilities: {
+      provides: [provideCapability(CommunityInteractionsPeerCap, () => interactionsPeer)],
+    },
 
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+    async setupMiddleware({ app, events }: PluginSetupContext) {
       if (!events.get('community:thread.embeds.resolved')) {
         events.register(
           defineEvent('community:thread.embeds.resolved', {
@@ -390,13 +412,10 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
             ? rolesValue.filter((role): role is string => typeof role === 'string')
             : [];
           if (actor.id) {
-            // Opaque boundary: AppEnv doesn't include CommunityEnv variables.
-            // The communityPrincipal context variable is consumed by community
-            // routes which are typed with CommunityEnv.
-            (c as unknown as { set(key: string, value: unknown): void }).set('communityPrincipal', {
-              subject: actor.id,
-              roles,
-            });
+            (c as unknown as { set(key: string, value: unknown): void }).set(
+              'communityPrincipal',
+              { subject: actor.id, roles },
+            );
           }
           await next();
         });
@@ -411,17 +430,15 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           );
         })();
 
-      // Retain for setupPost WS self-wiring (buildSubscribeGuard needs permissions).
       permissionsRef = permissions;
+      permissionsAdapterRef.current = permissions.adapter;
 
       if (pluginState) {
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
           publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissions);
         }
-        // Merge with any existing slot value so we don't clobber entityAdapters
-        // that `innerPlugin` writes via `publishEntityAdaptersState`. Reads/writes
-        // go through the typed `CommunityPluginStateRef` so the value shape is
-        // checked at the call site.
+        // Merge so we don't clobber other keys (entityAdapters published by
+        // the framework's entity-plugin path).
         const existing = readPluginState(pluginState, CommunityPluginStateRef);
         publishPluginState(pluginState, CommunityPluginStateRef, {
           ...(existing ?? {}),
@@ -431,7 +448,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         });
       }
 
-      // Populate permission-dependent middleware refs now that permissions are resolved.
+      // Permission-dependent middleware refs (now that permissions are resolved).
       containerCreationGuardRef.handler = createContainerCreationGuardMiddleware({
         containerCreation: config.containerCreation,
         permissionEvaluator: permissions.evaluator,
@@ -439,8 +456,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       grantManagerRef.handler = createGrantManagerMiddleware({
         permissionsAdapter: permissions.adapter,
         getMemberById: async memberId => {
-          if (!hasGetById(memberAdapterRef)) return null;
-          const result = await memberAdapterRef.getById(memberId);
+          const adapter = refs.member as unknown as AdapterResult | undefined;
+          if (!hasGetById(adapter)) return null;
+          const result = await adapter.getById(memberId);
           if (!result || typeof result !== 'object') return null;
           const record = result as Record<string, unknown>;
           return {
@@ -450,16 +468,15 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           };
         },
       });
-      // Container creator grant: lazily wired against `memberAdapterRef`
-      // which `manifestRuntime.onAdaptersCaptured` populates below. The
-      // wrapper-functor pattern means the middleware closes over the
-      // ref, not the adapter — so by the time a request hits, the
+      // Container creator grant: lazily wired against `refs.member` which the
+      // entity-plugin populates inside its `setupRoutes`. The wrapper closes
+      // over the ref, not the adapter — so by the time a request hits, the
       // captured adapter is in place.
       containerCreatorGrantRef.handler = createContainerCreatorGrantMiddleware({
         permissionsAdapter: permissions.adapter,
         memberAdapter: {
           create: async input => {
-            const adapter = memberAdapterRef as unknown as ContainerMemberCreator | undefined;
+            const adapter = refs.member as unknown as ContainerMemberCreator | undefined;
             if (!adapter || typeof adapter.create !== 'function') {
               throw new Error(
                 '[slingshot-community] ContainerMember adapter unavailable when issuing creator grant',
@@ -469,375 +486,140 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           },
         },
       });
-      const memberJoinGuard = createMemberJoinGuardMiddleware();
-      const roleAssignmentGuard = createRoleAssignmentGuardMiddleware({
+      roleAssignmentGuardRef.handler = createRoleAssignmentGuardMiddleware({
         evaluator: permissions.evaluator,
       });
-      const manifest = structuredClone(communityManifest);
-      const manifestRuntime = createCommunityManifestRuntime({
-        scoring: scoringConfig,
-        permissionsAdapter: permissions.adapter,
-        onAdaptersCaptured: adapters => {
-          // The concrete adapter types from the manifest runtime don't structurally
-          // overlap with BareEntityAdapter, making the intermediate `unknown` cast
-          // necessary. We add runtime assertions to verify the CRUD contract holds.
-          if (typeof adapters.thread?.getById !== 'function') {
-            throw new Error('[slingshot-community] Thread adapter missing getById');
-          }
-          if (typeof adapters.reply?.getById !== 'function') {
-            throw new Error('[slingshot-community] Reply adapter missing getById');
-          }
-          if (typeof adapters.member?.getById !== 'function') {
-            throw new Error('[slingshot-community] Member adapter missing getById');
-          }
-          threadAdapterRef = adapters.thread as unknown as AdapterResult;
-          replyAdapterRef = adapters.reply as unknown as AdapterResult;
-          memberAdapterRef = adapters.member as unknown as AdapterResult;
-        },
-        setBanCheckHandler(handler) {
-          banCheckRef.handler = handler;
-        },
-        setAutoModHandler(handler) {
-          autoModRef.handler = handler;
-        },
-        setThreadStateGuardHandler(handler) {
-          threadStateGuardRef.handler = handler;
-        },
-        setPublishedThreadGuardHandler(handler) {
-          publishedThreadGuardRef.handler = handler;
-        },
-        setTargetVisibilityGuardHandler(handler) {
-          targetVisibilityGuardRef.handler = handler;
-        },
-        setReportTargetGuardHandler(handler) {
-          reportTargetGuardRef.handler = handler;
-        },
-        setMemberJoinPolicyGuardHandler(handler) {
-          memberJoinPolicyGuardRef.handler = handler;
-        },
-        setSolutionReplyGuardHandler(handler) {
-          solutionReplyGuardRef.handler = handler;
-        },
-        setReplyCountUpdateHandler(handler) {
-          replyCountUpdateRef.handler = handler;
-        },
-        setReplyCountDecrementHandler(handler) {
-          replyCountDecrementRef.handler = handler;
-        },
-        setAuditLogHandler(handler) {
-          auditLogRef.handler = handler;
-        },
-      });
-
-      // Build the inner entity plugin with fully-resolved permissions.
-      innerPlugin = createEntityPlugin({
-        name: COMMUNITY_PLUGIN_STATE_KEY,
-        mountPath: config.mountPath ?? '/community',
-        manifest,
-        manifestRuntime,
-
-        // Wire WS config when provided.
-        wsEndpoint: config.ws?.wsEndpoint,
-
-        middleware: {
-          banCheck: async (c, next) => banCheckRef.handler(c, next),
-          autoMod: async (c, next) => autoModRef.handler(c, next),
-          threadStateGuard: async (c, next) => threadStateGuardRef.handler(c, next),
-          publishedThreadGuard: async (c, next) => publishedThreadGuardRef.handler(c, next),
-          targetVisibilityGuard: async (c, next) => targetVisibilityGuardRef.handler(c, next),
-          reportTargetGuard: async (c, next) => reportTargetGuardRef.handler(c, next),
-          memberJoinPolicyGuard: async (c, next) => memberJoinPolicyGuardRef.handler(c, next),
-          solutionReplyGuard: async (c, next) => solutionReplyGuardRef.handler(c, next),
-          auditLog: async (c, next) => auditLogRef.handler(c, next),
-          grantManager: async (c, next) => grantManagerRef.handler(c, next),
-          containerCreationGuard: async (c, next) => containerCreationGuardRef.handler(c, next),
-          containerCreatorGrant: async (c, next) => containerCreatorGrantRef.handler(c, next),
-          banNotify: async (c, next) => banNotifyRef.handler(c, next),
-          memberJoinGuard,
-          roleAssignmentGuard,
-          pollRequiredGuard: buildPollRequiredGuard(app),
-          attachmentRequiredGuard: buildAttachmentRequiredGuard(app),
-          threadPostCreate: createThreadPostCreateMiddleware(),
-          replyPostCreate: createReplyPostCreateMiddleware(),
-          replyCountUpdate: async (c, next) => replyCountUpdateRef.handler(c, next),
-          replyCountDecrement: async (c, next) => replyCountDecrementRef.handler(c, next),
-        },
-
-        permissions,
-
-        setupPost: ({ bus: postBus }) => {
-          const notificationBuilder = notificationsBuilderFactoryRef?.({ source: 'community' });
-          if (!notificationBuilder) return;
-          const builder = notificationBuilder;
-
-          banNotifyRef.handler = createBanNotifyMiddleware({
-            builder,
-          });
-
-          if (!hasBusOn(postBus)) return;
-
-          postBus.on('community:reply.created', async payload => {
-            const replyPayload = payload as typeof payload & { replyId?: string };
-            const replyId = replyPayload.id ?? replyPayload.replyId;
-            const actorId = payload.authorId as string | undefined;
-            const threadId = payload.threadId as string | undefined;
-            if (!replyId || !actorId || !threadId || !threadAdapterRef) return;
-
-            const thread = (await threadAdapterRef.getById(threadId)) as {
-              authorId?: string;
-              containerId?: string;
-            } | null;
-            if (!thread?.authorId || !thread.containerId) return;
-
-            await notificationBuilder.notify({
-              tenantId: payload.tenantId as string | undefined,
-              userId: thread.authorId,
-              type: 'community:reply',
-              actorId,
-              targetType: 'community:reply',
-              targetId: replyId,
-              scopeId: thread.containerId,
-              dedupKey: `community:reply:${threadId}:${thread.authorId}`,
-              data: {
-                threadId,
-                containerId: thread.containerId,
-              },
-            });
-          });
-
-          function buildMentionDeps(): NotifyMentionsDeps | null {
-            if (!threadAdapterRef || !replyAdapterRef) return null;
-            // Runtime guard: verify getById is callable before using the adapters.
-            // The double cast is necessary because BareEntityAdapter and
-            // EntityAdapter<Thread/Reply> don't structurally overlap in the TS
-            // type system, even though at runtime they satisfy the same contract.
-            if (!hasGetById(threadAdapterRef) || !hasGetById(replyAdapterRef)) return null;
-            return {
-              builder,
-              threadAdapter: threadAdapterRef as unknown as NotifyMentionsDeps['threadAdapter'],
-              replyAdapter: replyAdapterRef as unknown as NotifyMentionsDeps['replyAdapter'],
-            };
-          }
-
-          postBus.on('community:thread.created', async payload => {
-            const deps = buildMentionDeps();
-            if (!deps) return;
-            await notifyMentions(payload, deps, 'thread');
-          });
-
-          postBus.on('community:reply.created', async payload => {
-            const deps = buildMentionDeps();
-            if (!deps) return;
-            await notifyMentions(payload, deps, 'reply');
-          });
-
-          // parseBody → attachMentions: server-truth normalization of the
-          // body's mention tokens into the entity's `mentions` /
-          // `broadcastMentions` / `mentionedRoleIds` sidecars. Closes the
-          // spoofing gap where a client could set those arrays to arbitrary
-          // user IDs without writing the corresponding `<@id>` token in
-          // the body. Failures are silent — sidecar normalization is
-          // best-effort and must never break create.
-          postBus.on('community:thread.created', async payload => {
-            const adapter = threadAdapterRef;
-            if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
-            const id = typeof payload.id === 'string' ? payload.id : undefined;
-            if (!id) return;
-            const record = (await adapter.getById(id)) as
-              | { body?: string; format?: 'plain' | 'markdown' }
-              | null;
-            if (!record) return;
-            const parsed = parseBody(record.body, record.format ?? 'markdown');
-            try {
-              await adapter.attachMentions(
-                { id },
-                {
-                  mentions: parsed.mentions,
-                  broadcastMentions: parsed.broadcastMentions,
-                  mentionedRoleIds: parsed.mentionedRoleIds,
-                },
-              );
-            } catch {
-              // Silent — best-effort normalization.
-            }
-          });
-
-          postBus.on('community:reply.created', async payload => {
-            const adapter = replyAdapterRef;
-            if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
-            const id = typeof payload.id === 'string' ? payload.id : undefined;
-            if (!id) return;
-            const record = (await adapter.getById(id)) as
-              | { body?: string; format?: 'plain' | 'markdown' }
-              | null;
-            if (!record) return;
-            const parsed = parseBody(record.body, record.format ?? 'markdown');
-            try {
-              await adapter.attachMentions(
-                { id },
-                {
-                  mentions: parsed.mentions,
-                  broadcastMentions: parsed.broadcastMentions,
-                  mentionedRoleIds: parsed.mentionedRoleIds,
-                },
-              );
-            } catch {
-              // Silent — best-effort normalization.
-            }
-          });
-
-          // Link unfurl: when slingshot-embeds is registered, fan out
-          // thread/reply creates → URL extraction → unfurl → attachEmbeds →
-          // `community:thread.embeds.resolved` / `community:reply.embeds.resolved`.
-          //
-          // Mirrors slingshot-chat's pattern (`chat:message.created`). The
-          // event payload doesn't include `body`, so we hydrate via the
-          // adapter. Failures are silent — embed resolution is best-effort
-          // and must never break the create path.
-          const embedsState = probeEmbedsPeer(app);
-          if (embedsState) {
-            postBus.on('community:thread.created', async payload => {
-              const threadAdapter = threadAdapterRef;
-              if (!hasAttachEmbeds(threadAdapter) || !hasGetById(threadAdapter)) return;
-              const threadId = typeof payload.id === 'string' ? payload.id : undefined;
-              const containerId =
-                typeof payload.containerId === 'string' ? payload.containerId : undefined;
-              if (!threadId || !containerId) return;
-              const record = (await threadAdapter.getById(threadId)) as { body?: string } | null;
-              const urls = extractUrls(record?.body);
-              if (urls.length === 0) return;
-              try {
-                const embeds = await embedsState.unfurl(urls);
-                if (embeds.length === 0) return;
-                await threadAdapter.attachEmbeds({ id: threadId }, { embeds });
-                events.publish(
-                  'community:thread.embeds.resolved',
-                  {
-                    id: threadId,
-                    tenantId:
-                      typeof payload.tenantId === 'string' ? payload.tenantId : null,
-                    containerId,
-                    embeds,
-                  },
-                  {
-                    source: 'system',
-                    userId:
-                      typeof payload.authorId === 'string' ? payload.authorId : null,
-                    requestTenantId: null,
-                  },
-                );
-              } catch {
-                // Silent — embed resolution is best-effort.
-              }
-            });
-
-            postBus.on('community:reply.created', async payload => {
-              const replyAdapter = replyAdapterRef;
-              if (!hasAttachEmbeds(replyAdapter) || !hasGetById(replyAdapter)) return;
-              const replyId = typeof payload.id === 'string' ? payload.id : undefined;
-              const containerId =
-                typeof payload.containerId === 'string' ? payload.containerId : undefined;
-              if (!replyId || !containerId) return;
-              const record = (await replyAdapter.getById(replyId)) as {
-                body?: string;
-                threadId?: string;
-              } | null;
-              const threadId = typeof record?.threadId === 'string' ? record.threadId : undefined;
-              if (!threadId) return;
-              const urls = extractUrls(record?.body);
-              if (urls.length === 0) return;
-              try {
-                const embeds = await embedsState.unfurl(urls);
-                if (embeds.length === 0) return;
-                await replyAdapter.attachEmbeds({ id: replyId }, { embeds });
-                events.publish(
-                  'community:reply.embeds.resolved',
-                  {
-                    id: replyId,
-                    tenantId:
-                      typeof payload.tenantId === 'string' ? payload.tenantId : null,
-                    threadId,
-                    containerId,
-                    embeds,
-                  },
-                  {
-                    source: 'system',
-                    userId:
-                      typeof payload.authorId === 'string' ? payload.authorId : null,
-                    requestTenantId: null,
-                  },
-                );
-              } catch {
-                // Silent — embed resolution is best-effort.
-              }
-            });
-          }
-        },
-      });
-
-      if (innerPlugin.setupMiddleware) {
-        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus, events });
-      }
+      pollRequiredGuardRef.handler = buildPollRequiredGuard(app);
+      attachmentRequiredGuardRef.handler = buildAttachmentRequiredGuard(app);
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+    async setupPost({ app, bus, events }: PluginSetupContext) {
       const pluginState = getPluginStateOrNull(app);
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
-      if (permissionsRef && pluginState) {
-        if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
-          publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissionsRef);
-        }
-        // `innerPlugin.setupRoutes` (above) just published `entityAdapters` into
-        // this slot via `publishEntityAdaptersState`. Read the existing value and
-        // spread it through so the adapters survive while we refresh the keys
-        // this plugin owns. Typed via `CommunityPluginStateRef`.
-        const existing = readPluginState(pluginState, CommunityPluginStateRef);
-        publishPluginState(pluginState, CommunityPluginStateRef, {
-          ...(existing ?? {}),
-          config,
-          evaluator: permissionsRef.evaluator,
-          interactionsPeer,
-        });
-      }
-    },
-
-    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      const appCtx = getContextOrNull(app);
-      const pluginState = getPluginStateOrNull(app);
-      if (!notificationsBuilderFactoryRef && appCtx) {
+      if (!notificationsBuilderFactoryRef) {
+        const slingshotCtx = getContext(app);
         notificationsBuilderFactoryRef = resolveCapabilityValue(
-          appCtx,
+          slingshotCtx,
           NotificationsBuilderFactory,
         );
       }
       if (!notificationsBuilderFactoryRef) {
         throw new Error(
           '[slingshot-community] slingshot-notifications is a required dependency. ' +
-            'Register createNotificationsPackage() before this plugin.',
+            'Register createNotificationsPackage() before this package.',
         );
       }
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
+      const builder = notificationsBuilderFactoryRef({ source: 'community' });
 
-      // Contract-bound capability publish. The peer closure captures the lazy
-      // `threadAdapterRef`/`replyAdapterRef` getters so it always sees the
-      // latest adapters. `interactionsPeer` is also written into pluginState
-      // above so legacy `getPublishedInteractionsPeerOrNull` consumers keep
-      // working.
-      await registerPluginCapabilities(getContext(app), 'slingshot-community', [
-        provideCapability(CommunityInteractionsPeerCap, () => interactionsPeer),
-      ]);
+      if (!permissionsRef) {
+        throw new Error(
+          '[slingshot-community] permissions ref missing in setupPost — setupMiddleware did not run',
+        );
+      }
+      const permissions = permissionsRef;
 
-      // Push formatter registration — optional integration with slingshot-push.
-      // Duck-typed to avoid a direct dependency on @lastshotlabs/slingshot-push.
-      // If slingshot-push is present, community registers formatters for each
-      // notification type it emits so push delivery produces meaningful titles/bodies.
+      // ─── Adapter capture assertion ──────────────────────────────────────────
+      // The package's entities all use manual wiring and populate `refs`
+      // inside `buildAdapter`. If any required adapter is missing at
+      // setupPost time, the entity routes never mounted — surface that
+      // rather than no-op below.
+      if (!refs.thread || !refs.reply || !refs.member || !refs.container) {
+        throw new Error(
+          '[slingshot-community] required adapters were not captured during entity setup',
+        );
+      }
+
+      // ─── Adapter-dependent middleware (now adapters are captured) ───────────
+      banCheckRef.handler = createBanCheckMiddleware({
+        banAdapter: refs.ban as never,
+      });
+      autoModRef.handler = createAutoModMiddleware({
+        autoModRuleAdapter: refs.autoModRule,
+        reportAdapter: refs.report as never,
+      });
+      threadStateGuardRef.handler = createThreadStateGuardMiddleware({
+        threadAdapter: refs.thread as never,
+      });
+      publishedThreadGuardRef.handler = createPublishedThreadGuardMiddleware({
+        threadAdapter: refs.thread as never,
+      });
+      targetVisibilityGuardRef.handler = createContentTargetGuardMiddleware(
+        {
+          threadAdapter: refs.thread as never,
+          replyAdapter: refs.reply as never,
+        },
+        { requireContainerIdMatch: true },
+      );
+      reportTargetGuardRef.handler = createContentTargetGuardMiddleware(
+        {
+          threadAdapter: refs.thread as never,
+          replyAdapter: refs.reply as never,
+        },
+        { allowUserTarget: true, attachContainerId: true },
+      );
+      memberJoinPolicyGuardRef.handler = createMemberJoinPolicyGuardMiddleware({
+        containerAdapter: refs.container,
+      });
+      solutionReplyGuardRef.handler = createSolutionReplyGuardMiddleware({
+        replyAdapter: refs.reply as never,
+      });
+      replyCountUpdateRef.handler = createReplyCountUpdateMiddleware({
+        threadAdapter: refs.thread,
+      });
+      replyCountDecrementRef.handler = createReplyCountDecrementMiddleware({
+        replyAdapter: refs.reply,
+        threadAdapter: refs.thread,
+      });
+      const auditLogAdapter = refs.auditLog;
+      auditLogRef.handler = createAuditLogMiddleware({
+        adminGate: auditLogAdapter
+          ? {
+              verifyRequest() {
+                return Promise.resolve(null);
+              },
+              async logAuditEntry(entry) {
+                await auditLogAdapter.create({
+                  action: entry.action,
+                  actorId: entry.actorId,
+                  targetId: entry.targetId,
+                  targetType: 'community',
+                  tenantId: entry.meta?.tenantId as string | undefined,
+                  meta: entry.meta,
+                });
+              },
+            }
+          : undefined,
+      });
+      banNotifyRef.handler = createBanNotifyMiddleware({ builder });
+
+      // Republish the plugin state slot now that all adapters are captured.
+      // `entityAdapters` is published by the framework's entity-plugin path —
+      // read+merge so we don't clobber it.
+      if (pluginState) {
+        const existing = readPluginState(pluginState, CommunityPluginStateRef);
+        publishPluginState(pluginState, CommunityPluginStateRef, {
+          ...(existing ?? {}),
+          config,
+          evaluator: permissions.evaluator,
+          interactionsPeer,
+        });
+      }
+
+      // ─── Event-bus subscribers (mention notify, mention attach, embeds) ─────
+      subscribeBusHandlers({
+        bus,
+        events,
+        app,
+        refs,
+        builder,
+      });
+
+      // ─── Push formatter registration (optional integration) ─────────────────
       const maybePushState = probePushFormatterRegistrar(pluginState);
-
       if (maybePushState) {
         const truncate = (text: unknown, max = 100): string => {
           const str = typeof text === 'string' ? text : '';
-          return str.length <= max ? str : `${str.slice(0, max)}\u2026`;
+          return str.length <= max ? str : `${str.slice(0, max)}…`;
         };
 
         maybePushState.registerFormatter('community:reply', n => {
@@ -882,62 +664,211 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         maybePushState.registerFormatter('community:thread.subscribed_reply', n => {
           const data = notificationData(n);
           return {
-            title: `New reply in \u201c${toNotificationText(data['threadTitle'], 'a thread')}\u201d`,
+            title: `New reply in “${toNotificationText(data['threadTitle'], 'a thread')}”`,
             body: truncate(data['bodyPreview']),
             url: `/community/threads/${toNotificationText(data['threadId'])}#reply-${toNotificationText(data['replyId'])}`,
           };
         });
       }
-
-      // Self-wire WS subscribe guard and incoming handlers onto the live endpoint
-      // config. This runs after all adapters are resolved and innerPlugin is fully
-      // initialised, so buildSubscribeGuard and buildReceiveIncoming are available.
-      //
-      // In config-driven mode: ctx.wsEndpoints is populated by the framework before
-      // plugins run, so mutations here are visible when connections arrive.
-      // In code mode: callers may instead use buildSubscribeGuard/buildReceiveIncoming
-      // directly when constructing the WS endpoint config.
-      if (config.ws?.wsEndpoint && innerPlugin && permissionsRef) {
-        const endpointMap = appCtx?.wsEndpoints;
-        if (endpointMap) {
-          const ep = (endpointMap[config.ws.wsEndpoint] ??= {});
-          ep.onRoomSubscribe = innerPlugin.buildSubscribeGuard({
-            getActor: (ws: unknown) => {
-              const data = (
-                ws as { data?: { actor?: import('@lastshotlabs/slingshot-core').Actor } }
-              ).data;
-              return data?.actor ?? null;
-            },
-            checkPermission: (actor, requires, scope) => {
-              if (!permissionsRef || !actor.id) return Promise.resolve(false);
-              return permissionsRef.evaluator.can(
-                {
-                  subjectId: actor.id,
-                  subjectType: actor.kind === 'service-account' ? 'service-account' : 'user',
-                },
-                requires,
-                scope,
-              );
-            },
-            middleware: {},
-          });
-          const incoming = innerPlugin.buildReceiveIncoming();
-          ep.incoming = { ...ep.incoming, ...incoming };
-        }
-      }
     },
-
-    buildSubscribeGuard(deps: ChannelConfigDeps): (ws: unknown, room: string) => Promise<boolean> {
-      if (!innerPlugin) {
-        // Called before setupMiddleware — return a no-op guard.
-        return () => Promise.resolve(true);
-      }
-      return innerPlugin.buildSubscribeGuard(deps);
-    },
-
-    buildReceiveIncoming(): Record<string, ChannelIncomingEventDeclaration> {
-      if (!innerPlugin) return {};
-      return innerPlugin.buildReceiveIncoming();
-    },
-  };
+  });
 }
+
+// ---------------------------------------------------------------------------
+// Bus subscribers extracted into a single helper to keep setupPost readable.
+// ---------------------------------------------------------------------------
+
+function subscribeBusHandlers(args: {
+  bus: unknown;
+  events: PluginSetupContext['events'];
+  app: PluginSetupContext['app'];
+  refs: CommunityAdapterRefs;
+  builder: import('@lastshotlabs/slingshot-core').NotificationBuilder;
+}): void {
+  const { bus, events, app, refs, builder } = args;
+  if (!hasBusOn(bus)) return;
+
+  // Reply-created → thread author notification.
+  bus.on('community:reply.created', async payload => {
+    const replyPayload = payload as { id?: unknown; replyId?: unknown };
+    const replyIdRaw = replyPayload.id ?? replyPayload.replyId;
+    const replyId = typeof replyIdRaw === 'string' ? replyIdRaw : undefined;
+    const actorId = payload.authorId as string | undefined;
+    const threadId = payload.threadId as string | undefined;
+    if (!replyId || !actorId || !threadId || !refs.thread) return;
+
+    const thread = (await refs.thread.getById(threadId)) as {
+      authorId?: string;
+      containerId?: string;
+    } | null;
+    if (!thread?.authorId || !thread.containerId) return;
+
+    await builder.notify({
+      tenantId: payload.tenantId as string | undefined,
+      userId: thread.authorId,
+      type: 'community:reply',
+      actorId,
+      targetType: 'community:reply',
+      targetId: replyId,
+      scopeId: thread.containerId,
+      dedupKey: `community:reply:${threadId}:${thread.authorId}`,
+      data: {
+        threadId,
+        containerId: thread.containerId,
+      },
+    });
+  });
+
+  function buildMentionDeps(): NotifyMentionsDeps | null {
+    const threadAdapter = refs.thread as unknown as AdapterResult | undefined;
+    const replyAdapter = refs.reply as unknown as AdapterResult | undefined;
+    if (!threadAdapter || !replyAdapter) return null;
+    if (!hasGetById(threadAdapter) || !hasGetById(replyAdapter)) return null;
+    return {
+      builder,
+      threadAdapter: threadAdapter as unknown as NotifyMentionsDeps['threadAdapter'],
+      replyAdapter: replyAdapter as unknown as NotifyMentionsDeps['replyAdapter'],
+    };
+  }
+
+  bus.on('community:thread.created', async payload => {
+    const deps = buildMentionDeps();
+    if (!deps) return;
+    await notifyMentions(payload, deps, 'thread');
+  });
+
+  bus.on('community:reply.created', async payload => {
+    const deps = buildMentionDeps();
+    if (!deps) return;
+    await notifyMentions(payload, deps, 'reply');
+  });
+
+  // parseBody → attachMentions: normalise mention sidecars from the body so
+  // clients can't spoof `mentions` arrays. Best-effort; silent on failure.
+  bus.on('community:thread.created', async payload => {
+    const adapter = refs.thread as unknown as AdapterResult | undefined;
+    if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+    const id = typeof payload.id === 'string' ? payload.id : undefined;
+    if (!id) return;
+    const record = (await adapter.getById(id)) as
+      | { body?: string; format?: 'plain' | 'markdown' }
+      | null;
+    if (!record) return;
+    const parsed = parseBody(record.body, record.format ?? 'markdown');
+    try {
+      await adapter.attachMentions(
+        { id },
+        {
+          mentions: parsed.mentions,
+          broadcastMentions: parsed.broadcastMentions,
+          mentionedRoleIds: parsed.mentionedRoleIds,
+        },
+      );
+    } catch {
+      // Silent — best-effort normalization.
+    }
+  });
+
+  bus.on('community:reply.created', async payload => {
+    const adapter = refs.reply as unknown as AdapterResult | undefined;
+    if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+    const id = typeof payload.id === 'string' ? payload.id : undefined;
+    if (!id) return;
+    const record = (await adapter.getById(id)) as
+      | { body?: string; format?: 'plain' | 'markdown' }
+      | null;
+    if (!record) return;
+    const parsed = parseBody(record.body, record.format ?? 'markdown');
+    try {
+      await adapter.attachMentions(
+        { id },
+        {
+          mentions: parsed.mentions,
+          broadcastMentions: parsed.broadcastMentions,
+          mentionedRoleIds: parsed.mentionedRoleIds,
+        },
+      );
+    } catch {
+      // Silent — best-effort normalization.
+    }
+  });
+
+  // Link unfurl: when slingshot-embeds is registered, fan out
+  // thread/reply creates → URL extraction → unfurl → attachEmbeds →
+  // `community:thread.embeds.resolved` / `community:reply.embeds.resolved`.
+  const embedsState = probeEmbedsPeer(app);
+  if (!embedsState) return;
+
+  bus.on('community:thread.created', async payload => {
+    const threadAdapter = refs.thread as unknown as AdapterResult | undefined;
+    if (!hasAttachEmbeds(threadAdapter) || !hasGetById(threadAdapter)) return;
+    const threadId = typeof payload.id === 'string' ? payload.id : undefined;
+    const containerId =
+      typeof payload.containerId === 'string' ? payload.containerId : undefined;
+    if (!threadId || !containerId) return;
+    const record = (await threadAdapter.getById(threadId)) as { body?: string } | null;
+    const urls = extractUrls(record?.body);
+    if (urls.length === 0) return;
+    try {
+      const embeds = await embedsState.unfurl(urls);
+      if (embeds.length === 0) return;
+      await threadAdapter.attachEmbeds({ id: threadId }, { embeds });
+      events.publish(
+        'community:thread.embeds.resolved',
+        {
+          id: threadId,
+          tenantId: typeof payload.tenantId === 'string' ? payload.tenantId : null,
+          containerId,
+          embeds,
+        },
+        {
+          source: 'system',
+          userId: typeof payload.authorId === 'string' ? payload.authorId : null,
+          requestTenantId: null,
+        },
+      );
+    } catch {
+      // Silent — embed resolution is best-effort.
+    }
+  });
+
+  bus.on('community:reply.created', async payload => {
+    const replyAdapter = refs.reply as unknown as AdapterResult | undefined;
+    if (!hasAttachEmbeds(replyAdapter) || !hasGetById(replyAdapter)) return;
+    const replyId = typeof payload.id === 'string' ? payload.id : undefined;
+    const containerId =
+      typeof payload.containerId === 'string' ? payload.containerId : undefined;
+    if (!replyId || !containerId) return;
+    const record = (await replyAdapter.getById(replyId)) as {
+      body?: string;
+      threadId?: string;
+    } | null;
+    const threadId = typeof record?.threadId === 'string' ? record.threadId : undefined;
+    if (!threadId) return;
+    const urls = extractUrls(record?.body);
+    if (urls.length === 0) return;
+    try {
+      const embeds = await embedsState.unfurl(urls);
+      if (embeds.length === 0) return;
+      await replyAdapter.attachEmbeds({ id: replyId }, { embeds });
+      events.publish(
+        'community:reply.embeds.resolved',
+        {
+          id: replyId,
+          tenantId: typeof payload.tenantId === 'string' ? payload.tenantId : null,
+          threadId,
+          containerId,
+          embeds,
+        },
+        {
+          source: 'system',
+          userId: typeof payload.authorId === 'string' ? payload.authorId : null,
+          requestTenantId: null,
+        },
+      );
+    } catch {
+      // Silent — embed resolution is best-effort.
+    }
+  });
+}
+

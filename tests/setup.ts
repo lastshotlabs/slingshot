@@ -2,7 +2,7 @@ import { registerAdminResourceTypes } from '@lastshotlabs/slingshot-admin';
 import { createAuthPlugin, createMemoryAuthAdapter } from '@lastshotlabs/slingshot-auth';
 import type { AuthPluginConfig } from '@lastshotlabs/slingshot-auth';
 import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
-import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 import type { CommunityPluginConfig } from '@lastshotlabs/slingshot-community';
 import type {
   PluginSetupContext,
@@ -189,37 +189,44 @@ export function authHeader(token: string): Record<string, string> {
   return { 'x-user-token': token };
 }
 
-// ---------------------------------------------------------------------------
-// Community plugin helpers
-// ---------------------------------------------------------------------------
 
-export function communityPlugin(overrides: Partial<CommunityPluginConfig> = {}): SlingshotPlugin {
-  const permissionsState = createTestPermissions();
-  const plugin = createCommunityPlugin({
-    containerCreation: 'admin',
-    ...overrides,
+export function notificationsPackage(): SlingshotPackageDefinition {
+  return createNotificationsPackage({
+    dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
   });
+}
 
+// ---------------------------------------------------------------------------
+// Community package helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Permissions-publishing helper plugin used alongside `communityPackage()` in
+ * tests. The community package depends on `slingshot-permissions`; tests that
+ * don't register a real permissions package use this thin wrapper to publish
+ * a memory-backed permissions state via the capability contract.
+ */
+export function communityPermissionsPlugin(): SlingshotPlugin {
+  const permissionsState = createTestPermissions();
   return {
-    ...plugin,
-    dependencies: ['slingshot-auth', 'slingshot-notifications'],
+    name: 'slingshot-permissions',
+    dependencies: ['slingshot-auth'],
     async setupMiddleware(ctx: PluginSetupContext) {
-      // Publish permissions via the capability contract so cross-package
-      // consumers (community plugin, admin plugin) resolve them through
-      // `getPermissionsStateOrNull` / `ctx.capabilities.require(...)`.
       await registerPluginCapabilities(getContext(ctx.app), PERMISSIONS_STATE_KEY, [
         provideCapability(PermissionsEvaluatorCap, () => permissionsState.evaluator),
         provideCapability(PermissionsRegistryCap, () => permissionsState.registry),
         provideCapability(PermissionsAdapterCap, () => permissionsState.adapter),
       ]);
-      await plugin.setupMiddleware?.(ctx);
     },
   };
 }
 
-export function notificationsPackage(): SlingshotPackageDefinition {
-  return createNotificationsPackage({
-    dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+export function communityPackage(
+  overrides: Partial<CommunityPluginConfig> = {},
+): SlingshotPackageDefinition {
+  return createCommunityPackage({
+    containerCreation: 'admin',
+    ...overrides,
   });
 }
 

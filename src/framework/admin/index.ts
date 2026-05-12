@@ -73,7 +73,7 @@ export interface SlingshotAdminPluginConfig extends Omit<
  * ```ts
  * const app = createApp({
  *   plugins: [
- *     createCommunityPlugin({ ... }),  // sets PERMISSIONS_STATE_KEY
+ *     createCommunityPackage({ ... }),  // sets PERMISSIONS_STATE_KEY
  *     createSlingshotAdminPlugin({
  *       title: 'My Admin',
  *       basePath: '/admin',

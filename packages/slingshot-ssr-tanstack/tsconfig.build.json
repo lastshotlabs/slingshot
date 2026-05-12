@@ -8,10 +8,12 @@
     "rootDir": ".",
     "skipLibCheck": true,
     "paths": {
-      // Point at slingshot-ssr's BUILT declarations during this build, not
-      // its source. Pointing at src/ would pull slingshot-ssr's .ts files
-      // into this package's compilation, violating rootDir. The dist .d.ts
-      // file is sufficient — we only need the type surface here.
+      // Point at sibling-package BUILT declarations during this build, not
+      // source. Pointing at src/ would pull .ts files into this package's
+      // compilation, violating rootDir. The dist .d.ts files are
+      // sufficient — we only need the type surface here.
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-permissions": ["../slingshot-permissions/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-ssr": ["../slingshot-ssr/dist/src/index.d.ts"]
     }
   },

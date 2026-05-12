@@ -10,6 +10,7 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   createInProcessAdapter,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
@@ -115,6 +116,11 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
       }),
       config: {} as never,
     });
+    await registerPluginCapabilities(
+      { pluginState, capabilityProviders } as never,
+      plugin.name,
+      plugin.capabilities.provides,
+    );
 
     const runtime = getOrchestration({ pluginState, capabilityProviders } as never);
     expect(runtime).toBeDefined();
@@ -142,6 +148,11 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
       }),
       config: {} as never,
     });
+    await registerPluginCapabilities(
+      { pluginState, capabilityProviders } as never,
+      plugin.name,
+      plugin.capabilities.provides,
+    );
 
     const runtime = getOrchestrationOrNull({ pluginState, capabilityProviders } as never);
     expect(runtime).not.toBeNull();

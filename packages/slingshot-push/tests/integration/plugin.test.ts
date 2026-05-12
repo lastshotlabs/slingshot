@@ -16,6 +16,8 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   getActorId,
+  getContextOrNull,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv, PostAuthGuard } from '@lastshotlabs/slingshot-core';
 import type {
@@ -244,6 +246,18 @@ async function runPushPackageLifecycle(
   await plugin.setupRoutes?.(ctx);
   await entityPlugin.setupPost?.(ctx);
   await plugin.setupPost?.(ctx);
+
+  // Drive the declarative `definePackage({ capabilities: { provides } })` slot
+  // the same way `compilePackages` does at framework boot, since these tests
+  // bypass createApp/compilePackages.
+  const slingshotCtx = getContextOrNull(ctx.app);
+  if (slingshotCtx) {
+    await registerPluginCapabilities(
+      slingshotCtx as never,
+      plugin.name,
+      plugin.capabilities.provides,
+    );
+  }
 }
 
 async function createPushHarness(opts?: {

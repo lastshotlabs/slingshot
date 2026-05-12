@@ -14,7 +14,10 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   createInProcessAdapter,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
+import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
+import { getContext } from '@lastshotlabs/slingshot-core';
 import {
   createMemoryAdapter,
   createOrchestrationRuntime,
@@ -59,6 +62,21 @@ function attachMinimalContext(app: Hono) {
   const capabilityProviders = new Map<string, string>();
   attachContext(app, { app, pluginState, capabilityProviders } as never);
   return pluginState;
+}
+
+async function publishPackageCapabilities(
+  app: Hono,
+  plugin: SlingshotPackageDefinition,
+): Promise<void> {
+  const ctx = getContext(app as never) as {
+    pluginState: Map<unknown, unknown>;
+    capabilityProviders?: Map<string, string>;
+  };
+  await registerPluginCapabilities(
+    ctx as never,
+    plugin.name,
+    plugin.capabilities.provides,
+  );
 }
 
 describe('adminAuth — edge cases', () => {
@@ -277,9 +295,10 @@ describe('plugin — event sink integration with bus', () => {
     const pluginState = attachMinimalContext(app);
 
     await plugin.setupRoutes?.(makeSetupContext(app));
+    await publishPackageCapabilities(app, plugin);
 
-    // After setupRoutes, the runtime is published as a contract capability under the
-    // PACKAGE_CAPABILITIES_PREFIX slot for slingshot-orchestration.
+    // After setupRoutes + declarative capability publication, the runtime is in the
+    // PACKAGE_CAPABILITIES_PREFIX slot for slingshot-orchestration-plugin.
     const slot = pluginState.get(
       'slingshot:package:capabilities:slingshot-orchestration-plugin',
     ) as Record<string, unknown> | undefined;
@@ -303,6 +322,7 @@ describe('plugin — event sink integration with bus', () => {
     const pluginState = attachMinimalContext(app);
 
     await plugin.setupRoutes?.(makeSetupContext(app));
+    await publishPackageCapabilities(app, plugin);
 
     const slot = pluginState.get(
       'slingshot:package:capabilities:slingshot-orchestration-plugin',

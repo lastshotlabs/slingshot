@@ -23,6 +23,8 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  getContextOrNull,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import type {
   CoreRegistrar,
@@ -253,6 +255,17 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   await plugin.setupRoutes?.(setupContext);
   await entityPlugin.setupPost?.(setupContext);
   await plugin.setupPost?.(setupContext);
+
+  // Drive the declarative capabilities slot the same way compilePackages
+  // would at framework boot, since this test bypasses createApp.
+  const slingshotCtx = getContextOrNull(app);
+  if (slingshotCtx) {
+    await registerPluginCapabilities(
+      slingshotCtx as never,
+      plugin.name,
+      plugin.capabilities.provides,
+    );
+  }
 
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-push') as
     | { runtime?: PushPluginState }

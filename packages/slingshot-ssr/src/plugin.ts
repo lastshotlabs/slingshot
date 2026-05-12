@@ -6,9 +6,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   definePackage,
-  getContext,
   provideCapability,
-  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import { buildActionRouter } from './actions/routes';
 import { SsrAssetManifestError, type ViteManifest, readAssetManifest } from './assets';
@@ -94,6 +92,18 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
     name: 'slingshot-ssr',
     dependencies: [],
     entities: [],
+    capabilities: {
+      provides: [
+        provideCapability(IsrInvalidatorsCap, () => {
+          if (!isrInvalidators) {
+            throw new Error(
+              '[slingshot-ssr] ISR invalidators requested before setupMiddleware completed or ISR is disabled; ensure config.isr is set and consume IsrInvalidatorsCap from setupPost or later.',
+            );
+          }
+          return isrInvalidators;
+        }),
+      ],
+    },
 
     setupRoutes({ app }: PluginSetupContext) {
       if (config.draftModeSecret !== undefined && config.draftModeSecret.length > 0) {
@@ -134,10 +144,10 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
       await routeSource.init();
 
       if (isrAdapter !== null) {
+        // Capability publication is declarative on the package — see
+        // `definePackage({ capabilities: { provides: [...] } })` above. We
+        // just populate the hoisted ref so resolvers stop throwing.
         isrInvalidators = createIsrInvalidators(isrAdapter);
-        await registerPluginCapabilities(getContext(app), 'slingshot-ssr', [
-          provideCapability(IsrInvalidatorsCap, () => isrInvalidators),
-        ]);
       }
 
       const serverActionsDir =

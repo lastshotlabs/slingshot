@@ -5,6 +5,7 @@ import {
   attachContext,
   createEntityRegistry,
   getContext,
+  registerPluginCapabilities,
   resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
 import { createNotificationsPackage } from '../../src/plugin';
@@ -159,6 +160,10 @@ describe('createNotificationsPackage lifecycle', () => {
     });
 
     const ctx = getContext(app);
+    // Drive the declarative capabilities slot the same way compilePackages
+    // does at framework boot.
+    await registerPluginCapabilities(ctx as never, plugin.name, plugin.capabilities.provides);
+
     const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactory);
     const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistry);
     expect(builderFactory).toBeDefined();
@@ -227,6 +232,12 @@ describe('createNotificationsPackage lifecycle', () => {
       bus,
       events,
     });
+
+    await registerPluginCapabilities(
+      getContext(app) as never,
+      plugin.name,
+      plugin.capabilities.provides,
+    );
 
     const deliveryRegistry = resolveCapabilityValue(
       getContext(app),

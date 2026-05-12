@@ -5,9 +5,7 @@ import type {
 import {
   createConsoleLogger,
   definePackage,
-  getContext,
   provideCapability,
-  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
@@ -87,7 +85,23 @@ export function createOrchestrationPackage(
   return definePackage({
     name: ORCHESTRATION_PLUGIN_KEY,
     dependencies: [],
+    capabilities: {
+      provides: [
+        provideCapability(OrchestrationRuntimeCap, () => {
+          if (!runtime) {
+            throw new Error(
+              '[slingshot-orchestration-plugin] runtime requested before setupRoutes constructed it; consumers must read OrchestrationRuntimeCap from setupPost or later.',
+            );
+          }
+          return runtime;
+        }),
+      ],
+    },
 
+    // Returns a Promise so tests can use `await … .resolves.toBeUndefined()`
+    // against the success path and `… .rejects.toThrow(…)` against the
+    // INVALID_CONFIG checks below. The hook contract is `() => void | Promise<void>`.
+    // eslint-disable-next-line @typescript-eslint/require-await
     async setupRoutes({ app, bus }: PluginSetupContext) {
       if (!runtime) {
         if (!providedAdapter) {
@@ -104,15 +118,6 @@ export function createOrchestrationPackage(
           eventSink,
         });
       }
-
-      // Imperative capability publish — the framework's capabilities.provides
-      // resolver runs at setupMiddleware time, before setupRoutes creates the
-      // runtime. Publishing here keeps the package-capabilities pluginState
-      // slot populated immediately after setupRoutes for both framework-driven
-      // boots and isolated lifecycle tests.
-      await registerPluginCapabilities(getContext(app), ORCHESTRATION_PLUGIN_KEY, [
-        provideCapability(OrchestrationRuntimeCap, () => runtime),
-      ]);
 
       if (!routes) return;
       if (routeMiddleware.length === 0) {

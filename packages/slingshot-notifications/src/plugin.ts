@@ -11,11 +11,11 @@ import {
   definePackage,
   getContextOrNull,
   provideCapability,
-  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from './builder';
+import type { NotificationBuilder } from '@lastshotlabs/slingshot-core';
 import { createIntervalDispatcher } from './dispatcher';
 import type { DispatcherAdapter } from './dispatcher';
 import { buildNotificationsEntityModules } from './entities/modules';
@@ -229,6 +229,14 @@ export function createNotificationsPackage(
   const deliveryAdapters = new Set<DeliveryAdapter>();
   // Hoisted so the health capability can reference it. Assigned in setupPost.
   let dispatcher!: DispatcherAdapter;
+  // Hoisted refs read by the declarative capability resolvers. Populated in
+  // setupPost; resolvers throw a clear "not ready" error when read earlier.
+  let builderFactoryRef: ((opts: { source: string }) => NotificationBuilder) | undefined;
+  const deliveryRegistry: NotificationsDeliveryRegistry = {
+    register(adapter: DeliveryAdapter) {
+      deliveryAdapters.add(adapter);
+    },
+  };
 
   const { notificationModule, notificationPreferenceModule } = buildNotificationsEntityModules({
     onNotificationAdapter: adapter => {
@@ -279,6 +287,20 @@ export function createNotificationsPackage(
     mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
     entities: [notificationModule, notificationPreferenceModule],
+    capabilities: {
+      provides: [
+        provideCapability(NotificationsBuilderFactory, () => {
+          if (!builderFactoryRef) {
+            throw new Error(
+              '[slingshot-notifications] builder factory requested before setupPost completed; consumers must read NotificationsBuilderFactory from setupPost or later.',
+            );
+          }
+          return builderFactoryRef;
+        }),
+        provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
+        provideCapability(NotificationsHealthCap, () => buildHealth),
+      ],
+    },
 
     setupMiddleware({ events }: PluginSetupContext) {
       // Entity adapters are populated by the entity modules' `onAdapter`
@@ -405,23 +427,10 @@ export function createNotificationsPackage(
           metrics: metricsProxy,
         });
 
-      const deliveryRegistry = {
-        register(adapter: DeliveryAdapter) {
-          deliveryAdapters.add(adapter);
-        },
-      };
-
-      // Contract-bound capability publish — cross-package consumers resolve
-      // `NotificationsBuilderFactory`, `NotificationsDeliveryRegistry`, and
-      // `NotificationsHealthCap` through `ctx.capabilities.require(...)`.
-      const slingshotCtx = getContextOrNull(app);
-      if (slingshotCtx) {
-        await registerPluginCapabilities(slingshotCtx, NOTIFICATIONS_PLUGIN_NAME, [
-          provideCapability(NotificationsBuilderFactory, () => builderFactory),
-          provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
-          provideCapability(NotificationsHealthCap, () => buildHealth),
-        ]);
-      }
+      // Capability publication is declarative on the package — see
+      // `definePackage({ capabilities: { provides: [...] } })` above. We just
+      // populate the hoisted ref so resolvers stop throwing.
+      builderFactoryRef = builderFactory;
 
       dispatcher.start();
 

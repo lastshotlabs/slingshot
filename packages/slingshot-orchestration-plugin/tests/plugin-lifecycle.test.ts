@@ -7,7 +7,9 @@ import {
   createEventPublisher,
   createInProcessAdapter,
   getContext,
+  registerPluginCapabilities,
 } from '@lastshotlabs/slingshot-core';
+import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
   createMemoryAdapter,
@@ -40,6 +42,25 @@ function attachMinimalContext(app: Hono) {
 function getCapabilityProviders(app: Hono): Map<string, string> {
   const ctx = getContext(app as never) as { capabilityProviders?: Map<string, string> };
   return ctx.capabilityProviders ?? new Map();
+}
+
+// Drive the declarative `definePackage({ capabilities: { provides } })` slot the
+// same way `compilePackages` does at framework boot. Tests that bypass
+// `createApp/compilePackages` call this after running the lifecycle hooks that
+// populate the resolver closures.
+async function publishPackageCapabilities(
+  app: Hono,
+  plugin: SlingshotPackageDefinition,
+): Promise<void> {
+  const ctx = getContext(app as never) as {
+    pluginState: Map<unknown, unknown>;
+    capabilityProviders?: Map<string, string>;
+  };
+  await registerPluginCapabilities(
+    ctx as never,
+    plugin.name,
+    plugin.capabilities.provides,
+  );
 }
 
 const noopTask = defineTask({
@@ -150,6 +171,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
     const ctx = makeSetupContext(app);
 
     await expect(plugin.setupRoutes?.(ctx)).resolves.toBeUndefined();
+    await publishPackageCapabilities(app, plugin);
   });
 
   test('publishes runtime on pluginState after setupRoutes', async () => {
@@ -165,6 +187,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
     const ctx = makeSetupContext(app);
 
     await plugin.setupRoutes?.(ctx);
+    await publishPackageCapabilities(app, plugin);
 
     expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
   });
@@ -184,6 +207,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: false', () => 
     const ctx = makeSetupContext(app);
 
     await expect(plugin.setupRoutes?.(ctx)).resolves.toBeUndefined();
+    await publishPackageCapabilities(app, plugin);
   });
 
   test('still publishes runtime on pluginState when routes: false', async () => {
@@ -199,6 +223,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: false', () => 
     const ctx = makeSetupContext(app);
 
     await plugin.setupRoutes?.(ctx);
+    await publishPackageCapabilities(app, plugin);
 
     expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
   });
@@ -374,6 +399,7 @@ describe('getOrchestration / getOrchestrationOrNull', () => {
     const app = new Hono();
     const pluginState = attachMinimalContext(app);
     await plugin.setupRoutes?.(makeSetupContext(app));
+    await publishPackageCapabilities(app, plugin);
 
     const ctx = { pluginState, capabilityProviders: getCapabilityProviders(app) } as never;
     const runtime = getOrchestration(ctx);

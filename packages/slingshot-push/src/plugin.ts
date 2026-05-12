@@ -12,10 +12,8 @@ import {
   definePackage,
   getActorId,
   getActorTenantId,
-  getContext,
   getContextOrNull,
   provideCapability,
-  registerPluginCapabilities,
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -98,6 +96,9 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
   let providersRef: Partial<Record<'web' | 'ios' | 'android', PushProvider>> = {};
   // Captured during setupPost so teardown can abort in-flight retry sleeps.
   let routerRef: ReturnType<typeof createPushRouter> | null = null;
+  // Hoisted ref read by the declarative `PushRuntimeCap` resolver. Populated
+  // in setupPost; resolver throws a clear "not ready" error when read earlier.
+  let runtimeStateRef: PushPluginState | undefined;
 
   // The unified metrics emitter is owned by the framework context and not
   // available until `setupPost` runs (the router is constructed there). We
@@ -181,6 +182,19 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
     ],
     publicPaths: enabledPlatforms.has('web') ? [`${config.mountPath}/vapid-public-key`] : [],
     csrfExemptPaths: [`${config.mountPath}/*`],
+    capabilities: {
+      provides: [
+        provideCapability(PushRuntimeCap, () => {
+          if (!runtimeStateRef) {
+            throw new Error(
+              '[slingshot-push] runtime requested before setupPost completed; consumers must read PushRuntimeCap from setupPost or later.',
+            );
+          }
+          return runtimeStateRef;
+        }),
+        provideCapability(PushHealthCap, () => getHealth),
+      ],
+    },
 
     setupRoutes({ app, bus }: PluginSetupContext) {
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
@@ -405,10 +419,10 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
         },
       };
 
-      await registerPluginCapabilities(getContext(app), 'slingshot-push', [
-        provideCapability(PushRuntimeCap, () => state),
-        provideCapability(PushHealthCap, () => getHealth),
-      ]);
+      // Capability publication is declarative on the package — see
+      // `definePackage({ capabilities: { provides: [...] } })` above. We just
+      // populate the hoisted ref so resolvers stop throwing.
+      runtimeStateRef = state;
 
       // Consume the slingshot-notifications contract: register our delivery adapter
       // through the typed `NotificationsDeliveryRegistry` capability when notifications

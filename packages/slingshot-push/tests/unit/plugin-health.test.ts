@@ -7,6 +7,7 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   getContext,
+  registerPluginCapabilities,
   resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
 import type { SlingshotFrameworkConfig, StoreType } from '@lastshotlabs/slingshot-core';
@@ -162,6 +163,14 @@ describe('createPushPackage health capability', () => {
     await pkg.setupRoutes?.(ctx);
     await entityPlugin.setupPost?.(ctx);
     await pkg.setupPost?.(ctx);
+
+    // Drive the declarative capabilities slot the same way compilePackages
+    // does at framework boot.
+    await registerPluginCapabilities(
+      getContext(app) as never,
+      pkg.name,
+      pkg.capabilities.provides,
+    );
 
     const getHealth = resolveCapabilityValue(getContext(app), PushHealthCap);
     expect(typeof getHealth).toBe('function');

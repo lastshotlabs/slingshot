@@ -3,16 +3,14 @@ import { MAX_CONTENT_BODY_LENGTH } from '@lastshotlabs/slingshot-core';
 import {
   CHAT_PLUGIN_STATE_KEY,
   ChatRepoNotImplementedError,
-  chatManifest,
-  createChatPlugin,
+  createChatPackage,
 } from '../../src/index';
 import * as entry from '../../src/index';
 import { createMessageSchema, createRoomSchema, updateRoomSchema } from '../../src/schemas';
 
 describe('slingshot-chat public api', () => {
   test('entrypoint re-exports the main runtime surface', () => {
-    expect(entry.createChatPlugin).toBe(createChatPlugin);
-    expect(entry.chatManifest).toBe(chatManifest);
+    expect(entry.createChatPackage).toBe(createChatPackage);
     expect(entry.CHAT_PLUGIN_STATE_KEY).toBe(CHAT_PLUGIN_STATE_KEY);
     expect(entry.ChatRepoNotImplementedError).toBe(ChatRepoNotImplementedError);
   });

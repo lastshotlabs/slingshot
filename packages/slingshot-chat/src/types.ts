@@ -666,15 +666,15 @@ export interface ChatAesGcmEncryptionConfig {
   readonly aadPrefix?: string;
 }
 
-/** Manifest-safe encryption config for `createChatPlugin()`. */
+/** JSON-safe encryption config for `createChatPackage()`. */
 export type ChatEncryptionConfig = ChatNoEncryptionConfig | ChatAesGcmEncryptionConfig;
 
 /**
- * Configuration for `createChatPlugin()`.
+ * Configuration for `createChatPackage()`.
  *
  * @example
  * ```ts
- * createChatPlugin({
+ * createChatPackage({
  *   storeType: 'postgres',
  *   mountPath: '/chat',
  *   permissions: { createRoom: ['admin', 'moderator'] },

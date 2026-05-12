@@ -5,13 +5,14 @@ import './events';
  * `@lastshotlabs/slingshot-chat` is Slingshot's chat domain package. It provides
  * rooms, memberships, messages, reactions, read receipts, pins, blocks,
  * favorites, invites, reminders, scheduled messages, and the WebSocket realtime
- * surface — driven by the shared package-first/entity authoring model.
+ * surface — authored via `definePackage(...)` and consumed through
+ * `createApp({ packages: [createChatPackage(...)] })`.
  *
  * @example
  * ```ts
- * import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+ * import { createChatPackage } from '@lastshotlabs/slingshot-chat';
  *
- * createChatPlugin({
+ * createChatPackage({
  *   storeType: 'postgres',
  *   mountPath: '/chat',
  * });
@@ -76,20 +77,16 @@ export type {
 } from './types';
 
 /**
- * Create and return a configured slingshot-chat `SlingshotPlugin`.
+ * Create and return a configured chat `SlingshotPackageDefinition`.
  *
  * @example
  * ```ts
- * import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+ * import { createChatPackage } from '@lastshotlabs/slingshot-chat';
  *
- * createChatPlugin({ storeType: 'memory', mountPath: '/chat' });
+ * createChatPackage({ storeType: 'memory', mountPath: '/chat' });
  * ```
  */
-export { createChatPlugin } from './plugin';
-/**
- * Entity manifest describing the chat entities and their wiring graph.
- */
-export { chatManifest } from './manifest/chatManifest';
+export { createChatPackage } from './plugin';
 
 /**
  * Provider-owned package contract. Cross-package consumers resolve
@@ -104,7 +101,7 @@ export { Chat, ChatInteractionsPeerCap } from './public';
 export type { ChatInteractionsPeer } from './public';
 
 /**
- * Plugin state key under which the chat plugin publishes a partial
+ * Plugin state key under which the chat package publishes a partial
  * `ChatPluginState` (currently `interactionsPeer`) for back-compat with
  * `getPublishedInteractionsPeerOrNull` consumers. Prefer the public contract
  * (`ChatInteractionsPeerCap`) for new cross-package code.

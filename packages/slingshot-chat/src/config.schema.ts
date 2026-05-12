@@ -39,7 +39,7 @@ export const chatPermissionsConfigSchema = z.object({
 });
 
 /**
- * Zod schema for `ChatPluginConfig`. Validated at construction time in `createChatPlugin()`.
+ * Zod schema for `ChatPluginConfig`. Validated at construction time in `createChatPackage()`.
  * @internal
  */
 export const chatPluginConfigSchema = z.object({

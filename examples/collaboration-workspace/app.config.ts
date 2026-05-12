@@ -1,6 +1,6 @@
 import { createAssetsPackage } from '../../packages/slingshot-assets/src/index.ts';
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
-import { createChatPlugin } from '../../packages/slingshot-chat/src/index.ts';
+import { createChatPackage } from '../../packages/slingshot-chat/src/index.ts';
 import { createCommunityPackage } from '../../packages/slingshot-community/src/index.ts';
 import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/index.ts';
 import { createEmbedsPlugin } from '../../packages/slingshot-embeds/src/index.ts';
@@ -25,13 +25,6 @@ export default defineApp({
       auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createChatPlugin({
-      storeType: 'memory',
-      permissions: {
-        createRoom: ['user', 'moderator', 'admin'],
-        sendMessage: ['user', 'moderator', 'admin'],
-      },
-    }),
     createEmbedsPlugin({}),
     createGifsPlugin({
       provider: 'tenor',
@@ -48,6 +41,13 @@ export default defineApp({
   ],
   packages: [
     createPermissionsPackage(),
+    createChatPackage({
+      storeType: 'memory',
+      permissions: {
+        createRoom: ['user', 'moderator', 'admin'],
+        sendMessage: ['user', 'moderator', 'admin'],
+      },
+    }),
     createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
     createAssetsPackage({
       storage: { adapter: 'memory' },

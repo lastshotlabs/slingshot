@@ -6,7 +6,10 @@ import type {
   AppEnv,
   CoreRegistrar,
   PermissionsState,
+  ResolvedEntityConfig,
+  SlingshotPackageDefinition,
   StoreInfra,
+  StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   InProcessAdapter,
@@ -16,18 +19,26 @@ import {
   createEntityRegistry,
   createEventDefinitionRegistry,
   createEventPublisher,
+  resolveRepo,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import {
+  createEntityFactories,
+  createEntityPlugin,
+} from '@lastshotlabs/slingshot-entity';
+import type {
+  BareEntityAdapter,
+  EntityPluginEntry,
+} from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
 import { createMemoryPermissionsAdapter } from '@lastshotlabs/slingshot-permissions/testing';
-import { createChatPlugin } from '../../src/plugin';
+import { createChatPackage } from '../../src/plugin';
 
 type PgRow = Record<string, unknown>;
 type PgQueryResult = { rows: PgRow[]; rowCount: number | null };
 
 const BLOCK_TABLE = 'slingshot_chat_blocks';
-const pluginsToTeardown = new Set<ReturnType<typeof createChatPlugin>>();
+const packagesToTeardown = new Set<SlingshotPackageDefinition>();
 
 class FakeChatRoutePostgresPool {
   readonly queries: string[] = [];
@@ -152,8 +163,8 @@ async function createPostgresChatBlocksApp(): Promise<{
   pool: FakeChatRoutePostgresPool;
 }> {
   const pool = new FakeChatRoutePostgresPool();
-  const plugin = createChatPlugin({ storeType: 'postgres', enablePresence: false });
-  pluginsToTeardown.add(plugin);
+  const pkg = createChatPackage({ storeType: 'postgres', enablePresence: false });
+  packagesToTeardown.add(pkg);
 
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
@@ -223,33 +234,82 @@ async function createPostgresChatBlocksApp(): Promise<{
     await next();
   });
 
-  await plugin.setupMiddleware?.({
+  // Mount the package through `createEntityPlugin` — same pattern as the
+  // chat test harness. Each entity module's `wiring.buildAdapter` runs
+  // during the entity-plugin's setupRoutes and populates the package refs.
+  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+    const impl = (entityModule as { implementation: unknown }).implementation as {
+      config: ResolvedEntityConfig;
+      operations?: Record<string, unknown>;
+      extraRoutes?: unknown;
+      overrides?: unknown;
+      channels?: unknown;
+      routePath?: string;
+      parentPath?: string;
+      wiring: { mode: string; buildAdapter?: unknown };
+    };
+    let buildAdapter: ((storeType: StoreType, infra: unknown) => BareEntityAdapter) | undefined;
+    if (impl.wiring.mode === 'manual') {
+      buildAdapter = impl.wiring.buildAdapter as
+        | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
+        | undefined;
+    } else if (impl.wiring.mode === 'standard') {
+      buildAdapter = (storeType, infra) => {
+        const factories = createEntityFactories(
+          impl.config,
+          impl.operations as Parameters<typeof createEntityFactories>[1],
+        );
+        return resolveRepo(
+          factories,
+          storeType,
+          infra as StoreInfra,
+        ) as unknown as BareEntityAdapter;
+      };
+    }
+    if (!buildAdapter) {
+      throw new Error(
+        `[chat postgres test] cannot resolve buildAdapter for entity '${entityModule.entityName}'`,
+      );
+    }
+    return {
+      config: impl.config,
+      operations: impl.operations as never,
+      extraRoutes: impl.extraRoutes as never,
+      overrides: impl.overrides as never,
+      channels: impl.channels as never,
+      ...(impl.routePath ? { routePath: impl.routePath } : {}),
+      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+      buildAdapter,
+    };
+  });
+  const entityPlugin = createEntityPlugin({
+    name: pkg.name,
+    mountPath: pkg.mountPath ?? '/chat',
+    entities: entityEntries,
+    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+  });
+
+  const setupCtx = {
     app,
     config: frameworkConfig as never,
     bus,
     events,
-  });
-  await plugin.setupRoutes?.({
-    app,
-    config: frameworkConfig as never,
-    bus,
-    events,
-  });
-  await plugin.setupPost?.({
-    app,
-    config: frameworkConfig as never,
-    bus,
-    events,
-  });
+  };
+  await pkg.setupMiddleware?.(setupCtx as never);
+  await entityPlugin.setupMiddleware?.(setupCtx as never);
+  await entityPlugin.setupRoutes?.(setupCtx as never);
+  await pkg.setupRoutes?.(setupCtx as never);
+  await entityPlugin.setupPost?.(setupCtx as never);
+  await pkg.setupPost?.(setupCtx as never);
 
   return { app, pool };
 }
 
 afterEach(() => {
-  for (const plugin of pluginsToTeardown) {
-    plugin.teardown?.();
+  for (const pkg of packagesToTeardown) {
+    pkg.teardown?.();
   }
-  pluginsToTeardown.clear();
+  packagesToTeardown.clear();
 });
 
 describe('chat postgres block routes', () => {

@@ -4,7 +4,7 @@
 //
 // Two exports:
 //
-//   - `createTanStackRouteSource()` — pass to `createSsrPlugin({ routeSource })`
+//   - `createTanStackRouteSource()` — pass to `createSsrPackage({ routeSource })`
 //     in your slingshot app. Resolves TanStack route files, pairs each with
 //     its `.server.{ts,tsx}` companion, and runs the loader server-side.
 //

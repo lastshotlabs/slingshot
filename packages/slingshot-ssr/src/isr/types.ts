@@ -89,7 +89,7 @@ export interface IsrCacheAdapter {
 }
 
 /**
- * ISR (Incremental Static Regeneration) configuration for `createSsrPlugin()`.
+ * ISR (Incremental Static Regeneration) configuration for `createSsrPackage()`.
  *
  * When set, any loader returning `revalidate: N` causes the rendered HTML to be
  * stored in the configured adapter. Subsequent requests are served from cache
@@ -98,7 +98,7 @@ export interface IsrCacheAdapter {
  *
  * @example Memory adapter (default for single-instance deployments)
  * ```ts
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer,
  *   serverRoutesDir,
  *   assetsManifest,
@@ -111,7 +111,7 @@ export interface IsrCacheAdapter {
  * import { createRedisIsrCache } from '@lastshotlabs/slingshot-ssr/isr';
  * import Redis from 'ioredis';
  *
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer,
  *   serverRoutesDir,
  *   assetsManifest,

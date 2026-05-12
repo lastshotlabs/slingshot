@@ -1,39 +1,39 @@
 import { describe, expect, it } from 'bun:test';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { ssrPluginConfigSchema } from '../../src/config.schema';
-import { createSsrPlugin } from '../../src/plugin';
+import { createSsrPackage } from '../../src/plugin';
 import { createTestSsrConfig } from '../../src/testing';
 
-describe('createSsrPlugin', () => {
+describe('createSsrPackage', () => {
   it('returns a SlingshotPlugin with name slingshot-ssr', () => {
-    const plugin = createSsrPlugin(createTestSsrConfig());
+    const plugin = createSsrPackage(createTestSsrConfig());
     expect(plugin.name).toBe('slingshot-ssr');
   });
 
   it('has setupMiddleware lifecycle method', () => {
-    const plugin = createSsrPlugin(createTestSsrConfig());
+    const plugin = createSsrPackage(createTestSsrConfig());
     expect(typeof plugin.setupMiddleware).toBe('function');
   });
 
   it('registers route and middleware lifecycle methods', () => {
-    const plugin = createSsrPlugin(createTestSsrConfig());
+    const plugin = createSsrPackage(createTestSsrConfig());
     expect(typeof plugin.setupRoutes).toBe('function');
     expect(typeof plugin.setupPost).toBe('function');
   });
 });
 
-describe('createSsrPlugin — config validation', () => {
+describe('createSsrPackage — config validation', () => {
   it('throws ZodError when serverRoutesDir is missing', () => {
-    expect(() => createSsrPlugin(createTestSsrConfig({ serverRoutesDir: '' }))).toThrow();
+    expect(() => createSsrPackage(createTestSsrConfig({ serverRoutesDir: '' }))).toThrow();
   });
 
   it('throws ZodError when assetsManifest is missing', () => {
-    expect(() => createSsrPlugin(createTestSsrConfig({ assetsManifest: '' }))).toThrow();
+    expect(() => createSsrPackage(createTestSsrConfig({ assetsManifest: '' }))).toThrow();
   });
 
   it('throws ZodError when renderer is not an object', () => {
     expect(() =>
-      createSsrPlugin({
+      createSsrPackage({
         renderer: 'not-an-object' as never,
         serverRoutesDir: '/fake/routes',
         assetsManifest: '/fake/manifest.json',
@@ -119,9 +119,9 @@ describe('ssrPluginConfigSchema', () => {
   });
 });
 
-describe('createSsrPlugin — production mode manifest check', () => {
+describe('createSsrPackage — production mode manifest check', () => {
   it('throws at setupMiddleware time when manifest is missing in production', async () => {
-    const plugin = createSsrPlugin(
+    const plugin = createSsrPackage(
       createTestSsrConfig({
         assetsManifest: '/nonexistent/manifest.json',
         devMode: false,
@@ -148,7 +148,7 @@ describe('createSsrPlugin — production mode manifest check', () => {
   });
 
   it('does NOT throw at setupMiddleware time in dev mode', async () => {
-    const plugin = createSsrPlugin(
+    const plugin = createSsrPackage(
       createTestSsrConfig({
         assetsManifest: '/nonexistent/manifest.json',
         devMode: true,

@@ -49,7 +49,7 @@ export interface IsrInvalidators {
 /**
  * Create ISR invalidation utilities bound to a specific cache adapter.
  *
- * The returned object is stored in `pluginState` during `createSsrPlugin()`
+ * The returned object is stored in `pluginState` during `createSsrPackage()`
  * setup so that server actions and route handlers can retrieve it without
  * importing from a global singleton (Rule 3 — no module-level mutable state).
  *

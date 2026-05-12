@@ -2,9 +2,10 @@ import path from 'node:path';
 import type {
   PluginSetupContext,
   ResolvedEntityConfig,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
+  definePackage,
   getContext,
   provideCapability,
   registerPluginCapabilities,
@@ -35,15 +36,19 @@ function toTagValue(value: unknown): string | null {
 }
 
 /**
- * Create a Slingshot SSR plugin.
+ * Create the Slingshot SSR package.
  *
  * Registers SSR middleware, server action routes, metadata routes, and
  * optional entity-driven page support when `config.pages` is supplied.
  *
+ * The package itself owns no entities — page routes are driven imperatively
+ * from `setupMiddleware`/`setupRoutes`/`setupPost` lifecycle hooks, so the
+ * `definePackage` input has empty `entities: []`.
+ *
  * @param rawConfig - Plugin configuration validated at construction time.
- * @returns A Slingshot plugin instance for app registration.
+ * @returns A `SlingshotPackageDefinition` ready to pass to `createApp({ packages })`.
  */
-export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
+export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDefinition {
   const validated = ssrPluginConfigSchema.parse(rawConfig);
 
   // Pick the route source. Explicit `routeSource` wins; otherwise build a
@@ -85,8 +90,10 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
   let entityConfigMap = new Map<string, ResolvedEntityConfig>();
   const unsubscribers: Array<() => void> = [];
 
-  return {
+  return definePackage({
     name: 'slingshot-ssr',
+    dependencies: [],
+    entities: [],
 
     setupRoutes({ app }: PluginSetupContext) {
       if (config.draftModeSecret !== undefined && config.draftModeSecret.length > 0) {
@@ -228,7 +235,7 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
         await isrTracker.drainPendingWrites(cacheFlushTimeoutMs);
       }
     },
-  };
+  });
 }
 
 /**

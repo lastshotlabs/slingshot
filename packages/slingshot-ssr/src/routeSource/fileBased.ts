@@ -40,13 +40,13 @@ export interface FileBasedRouteSourceConfig {
 /**
  * Build the default file-based route source.
  *
- * This is what `createSsrPlugin` uses when no explicit `routeSource` is
- * configured. Existing apps that pass `serverRoutesDir` to `createSsrPlugin`
+ * This is what `createSsrPackage` uses when no explicit `routeSource` is
+ * configured. Existing apps that pass `serverRoutesDir` to `createSsrPackage`
  * get this source behind the scenes — no migration needed.
  *
  * @example
  * ```ts
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer,
  *   routeSource: createFileBasedRouteSource({
  *     serverRoutesDir: path.resolve(import.meta.dir, 'server/routes'),

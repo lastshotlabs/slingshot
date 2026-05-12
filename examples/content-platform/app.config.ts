@@ -8,7 +8,7 @@ import { createDeepLinksPlugin } from '../../packages/slingshot-deep-links/src/i
 import { createNotificationsPackage } from '../../packages/slingshot-notifications/src/index.ts';
 import { createPermissionsPackage } from '../../packages/slingshot-permissions/src/index.ts';
 import { createSearchPackage } from '../../packages/slingshot-search/src/index.ts';
-import { createSsrPlugin } from '../../packages/slingshot-ssr/src/index.ts';
+import { createSsrPackage } from '../../packages/slingshot-ssr/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 import { renderer } from './src/renderer.ts';
 
@@ -50,14 +50,6 @@ export default defineApp({
         '/open/*': '/articles/:id',
       },
     }),
-    createSsrPlugin({
-      renderer,
-      serverRoutesDir,
-      assetsManifest,
-      staticDir,
-      draftModeSecret: process.env.DRAFT_MODE_SECRET ?? 'draft-secret',
-      isr: { adapter: createKvIsrCache(inMemoryKv) },
-    }),
   ],
   packages: [
     createPermissionsPackage(),
@@ -73,6 +65,14 @@ export default defineApp({
       providers: {
         default: { provider: 'db-native' },
       },
+    }),
+    createSsrPackage({
+      renderer,
+      serverRoutesDir,
+      assetsManifest,
+      staticDir,
+      draftModeSecret: process.env.DRAFT_MODE_SECRET ?? 'draft-secret',
+      isr: { adapter: createKvIsrCache(inMemoryKv) },
     }),
   ],
 });

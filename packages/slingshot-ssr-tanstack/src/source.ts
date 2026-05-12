@@ -70,15 +70,15 @@ export interface TanStackRouteSourceConfig {
 /**
  * Build a TanStack-aware route source.
  *
- * Pass to `createSsrPlugin({ routeSource })`. The plugin will use this for
+ * Pass to `createSsrPackage({ routeSource })`. The plugin will use this for
  * URL → route resolution and module loading instead of the file-based default.
  *
  * @example
  * ```ts
- * import { createSsrPlugin } from '@lastshotlabs/slingshot-ssr';
+ * import { createSsrPackage } from '@lastshotlabs/slingshot-ssr';
  * import { createTanStackRouteSource } from '@lastshotlabs/slingshot-ssr-tanstack';
  *
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer,
  *   routeSource: createTanStackRouteSource({
  *     routesDirectory: path.resolve(__dirname, '../web/src/routes'),

@@ -28,7 +28,7 @@ export type ViteManifest = Partial<Record<string, ViteManifestEntry>>;
 /**
  * Error thrown when the asset manifest file cannot be read or parsed.
  *
- * In production mode, `createSsrPlugin()` treats this as a startup error —
+ * In production mode, `createSsrPackage()` treats this as a startup error —
  * the server will not start without a valid manifest. Run `bun run build`
  * before starting the server in production.
  */

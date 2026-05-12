@@ -68,7 +68,7 @@ export const isrConfigSchema = z
 /**
  * Zod schema for {@link SsrPluginConfig}.
  *
- * Used by `createSsrPlugin()` to validate config at construction time.
+ * Used by `createSsrPackage()` to validate config at construction time.
  * Exported so callers can pre-validate before passing in, or use it to
  * generate JSON Schema for tooling.
  *
@@ -312,7 +312,7 @@ export const ssrPluginConfigSchema = z.object({
 }).refine(
   (cfg) => cfg.serverRoutesDir !== undefined || cfg.routeSource !== undefined,
   {
-    message: 'createSsrPlugin requires either `serverRoutesDir` or `routeSource`.',
+    message: 'createSsrPackage requires either `serverRoutesDir` or `routeSource`.',
     path: ['serverRoutesDir'],
   },
 );

@@ -1,6 +1,6 @@
 // packages/slingshot-ssr/src/index.ts
 
-/** Core renderer, loader, ISR, draft-mode, and page-contract types for `createSsrPlugin()`. */
+/** Core renderer, loader, ISR, draft-mode, and page-contract types for `createSsrPackage()`. */
 export type {
   SsrLoadContext,
   SsrLoadResult,
@@ -46,8 +46,8 @@ export {
   defineRoute,
 } from './types';
 
-/** Build the SSR plugin that mounts route resolution, rendering, metadata, and ISR behavior. */
-export { createSsrPlugin } from './plugin';
+/** Build the SSR package that mounts route resolution, rendering, metadata, and ISR behavior. */
+export { createSsrPackage } from './plugin';
 
 /** Error thrown when the client asset manifest cannot be read or parsed. */
 export { SsrAssetManifestError } from './assets';

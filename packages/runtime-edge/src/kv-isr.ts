@@ -413,7 +413,7 @@ export interface KvIsrCacheOptions {
  *   async fetch(request: Request, env: Env): Promise<Response> {
  *     const app = await createApp({
  *       plugins: [
- *         createSsrPlugin({
+ *         createSsrPackage({
  *           isr: { adapter: createKvIsrCache(env.ISR_CACHE) },
  *           // ...
  *         }),

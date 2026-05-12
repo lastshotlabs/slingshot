@@ -204,7 +204,7 @@ async function readFileViaRuntime(
 /**
  * Build the Hono middleware handler for SSR request interception.
  *
- * Called once at plugin startup from `createSsrPlugin()`. Returns the handler;
+ * Called once at plugin startup from `createSsrPackage()`. Returns the handler;
  * the caller registers it with `app.use('*', handler)`.
  *
  * The `app` parameter is the Hono instance — closed over so the middleware can
@@ -231,7 +231,7 @@ export function buildSsrMiddleware(
   isrAdapter: IsrCacheAdapter | null = null,
   isrTracker: IsrTracker | null = null,
 ): MiddlewareHandler {
-  // Resolve the route source up-front. `createSsrPlugin` already does this
+  // Resolve the route source up-front. `createSsrPackage` already does this
   // before passing config in, but `buildSsrMiddleware` is also called directly
   // (notably in tests) with a config that may only have `serverRoutesDir`.
   // Build the file-based source from `serverRoutesDir` if no explicit source
@@ -242,7 +242,7 @@ export function buildSsrMiddleware(
       ? createFileBasedRouteSource({ serverRoutesDir: rawConfig.serverRoutesDir })
       : null);
   if (resolvedRouteSource && resolvedRouteSource !== rawConfig.routeSource) {
-    // Tests / direct callers may skip `createSsrPlugin`. Initialize the source
+    // Tests / direct callers may skip `createSsrPackage`. Initialize the source
     // here so the file-based scanner has run before the first request.
     void Promise.resolve(resolvedRouteSource.init());
   }

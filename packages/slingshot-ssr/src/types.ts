@@ -754,9 +754,9 @@ export type SsrMiddlewareResult =
  *
  * @example Plain HTML renderer (no framework required)
  * ```ts
- * import { createSsrPlugin } from '@lastshotlabs/slingshot-ssr'
+ * import { createSsrPackage } from '@lastshotlabs/slingshot-ssr'
  *
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer: {
  *     async resolve(url) {
  *       const template = templates[url.pathname]
@@ -1043,11 +1043,11 @@ export interface SsrCacheControl {
 }
 
 /**
- * Configuration for `createSsrPlugin()`.
+ * Configuration for `createSsrPackage()`.
  *
  * @example
  * ```ts
- * createSsrPlugin({
+ * createSsrPackage({
  *   renderer: createReactRenderer({ snapshot, resolveComponent }),
  *   serverRoutesDir: import.meta.dir + '/server/routes',
  *   assetsManifest: import.meta.dir + '/dist/.vite/manifest.json',
@@ -1151,13 +1151,13 @@ export interface SsrPluginConfig {
    *
    * @example Memory adapter (default)
    * ```ts
-   * createSsrPlugin({ ..., isr: {} })
+   * createSsrPackage({ ..., isr: {} })
    * ```
    *
    * @example Redis adapter
    * ```ts
    * import { createRedisIsrCache } from '@lastshotlabs/slingshot-ssr/isr';
-   * createSsrPlugin({ ..., isr: { adapter: createRedisIsrCache(redis) } })
+   * createSsrPackage({ ..., isr: { adapter: createRedisIsrCache(redis) } })
    * ```
    */
   readonly isr?: IsrConfig;
@@ -1214,7 +1214,7 @@ export interface SsrPluginConfig {
    * ```ts
    * import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
    *
-   * createSsrPlugin({
+   * createSsrPackage({
    *   runtime: edgeRuntime({
    *     fileStore: (path) => env.ASSETS.fetch(path).then(r => r.ok ? r.text() : null),
    *   }),
@@ -1239,7 +1239,7 @@ export interface SsrPluginConfig {
    *
    * @example
    * ```ts
-   * createSsrPlugin({
+   * createSsrPackage({
    *   renderer,
    *   serverRoutesDir,
    *   assetsManifest,

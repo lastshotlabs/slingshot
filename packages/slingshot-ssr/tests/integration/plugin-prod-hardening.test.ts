@@ -11,7 +11,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { IsrCacheAdapter, IsrCacheEntry } from '../../src/isr/types';
 import type { PageDeclaration } from '../../src/pageDeclarations';
-import { createSsrPlugin } from '../../src/plugin';
+import { createSsrPackage } from '../../src/plugin';
 import type { SlingshotSsrRenderer, SsrRouteChain, SsrRouteMatch } from '../../src/types';
 
 function makeRouteMatch(url: URL): SsrRouteMatch {
@@ -48,11 +48,11 @@ const mockBus = { on: () => {}, off: () => {}, emit: () => {}, drain: async () =
 
 function makeFrameworkConfig(entityRegistry: EntityRegistry) {
   return { entityRegistry } as unknown as Parameters<
-    NonNullable<ReturnType<typeof createSsrPlugin>['setupPost']>
+    NonNullable<ReturnType<typeof createSsrPackage>['setupPost']>
   >[0]['config'];
 }
 
-describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
+describe('createSsrPackage — P-SSR-3 page adapter validation at setup', () => {
   it('throws when a page references an unregistered entity', () => {
     const pages: Record<string, PageDeclaration> = {
       posts: {
@@ -63,7 +63,7 @@ describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
         fields: ['id'],
       } as PageDeclaration,
     };
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer: makeMockRenderer(),
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',
@@ -94,7 +94,7 @@ describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
         fields: ['id'],
       } as PageDeclaration,
     };
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer: makeMockRenderer(),
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',
@@ -138,7 +138,7 @@ describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
         fields: ['id'],
       } as PageDeclaration,
     };
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer: makeMockRenderer(),
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',
@@ -167,7 +167,7 @@ describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
   });
 });
 
-describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => {
+describe('createSsrPackage — P-SSR-7 ISR cache write drain on teardown', () => {
   it('teardown awaits in-flight ISR cache writes up to cacheFlushTimeoutMs', async () => {
     // Drive a real request through the middleware to enqueue a fire-and-forget
     // cache write, then assert teardown awaits the in-flight set() before
@@ -202,7 +202,7 @@ describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => 
       },
     };
 
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer,
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',
@@ -246,7 +246,7 @@ describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => 
       invalidatePath: async () => {},
       invalidateTag: async () => {},
     };
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer: makeMockRenderer(),
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',
@@ -282,7 +282,7 @@ describe('createSsrPlugin — P-SSR-7 ISR cache write drain on teardown', () => 
         });
       },
     };
-    const plugin = createSsrPlugin({
+    const plugin = createSsrPackage({
       renderer,
       serverRoutesDir: '/fake/routes',
       assetsManifest: '/fake/manifest.json',

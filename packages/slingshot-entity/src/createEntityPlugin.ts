@@ -32,8 +32,6 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
-  RESOLVE_COMPOSITE_FACTORIES,
-  RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
   createConsoleLogger,
   createRouter,
@@ -53,12 +51,7 @@ import type {
 import type { ChannelConfigDeps } from './channels/applyChannelConfig';
 import { buildEntityReceiveHandlers } from './channels/applyChannelConfig';
 import { buildSubscribeGuard, wireChannelForwarding } from './channels/applyChannelConfig';
-import { buildEntityZodSchemas } from './lib/entityZodSchemas';
 import { paginateAdapter } from './lib/paginateAdapter';
-import type { EntityManifestRuntime } from './manifest/entityManifestRuntime';
-import type { RuntimeHookRef } from './manifest/entityManifestSchema';
-import type { MultiEntityManifest } from './manifest/multiEntityManifest';
-import { resolveMultiEntityManifest } from './manifest/multiEntityManifest';
 import { freezeEntityPolicyRegistry, getEntityPolicyResolver } from './policy/registerEntityPolicy';
 import { applyRouteConfig, buildBareEntityRoutes, planEntityRoutes } from './routing';
 import type {
@@ -308,33 +301,8 @@ function resolveEntryAdapter(
   return adapter;
 }
 
-/**
- * Shape of the `createEntityFactories` function injected by the framework
- * bootstrap via `RESOLVE_ENTITY_FACTORIES`. The package uses this type only
- * at the call site — never imports `createEntityFactories` directly.
- */
-type EntityFactoryCreator = (
-  config: ResolvedEntityConfig,
-  operations?: Record<string, OperationConfig>,
-) => RepoFactories<Record<string, unknown>>;
-
-/**
- * Shape of the `createCompositeFactories` function injected via `RESOLVE_COMPOSITE_FACTORIES`.
- */
-type CompositeFactoryCreator = (
-  entities: Record<
-    string,
-    { config: ResolvedEntityConfig; operations: Record<string, OperationConfig> }
-  >,
-  operations?: Record<string, OperationConfig>,
-) => RepoFactories<Record<string, unknown>>;
-
-type ManifestResolvedEntry = EntityPluginEntryManual & {
-  manifestAdapterTransforms?: RuntimeHookRef[];
-};
-
 type SetupRoutePlanEntry = {
-  entry: EntityPluginEntry | ManifestResolvedEntry;
+  entry: EntityPluginEntry;
   adapter: BareEntityAdapter;
   plannedRoutes: PlannedEntityRoute[];
 };
@@ -342,7 +310,6 @@ type SetupRoutePlanEntry = {
 const ENTITY_PLUGIN_TOOLING_METADATA = Symbol.for('slingshot.entity.plugin.toolingMetadata');
 
 export interface EntityPluginToolingMetadata {
-  manifest?: MultiEntityManifest;
   entries: readonly EntityPluginEntry[];
 }
 
@@ -358,156 +325,18 @@ export function getEntityPluginToolingMetadata(
 }
 
 /**
- * Resolve a `MultiEntityManifest` into `EntityPluginEntryManual[]`.
- *
- * Each entry's `buildAdapter` closure uses the `RESOLVE_ENTITY_FACTORIES`
- * Reflect symbol injected by the framework bootstrap to create `RepoFactories`
- * at `setupRoutes` time without importing `createEntityFactories` directly
- * (CLAUDE.md Rule 16).
- *
- * Entities that appear in a composite group are NOT added as standalone entries.
- * For each composite, one `EntityPluginEntryManual` is created using the group's
- * `entityKey` as the primary entity. Composite-level ops (e.g. `op.transaction`)
- * are merged onto the resolved adapter, matching the `EntityPluginEntryFactories`
- * composite path behaviour.
- *
- * @internal Not exported — only called from `createEntityPlugin` when `manifest` is set.
- */
-function resolveManifestEntries(
-  manifest: MultiEntityManifest,
-  runtime?: EntityManifestRuntime,
-): ManifestResolvedEntry[] {
-  const resolved = resolveMultiEntityManifest(manifest, runtime?.customHandlers);
-  const entries: ManifestResolvedEntry[] = [];
-  const inComposite = new Set<string>();
-
-  for (const composite of Object.values(resolved.composites)) {
-    for (const key of composite.entities) inComposite.add(key);
-  }
-
-  // Composite entries — one entry per composite keyed by entityKey.
-  for (const composite of Object.values(resolved.composites)) {
-    const entityEntry = resolved.entities[composite.entityKey];
-    const compositeEntityMap = Object.fromEntries(
-      composite.entities.map(key => [key, resolved.entities[key]]),
-    );
-    const compositeOps = composite.operations;
-    const manifestEntities = manifest.entities as Record<
-      string,
-      (typeof manifest.entities)[string] | undefined
-    >;
-    const manifestEntityEntry = manifestEntities[composite.entityKey];
-    const compositeRoutePath = manifestEntityEntry?.routePath;
-
-    // Register OpenAPI schemas for composite sub-entities (non-entityKey).
-    // These entities don't get their own route entries, so buildBareEntityRoutes
-    // is never called for them — register their schemas explicitly here.
-    for (const key of composite.entities) {
-      if (key !== composite.entityKey) {
-        buildEntityZodSchemas(resolved.entities[key].config);
-      }
-    }
-
-    const compositeEntry: ManifestResolvedEntry = {
-      config: entityEntry.config,
-      operations: entityEntry.operations,
-      channels: manifestEntityEntry?.channels,
-      routePath: compositeRoutePath,
-      manifestAdapterTransforms: manifestEntityEntry?.adapterTransforms,
-      buildAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter {
-        const compositeCreator = Reflect.get(infra as object, RESOLVE_COMPOSITE_FACTORIES) as
-          | CompositeFactoryCreator
-          | undefined;
-        if (!compositeCreator) {
-          throw new Error(
-            `[EntityPlugin] Manifest-driven composite entities require the framework to inject RESOLVE_COMPOSITE_FACTORIES. ` +
-              `Ensure you are using createContextStoreInfra from the Slingshot framework bootstrap.`,
-          );
-        }
-        const factories = compositeCreator(compositeEntityMap, compositeOps);
-        const compositeResolved = resolveRepo(factories, storeType, infra);
-        const entityAdapter = resolveCompositeEntityAdapter(
-          compositeResolved,
-          composite.entityKey,
-          entityEntry.config,
-        );
-        if (!entityAdapter || typeof entityAdapter !== 'object') {
-          throw new Error(
-            `[EntityPlugin] Composite factory did not produce an adapter for entityKey '${composite.entityKey}'`,
-          );
-        }
-        // Mix composite-level ops onto the entity adapter (same as EntityPluginEntryFactories composite path)
-        const adapter: BareEntityAdapter & Record<string, unknown> = { ...entityAdapter };
-        for (const opName of Object.keys(compositeOps)) {
-          if (
-            typeof compositeResolved[opName] === 'function' &&
-            typeof adapter[opName] !== 'function'
-          ) {
-            adapter[opName] = compositeResolved[opName];
-          }
-        }
-        return adapter;
-      },
-    };
-    entries.push(compositeEntry);
-  }
-
-  // Standalone entries — entities not in any composite.
-  for (const [key, { config, operations }] of Object.entries(resolved.entities)) {
-    if (inComposite.has(key)) continue;
-    const standaloneManifestEntry = (
-      manifest.entities as Record<string, (typeof manifest.entities)[string] | undefined>
-    )[key];
-    const standaloneEntry: ManifestResolvedEntry = {
-      config,
-      operations,
-      channels: standaloneManifestEntry?.channels,
-      routePath: standaloneManifestEntry?.routePath,
-      manifestAdapterTransforms: standaloneManifestEntry?.adapterTransforms,
-      buildAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter {
-        const factoryCreator = Reflect.get(infra as object, RESOLVE_ENTITY_FACTORIES) as
-          | EntityFactoryCreator
-          | undefined;
-        if (!factoryCreator) {
-          throw new Error(
-            `[EntityPlugin] Manifest-driven entities require the framework to inject RESOLVE_ENTITY_FACTORIES. ` +
-              `Ensure you are using createContextStoreInfra from the Slingshot framework bootstrap.`,
-          );
-        }
-        const factories = factoryCreator(config, operations);
-        return resolveRepo(factories, storeType, infra) as unknown as BareEntityAdapter;
-      },
-    };
-    entries.push(standaloneEntry);
-  }
-
-  return entries;
-}
-
-/**
  * Configuration for the `createEntityPlugin()` factory.
  *
- * Entities can be wired in two ways — only one may be used per plugin:
+ * Wire entities as TypeScript `EntityPluginEntry[]` defined via
+ * `defineEntity()` + `defineOperations()`.
  *
- * - **`entities`** — TypeScript `EntityPluginEntry[]`. Use when entities are
- *   defined in code via `defineEntity()` + `defineOperations()`.
- * - **`manifest`** — A `MultiEntityManifest` JSON object. The plugin resolves
- *   it internally and creates all factories. Use for fully declarative plugins.
- *
- * @example Entities path:
+ * @example
  * ```ts
  * createEntityPlugin({
  *   name: 'chat',
  *   mountPath: '/chat',
  *   entities: [{ config: Message, operations: MessageOps.operations, factories: messageFactories }],
  * });
- * ```
- *
- * @example Manifest path (preferred for standard entities):
- * ```ts
- * import manifest from './chat.manifest.json';
- *
- * createEntityPlugin({ name: 'chat', mountPath: '/chat', manifest });
  * ```
  */
 export interface EntityPluginConfig {
@@ -526,35 +355,11 @@ export interface EntityPluginConfig {
    */
   defaultTag?: string;
   /**
-   * Entity entries defined in TypeScript. Mutually exclusive with `manifest`.
+   * Entity entries defined in TypeScript.
    * Use `EntityPluginEntryFactories` (`factories` ± `entityKey`) for zero-code
    * wiring, or `EntityPluginEntryManual` (`buildAdapter`) as an escape hatch.
    */
-  entities?: EntityPluginEntry[];
-  /**
-   * JSON manifest defining all entities declaratively. The plugin resolves the
-   * manifest internally and creates all factories via the framework's
-   * `createEntityFactories` / `createCompositeFactories` (injected at startup).
-   * Mutually exclusive with `entities`.
-   *
-   * @example
-   * ```ts
-   * import manifest from './content.manifest.json';
-   * createEntityPlugin({ name: 'content', manifest, permissions, setupPost: ... })
-   * ```
-   */
-  manifest?: MultiEntityManifest;
-  /**
-   * Runtime services for manifest-driven plugins.
-   *
-   * Use this to provide:
-   * - custom operation handlers referenced from manifest `custom` ops
-   * - adapter transforms referenced from `adapterTransforms`
-   * - lifecycle hooks referenced from `hooks.afterAdapters`
-   *
-   * Ignored when `entities` is used instead of `manifest`.
-   */
-  manifestRuntime?: EntityManifestRuntime;
+  entities: EntityPluginEntry[];
   /**
    * Named middleware handlers referenced by entity route configs.
    * Keys must match the names used in `EntityRouteConfig.middleware`.
@@ -773,27 +578,16 @@ export interface EntityPlugin extends SlingshotPlugin {
  * ```
  */
 export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlugin {
-  if (!pluginConfig.entities && !pluginConfig.manifest) {
-    throw new Error(
-      `[EntityPlugin:${pluginConfig.name}] Either 'entities' or 'manifest' is required`,
-    );
-  }
-  if (pluginConfig.entities && pluginConfig.manifest) {
-    throw new Error(
-      `[EntityPlugin:${pluginConfig.name}] 'entities' and 'manifest' are mutually exclusive`,
-    );
+  if (!pluginConfig.entities) {
+    throw new Error(`[EntityPlugin:${pluginConfig.name}] 'entities' is required`);
   }
 
   const entityLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
 
-  // Resolve manifest into entries eagerly — manifest resolution is pure (no infra needed).
-  // The buildAdapter closures inside each entry defer factory creation to setupRoutes time.
-  const resolvedEntries: Array<EntityPluginEntry | ManifestResolvedEntry> = pluginConfig.manifest
-    ? resolveManifestEntries(pluginConfig.manifest, pluginConfig.manifestRuntime)
-    : (pluginConfig.entities ?? []);
+  const resolvedEntries: EntityPluginEntry[] = pluginConfig.entities;
 
   if (
-    pluginConfig.entities?.some(
+    pluginConfig.entities.some(
       entry =>
         entry.authoringSource !== 'package' &&
         (entry.extraRoutes?.length || entry.overrides !== undefined),
@@ -848,16 +642,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
       const routePlan: SetupRoutePlanEntry[] = [];
 
       for (const entry of resolvedEntries) {
-        const rawAdapter = resolveEntryAdapter(entry, storeType, infra);
-        const adapter = await applyManifestAdapterTransforms(
-          app,
-          bus,
-          pluginConfig.name,
-          entry,
-          rawAdapter,
-          resolvedAdapters,
-          pluginConfig.manifestRuntime,
-        );
+        const adapter = resolveEntryAdapter(entry, storeType, infra);
         const { config } = entry;
         const planningParentPath = supportsOpenApiRegistration(app)
           ? [mountPath, entry.parentPath]
@@ -882,16 +667,6 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           // already registered — skip
         }
       }
-
-      await runManifestAfterAdaptersHooks(
-        app,
-        bus,
-        pluginConfig.name,
-        pluginConfig.manifest,
-        resolvedAdapters,
-        resolvedPermissions,
-        pluginConfig.manifestRuntime,
-      );
 
       if (pluginCtx?.pluginState) {
         publishEntityAdaptersState(pluginCtx.pluginState, pluginConfig.name, resolvedAdapters);
@@ -1227,7 +1002,6 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
 
   Object.defineProperty(plugin, ENTITY_PLUGIN_TOOLING_METADATA, {
     value: {
-      ...(pluginConfig.manifest ? { manifest: pluginConfig.manifest } : {}),
       entries: resolvedEntries,
     } satisfies EntityPluginToolingMetadata,
   });
@@ -1238,101 +1012,6 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function isManifestResolvedEntry(
-  entry: EntityPluginEntry | ManifestResolvedEntry,
-): entry is ManifestResolvedEntry {
-  return 'manifestAdapterTransforms' in entry;
-}
-
-async function applyManifestAdapterTransforms(
-  app: import('hono').Hono<import('@lastshotlabs/slingshot-core').AppEnv>,
-  bus: SlingshotEventBus,
-  pluginName: string,
-  entry: EntityPluginEntry | ManifestResolvedEntry,
-  rawAdapter: BareEntityAdapter,
-  resolvedAdapters: Record<string, BareEntityAdapter>,
-  runtime?: EntityManifestRuntime,
-): Promise<BareEntityAdapter> {
-  if (!isManifestResolvedEntry(entry) || !entry.manifestAdapterTransforms?.length) {
-    return rawAdapter;
-  }
-
-  if (!runtime?.adapterTransforms) {
-    throw new Error(
-      `[EntityPlugin:${pluginName}] Entity '${entry.config.name}' declares adapterTransforms ` +
-        `but no manifestRuntime.adapterTransforms registry was provided`,
-    );
-  }
-
-  let adapter = rawAdapter;
-  for (const hookRef of entry.manifestAdapterTransforms) {
-    if (!runtime.adapterTransforms.has(hookRef.handler)) {
-      throw new Error(
-        `[EntityPlugin:${pluginName}] Unknown adapter transform '${hookRef.handler}' ` +
-          `for entity '${entry.config.name}'. Available: [${runtime.adapterTransforms
-            .list()
-            .join(', ')}]`,
-      );
-    }
-    const transform = runtime.adapterTransforms.resolve(hookRef.handler);
-    const nextAdapter = await transform(adapter, {
-      app,
-      bus,
-      pluginName,
-      entityName: entry.config.name,
-      adapters: Object.freeze({ ...resolvedAdapters, [entry.config.name]: adapter }),
-      params: hookRef.params,
-    });
-    if (typeof nextAdapter !== 'object') {
-      throw new Error(
-        `[EntityPlugin:${pluginName}] Adapter transform '${hookRef.handler}' for entity ` +
-          `'${entry.config.name}' did not return an adapter object`,
-      );
-    }
-    adapter = nextAdapter;
-  }
-
-  return adapter;
-}
-
-async function runManifestAfterAdaptersHooks(
-  app: import('hono').Hono<import('@lastshotlabs/slingshot-core').AppEnv>,
-  bus: SlingshotEventBus,
-  pluginName: string,
-  manifest: MultiEntityManifest | undefined,
-  resolvedAdapters: Record<string, BareEntityAdapter>,
-  permissions: unknown,
-  runtime?: EntityManifestRuntime,
-): Promise<void> {
-  const hookRefs = manifest?.hooks?.afterAdapters ?? [];
-  if (hookRefs.length === 0) return;
-
-  if (!runtime?.hooks) {
-    throw new Error(
-      `[EntityPlugin:${pluginName}] Manifest declares hooks.afterAdapters but no ` +
-        `manifestRuntime.hooks registry was provided`,
-    );
-  }
-
-  for (const hookRef of hookRefs) {
-    if (!runtime.hooks.has(hookRef.handler)) {
-      throw new Error(
-        `[EntityPlugin:${pluginName}] Unknown afterAdapters hook '${hookRef.handler}'. ` +
-          `Available: [${runtime.hooks.list().join(', ')}]`,
-      );
-    }
-    const hook = runtime.hooks.resolve(hookRef.handler);
-    await hook({
-      app,
-      bus,
-      pluginName,
-      adapters: Object.freeze({ ...resolvedAdapters }),
-      permissions,
-      params: hookRef.params,
-    });
-  }
-}
 
 /**
  * Resolve cascade filter params from a trigger event payload.
@@ -1504,7 +1183,7 @@ function buildRouteEventScope(
 function registerEntityEventDefinitions(
   events: import('@lastshotlabs/slingshot-core').SlingshotEvents,
   pluginName: string,
-  entries: Array<EntityPluginEntry | ManifestResolvedEntry>,
+  entries: EntityPluginEntry[],
 ): void {
   for (const entry of entries) {
     for (const event of listEntityRouteEvents(entry.config.routes, entry.extraRoutes)) {

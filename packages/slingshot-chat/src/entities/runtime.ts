@@ -11,10 +11,9 @@
  *     `claimDueScheduledMessages`, `forwardMessage`, `redeemInvite`,
  *     `claimInviteSlot`, `releaseInviteSlot`, `claimDueReminders`).
  *
- * No `EntityManifestRuntime` involved — every export here is either a plain
- * adapter ref shape, a plain async handler, or a small typed builder. The
- * middleware factories that consume adapter refs are wired separately by the
- * package factory.
+ * Every export here is either a plain adapter ref shape, a plain async
+ * handler, or a small typed builder. The middleware factories that consume
+ * adapter refs are wired separately by the package factory.
  */
 import { HTTPException } from 'hono/http-exception';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';

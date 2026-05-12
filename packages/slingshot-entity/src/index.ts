@@ -109,52 +109,6 @@ export { auditEntity } from './audits';
 /** Audit result types surfaced by entity-definition linting and review tooling. */
 export type { EntityAuditFinding, EntityAuditResult, AuditSeverity } from './audits';
 
-// Entity manifest (JSON-driven definitions)
-/** Manifest schemas and conversion helpers for JSON-driven entity authoring. */
-export {
-  entityManifestSchema,
-  manifestEntitySchema,
-  manifestEntitiesSchema,
-  validateEntityManifest,
-  multiEntityManifestSchema,
-  createEntityHandlerRegistry,
-  createEntityAdapterTransformRegistry,
-  createEntityPluginHookRegistry,
-  resolveEntityManifest,
-  parseAndResolveEntityManifest,
-  resolveMultiEntityManifest,
-  parseAndResolveMultiEntityManifest,
-  runtimeHookRefSchema,
-  adapterTransformsSchema,
-  manifestHooksSchema,
-} from './manifest';
-/** Manifest-driven entity authoring, registry, and hook contracts. */
-export type {
-  EntityManifest,
-  ManifestEntity,
-  ManifestEntities,
-  ManifestField,
-  ManifestOperation,
-  ManifestCustomOpHttp,
-  ManifestValidationResult,
-  HandlerRef,
-  RuntimeHookRef,
-  MultiEntityManifest,
-  ManifestCompositeEntry,
-  ResolvedMultiEntityManifest,
-  EntityHandlerRegistry,
-  EntityAdapterTransform,
-  EntityAdapterTransformContext,
-  EntityAdapterTransformRegistry,
-  EntityPluginAfterAdaptersContext,
-  EntityPluginAfterAdaptersHook,
-  EntityPluginHookRegistry,
-  EntityManifestRuntime,
-  EntityManifestConversionOptions,
-  ResolvedManifest,
-  ManifestHooks,
-} from './manifest';
-
 // Schema migrations
 /** Diff entity schemas and generate storage-specific migration plans. */
 export {
@@ -184,18 +138,6 @@ export {
 } from './validation';
 /** Validation result object returned by entity config checks. */
 export type { ValidationResult } from './validation';
-
-// App manifest → entity factory bridge
-/** Convert app-manifest entity declarations into runtime entity configs. */
-export { manifestToEntity, manifestEntitiesToConfigs } from './manifest/manifestToEntity';
-/** Result types returned when converting manifest entities into runtime config. */
-export type { ManifestEntityResult, ManifestEntitiesResult } from './manifest/manifestToEntity';
-/** Convert runtime entity config back into the manifest representation. */
-export {
-  entityConfigToManifestEntry,
-  fieldDefToManifestField,
-  operationsToManifestOperations,
-} from './manifest/entityConfigToManifest';
 
 // Plugin factory
 /** Build the entity plugin that mounts config-driven CRUD and operation routes. */

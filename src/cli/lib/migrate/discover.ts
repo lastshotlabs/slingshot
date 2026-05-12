@@ -2,15 +2,12 @@
  * Config discovery and DB connection resolution for `slingshot migrate`.
  *
  * Loads `app.config.ts`, walks the plugins array to find `createEntityPlugin`
- * instances, extracts their entity definitions, and resolves the DB backend
- * + connection string for the migrate run.
+ * instances, extracts their entity definitions from the plugin tooling
+ * metadata, and resolves the DB backend + connection string for the migrate run.
  */
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import {
-  getEntityPluginToolingMetadata,
-  manifestEntitiesToConfigs,
-} from '@lastshotlabs/slingshot-entity';
+import { getEntityPluginToolingMetadata } from '@lastshotlabs/slingshot-entity';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
 export type Backend = 'postgres' | 'sqlite' | 'mongo';
@@ -31,18 +28,6 @@ export interface ResolvedManifest {
 }
 
 const DEFAULT_CONFIG_PATHS = ['app.config.ts', 'app.config.js'];
-
-function addManifestEntities(
-  target: Record<string, ResolvedEntityConfig>,
-  entitiesRaw: Record<string, unknown>,
-): void {
-  const { entities: resolved } = manifestEntitiesToConfigs(
-    entitiesRaw as Parameters<typeof manifestEntitiesToConfigs>[0],
-  );
-  for (const [name, { config: resolvedConfig }] of Object.entries(resolved)) {
-    target[name] = resolvedConfig;
-  }
-}
 
 export async function loadManifest(configPath?: string): Promise<ResolvedManifest> {
   const candidates = configPath ? [configPath] : DEFAULT_CONFIG_PATHS;
@@ -81,11 +66,6 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
   for (const plugin of config.plugins ?? []) {
     const metadata = getEntityPluginToolingMetadata(plugin);
     if (!metadata) continue;
-
-    if (metadata.manifest) {
-      addManifestEntities(entities, metadata.manifest.entities as Record<string, unknown>);
-      continue;
-    }
 
     for (const entry of metadata.entries) {
       entities[entry.config.name] = entry.config;

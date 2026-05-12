@@ -13,7 +13,6 @@ used by Slingshot feature packages.
 | src/defineEntity.ts       | Entity definition API                                              |
 | src/defineOperations.ts   | Custom operation definition API                                    |
 | src/configDriven/index.ts | Runtime entity factories and schema generation                     |
-| src/manifest/index.ts     | Manifest-facing entity exports                                     |
 | docs/human/index.md       | Package guide synced into the docs site                            |
 
 ## Connections

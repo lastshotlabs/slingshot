@@ -8,8 +8,8 @@
  * adapter refs (banCheck, autoMod, threadStateGuard, …) are wired separately
  * by the package factory.
  *
- * No `EntityManifestRuntime` involved — every export here is either a plain
- * adapter ref shape, a plain async handler, or a small typed builder.
+ * Every export here is either a plain adapter ref shape, a plain async
+ * handler, or a small typed builder.
  */
 import { HTTPException } from 'hono/http-exception';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';

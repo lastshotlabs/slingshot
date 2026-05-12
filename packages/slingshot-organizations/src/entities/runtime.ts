@@ -7,11 +7,9 @@
  * `findByToken`, `redeem`, `revokeInvite`) that the entity-shell does not
  * generate for free.
  *
- * This module is consumed by `./modules.ts` and is the canonical place for
- * the runtime work that used to live in `../manifest/runtime.ts`. No
- * `EntityManifestRuntime` shape is involved any more — every function here
- * returns either a plain adapter transform `(adapter) => adapter` or a plain
- * async handler `(input) => result`.
+ * This module is consumed by `./modules.ts`. Every function here returns
+ * either a plain adapter transform `(adapter) => adapter` or a plain async
+ * handler `(input) => result`.
  */
 import { createHash, randomBytes } from 'crypto';
 import { HTTPException } from 'hono/http-exception';

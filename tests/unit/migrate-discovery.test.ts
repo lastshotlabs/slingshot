@@ -59,36 +59,4 @@ describe('migrate app.config discovery', () => {
     expect(pickBackend(discovered)).toBe('sqlite');
   });
 
-  test('loads manifest-backed entity plugins from app.config.ts', async () => {
-    const configPath = makeConfig(`
-      import { defineApp } from '${defineAppPath}';
-      import { createEntityPlugin } from '${entityPath}';
-
-      export default defineApp({
-        db: { sqlite: './app.db' },
-        plugins: [
-          createEntityPlugin({
-            name: 'content',
-            manifest: {
-              manifestVersion: 1,
-              entities: {
-                Article: {
-                  fields: {
-                    id: { type: 'string', primary: true },
-                    title: { type: 'string' },
-                  },
-                },
-              },
-            },
-          }),
-        ],
-      });
-    `);
-
-    const discovered = await loadManifest(configPath);
-
-    expect(Object.keys(discovered.entities)).toEqual(['Article']);
-    expect(discovered.entities.Article?._storageName).toBe('articles');
-    expect(pickBackend(discovered)).toBe('sqlite');
-  });
 });

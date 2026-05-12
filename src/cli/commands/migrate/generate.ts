@@ -44,7 +44,7 @@ export default class MigrateGenerate extends Command {
     if (Object.keys(manifest.entities).length === 0) {
       this.error(
         `No entities declared in ${manifest.manifestPath}. Add an entity plugin via ` +
-          `createEntityPlugin({ entities: [...] }) or createEntityPlugin({ manifest: { entities: { ... } } }) before generating migrations.`,
+          `createEntityPlugin({ entities: [...] }) before generating migrations.`,
       );
     }
 

@@ -1349,7 +1349,7 @@ export function applyWebhookDeliveryRuntimeTransform(
       lastAttempt: normalizeLastAttempt(input.lastAttempt),
     })) as DeliveryRecord;
   };
-  return {
+  const adapter: DeliveryRuntimeAdapter = {
     ...base,
     applyTransition,
     // The high-level runtime adapter calls `transition` directly when applying
@@ -1357,7 +1357,8 @@ export function applyWebhookDeliveryRuntimeTransform(
     // bind it to `applyTransition` so the validation runs on every transition,
     // including direct programmatic writes from the queue processor.
     transition: applyTransition,
-  } as DeliveryRuntimeAdapter;
+  };
+  return adapter;
 }
 
 /**

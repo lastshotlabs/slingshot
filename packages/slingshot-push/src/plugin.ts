@@ -182,8 +182,7 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
     publicPaths: enabledPlatforms.has('web') ? [`${config.mountPath}/vapid-public-key`] : [],
     csrfExemptPaths: [`${config.mountPath}/*`],
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupRoutes({ app, bus }: PluginSetupContext) {
+    setupRoutes({ app, bus }: PluginSetupContext) {
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
         const slingshotCtx = c.get('slingshotCtx') as { routeAuth?: RouteAuthRegistry } | undefined;
         const routeAuth = slingshotCtx?.routeAuth;

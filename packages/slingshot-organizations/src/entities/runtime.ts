@@ -526,7 +526,7 @@ export function applyInviteRuntimeTransform(
     inviteIdempotencyTtlMs,
   } = args;
   const inviteAdapter = requireMethod(adapter, 'create');
-  return {
+  const wrapped: InviteRuntimeAdapter = {
     ...adapter,
     create: async (input: unknown) => {
       const record = { ...(input as Record<string, unknown>) };
@@ -589,7 +589,8 @@ export function applyInviteRuntimeTransform(
     async reveal(id: string) {
       return (await adapter.getById(id)) as OrganizationInviteRecord | null;
     },
-  } as InviteRuntimeAdapter;
+  };
+  return wrapped;
 }
 
 // ─── Custom-op handlers ───────────────────────────────────────────────────────

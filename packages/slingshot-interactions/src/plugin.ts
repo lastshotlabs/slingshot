@@ -152,8 +152,7 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
       publishPluginState(pluginState, INTERACTIONS_PLUGIN_STATE_KEY, state);
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupRoutes({ app }: PluginSetupContext) {
+    setupRoutes({ app }: PluginSetupContext) {
       if (!stateRef || !interactionEventsAdapterRef) {
         throw new Error(
           '[slingshot-interactions] InteractionEvent adapter was not resolved during setupRoutes',

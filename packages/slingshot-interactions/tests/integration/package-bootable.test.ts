@@ -22,6 +22,7 @@ import {
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import type { ChatInteractionsPeer } from '../../src/peers/types';
 import { createInteractionsPackage } from '../../src/plugin';
+import type { InteractionsPluginState } from '../../src/state';
 
 // ---------------------------------------------------------------------------
 // Minimal fake PermissionsState
@@ -52,6 +53,9 @@ function createFakePermissionsState(): PermissionsState {
       async createGrant() {
         return 'g1';
       },
+      async createGrants() {
+        return [];
+      },
       async revokeGrant() {
         return false;
       },
@@ -70,6 +74,9 @@ function createFakePermissionsState(): PermissionsState {
       async deleteAllGrantsForSubject() {
         /* noop */
       },
+      async deleteAllGrantsOnResource() {
+        /* noop */
+      },
     },
   };
 }
@@ -82,9 +89,6 @@ function createFakeRateLimitAdapter(): RateLimitAdapter {
   return {
     async trackAttempt() {
       return false; // never exceeded
-    },
-    async resetAttempts() {
-      /* noop */
     },
   };
 }
@@ -171,7 +175,7 @@ interface Harness {
 async function bootFromManifest(): Promise<Harness> {
   const config = JSON.parse(MANIFEST_JSON) as unknown;
 
-  const app = new Hono();
+  const app = new Hono<import('@lastshotlabs/slingshot-core').AppEnv>();
   const bus = new InProcessAdapter();
   const events = createEventPublisher({
     definitions: createEventDefinitionRegistry(),
@@ -340,13 +344,10 @@ describe('Queue dispatcher — via manifest config', () => {
 
     // Directly invoke dispatch via plugin state to avoid auth middleware complexity.
     const { dispatchInteraction } = await import('../../src/handlers/dispatch');
-    const state = ctx.pluginState.get('slingshot-interactions') as Parameters<
-      typeof dispatchInteraction
-    >[0] & { repos: { interactionEvents: { create(d: unknown): Promise<unknown> } } };
+    const state = ctx.pluginState.get('slingshot-interactions') as InteractionsPluginState;
 
     const outcome = await dispatchInteraction(
       {
-        ctx,
         handlers: state.handlers,
         evaluator: state.permissions.evaluator,
         rateLimit: state.rateLimit,
@@ -373,14 +374,11 @@ describe('Route dispatcher — via manifest config', () => {
     const { app } = await bootFromManifest();
     const { getContext } = await import('@lastshotlabs/slingshot-core');
     const ctx = getContext(app);
-    const state = ctx.pluginState.get('slingshot-interactions') as Parameters<
-      typeof import('../../src/handlers/dispatch').dispatchInteraction
-    >[0];
+    const state = ctx.pluginState.get('slingshot-interactions') as InteractionsPluginState;
 
     const { dispatchInteraction } = await import('../../src/handlers/dispatch');
     const outcome = await dispatchInteraction(
       {
-        ctx,
         handlers: state.handlers,
         evaluator: state.permissions.evaluator,
         rateLimit: state.rateLimit,
@@ -414,14 +412,11 @@ describe('Webhook dispatcher — via manifest config', () => {
     const { app } = await bootFromManifest();
     const { getContext } = await import('@lastshotlabs/slingshot-core');
     const ctx = getContext(app);
-    const state = ctx.pluginState.get('slingshot-interactions') as Parameters<
-      typeof import('../../src/handlers/dispatch').dispatchInteraction
-    >[0];
+    const state = ctx.pluginState.get('slingshot-interactions') as InteractionsPluginState;
 
     const { dispatchInteraction } = await import('../../src/handlers/dispatch');
     const outcome = await dispatchInteraction(
       {
-        ctx,
         handlers: state.handlers,
         evaluator: state.permissions.evaluator,
         rateLimit: state.rateLimit,

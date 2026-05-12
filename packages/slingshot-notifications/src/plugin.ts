@@ -306,8 +306,7 @@ export function createNotificationsPackage(
       }
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupRoutes({ app, bus }: PluginSetupContext) {
+    setupRoutes({ app, bus }: PluginSetupContext) {
       if (config.sseEnabled) {
         app.route('/', createNotificationSseRoute(bus, config.ssePath));
       }

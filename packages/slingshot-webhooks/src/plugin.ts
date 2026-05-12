@@ -506,8 +506,7 @@ export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotP
       ],
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupMiddleware(_ctx: PluginSetupContext) {
+    async setupMiddleware(): Promise<void> {
       if (useExternalAdapter) {
         runtimeAdapter = config.adapter;
         return;

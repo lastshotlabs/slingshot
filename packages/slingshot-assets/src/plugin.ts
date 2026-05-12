@@ -258,8 +258,7 @@ export function createAssetsPackage(
       deleteStorageFile,
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupMiddleware({ events }: PluginSetupContext) {
+    setupMiddleware({ events }: PluginSetupContext) {
       // Register the operational events the assets package emits before any
       // route can fire them (delete-cascade-cleanup, presign retry exhaustion).
       if (!events.get('asset:storageDeleteFailed')) {
@@ -278,8 +277,7 @@ export function createAssetsPackage(
       publisher = events;
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupPost(_ctx: PluginSetupContext) {
+    setupPost() {
       if (!assetAdapterRef) {
         // The entity module uses manual wiring and populates `assetAdapterRef`
         // inside `buildAdapter`. If we reach `setupPost` without it being

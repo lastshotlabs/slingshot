@@ -398,19 +398,17 @@ export function createOrganizationsPackage(
   // completes, so the redeem handler always sees a resolved runtime by the
   // time it dereferences `authRuntime.adapter.*` at request time.
   const authRuntimeRef: { current?: BuildOrganizationsEntityModulesArgs['authRuntime'] } = {};
-  const authRuntimeProxy = new Proxy(
-    {} as BuildOrganizationsEntityModulesArgs['authRuntime'],
-    {
-      get(_target, prop) {
-        if (!authRuntimeRef.current) {
-          throw new Error(
-            '[slingshot-organizations] auth runtime accessed before setupMiddleware resolved it',
-          );
-        }
-        return Reflect.get(authRuntimeRef.current as object, prop);
-      },
+  const emptyTarget = Object.create(null) as BuildOrganizationsEntityModulesArgs['authRuntime'];
+  const authRuntimeProxy = new Proxy(emptyTarget, {
+    get(_target, prop) {
+      if (!authRuntimeRef.current) {
+        throw new Error(
+          '[slingshot-organizations] auth runtime accessed before setupMiddleware resolved it',
+        );
+      }
+      return Reflect.get(authRuntimeRef.current as object, prop);
     },
-  );
+  });
 
   const {
     organizationModule,
@@ -448,16 +446,14 @@ export function createOrganizationsPackage(
       provides: [provideCapability(OrgServiceCap, () => createOrgService())],
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupMiddleware(ctx: PluginSetupContext) {
+    setupMiddleware(ctx: PluginSetupContext) {
       // Resolve auth runtime + route-auth so middleware closures point at the
       // real guards before any route is mounted in `setupRoutes`.
       authRuntimeRef.current = getOrganizationsAuthRuntime(getPluginStateOrNull(ctx.app));
       resolveAuthGuards(ctx);
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async setupPost(ctx: PluginSetupContext) {
+    setupPost(ctx: PluginSetupContext) {
       if (organizationsEnabled && (!refs.organizations || !refs.members)) {
         // The package's entities all use manual wiring and populate `refs`
         // inside `buildAdapter`. If we reach `setupPost` without them

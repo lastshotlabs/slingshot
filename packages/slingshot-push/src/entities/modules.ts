@@ -34,14 +34,15 @@ import type { PushRouterRepos } from '../router';
  */
 function applySubscriptionUpsertTransform(adapter: BareEntityAdapter): BareEntityAdapter {
   const subs = adapter as unknown as PushRouterRepos['subscriptions'];
-  return {
+  const wrapped: BareEntityAdapter = {
     ...adapter,
     create: async input =>
       subs.upsertByDevice({
         ...(input as Record<string, unknown>),
         lastSeenAt: new Date(),
       }),
-  } as BareEntityAdapter;
+  };
+  return wrapped;
 }
 
 /**

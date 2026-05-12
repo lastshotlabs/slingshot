@@ -149,9 +149,10 @@ export function applyAssetTtlTransform(
       '[slingshot-assets] Asset adapter does not expose the full assets runtime contract',
     );
   }
-  return {
+  const wrapped: BareEntityAdapter = {
     ...withAssetTtl(adapter, ttlSeconds ?? DEFAULT_ASSET_REGISTRY_TTL_SECONDS),
-  } as BareEntityAdapter;
+  };
+  return wrapped;
 }
 
 /** Shared dependencies for the custom-op handlers. */

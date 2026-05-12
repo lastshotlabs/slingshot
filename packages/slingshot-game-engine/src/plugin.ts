@@ -185,21 +185,21 @@ export function createGameEnginePackage(
         // setupMiddleware time, before our setupPost populates the runtime
         // state. Field access throws a clear error if reached before
         // setupPost has run.
-        provideCapability(
-          GameEngineRuntimeCap,
-          () =>
-            new Proxy({} as import('./types/state').GameEnginePluginState, {
-              get(_target, prop, receiver) {
-                if (typeof prop === 'symbol' || prop === 'then') return undefined;
-                if (!runtimeStateRef) {
-                  throw new Error(
-                    `[slingshot-game-engine] runtime.${String(prop)} accessed before setupPost completed; resolve GameEngineRuntimeCap from setupPost or later.`,
-                  );
-                }
-                return Reflect.get(runtimeStateRef, prop, receiver);
-              },
-            }),
-        ),
+        provideCapability(GameEngineRuntimeCap, () => {
+          type GameEnginePluginState = import('./types/state').GameEnginePluginState;
+          const target: GameEnginePluginState = Object.create(null) as GameEnginePluginState;
+          return new Proxy(target, {
+            get(_target, prop, receiver) {
+              if (typeof prop === 'symbol' || prop === 'then') return undefined;
+              if (!runtimeStateRef) {
+                throw new Error(
+                  `[slingshot-game-engine] runtime.${String(prop)} accessed before setupPost completed; resolve GameEngineRuntimeCap from setupPost or later.`,
+                );
+              }
+              return Reflect.get(runtimeStateRef, prop, receiver);
+            },
+          });
+        }),
       ],
     },
     middleware,

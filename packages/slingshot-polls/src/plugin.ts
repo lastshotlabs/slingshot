@@ -183,21 +183,20 @@ export function createPollsPackage(
         // setupMiddleware time, before our setupPost populates the runtime
         // state. Field access throws a clear error if reached before
         // setupPost has run.
-        provideCapability(
-          PollsRuntimeCap,
-          () =>
-            new Proxy({} as PollsPluginState, {
-              get(_target, prop, receiver) {
-                if (typeof prop === 'symbol' || prop === 'then') return undefined;
-                if (!runtimeStateRef) {
-                  throw new Error(
-                    `[slingshot-polls] runtime.${String(prop)} accessed before setupPost completed; resolve PollsRuntimeCap from setupPost or later.`,
-                  );
-                }
-                return Reflect.get(runtimeStateRef, prop, receiver);
-              },
-            }),
-        ),
+        provideCapability(PollsRuntimeCap, () => {
+          const target: PollsPluginState = Object.create(null) as PollsPluginState;
+          return new Proxy(target, {
+            get(_target, prop, receiver) {
+              if (typeof prop === 'symbol' || prop === 'then') return undefined;
+              if (!runtimeStateRef) {
+                throw new Error(
+                  `[slingshot-polls] runtime.${String(prop)} accessed before setupPost completed; resolve PollsRuntimeCap from setupPost or later.`,
+                );
+              }
+              return Reflect.get(runtimeStateRef, prop, receiver);
+            },
+          });
+        }),
       ],
     },
 

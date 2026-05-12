@@ -189,23 +189,26 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
         // Proxy that defers field access to the live ref so the resolver
         // succeeds at boot and failures surface only when a consumer actually
         // touches the runtime before setupPost has run.
-        provideCapability(
-          PushRuntimeCap,
-          () =>
-            new Proxy({} as PushPluginState, {
-              get(_target, prop, receiver) {
-                // Skip symbol probes (the framework awaits resolve() and the
-                // Promise machinery probes `.then`) so the Proxy is await-safe.
-                if (typeof prop === 'symbol' || prop === 'then') return undefined;
-                if (!runtimeStateRef) {
-                  throw new Error(
-                    `[slingshot-push] runtime.${String(prop)} accessed before setupPost completed; resolve PushRuntimeCap from setupPost or later.`,
-                  );
-                }
-                return Reflect.get(runtimeStateRef, prop, receiver);
-              },
-            }),
-        ),
+        provideCapability(PushRuntimeCap, () => {
+          // The framework eagerly resolves capability values at setupMiddleware
+          // time, before our setupPost populates `runtimeStateRef`. Return a
+          // Proxy that defers field access to the live ref; failures surface
+          // only when a consumer actually touches the runtime before setupPost.
+          const target: PushPluginState = Object.create(null) as PushPluginState;
+          return new Proxy(target, {
+            get(_target, prop, receiver) {
+              // Skip symbol probes (the framework awaits resolve() and the
+              // Promise machinery probes `.then`) so the Proxy is await-safe.
+              if (typeof prop === 'symbol' || prop === 'then') return undefined;
+              if (!runtimeStateRef) {
+                throw new Error(
+                  `[slingshot-push] runtime.${String(prop)} accessed before setupPost completed; resolve PushRuntimeCap from setupPost or later.`,
+                );
+              }
+              return Reflect.get(runtimeStateRef, prop, receiver);
+            },
+          });
+        }),
         provideCapability(PushHealthCap, () => getHealth),
         provideCapability(
           PushFormatterRegistryCap,

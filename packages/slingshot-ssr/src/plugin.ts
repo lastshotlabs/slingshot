@@ -98,21 +98,20 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
         // setupMiddleware time, before our setupMiddleware populates
         // `isrInvalidators` (and only when config.isr is set). Field access
         // throws a clear error if reached before ISR is wired.
-        provideCapability(
-          IsrInvalidatorsCap,
-          () =>
-            new Proxy({} as IsrInvalidators, {
-              get(_target, prop, receiver) {
-                if (typeof prop === 'symbol' || prop === 'then') return undefined;
-                if (!isrInvalidators) {
-                  throw new Error(
-                    `[slingshot-ssr] ISR invalidators.${String(prop)} accessed before setupMiddleware completed or ISR is disabled; ensure config.isr is set and resolve IsrInvalidatorsCap from setupPost or later.`,
-                  );
-                }
-                return Reflect.get(isrInvalidators, prop, receiver);
-              },
-            }),
-        ),
+        provideCapability(IsrInvalidatorsCap, () => {
+          const target: IsrInvalidators = Object.create(null) as IsrInvalidators;
+          return new Proxy(target, {
+            get(_target, prop, receiver) {
+              if (typeof prop === 'symbol' || prop === 'then') return undefined;
+              if (!isrInvalidators) {
+                throw new Error(
+                  `[slingshot-ssr] ISR invalidators.${String(prop)} accessed before setupMiddleware completed or ISR is disabled; ensure config.isr is set and resolve IsrInvalidatorsCap from setupPost or later.`,
+                );
+              }
+              return Reflect.get(isrInvalidators, prop, receiver);
+            },
+          });
+        }),
       ],
     },
 

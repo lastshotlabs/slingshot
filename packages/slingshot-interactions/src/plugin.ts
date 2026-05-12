@@ -57,21 +57,20 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
         // Return a Proxy: the framework eagerly resolves capability values at
         // setupMiddleware time. Field access throws a clear error if reached
         // before our setupMiddleware populates `stateRef`.
-        provideCapability(
-          InteractionsRuntimeCap,
-          () =>
-            new Proxy({} as InteractionsPluginState, {
-              get(_target, prop, receiver) {
-                if (typeof prop === 'symbol' || prop === 'then') return undefined;
-                if (!stateRef) {
-                  throw new Error(
-                    `[slingshot-interactions] runtime.${String(prop)} accessed before setupMiddleware completed; resolve InteractionsRuntimeCap from setupRoutes or later.`,
-                  );
-                }
-                return Reflect.get(stateRef, prop, receiver);
-              },
-            }),
-        ),
+        provideCapability(InteractionsRuntimeCap, () => {
+          const target: InteractionsPluginState = Object.create(null) as InteractionsPluginState;
+          return new Proxy(target, {
+            get(_target, prop, receiver) {
+              if (typeof prop === 'symbol' || prop === 'then') return undefined;
+              if (!stateRef) {
+                throw new Error(
+                  `[slingshot-interactions] runtime.${String(prop)} accessed before setupMiddleware completed; resolve InteractionsRuntimeCap from setupRoutes or later.`,
+                );
+              }
+              return Reflect.get(stateRef, prop, receiver);
+            },
+          });
+        }),
       ],
     },
 

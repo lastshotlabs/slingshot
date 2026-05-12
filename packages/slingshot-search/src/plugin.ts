@@ -105,7 +105,8 @@ export function createSearchPackage(
           // runtime. Field access throws a clear error if reached before
           // setupPost has run.
           resolve() {
-            return new Proxy({} as SearchPluginRuntime, {
+            const target: SearchPluginRuntime = Object.create(null) as SearchPluginRuntime;
+            return new Proxy(target, {
               get(_target, prop, receiver) {
                 if (typeof prop === 'symbol' || prop === 'then') return undefined;
                 if (!runtime) {

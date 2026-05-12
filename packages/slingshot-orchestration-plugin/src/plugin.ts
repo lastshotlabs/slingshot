@@ -101,7 +101,6 @@ export function createOrchestrationPackage(
     // Returns a Promise so tests can use `await … .resolves.toBeUndefined()`
     // against the success path and `… .rejects.toThrow(…)` against the
     // INVALID_CONFIG checks below. The hook contract is `() => void | Promise<void>`.
-    // eslint-disable-next-line @typescript-eslint/require-await
     async setupRoutes({ app, bus }: PluginSetupContext) {
       if (!runtime) {
         if (!providedAdapter) {

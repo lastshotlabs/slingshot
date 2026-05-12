@@ -25,6 +25,7 @@ import type {
 import {
   deepFreeze,
   defineEvent,
+  definePackage,
   getContext,
   getPermissionsStateOrNull,
   getPluginState,
@@ -230,17 +231,14 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
     attachmentRequiredGuard: async (c, next) => attachmentRequiredGuardRef.handler(c, next),
   };
 
-  return {
-    kind: 'package' as const,
+  return definePackage({
     name: CHAT_PLUGIN_STATE_KEY,
     mountPath,
     dependencies: ['slingshot-auth', 'slingshot-notifications', 'slingshot-permissions'],
     entities,
-    domains: [] as const,
     middleware,
     capabilities: {
       provides: [provideCapability(ChatInteractionsPeerCap, () => interactionsPeer)],
-      requires: [] as const,
     },
 
     async setupMiddleware({ app, events }: PluginSetupContext) {
@@ -634,5 +632,5 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
         scheduledTimer = undefined;
       }
     },
-  } satisfies SlingshotPackageDefinition;
+  });
 }

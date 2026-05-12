@@ -1,9 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
-import type { Reply, Thread } from '../types/models';
-
-type ThreadAdapter = EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
-type ReplyAdapter = EntityAdapter<Reply, Record<string, unknown>, Record<string, unknown>>;
+import type { ReplyAdapter, ThreadAdapter } from '../entities/runtime';
 
 type GuardOptions = {
   allowUserTarget?: boolean;

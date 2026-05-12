@@ -1,25 +1,10 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
 import { getActor, getActorTenantId } from '@lastshotlabs/slingshot-core';
+import type { AutoModRuleAdapter, ReportAdapter } from '../entities/runtime';
 import type { ModerationDecision, ModerationTarget } from '../types/config';
 import type { CommunityPrincipal } from '../types/env';
-import type { Report } from '../types/models';
 
-type AutoModRuleRecord = {
-  readonly tenantId?: string | null;
-  readonly containerId?: string | null;
-  readonly enabled?: boolean;
-  readonly matcher?: unknown;
-  readonly decision?: 'flag' | 'reject' | 'shadow-ban';
-  readonly priority?: number;
-  readonly name?: string;
-};
-
-type AutoModRuleAdapter = {
-  list(input: { filter?: Record<string, unknown>; limit?: number }): Promise<{
-    items: AutoModRuleRecord[];
-  }>;
-};
+type AutoModRuleRecord = Awaited<ReturnType<AutoModRuleAdapter['list']>>['items'][number];
 
 type MatcherRecord = {
   readonly type?: unknown;
@@ -160,7 +145,7 @@ export function createAutoModMiddleware(deps: {
     content: ModerationTarget,
   ) => ModerationDecision | Promise<ModerationDecision>;
   autoModRuleAdapter?: AutoModRuleAdapter;
-  reportAdapter: EntityAdapter<Report, Record<string, unknown>, Record<string, unknown>>;
+  reportAdapter: ReportAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
     const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;

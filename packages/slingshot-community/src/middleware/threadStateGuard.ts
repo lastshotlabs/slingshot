@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
-import type { Thread } from '../types/models';
+import type { ThreadAdapter } from '../entities/runtime';
 
 function readThreadIdFromBody(body: unknown): string {
   if (typeof body !== 'object' || body === null) {
@@ -39,7 +38,7 @@ function readContainerIdFromBody(body: unknown): string {
  *   as route-level middleware.
  */
 export function createThreadStateGuardMiddleware(deps: {
-  threadAdapter: EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
+  threadAdapter: ThreadAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
     let threadId = c.req.param('threadId');

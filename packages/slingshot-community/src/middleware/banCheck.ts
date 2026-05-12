@@ -1,8 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
 import { getActorTenantId } from '@lastshotlabs/slingshot-core';
+import type { BanAdapter } from '../entities/runtime';
 import type { CommunityPrincipal } from '../types/env';
-import type { Ban } from '../types/models';
 
 /**
  * Create a Hono middleware that enforces container ban status for the current
@@ -56,7 +55,7 @@ import type { Ban } from '../types/models';
  * ```
  */
 export function createBanCheckMiddleware(deps: {
-  banAdapter: EntityAdapter<Ban, Record<string, unknown>, Record<string, unknown>>;
+  banAdapter: BanAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
     const principal = c.get('communityPrincipal') as CommunityPrincipal | undefined;

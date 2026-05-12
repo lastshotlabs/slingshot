@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
-import type { Reply } from '../types/models';
+import type { ReplyAdapter } from '../entities/runtime';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -10,7 +9,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Ensure a selected solution reply belongs to the thread being updated.
  */
 export function createSolutionReplyGuardMiddleware(deps: {
-  replyAdapter: EntityAdapter<Reply, Record<string, unknown>, Record<string, unknown>>;
+  replyAdapter: ReplyAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
     let body: Record<string, unknown>;

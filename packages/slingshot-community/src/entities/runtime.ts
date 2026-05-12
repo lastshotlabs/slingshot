@@ -12,22 +12,63 @@
  * handler, or a small typed builder.
  */
 import { HTTPException } from 'hono/http-exception';
+import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import type { Reply, Thread } from '../types/models';
 
 // ---------------------------------------------------------------------------
 // Adapter shapes
 // ---------------------------------------------------------------------------
+
+/**
+ * Read fields plucked from the resolved `Thread` record by middleware and bus
+ * handlers. Kept aligned with the storage adapter's `getById` return so callers
+ * don't need to re-cast.
+ */
+export type ThreadReadRecord = Pick<
+  Thread,
+  | 'id'
+  | 'createdAt'
+  | 'authorId'
+  | 'containerId'
+  | 'status'
+  | 'locked'
+  | 'body'
+  | 'format'
+  | 'mentions'
+  | 'broadcastMentions'
+  | 'mentionedRoleIds'
+  | 'components'
+  | 'embeds'
+>;
+
+/**
+ * Read fields plucked from the resolved `Reply` record by middleware and bus
+ * handlers. Kept aligned with the storage adapter's `getById` return so callers
+ * don't need to re-cast.
+ */
+export type ReplyReadRecord = Pick<
+  Reply,
+  | 'id'
+  | 'createdAt'
+  | 'threadId'
+  | 'containerId'
+  | 'status'
+  | 'body'
+  | 'format'
+  | 'mentions'
+  | 'broadcastMentions'
+  | 'mentionedRoleIds'
+  | 'components'
+  | 'embeds'
+>;
 
 export type ContainerAdapter = {
   getById(id: string): Promise<{ id: string; joinPolicy?: string; deletedAt?: unknown } | null>;
 };
 
 export type ThreadAdapter = {
-  getById(id: string): Promise<{
-    createdAt?: string | Date;
-    containerId: string;
-    status?: string;
-  } | null>;
+  getById(id: string): Promise<ThreadReadRecord | null>;
   incrementReplyCount(id: string): Promise<unknown>;
   decrementReplyCount(id: string): Promise<unknown>;
   updateLastActivity(
@@ -36,17 +77,30 @@ export type ThreadAdapter = {
   ): Promise<unknown>;
   update(id: string, data: unknown): Promise<unknown>;
   updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
+  attachEmbeds(match: { id: string }, data: { embeds: unknown }): Promise<unknown>;
+  attachMentions(
+    match: { id: string },
+    data: {
+      mentions: readonly string[];
+      broadcastMentions: readonly ('everyone' | 'here')[];
+      mentionedRoleIds: readonly string[];
+    },
+  ): Promise<unknown>;
 };
 
 export type ReplyAdapter = {
-  getById(id: string): Promise<{
-    createdAt?: string | Date;
-    threadId?: string;
-    containerId: string;
-    status?: string;
-  } | null>;
+  getById(id: string): Promise<ReplyReadRecord | null>;
   update(id: string, data: unknown): Promise<unknown>;
   updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
+  attachEmbeds(match: { id: string }, data: { embeds: unknown }): Promise<unknown>;
+  attachMentions(
+    match: { id: string },
+    data: {
+      mentions: readonly string[];
+      broadcastMentions: readonly ('everyone' | 'here')[];
+      mentionedRoleIds: readonly string[];
+    },
+  ): Promise<unknown>;
 };
 
 export type ReactionAdapter = {
@@ -56,7 +110,12 @@ export type ReactionAdapter = {
 };
 
 export type ContainerMemberAdapter = {
-  create(input: { containerId: string; userId: string; role?: string }): Promise<unknown>;
+  create(input: {
+    containerId: string;
+    userId: string;
+    role?: 'owner' | 'moderator' | 'member';
+    tenantId?: string | null;
+  }): Promise<unknown>;
   getMember(params: { containerId: string; userId: string }): Promise<unknown>;
   getById(id: string): Promise<{ role?: string; userId?: string; containerId?: string } | null>;
 };
@@ -66,7 +125,11 @@ export type ReportAdapter = {
 };
 
 export type BanAdapter = {
-  list(input: { filter: Record<string, unknown>; limit?: number }): Promise<{ items: unknown[] }>;
+  list(input: {
+    filter: Record<string, unknown>;
+    limit?: number;
+    tenantId?: string;
+  }): Promise<{ items: unknown[] }>;
 };
 
 export type AuditLogAdapter = {
@@ -203,7 +266,7 @@ export function createReleaseInviteSlotHandler(
  * without leaking the full {@link PermissionsState} surface.
  */
 export interface RedeemPermissionsAdapter {
-  createGrant(input: Record<string, unknown>): Promise<string>;
+  createGrant(input: Parameters<PermissionsAdapter['createGrant']>[0]): Promise<string>;
 }
 
 export interface CreateRedeemHandlerArgs {
@@ -278,7 +341,7 @@ export function createRedeemInviteHandler(args: CreateRedeemHandlerArgs) {
         subjectType: 'user',
         resourceType: 'community:container',
         resourceId: invite.containerId,
-        tenantId,
+        tenantId: tenantId ?? null,
         roles: ['member'],
         effect: 'allow',
         grantedBy: invite.createdBy,

@@ -1,12 +1,11 @@
 import type { MiddlewareHandler } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
-import type { Thread } from '../types/models';
+import type { ThreadAdapter } from '../entities/runtime';
 
 /**
  * Allow public thread-adjacent reads/writes only for published threads.
  */
 export function createPublishedThreadGuardMiddleware(deps: {
-  threadAdapter: EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
+  threadAdapter: ThreadAdapter;
 }): MiddlewareHandler {
   return async (c, next) => {
     let id = c.req.param('id') || c.req.param('threadId');

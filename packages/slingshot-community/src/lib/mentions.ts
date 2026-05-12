@@ -1,7 +1,6 @@
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
 import type { NotificationBuilder } from '@lastshotlabs/slingshot-core';
 import { extractMentionsFromBody } from '@lastshotlabs/slingshot-core/content';
-import type { Reply, Thread } from '../types/models';
+import type { ReplyAdapter, ThreadAdapter } from '../entities/runtime';
 
 /**
  * Runtime dependencies required by {@link notifyMentions}.
@@ -18,12 +17,12 @@ export interface NotifyMentionsDeps {
    * Adapter for the `Thread` entity — used to load the thread when
    * `source === 'thread'` to extract title and body for mention scanning.
    */
-  threadAdapter: EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
+  threadAdapter: ThreadAdapter;
   /**
    * Adapter for the `Reply` entity — used to load the reply when
    * `source === 'reply'` to extract body and parent thread ID.
    */
-  replyAdapter: EntityAdapter<Reply, Record<string, unknown>, Record<string, unknown>>;
+  replyAdapter: ReplyAdapter;
 }
 
 /**

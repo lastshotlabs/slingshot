@@ -37,11 +37,10 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
 import type { MiddlewareHandler } from 'hono';
 import { buildCommunityEntityModules } from './entities/modules';
-import type { CommunityAdapterRefs } from './entities/runtime';
+import type { CommunityAdapterRefs, RedeemPermissionsAdapter } from './entities/runtime';
 import { notifyMentions } from './lib/mentions';
 import type { NotifyMentionsDeps } from './lib/mentions';
 import { extractUrls } from './lib/urls';
@@ -50,10 +49,7 @@ import { createAutoModMiddleware } from './middleware/autoMod';
 import { createBanCheckMiddleware } from './middleware/banCheck';
 import { createBanNotifyMiddleware } from './middleware/banNotify';
 import { createContainerCreationGuardMiddleware } from './middleware/containerCreationGuard';
-import {
-  createContainerCreatorGrantMiddleware,
-  type ContainerMemberCreator,
-} from './middleware/containerCreatorGrant';
+import { createContainerCreatorGrantMiddleware } from './middleware/containerCreatorGrant';
 import { createContentTargetGuardMiddleware } from './middleware/contentTargetGuard';
 import { createGrantManagerMiddleware } from './middleware/grantManager';
 import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
@@ -75,47 +71,6 @@ import { DEFAULT_SCORING_CONFIG } from './types/config';
 import type { CommunityPluginConfig } from './types/config';
 import { communityPluginConfigSchema } from './types/config';
 import { COMMUNITY_PLUGIN_STATE_KEY, CommunityPluginStateRef } from './types/state';
-
-type AdapterResult = BareEntityAdapter;
-
-/** Runtime check that an adapter exposes an `updateComponents` method. */
-function hasUpdateComponents(adapter: AdapterResult | undefined): adapter is AdapterResult & {
-  updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
-} {
-  return (
-    adapter != null && typeof (adapter as Record<string, unknown>).updateComponents === 'function'
-  );
-}
-
-/** Runtime check that an adapter exposes a typed `getById` returning member-like records. */
-function hasGetById(adapter: AdapterResult | undefined): adapter is AdapterResult & {
-  getById(id: string): Promise<{ role?: string; userId?: string; containerId?: string } | null>;
-} {
-  return adapter != null && typeof (adapter as Record<string, unknown>).getById === 'function';
-}
-
-/** Runtime check that an adapter exposes the `attachEmbeds` field-update operation. */
-function hasAttachEmbeds(adapter: AdapterResult | undefined): adapter is AdapterResult & {
-  attachEmbeds(match: { id: string }, data: { embeds: unknown }): Promise<unknown>;
-} {
-  return adapter != null && typeof (adapter as Record<string, unknown>).attachEmbeds === 'function';
-}
-
-/** Runtime check that an adapter exposes the `attachMentions` field-update operation. */
-function hasAttachMentions(adapter: AdapterResult | undefined): adapter is AdapterResult & {
-  attachMentions(
-    match: { id: string },
-    data: {
-      mentions: readonly string[];
-      broadcastMentions: readonly ('everyone' | 'here')[];
-      mentionedRoleIds: readonly string[];
-    },
-  ): Promise<unknown>;
-} {
-  return (
-    adapter != null && typeof (adapter as Record<string, unknown>).attachMentions === 'function'
-  );
-}
 
 function hasBusOn(bus: unknown): bus is {
   on(event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>): void;
@@ -150,33 +105,23 @@ function buildInteractionsPeer(refs: CommunityAdapterRefs): CommunityInteraction
     peerKind: 'community',
     async resolveMessageByKindAndId(kind, id) {
       if (kind === 'community:thread') {
-        const record = (await refs.thread?.getById(id)) as
-          | { components?: unknown }
-          | null
-          | undefined;
-        return record ?? null;
+        return (await refs.thread?.getById(id)) ?? null;
       }
       if (kind === 'community:reply') {
-        const record = (await refs.reply?.getById(id)) as
-          | { components?: unknown }
-          | null
-          | undefined;
-        return record ?? null;
+        return (await refs.reply?.getById(id)) ?? null;
       }
       return null;
     },
     async updateComponents(kind, id, components) {
       if (kind === 'community:thread') {
-        const adapter = refs.thread as unknown as AdapterResult | undefined;
-        if (hasUpdateComponents(adapter)) {
-          await adapter.updateComponents({ id }, { components });
+        if (refs.thread) {
+          await refs.thread.updateComponents({ id }, { components });
         }
         return;
       }
       if (kind === 'community:reply') {
-        const adapter = refs.reply as unknown as AdapterResult | undefined;
-        if (hasUpdateComponents(adapter)) {
-          await adapter.updateComponents({ id }, { components });
+        if (refs.reply) {
+          await refs.reply.updateComponents({ id }, { components });
         }
       }
     },
@@ -264,14 +209,14 @@ export function createCommunityPackage(
   // (entity modules are built before `setupMiddleware` runs). We expose a
   // delegating wrapper whose target is filled in inside `setupMiddleware`.
   const permissionsAdapterRef: { current?: PermissionsState['adapter'] } = {};
-  const permissionsAdapterProxy = {
-    createGrant: (input: Record<string, unknown>) => {
+  const permissionsAdapterProxy: RedeemPermissionsAdapter = {
+    createGrant: input => {
       if (!permissionsAdapterRef.current) {
         throw new Error(
           '[slingshot-community] Permissions adapter accessed before setupMiddleware resolved it',
         );
       }
-      return permissionsAdapterRef.current.createGrant(input as never);
+      return permissionsAdapterRef.current.createGrant(input);
     },
   };
 
@@ -411,6 +356,11 @@ export function createCommunityPackage(
             ? rolesValue.filter((role): role is string => typeof role === 'string')
             : [];
           if (actor.id) {
+            // The framework's typed `c.set` only accepts keys declared in
+            // its global `AppVariables` map. The community plugin's
+            // `communityPrincipal` slot lives in `CommunityEnv` and is not
+            // merged into `AppVariables` (other plugins use the same trick).
+            // Narrow back to the structural `set(key, value)` Hono exposes.
             (c as unknown as { set(key: string, value: unknown): void }).set(
               'communityPrincipal',
               { subject: actor.id, roles },
@@ -455,15 +405,14 @@ export function createCommunityPackage(
       grantManagerRef.handler = createGrantManagerMiddleware({
         permissionsAdapter: permissions.adapter,
         getMemberById: async memberId => {
-          const adapter = refs.member as unknown as AdapterResult | undefined;
-          if (!hasGetById(adapter)) return null;
-          const result = await adapter.getById(memberId);
-          if (!result || typeof result !== 'object') return null;
-          const record = result as Record<string, unknown>;
+          if (!refs.member) return null;
+          const result = await refs.member.getById(memberId);
+          if (!result) return null;
           return {
-            role: typeof record.role === 'string' ? record.role : undefined,
-            userId: typeof record.userId === 'string' ? record.userId : undefined,
-            containerId: typeof record.containerId === 'string' ? record.containerId : undefined,
+            role: typeof result.role === 'string' ? result.role : undefined,
+            userId: typeof result.userId === 'string' ? result.userId : undefined,
+            containerId:
+              typeof result.containerId === 'string' ? result.containerId : undefined,
           };
         },
       });
@@ -475,13 +424,12 @@ export function createCommunityPackage(
         permissionsAdapter: permissions.adapter,
         memberAdapter: {
           create: async input => {
-            const adapter = refs.member as unknown as ContainerMemberCreator | undefined;
-            if (!adapter || typeof adapter.create !== 'function') {
+            if (!refs.member) {
               throw new Error(
                 '[slingshot-community] ContainerMember adapter unavailable when issuing creator grant',
               );
             }
-            return adapter.create(input);
+            return refs.member.create(input);
           },
         },
       });
@@ -529,30 +477,35 @@ export function createCommunityPackage(
       }
 
       // ─── Adapter-dependent middleware (now adapters are captured) ───────────
+      if (!refs.ban || !refs.report) {
+        throw new Error(
+          '[slingshot-community] ban/report adapters were not captured during entity setup',
+        );
+      }
       banCheckRef.handler = createBanCheckMiddleware({
-        banAdapter: refs.ban as never,
+        banAdapter: refs.ban,
       });
       autoModRef.handler = createAutoModMiddleware({
         autoModRuleAdapter: refs.autoModRule,
-        reportAdapter: refs.report as never,
+        reportAdapter: refs.report,
       });
       threadStateGuardRef.handler = createThreadStateGuardMiddleware({
-        threadAdapter: refs.thread as never,
+        threadAdapter: refs.thread,
       });
       publishedThreadGuardRef.handler = createPublishedThreadGuardMiddleware({
-        threadAdapter: refs.thread as never,
+        threadAdapter: refs.thread,
       });
       targetVisibilityGuardRef.handler = createContentTargetGuardMiddleware(
         {
-          threadAdapter: refs.thread as never,
-          replyAdapter: refs.reply as never,
+          threadAdapter: refs.thread,
+          replyAdapter: refs.reply,
         },
         { requireContainerIdMatch: true },
       );
       reportTargetGuardRef.handler = createContentTargetGuardMiddleware(
         {
-          threadAdapter: refs.thread as never,
-          replyAdapter: refs.reply as never,
+          threadAdapter: refs.thread,
+          replyAdapter: refs.reply,
         },
         { allowUserTarget: true, attachContainerId: true },
       );
@@ -560,7 +513,7 @@ export function createCommunityPackage(
         containerAdapter: refs.container,
       });
       solutionReplyGuardRef.handler = createSolutionReplyGuardMiddleware({
-        replyAdapter: refs.reply as never,
+        replyAdapter: refs.reply,
       });
       replyCountUpdateRef.handler = createReplyCountUpdateMiddleware({
         threadAdapter: refs.thread,
@@ -696,10 +649,7 @@ function subscribeBusHandlers(args: {
     const threadId = payload.threadId as string | undefined;
     if (!replyId || !actorId || !threadId || !refs.thread) return;
 
-    const thread = (await refs.thread.getById(threadId)) as {
-      authorId?: string;
-      containerId?: string;
-    } | null;
+    const thread = await refs.thread.getById(threadId);
     if (!thread?.authorId || !thread.containerId) return;
 
     await builder.notify({
@@ -719,14 +669,11 @@ function subscribeBusHandlers(args: {
   });
 
   function buildMentionDeps(): NotifyMentionsDeps | null {
-    const threadAdapter = refs.thread as unknown as AdapterResult | undefined;
-    const replyAdapter = refs.reply as unknown as AdapterResult | undefined;
-    if (!threadAdapter || !replyAdapter) return null;
-    if (!hasGetById(threadAdapter) || !hasGetById(replyAdapter)) return null;
+    if (!refs.thread || !refs.reply) return null;
     return {
       builder,
-      threadAdapter: threadAdapter as unknown as NotifyMentionsDeps['threadAdapter'],
-      replyAdapter: replyAdapter as unknown as NotifyMentionsDeps['replyAdapter'],
+      threadAdapter: refs.thread,
+      replyAdapter: refs.reply,
     };
   }
 
@@ -745,17 +692,14 @@ function subscribeBusHandlers(args: {
   // parseBody → attachMentions: normalise mention sidecars from the body so
   // clients can't spoof `mentions` arrays. Best-effort; silent on failure.
   bus.on('community:thread.created', async payload => {
-    const adapter = refs.thread as unknown as AdapterResult | undefined;
-    if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+    if (!refs.thread) return;
     const id = typeof payload.id === 'string' ? payload.id : undefined;
     if (!id) return;
-    const record = (await adapter.getById(id)) as
-      | { body?: string; format?: 'plain' | 'markdown' }
-      | null;
+    const record = await refs.thread.getById(id);
     if (!record) return;
     const parsed = parseBody(record.body, record.format ?? 'markdown');
     try {
-      await adapter.attachMentions(
+      await refs.thread.attachMentions(
         { id },
         {
           mentions: parsed.mentions,
@@ -769,17 +713,14 @@ function subscribeBusHandlers(args: {
   });
 
   bus.on('community:reply.created', async payload => {
-    const adapter = refs.reply as unknown as AdapterResult | undefined;
-    if (!hasAttachMentions(adapter) || !hasGetById(adapter)) return;
+    if (!refs.reply) return;
     const id = typeof payload.id === 'string' ? payload.id : undefined;
     if (!id) return;
-    const record = (await adapter.getById(id)) as
-      | { body?: string; format?: 'plain' | 'markdown' }
-      | null;
+    const record = await refs.reply.getById(id);
     if (!record) return;
     const parsed = parseBody(record.body, record.format ?? 'markdown');
     try {
-      await adapter.attachMentions(
+      await refs.reply.attachMentions(
         { id },
         {
           mentions: parsed.mentions,
@@ -799,19 +740,18 @@ function subscribeBusHandlers(args: {
   if (!embedsState) return;
 
   bus.on('community:thread.created', async payload => {
-    const threadAdapter = refs.thread as unknown as AdapterResult | undefined;
-    if (!hasAttachEmbeds(threadAdapter) || !hasGetById(threadAdapter)) return;
+    if (!refs.thread) return;
     const threadId = typeof payload.id === 'string' ? payload.id : undefined;
     const containerId =
       typeof payload.containerId === 'string' ? payload.containerId : undefined;
     if (!threadId || !containerId) return;
-    const record = (await threadAdapter.getById(threadId)) as { body?: string } | null;
+    const record = await refs.thread.getById(threadId);
     const urls = extractUrls(record?.body);
     if (urls.length === 0) return;
     try {
       const embeds = await embedsState.unfurl(urls);
       if (embeds.length === 0) return;
-      await threadAdapter.attachEmbeds({ id: threadId }, { embeds });
+      await refs.thread.attachEmbeds({ id: threadId }, { embeds });
       events.publish(
         'community:thread.embeds.resolved',
         {
@@ -832,16 +772,12 @@ function subscribeBusHandlers(args: {
   });
 
   bus.on('community:reply.created', async payload => {
-    const replyAdapter = refs.reply as unknown as AdapterResult | undefined;
-    if (!hasAttachEmbeds(replyAdapter) || !hasGetById(replyAdapter)) return;
+    if (!refs.reply) return;
     const replyId = typeof payload.id === 'string' ? payload.id : undefined;
     const containerId =
       typeof payload.containerId === 'string' ? payload.containerId : undefined;
     if (!replyId || !containerId) return;
-    const record = (await replyAdapter.getById(replyId)) as {
-      body?: string;
-      threadId?: string;
-    } | null;
+    const record = await refs.reply.getById(replyId);
     const threadId = typeof record?.threadId === 'string' ? record.threadId : undefined;
     if (!threadId) return;
     const urls = extractUrls(record?.body);
@@ -849,7 +785,7 @@ function subscribeBusHandlers(args: {
     try {
       const embeds = await embedsState.unfurl(urls);
       if (embeds.length === 0) return;
-      await replyAdapter.attachEmbeds({ id: replyId }, { embeds });
+      await refs.reply.attachEmbeds({ id: replyId }, { embeds });
       events.publish(
         'community:reply.embeds.resolved',
         {

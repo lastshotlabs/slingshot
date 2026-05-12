@@ -15,7 +15,7 @@ import {
   createEventEnvelope,
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
-import { createWebhookPlugin } from '@lastshotlabs/slingshot-webhooks';
+import { createWebhookPackage } from '@lastshotlabs/slingshot-webhooks';
 import { createWebhookMemoryQueue } from '@lastshotlabs/slingshot-webhooks/testing';
 import type { E2EServerHandle } from '../../src/testing';
 import { authHeader, createMemoryAuthAdapter } from '../setup';
@@ -99,7 +99,7 @@ function makeWebhookPlugin(
 ) {
   const queue = createWebhookMemoryQueue({ maxAttempts: 1 });
 
-  const plugin = createWebhookPlugin({
+  const plugin = createWebhookPackage({
     queue,
     events: opts.events ?? ['user.*', 'order.*'],
     managementRole: opts.requireAuth ? 'admin' : undefined,
@@ -155,7 +155,8 @@ async function createAuthedHandle(
   const adapter = createMemoryAuthAdapter();
   const handle = await createTestHttpServer(
     {
-      plugins: [createWebhookTestEventsPlugin(), plugin],
+      plugins: [createWebhookTestEventsPlugin()],
+      packages: [plugin],
       tenancy: {
         resolution: 'header',
         headerName: 'x-tenant-id',

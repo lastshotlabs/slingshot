@@ -4,9 +4,9 @@
 import './events';
 
 /**
- * Create the webhooks plugin with endpoint management, signing, queues, and delivery.
+ * Create the webhooks package with endpoint management, signing, queues, and delivery.
  */
-export { createWebhookPlugin } from './plugin';
+export { createWebhookPackage } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */

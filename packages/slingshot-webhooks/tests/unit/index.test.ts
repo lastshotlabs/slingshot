@@ -3,7 +3,7 @@ import * as webhooks from '../../src/index';
 
 describe('slingshot-webhooks public entrypoint', () => {
   test('exports the runtime factories and constants expected by consumers', () => {
-    expect(webhooks.createWebhookPlugin).toBeFunction();
+    expect(webhooks.createWebhookPackage).toBeFunction();
     expect(webhooks.WEBHOOK_ROUTES).toBeDefined();
     expect(webhooks.WEBHOOKS_PLUGIN_STATE_KEY).toBe('slingshot-webhooks');
     expect(webhooks.webhookPluginConfigSchema.safeParse({}).success).toBe(true);

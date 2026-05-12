@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createWebhookPlugin } from '../../src/plugin';
+import { createWebhookPackage } from '../../src/plugin';
 import { WEBHOOK_ROUTES } from '../../src/routes';
 import type { InboundProvider } from '../../src/types/inbound';
 
@@ -8,37 +8,37 @@ const provider: InboundProvider = {
   verify: async () => ({ verified: true, payload: {} }),
 };
 
-describe('createWebhookPlugin', () => {
+describe('createWebhookPackage', () => {
   it('does not expose inbound paths when no inbound providers are configured', () => {
-    const plugin = createWebhookPlugin({});
+    const pkg = createWebhookPackage({});
 
-    expect(plugin.publicPaths).toEqual([]);
-    expect(plugin.csrfExemptPaths).toEqual([]);
+    expect(pkg.publicPaths).toEqual([]);
+    expect(pkg.csrfExemptPaths).toEqual([]);
   });
 
   it('does not expose inbound paths when inbound routes are disabled', () => {
-    const plugin = createWebhookPlugin({
+    const pkg = createWebhookPackage({
       inbound: [provider],
       disableRoutes: [WEBHOOK_ROUTES.INBOUND],
     });
 
-    expect(plugin.publicPaths).toEqual([]);
-    expect(plugin.csrfExemptPaths).toEqual([]);
+    expect(pkg.publicPaths).toEqual([]);
+    expect(pkg.csrfExemptPaths).toEqual([]);
   });
 
   it('normalizes trailing slashes in mountPath before building inbound paths', () => {
-    const plugin = createWebhookPlugin({
+    const pkg = createWebhookPackage({
       inbound: [provider],
       mountPath: '/custom/hooks/',
     });
 
-    expect(plugin.publicPaths).toEqual(['/custom/hooks/inbound/*']);
-    expect(plugin.csrfExemptPaths).toEqual(['/custom/hooks/inbound/*']);
+    expect(pkg.publicPaths).toEqual(['/custom/hooks/inbound/*']);
+    expect(pkg.csrfExemptPaths).toEqual(['/custom/hooks/inbound/*']);
   });
 
   it('rejects mountPath values without a leading slash', () => {
     expect(() =>
-      createWebhookPlugin({
+      createWebhookPackage({
         mountPath: 'custom/hooks',
       }),
     ).toThrow(/mountPath must start with '\//i);
@@ -46,7 +46,7 @@ describe('createWebhookPlugin', () => {
 
   it('requires a durable bus subscription name when durability is enabled', () => {
     expect(() =>
-      createWebhookPlugin({
+      createWebhookPackage({
         busSubscription: {
           durable: true,
         },
@@ -58,9 +58,9 @@ describe('createWebhookPlugin', () => {
     const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const plugin = createWebhookPlugin({});
+      const pkg = createWebhookPackage({});
       await expect(
-        plugin.setupMiddleware?.({
+        pkg.setupMiddleware?.({
           app: {} as never,
           config: {} as never,
           bus: {} as never,

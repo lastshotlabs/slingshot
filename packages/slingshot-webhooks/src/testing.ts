@@ -8,6 +8,7 @@ import type {
   PluginSetupContext,
   ResolvedEntityConfig,
   SlingshotEvents,
+  SlingshotPackageDefinition,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
@@ -23,10 +24,14 @@ import {
   defineEvent,
   getActor,
   getActorId,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import { createMemoryWebhookAdapter } from './adapters/memory';
 import { WebhookRuntimeError } from './errors/webhookErrors';
-import { createWebhookPlugin } from './plugin';
+import { createWebhookPackage } from './plugin';
 import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 
@@ -125,10 +130,17 @@ function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
 }
 
 /**
- * Create a Hono test app with the manifest-driven webhook plugin mounted.
+ * Create a Hono test app with the `definePackage` webhook package mounted.
  *
- * Pass `standalone: true` in `frameworkOptions` to boot without `slingshot-entity` —
- * the in-memory adapter is injected automatically.
+ * Mirrors the pattern used by other packages' test harnesses (polls,
+ * organizations): the package's entities are mounted manually via
+ * `createEntityPlugin`, delegating each entity's `buildAdapter` to the
+ * module's own `wiring.buildAdapter` so the package's closure-owned adapter
+ * refs are populated.
+ *
+ * Pass `standalone: true` in `frameworkOptions` to boot without
+ * `slingshot-entity` — the in-memory adapter is injected automatically and
+ * entity-CRUD routes are skipped.
  */
 export async function createWebhooksTestApp(
   configOverrides: Partial<WebhookPluginConfig> = {},
@@ -148,7 +160,7 @@ export async function createWebhooksTestApp(
       ? { adapter: createMemoryWebhookAdapter() }
       : {}),
   };
-  const plugin = createWebhookPlugin(pluginConfig);
+  const pkg: SlingshotPackageDefinition = createWebhookPackage(pluginConfig);
 
   const app = new OpenAPIHono<AppEnv>();
   const bus = new InProcessAdapter();
@@ -161,7 +173,9 @@ export async function createWebhooksTestApp(
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
   const pluginState = createPluginStateMap();
 
-  if (!frameworkOptions.standalone) {
+  const useEntityPath = !frameworkOptions.standalone && pkg.entities.length > 0;
+
+  if (useEntityPath) {
     const { createEntityFactories } = await import('@lastshotlabs/slingshot-entity');
     Reflect.set(
       frameworkConfig.storeInfra as object,
@@ -231,24 +245,86 @@ export async function createWebhooksTestApp(
     events,
   };
 
-  await plugin.setupMiddleware?.(setupContext);
-  await plugin.setupRoutes?.(setupContext);
-  await plugin.setupPost?.(setupContext);
+  await pkg.setupMiddleware?.(setupContext);
 
-  const slot = pluginState.get('slingshot:package:capabilities:slingshot-webhooks') as
-    | { adapter?: WebhookAdapter }
-    | undefined;
-  const runtime = slot?.adapter;
-  if (!runtime) {
-    throw new WebhookRuntimeError('Webhook plugin did not register runtime state');
+  // Mount the package's entity modules manually via `createEntityPlugin`,
+  // delegating each module's own `wiring.buildAdapter`. Mirrors the pattern
+  // used by `slingshot-polls/src/testing.ts` and the organizations test
+  // harness.
+  let entityPlugin: ReturnType<typeof createEntityPlugin> | undefined;
+  if (useEntityPath) {
+    const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
+      const impl = (entityModule as { implementation?: unknown }).implementation as {
+        config: ResolvedEntityConfig;
+        operations?: Record<string, unknown>;
+        extraRoutes?: unknown;
+        overrides?: unknown;
+        routePath?: string;
+        parentPath?: string;
+        wiring: { mode: string; buildAdapter?: unknown };
+      };
+      const buildAdapter = impl.wiring.buildAdapter as
+        | ((storeType: StoreType, infra: StoreInfra) => BareEntityAdapter)
+        | undefined;
+      if (impl.wiring.mode !== 'manual' || !buildAdapter) {
+        throw new WebhookRuntimeError(
+          `expected manual wiring on entity '${entityModule.entityName}', got '${impl.wiring.mode}'`,
+        );
+      }
+      return {
+        config: impl.config,
+        operations: impl.operations as never,
+        extraRoutes: impl.extraRoutes as never,
+        overrides: impl.overrides as never,
+        ...(impl.routePath ? { routePath: impl.routePath } : {}),
+        ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
+        buildAdapter,
+      };
+    });
+    entityPlugin = createEntityPlugin({
+      name: pkg.name,
+      mountPath: pkg.mountPath ?? '/webhooks',
+      entities: entityEntries,
+      middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
+    });
+    await entityPlugin.setupMiddleware?.(setupContext);
+    await entityPlugin.setupRoutes?.(setupContext);
   }
+
+  await pkg.setupRoutes?.(setupContext);
+  await entityPlugin?.setupPost?.(setupContext);
+  await pkg.setupPost?.(setupContext);
+
+  // `createApp` publishes capability provider results into the canonical
+  // `slingshot:package:capabilities:<name>` plugin-state slot. Bypassing
+  // `createApp` here, we replicate that step so the test helper can read
+  // the runtime adapter through the same slot used by docker/e2e callers.
+  let runtime: WebhookAdapter | undefined;
+  for (const provider of pkg.capabilities.provides) {
+    const value = await provider.resolve({ packageName: pkg.name });
+    const slotKey = `slingshot:package:capabilities:${pkg.name}`;
+    const existing =
+      (pluginState.get(slotKey) as Record<string, unknown> | undefined) ?? {};
+    publishPluginState(pluginState, slotKey, {
+      ...existing,
+      [provider.capability.name]: value,
+    });
+    if (provider.capability.name === 'adapter') {
+      runtime = value as WebhookAdapter;
+    }
+  }
+
+  if (!runtime) {
+    throw new WebhookRuntimeError('Webhook package did not register runtime adapter');
+  }
+
   return {
     app,
     runtime,
     bus,
     events,
     teardown: async () => {
-      await plugin.teardown?.();
+      await pkg.teardown?.();
     },
   };
 }

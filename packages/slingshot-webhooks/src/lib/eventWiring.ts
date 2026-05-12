@@ -5,7 +5,7 @@ import type {
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import { type RuntimeLogger, resolveWebhookDeliveries } from '../manifest/runtime';
+import { type RuntimeLogger, resolveWebhookDeliveries } from '../entities/runtime';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
 import type { WebhookQueue } from '../types/queue';

@@ -1,10 +1,24 @@
+/**
+ * Webhooks package factory.
+ *
+ * Creates a `SlingshotPackageDefinition` that mounts the WebhookEndpoint and
+ * WebhookDelivery entities, wires the queue lifecycle, dispatches delivery
+ * jobs, supplies the `/endpoints/:id/test` and `/admin/deliveries/:id/replay`
+ * routes, and mounts the inbound webhook receiver router. Cross-package
+ * consumers resolve the runtime adapter via {@link WebhookAdapterCap}.
+ *
+ * Every adapter ref, queue handle, rate-limit backend, and inbound router
+ * closure is owned by the factory's closure (Rule 3) — multiple package
+ * instances in the same process do not share state.
+ */
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import type {
+  EventDefinitionRegistry,
   MetricsEmitter,
   PluginSetupContext,
   SlingshotEventBus,
-  SlingshotPlugin,
+  SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
   HeaderInjectionError,
@@ -13,16 +27,21 @@ import {
   createConsoleLogger,
   createNoopMetricsEmitter,
   deepFreeze,
+  definePackage,
   getActor,
-  getContext,
   getContextOrNull,
   getRouteAuthOrNull,
   provideCapability,
-  registerPluginCapabilities,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { WebhookAdapterCap } from './public';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { buildWebhookEntityModules } from './entities/modules';
+import {
+  type WebhookAdapterRefs,
+  type WebhookRuntimeAdapter,
+  buildWebhookRuntimeAdapter,
+  createWebhookSecretCipher,
+} from './entities/runtime';
 import { WebhookConfigError, WebhookRuntimeError } from './errors/webhookErrors';
 import type { DispatchOptions } from './lib/dispatcher';
 import { deliverWebhook } from './lib/dispatcher';
@@ -30,7 +49,7 @@ import { wireEventSubscriptions } from './lib/eventWiring';
 import { logWebhookEvent } from './lib/log';
 import type { RateLimiter } from './lib/rateLimit';
 import { createSlidingWindowRateLimiter } from './lib/rateLimit';
-import type { GovernedWebhookRuntime } from './manifest/runtime';
+import { WebhookAdapterCap } from './public';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
 import { WEBHOOK_ROUTES } from './routes/index';
@@ -120,7 +139,7 @@ function buildInboundPublicPaths(
 /**
  * P-WEBHOOKS-9: clamp a caller-requested delivery timeout at 120s with a
  * loud warning + `webhook:timeoutClamped` event. Exported so unit tests can
- * exercise the clamp without standing up the full plugin lifecycle.
+ * exercise the clamp without standing up the full package lifecycle.
  */
 export const TIMEOUT_CLAMP_MS = 120_000;
 
@@ -391,12 +410,25 @@ async function resolveTestDelivery(
 }
 
 /**
- * Creates the manifest-driven webhook plugin for outbound delivery and inbound reception.
+ * Create the webhooks package using the `definePackage` authoring path.
+ *
+ * Mounts the WebhookEndpoint and WebhookDelivery entities (each with manual
+ * adapter wiring that wraps the standard adapter in subscription
+ * normalization, secret encryption, and the transition state machine),
+ * starts the queue lifecycle, supplies the bespoke `/endpoints/:id/test`
+ * and `/admin/deliveries/:id/replay` routes plus the inbound webhook
+ * receiver, and publishes the unified {@link WebhookAdapterCap} capability
+ * once the runtime is ready.
+ *
+ * When `config.adapter` is supplied, the package skips entity wiring and
+ * uses the caller-provided adapter directly — the entity modules and routes
+ * remain unmounted in that mode.
  */
-export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPlugin {
+export function createWebhookPackage(rawConfig: WebhookPluginConfig): SlingshotPackageDefinition {
   const config = deepFreeze(
     validatePluginConfig(WEBHOOKS_PLUGIN_STATE_KEY, rawConfig, webhookPluginConfigSchema),
   );
+
   const queue: WebhookQueue =
     config.queue === 'memory' || !config.queue
       ? createWebhookMemoryQueue({
@@ -411,10 +443,13 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
     config.inbound,
     config.disableRoutes,
   );
-  let unsubscribers: Array<() => void> = [];
-  let innerPlugin: SlingshotPlugin | undefined;
+
+  // Closure-owned state (Rule 3 — no globals).
+  const refs: WebhookAdapterRefs = {};
+  const definitionsRef: { current?: EventDefinitionRegistry } = {};
   let runtimeAdapter: WebhookAdapter | undefined;
   let inboundRateLimiter: RateLimiter | undefined;
+  let unsubscribers: Array<() => void> = [];
 
   // Lazy metrics resolution — proxied so the dispatcher pipeline picks up the
   // framework-owned emitter the moment setupPost runs.
@@ -425,77 +460,93 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
     timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
   };
 
-  return {
+  // Build entity modules eagerly so `definePackage` can declare them on
+  // `entities: [...]`. When `config.adapter` is supplied the modules are
+  // still constructed but stay unused — they're filtered out before the
+  // package declaration to avoid mounting CRUD routes the caller does not
+  // want.
+  const entityModules = buildWebhookEntityModules({
+    refs,
+    definitionsRef,
+    cipherOptions: {
+      secretEncryptionKey: config.secretEncryptionKey ?? null,
+      encryptor: config.encryptor ?? null,
+    },
+  });
+
+  const middleware: Record<string, MiddlewareHandler> = {
+    webhooksAdminGuard: requireWebhookAdmin,
+  };
+
+  const disabledRouteGroups = new Set(config.disableRoutes ?? []);
+  const endpointsRouteGroupDisabled = disabledRouteGroups.has(WEBHOOK_ROUTES.ENDPOINTS);
+  const useExternalAdapter = config.adapter !== undefined;
+  const entities = useExternalAdapter || endpointsRouteGroupDisabled
+    ? []
+    : [entityModules.webhookEndpointModule, entityModules.webhookDeliveryModule];
+
+  return definePackage({
     name: WEBHOOKS_PLUGIN_STATE_KEY,
-    dependencies: config.adapter ? [] : ['slingshot-auth'],
+    mountPath,
+    dependencies: useExternalAdapter ? [] : ['slingshot-auth'],
+    entities,
+    middleware,
     publicPaths: inboundRoutePatterns,
     csrfExemptPaths: inboundRoutePatterns,
+    capabilities: {
+      provides: [
+        provideCapability(WebhookAdapterCap, () => {
+          if (!runtimeAdapter) {
+            throw new WebhookRuntimeError(
+              'WebhookAdapterCap accessed before setupPost wired the runtime adapter',
+            );
+          }
+          return runtimeAdapter;
+        }),
+      ],
+    },
 
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      if (config.adapter) {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async setupMiddleware(_ctx: PluginSetupContext) {
+      if (useExternalAdapter) {
         runtimeAdapter = config.adapter;
-      } else {
-        if (!config.secretEncryptionKey && !config.encryptor) {
-          const pluginLogger: Logger = createConsoleLogger({
-            base: { plugin: 'slingshot-webhooks' },
-          });
-          if (process.env.NODE_ENV === 'production') {
-            if (!config.allowPlaintextSecrets) {
-              throw new WebhookConfigError(
-                'secret encryption is required in production. ' +
-                  'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
-                  'allowPlaintextSecrets: true if storage encryption is handled externally.',
-              );
-            }
-            pluginLogger.warn(
-              '[slingshot-webhooks] allowPlaintextSecrets is enabled in production. ' +
-                'Webhook secrets will be stored without encryption. Ensure storage-layer ' +
-                'encryption is handled externally (e.g. encrypted DB, KMS).',
+        return;
+      }
+
+      // Production safety: secret encryption is required unless the host
+      // app explicitly opts in to plaintext storage.
+      if (!config.secretEncryptionKey && !config.encryptor) {
+        const pluginLogger: Logger = createConsoleLogger({
+          base: { plugin: 'slingshot-webhooks' },
+        });
+        if (process.env.NODE_ENV === 'production') {
+          if (!config.allowPlaintextSecrets) {
+            throw new WebhookConfigError(
+              'secret encryption is required in production. ' +
+                'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
+                'allowPlaintextSecrets: true if storage encryption is handled externally.',
             );
           }
           pluginLogger.warn(
-            '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
-              'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
-              'or supply a custom `encryptor`, before exposing this app to production traffic.',
+            '[slingshot-webhooks] allowPlaintextSecrets is enabled in production. ' +
+              'Webhook secrets will be stored without encryption. Ensure storage-layer ' +
+              'encryption is handled externally (e.g. encrypted DB, KMS).',
           );
         }
-        const { createEntityPlugin } = await import('@lastshotlabs/slingshot-entity');
-        const { createWebhooksManifestRuntime } = await import('./manifest/runtime');
-        const { webhooksManifest } = await import('./manifest/webhooksManifest');
-        innerPlugin = createEntityPlugin({
-          name: WEBHOOKS_PLUGIN_STATE_KEY,
-          mountPath,
-          manifest: webhooksManifest,
-          manifestRuntime: createWebhooksManifestRuntime(
-            adapter => {
-              runtimeAdapter = adapter;
-            },
-            {
-              secretEncryptionKey: config.secretEncryptionKey ?? null,
-              encryptor: config.encryptor ?? null,
-            },
-          ),
-          middleware: {
-            webhooksAdminGuard: requireWebhookAdmin,
-          },
-        });
-        await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
+        pluginLogger.warn(
+          '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
+            'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
+            'or supply a custom `encryptor`, before exposing this app to production traffic.',
+        );
       }
     },
 
-    async setupRoutes({
-      app,
-      bus,
-      config: frameworkConfig,
-      events,
-    }: PluginSetupContext): Promise<void> {
-      const disabled = new Set(config.disableRoutes ?? []);
+    async setupRoutes({ app, bus }: PluginSetupContext): Promise<void> {
+      const adapterIsReady = (): WebhookAdapter | undefined => runtimeAdapter ?? refs.runtime;
 
-      if (!disabled.has(WEBHOOK_ROUTES.ENDPOINTS)) {
-        await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
-
+      if (!endpointsRouteGroupDisabled) {
         app.post(`${mountPath}/endpoints/:id/test`, requireWebhookAdmin, async c => {
-          const adapter = runtimeAdapter;
+          const adapter = adapterIsReady();
           if (!adapter) {
             return c.json({ error: 'Webhook runtime is not ready' }, 500);
           }
@@ -530,7 +581,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           `${mountPath}/admin/deliveries/:deliveryId/replay`,
           requireWebhookAdmin,
           async c => {
-            const adapter = runtimeAdapter;
+            const adapter = adapterIsReady();
             if (!adapter) {
               return c.json({ error: 'Webhook runtime is not ready' }, 500);
             }
@@ -577,10 +628,11 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         );
       }
 
-      if ((config.inbound?.length ?? 0) > 0 && !disabled.has(WEBHOOK_ROUTES.INBOUND)) {
-        // Resolve the rate limiter so the plugin owns the lifecycle — the built-in
-        // sliding window limiter creates a periodic cleanup timer that must be
-        // released on teardown to prevent timer leaks across plugin reloads.
+      if ((config.inbound?.length ?? 0) > 0 && !disabledRouteGroups.has(WEBHOOK_ROUTES.INBOUND)) {
+        // Resolve the rate limiter so the package owns the lifecycle — the
+        // built-in sliding window limiter creates a periodic cleanup timer
+        // that must be released on teardown to prevent timer leaks across
+        // reloads.
         let resolvedInboundRateLimiter: RateLimiter | undefined;
         if (config.inboundRateLimit) {
           if (
@@ -606,24 +658,36 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       }
     },
 
-    async setupPost({
-      bus,
-      config: frameworkConfig,
-      app,
-      events,
-    }: PluginSetupContext): Promise<void> {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
+    async setupPost({ app, bus, events }: PluginSetupContext): Promise<void> {
+      // When using a caller-supplied adapter the runtime is already in place
+      // — skip entity-adapter resolution and governance init.
+      if (!useExternalAdapter) {
+        if (!refs.endpoint || !refs.delivery) {
+          throw new WebhookRuntimeError(
+            'webhook entity adapters were not captured during setup',
+          );
+        }
+        const logger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
+        const cipher = createWebhookSecretCipher({
+          secretEncryptionKey: config.secretEncryptionKey ?? null,
+          encryptor: config.encryptor ?? null,
+        });
+        const runtime: WebhookRuntimeAdapter = buildWebhookRuntimeAdapter(
+          refs.endpoint,
+          refs.delivery,
+          cipher,
+          logger as unknown as Parameters<typeof buildWebhookRuntimeAdapter>[3],
+          definitionsRef,
+        );
+        refs.runtime = runtime;
+        runtimeAdapter = runtime;
+        await runtime.initializeGovernance(events.definitions);
+      }
+
       if (!runtimeAdapter) {
         throw new WebhookRuntimeError('Manifest adapters were not resolved during setup');
       }
-      if ('initializeGovernance' in runtimeAdapter) {
-        await (runtimeAdapter as WebhookAdapter & GovernedWebhookRuntime).initializeGovernance(
-          events.definitions,
-        );
-      }
-      await registerPluginCapabilities(getContext(app), 'slingshot-webhooks', [
-        provideCapability(WebhookAdapterCap, () => runtimeAdapter),
-      ]);
+
       // Resolve the framework-owned metrics emitter so the dispatcher
       // pipeline publishes counters/gauges/timings on hot paths.
       const ctx = getContextOrNull(app);
@@ -639,7 +703,6 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       inboundRateLimiter?.close?.();
       inboundRateLimiter = undefined;
       await queue.stop();
-      await innerPlugin?.teardown?.();
     },
-  };
+  });
 }

@@ -4,7 +4,7 @@ import {
   defineEvent,
   getContext,
 } from '../../packages/slingshot-core/src/index.ts';
-import { createWebhookPlugin } from '../../packages/slingshot-webhooks/src/index.ts';
+import { createWebhookPackage } from '../../packages/slingshot-webhooks/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
 declare module '@lastshotlabs/slingshot-core' {
@@ -71,8 +71,11 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createWebhookPlugin({
-      // Plugin-wide default delivery timeout. Per-endpoint
+    createOrdersPlugin(),
+  ],
+  packages: [
+    createWebhookPackage({
+      // Package-wide default delivery timeout. Per-endpoint
       // `deliveryTimeoutMs` overrides this when set on the endpoint record.
       deliveryTimeoutMs: 10_000,
       // Allow plaintext secrets in this in-memory example only — production
@@ -81,6 +84,5 @@ export default defineApp({
       allowPlaintextSecrets: true,
       events: ['orders:order.placed'],
     }),
-    createOrdersPlugin(),
   ],
 });

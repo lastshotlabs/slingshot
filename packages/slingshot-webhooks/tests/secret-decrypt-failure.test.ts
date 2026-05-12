@@ -5,7 +5,15 @@ import {
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import { type WebhookRuntimeAdapter, createWebhooksManifestRuntime } from '../src/manifest/runtime';
+import {
+  type RuntimeLogger,
+  type WebhookRuntimeAdapter,
+  applyWebhookDeliveryRuntimeTransform,
+  applyWebhookEndpointRuntimeTransform,
+  buildWebhookRuntimeAdapter,
+  createWebhookSecretCipher,
+} from '../src/entities/runtime';
+import type { WebhookSecretCipherOptions } from '../src/entities/runtime';
 import type { WebhookAttempt, WebhookEndpointSubscription } from '../src/types/models';
 import { WebhookSecretDecryptError } from '../src/types/queue';
 
@@ -180,50 +188,45 @@ function createDeliveryBaseAdapter(records: DeliveryRecord[]): BareEntityAdapter
   };
 }
 
+type ManifestRuntimeOptions = WebhookSecretCipherOptions & {
+  logger?: RuntimeLogger;
+};
+
 async function setupRuntime(options: {
   endpoints: EndpointRecord[];
   deliveries?: DeliveryRecord[];
-  manifestRuntimeOptions?: Parameters<typeof createWebhooksManifestRuntime>[1];
+  manifestRuntimeOptions?: ManifestRuntimeOptions;
 }): Promise<{ runtime: WebhookRuntimeAdapter }> {
-  let runtimeAdapter: WebhookRuntimeAdapter | undefined;
-  const manifestRuntime = createWebhooksManifestRuntime(adapter => {
-    runtimeAdapter = adapter;
-  }, options.manifestRuntimeOptions);
-
-  const endpointAdapter = createEndpointBaseAdapter(options.endpoints);
-  const deliveryAdapter = createDeliveryBaseAdapter(options.deliveries ?? []);
-
-  const transformCtx = {
-    app: {} as never,
-    bus: {} as never,
-    pluginName: 'webhooks',
-    entityName: 'WebhookEndpoint',
-    adapters: {},
-  };
-
-  const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
-    'webhooks.endpoint.runtime',
-  )(endpointAdapter, transformCtx as never);
-  const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
-    'webhooks.delivery.runtime',
-  )(deliveryAdapter, { ...transformCtx, entityName: 'WebhookDelivery' } as never);
-
-  await manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
-    app: {} as never,
-    bus: {} as never,
-    pluginName: 'webhooks',
-    adapters: {
-      WebhookEndpoint: transformedEndpointAdapter,
-      WebhookDelivery: transformedDeliveryAdapter,
-    },
-    permissions: null,
+  const definitionsRef: { current?: undefined } = {};
+  const cipher = createWebhookSecretCipher({
+    secretEncryptionKey: options.manifestRuntimeOptions?.secretEncryptionKey ?? null,
+    encryptor: options.manifestRuntimeOptions?.encryptor ?? null,
   });
 
-  if (!runtimeAdapter) {
-    throw new Error('failed to capture webhook runtime adapter');
-  }
+  const baseEndpointAdapter = createEndpointBaseAdapter(options.endpoints);
+  const baseDeliveryAdapter = createDeliveryBaseAdapter(options.deliveries ?? []);
 
-  return { runtime: runtimeAdapter };
+  const endpointAdapter = applyWebhookEndpointRuntimeTransform(
+    baseEndpointAdapter,
+    cipher,
+    definitionsRef as never,
+  );
+  const deliveryAdapter = applyWebhookDeliveryRuntimeTransform(baseDeliveryAdapter);
+
+  const logger: RuntimeLogger = options.manifestRuntimeOptions?.logger ?? {
+    error() {},
+    warn() {},
+  };
+
+  const runtime = buildWebhookRuntimeAdapter(
+    endpointAdapter,
+    deliveryAdapter,
+    cipher,
+    logger,
+    definitionsRef as never,
+  );
+
+  return { runtime };
 }
 
 // A ciphertext-shaped string designed to look exactly like the kind of value a

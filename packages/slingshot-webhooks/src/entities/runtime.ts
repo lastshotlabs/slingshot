@@ -1,3 +1,19 @@
+/**
+ * Pure runtime helpers used by the webhook entity modules.
+ *
+ * Adapter transforms wrap each entity adapter to enforce subscription
+ * normalization, secret encryption, sanitization, and the delivery
+ * transition contract. The exported `buildWebhookRuntimeAdapter()` builds
+ * the high-level {@link WebhookRuntimeAdapter} from the captured entity
+ * adapters; the package factory wires it into a closure-owned refs bag and
+ * publishes it through {@link WebhookAdapterCap}.
+ *
+ * This module is consumed by `./modules.ts` and is the canonical place for
+ * the runtime work that used to live in `../manifest/runtime.ts`. No
+ * `EntityManifestRuntime` shape is involved any more — every function here
+ * returns either a plain adapter transform `(adapter) => adapter` or a plain
+ * async handler `(input) => result`.
+ */
 import { HTTPException } from 'hono/http-exception';
 import {
   type EventDefinition,
@@ -10,15 +26,6 @@ import {
   createConsoleLogger,
 } from '@lastshotlabs/slingshot-core';
 import { authorizeEventSubscriber } from '@lastshotlabs/slingshot-core';
-import type {
-  EntityManifestRuntime,
-  EntityPluginAfterAdaptersContext,
-} from '@lastshotlabs/slingshot-entity';
-import {
-  createEntityAdapterTransformRegistry,
-  createEntityHandlerRegistry,
-  createEntityPluginHookRegistry,
-} from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import { WebhookPaginationError, WebhookRuntimeError } from '../errors/webhookErrors';
 import { matchGlob } from '../lib/globMatch';
@@ -86,8 +93,8 @@ type DeliveryRecord = {
 };
 
 /**
- * Minimal logger surface used by the manifest runtime. Apps can inject a
- * structured logger; otherwise the runtime falls back to `console`.
+ * Minimal logger surface used by the webhook entity runtime. Apps can inject
+ * a structured logger; otherwise the runtime falls back to `console`.
  */
 export interface RuntimeLogger {
   error(message: string, fields?: Record<string, unknown>): void;
@@ -98,7 +105,7 @@ const structuredRuntimeLogger: RuntimeLogger = createConsoleLogger({
   base: { component: 'slingshot-webhooks' },
 }) as unknown as RuntimeLogger;
 
-type EndpointRuntimeAdapter = BareEntityAdapter & {
+export type EndpointRuntimeAdapter = BareEntityAdapter & {
   reveal(id: string): Promise<EndpointRecord | null>;
   applyRawUpdate(id: string, input: Record<string, unknown>): Promise<EndpointRecord | null>;
   listRaw(opts?: {
@@ -108,7 +115,7 @@ type EndpointRuntimeAdapter = BareEntityAdapter & {
   }): Promise<PaginatedResult<EndpointRecord>>;
 };
 
-type DeliveryRuntimeAdapter = BareEntityAdapter & {
+export type DeliveryRuntimeAdapter = BareEntityAdapter & {
   transition(input: {
     id: string;
     status: DeliveryTransitionStatus;
@@ -123,6 +130,21 @@ type DeliveryRuntimeAdapter = BareEntityAdapter & {
     nextRetryAt?: string | null;
     lastAttempt?: WebhookAttempt;
   }): Promise<DeliveryRecord>;
+};
+
+/**
+ * Mutable bag of resolved entity adapters owned by the package factory.
+ *
+ * The `manual`-wiring `buildAdapter` callbacks populate this bag at adapter
+ * resolution time, before any route handler runs. The custom-op handler for
+ * `webhookDelivery.transition` and the high-level runtime adapter read
+ * through the same bag so every surface sees the same adapter instance.
+ */
+export type WebhookAdapterRefs = {
+  endpoint?: EndpointRuntimeAdapter;
+  delivery?: DeliveryRuntimeAdapter;
+  /** The fully-composed runtime adapter, populated once both entity adapters are captured. */
+  runtime?: WebhookRuntimeAdapter;
 };
 
 export interface GovernedWebhookRuntime {
@@ -766,14 +788,24 @@ type AsyncCipher = {
   decrypt(stored: string): Promise<string>;
 };
 
-function buildRuntimeAdapter(
+/**
+ * Construct the high-level webhook runtime adapter from the captured entity
+ * adapters. The returned adapter is the canonical surface published through
+ * `WebhookAdapterCap` and consumed by the queue processor, delivery test
+ * route, and event-bus subscribers.
+ *
+ * `definitionsRef` is a closure-shared reference filled in by the package
+ * factory inside `initializeGovernance(...)` — it remains undefined until
+ * the package's `setupPost` runs, after which event-driven writes have a
+ * resolved registry available.
+ */
+export function buildWebhookRuntimeAdapter(
   endpoints: EndpointRuntimeAdapter,
   deliveries: DeliveryRuntimeAdapter,
   cipher: AsyncCipher,
   logger: RuntimeLogger,
+  definitionsRef: { current?: EventDefinitionRegistry },
 ): WebhookRuntimeAdapter {
-  let definitionsRef: EventDefinitionRegistry | undefined;
-
   /**
    * Decrypt a stored webhook endpoint secret. Fails closed: if the cipher
    * cannot recover the plaintext we throw {@link WebhookSecretDecryptError}
@@ -801,15 +833,15 @@ function buildRuntimeAdapter(
 
   return {
     async initializeGovernance(definitions) {
-      definitionsRef = definitions;
+      definitionsRef.current = definitions;
       await migrateLegacyEndpointRows(endpoints, definitions, logger);
     },
 
     listSubscribableDefinitions(subscriber) {
-      if (!definitionsRef) {
+      if (!definitionsRef.current) {
         return Object.freeze([]) as readonly EventDefinition[];
       }
-      return listDefinitionsForOwner(definitionsRef, subscriber.ownerType);
+      return listDefinitionsForOwner(definitionsRef.current, subscriber.ownerType);
     },
 
     /**
@@ -824,7 +856,7 @@ function buildRuntimeAdapter(
      * widening of consent.
      */
     async expandSubscriptions(endpointId: string): Promise<WebhookEndpoint> {
-      if (!definitionsRef) {
+      if (!definitionsRef.current) {
         throw new HTTPException(409, {
           message: 'expandSubscriptions called before initializeGovernance',
         });
@@ -835,7 +867,7 @@ function buildRuntimeAdapter(
       }
       const stored = normalizeStoredSubscriptions(record.subscriptions);
       const owner: WebhookOwnerType = record.ownerType ?? 'tenant';
-      const allowed = listDefinitionsForOwner(definitionsRef, owner);
+      const allowed = listDefinitionsForOwner(definitionsRef.current, owner);
       const allowedKeys = new Set(allowed.map(def => def.key as string));
       // Union the existing concrete event keys with every event key the
       // owner is allowed to subscribe to. Pattern preservation: when the
@@ -973,8 +1005,8 @@ function buildRuntimeAdapter(
     },
 
     async updateDelivery(id, input) {
-      // P-WEBHOOKS-6: optimistic concurrency. The manifest entity adapter
-      // does not yet expose a CAS primitive, so we approximate by
+      // P-WEBHOOKS-6: optimistic concurrency. The entity adapter does not
+      // yet expose a CAS primitive, so we approximate by
       // comparing-and-fetching: read current version, refuse if mismatch,
       // then apply. This narrows the race window to the
       // read-then-write interval; production callers should still expect
@@ -1190,9 +1222,9 @@ export async function resolveWebhookDeliveries(
 }
 
 /**
- * Options for {@link createWebhooksManifestRuntime}.
+ * Options for {@link createWebhookSecretCipher}.
  */
-export interface CreateWebhooksManifestRuntimeOptions {
+export interface WebhookSecretCipherOptions {
   /** Base64 32-byte key for AES-256-GCM secret encryption. Omit for plaintext. */
   secretEncryptionKey?: string | null;
   /**
@@ -1200,34 +1232,32 @@ export interface CreateWebhooksManifestRuntimeOptions {
    * Takes precedence over {@link secretEncryptionKey} when provided.
    */
   encryptor?: SecretEncryptor | null;
-  /** Logger for runtime warnings/errors. Defaults to a `console`-backed logger. */
-  logger?: RuntimeLogger;
 }
 
 /**
- * Build the manifest runtime for webhook entities.
- *
- * Captures transformed adapters for imperative delivery orchestration while
- * letting the entity framework own CRUD and persistence.
- *
- * @param onAdaptersReady - Callback invoked once endpoint and delivery adapters are bound.
- * @param options - Optional secret-encryption configuration.
+ * Resolve the async cipher used by the endpoint adapter transform and the
+ * runtime adapter. Mirrors the legacy manifest behaviour: the explicit
+ * encryptor wins; otherwise a key-derived cipher is built (plaintext when
+ * no key is configured).
  */
-export function createWebhooksManifestRuntime(
-  onAdaptersReady: (adapter: WebhookRuntimeAdapter) => void,
-  options: CreateWebhooksManifestRuntimeOptions = {},
-): EntityManifestRuntime {
-  const adapterTransforms = createEntityAdapterTransformRegistry();
-  const customHandlers = createEntityHandlerRegistry();
-  const hooks = createEntityPluginHookRegistry();
-  const logger = options.logger ?? structuredRuntimeLogger;
-  const cipher: AsyncCipher = options.encryptor
-    ? wrapSecretEncryptor(options.encryptor)
-    : wrapSecretEncryptor(createSecretCipher(options.secretEncryptionKey ?? null));
-  let endpointAdapterRef: EndpointRuntimeAdapter | undefined;
-  let deliveryAdapterRef: DeliveryRuntimeAdapter | undefined;
-  let definitionsRef: EventDefinitionRegistry | undefined;
+export function createWebhookSecretCipher(options: WebhookSecretCipherOptions): AsyncCipher {
+  if (options.encryptor) {
+    return wrapSecretEncryptor(options.encryptor);
+  }
+  return wrapSecretEncryptor(createSecretCipher(options.secretEncryptionKey ?? null));
+}
 
+/**
+ * Wrap the WebhookEndpoint adapter with subscription normalization, secret
+ * encryption, and response sanitization. The returned adapter exposes the
+ * extra runtime hooks (`reveal`, `applyRawUpdate`, `listRaw`) used by the
+ * high-level runtime adapter.
+ */
+export function applyWebhookEndpointRuntimeTransform(
+  base: BareEntityAdapter,
+  cipher: AsyncCipher,
+  definitionsRef: { current?: EventDefinitionRegistry },
+): EndpointRuntimeAdapter {
   async function encryptSecretField<T extends Record<string, unknown>>(input: T): Promise<T> {
     if (typeof input.secret === 'string' && input.secret.length > 0) {
       return { ...input, secret: await cipher.encrypt(input.secret) };
@@ -1235,95 +1265,114 @@ export function createWebhooksManifestRuntime(
     return input;
   }
 
-  adapterTransforms.register('webhooks.endpoint.runtime', adapter => {
-    const base = adapter;
-    return {
-      ...adapter,
-      create: async (input: unknown) => {
-        if (!definitionsRef) {
-          throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
-        }
-        const normalized = normalizeEndpointCreateInput(
-          input as Record<string, unknown>,
-          definitionsRef,
-        );
-        const created = (await base.create(await encryptSecretField(normalized))) as EndpointRecord;
-        return sanitizeEndpoint(created);
-      },
-      getById: async (id: string, filter?: Record<string, unknown>) => {
-        const record = (await base.getById(id, filter)) as EndpointRecord | null;
-        return record ? sanitizeEndpoint(record) : null;
-      },
-      list: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
-        const page = await base.list(opts ?? {});
-        return {
-          ...page,
-          items: (page.items as EndpointRecord[]).map(sanitizeEndpoint),
-        };
-      },
-      update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
-        if (!definitionsRef) {
-          throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
-        }
-        const existing = (await base.getById(id)) as EndpointRecord | null;
-        if (!existing) {
-          return null;
-        }
-        const normalizedUpdate = normalizeEndpointUpdateInput(
-          existing,
-          input as Record<string, unknown>,
-          definitionsRef,
-        );
-        const updated = (await base.update(
-          id,
-          await encryptSecretField(normalizedUpdate),
-          filter,
-        )) as EndpointRecord | null;
-        return updated ? sanitizeEndpoint(updated) : null;
-      },
-      reveal: async (id: string) => {
-        return (await base.getById(id)) as EndpointRecord | null;
-      },
-      applyRawUpdate: async (id: string, input: Record<string, unknown>) => {
-        // Migration writes go through here. Encrypt secret if present so
-        // legacy plaintext rows get rewrapped on first migration touch.
-        return (await base.update(id, await encryptSecretField(input))) as EndpointRecord | null;
-      },
-      listRaw: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
-        return (await base.list(opts ?? {})) as PaginatedResult<EndpointRecord>;
-      },
-    };
-  });
+  return {
+    ...base,
+    create: async (input: unknown) => {
+      if (!definitionsRef.current) {
+        throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
+      }
+      const normalized = normalizeEndpointCreateInput(
+        input as Record<string, unknown>,
+        definitionsRef.current,
+      );
+      const created = (await base.create(await encryptSecretField(normalized))) as EndpointRecord;
+      return sanitizeEndpoint(created);
+    },
+    getById: async (id: string, filter?: Record<string, unknown>) => {
+      const record = (await base.getById(id, filter)) as EndpointRecord | null;
+      return record ? sanitizeEndpoint(record) : null;
+    },
+    list: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
+      const page = await base.list(opts ?? {});
+      return {
+        ...page,
+        items: (page.items as EndpointRecord[]).map(sanitizeEndpoint),
+      };
+    },
+    update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
+      if (!definitionsRef.current) {
+        throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
+      }
+      const existing = (await base.getById(id)) as EndpointRecord | null;
+      if (!existing) {
+        return null;
+      }
+      const normalizedUpdate = normalizeEndpointUpdateInput(
+        existing,
+        input as Record<string, unknown>,
+        definitionsRef.current,
+      );
+      const updated = (await base.update(
+        id,
+        await encryptSecretField(normalizedUpdate),
+        filter,
+      )) as EndpointRecord | null;
+      return updated ? sanitizeEndpoint(updated) : null;
+    },
+    reveal: async (id: string) => {
+      return (await base.getById(id)) as EndpointRecord | null;
+    },
+    applyRawUpdate: async (id: string, input: Record<string, unknown>) => {
+      // Migration writes go through here. Encrypt secret if present so
+      // legacy plaintext rows get rewrapped on first migration touch.
+      return (await base.update(id, await encryptSecretField(input))) as EndpointRecord | null;
+    },
+    listRaw: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
+      return (await base.list(opts ?? {})) as PaginatedResult<EndpointRecord>;
+    },
+  };
+}
 
-  adapterTransforms.register('webhooks.delivery.runtime', adapter => {
-    const base = adapter;
-    return {
-      ...adapter,
-      applyTransition: async (input: {
-        id: string;
-        status: DeliveryTransitionStatus;
-        attempts?: number;
-        nextRetryAt?: string | null;
-        lastAttempt?: WebhookAttempt;
-      }) => {
-        const current = (await base.getById(input.id)) as DeliveryRecord | null;
-        if (!current) {
-          throw new HTTPException(404, { message: 'Delivery not found' });
-        }
-        validateTransition(current.status, input.status);
-        return (await base.update(input.id, {
-          status: input.status,
-          attempts: input.attempts,
-          nextRetryAt: input.nextRetryAt ?? null,
-          lastAttempt: normalizeLastAttempt(input.lastAttempt),
-        })) as DeliveryRecord;
-      },
-    };
-  });
+/**
+ * Wrap the WebhookDelivery adapter with the `applyTransition` helper used
+ * by the lifted `transition` custom-op handler. Validates the state machine
+ * before delegating to the base adapter so any bypass of `transition` still
+ * goes through the same transition rules.
+ */
+export function applyWebhookDeliveryRuntimeTransform(
+  base: BareEntityAdapter,
+): DeliveryRuntimeAdapter {
+  const applyTransition = async (input: {
+    id: string;
+    status: DeliveryTransitionStatus;
+    attempts?: number;
+    nextRetryAt?: string | null;
+    lastAttempt?: WebhookAttempt;
+  }): Promise<DeliveryRecord> => {
+    const current = (await base.getById(input.id)) as DeliveryRecord | null;
+    if (!current) {
+      throw new HTTPException(404, { message: 'Delivery not found' });
+    }
+    validateTransition(current.status, input.status);
+    return (await base.update(input.id, {
+      status: input.status,
+      attempts: input.attempts,
+      nextRetryAt: input.nextRetryAt ?? null,
+      lastAttempt: normalizeLastAttempt(input.lastAttempt),
+    })) as DeliveryRecord;
+  };
+  return {
+    ...base,
+    applyTransition,
+    // The high-level runtime adapter calls `transition` directly when applying
+    // the delivery state-machine. With no manifest custom-handler in play, we
+    // bind it to `applyTransition` so the validation runs on every transition,
+    // including direct programmatic writes from the queue processor.
+    transition: applyTransition,
+  } as DeliveryRuntimeAdapter;
+}
 
-  customHandlers.register('webhooks.delivery.transition', () => () => async (input: unknown) => {
+/**
+ * Builder for the lifted `webhooks.delivery.transition` custom-op handler.
+ * Returns an async `(input) => result` that the entity-route override layer
+ * binds onto the generated `POST /endpoints/:endpointId/deliveries/:id/transition` route.
+ */
+export function createDeliveryTransitionHandler(
+  refs: WebhookAdapterRefs,
+): (input: unknown) => Promise<unknown> {
+  return async input => {
     const params = (input ?? {}) as Record<string, unknown>;
-    const deliveryAdapter = deliveryAdapterRef;
+    const deliveryAdapter = refs.delivery;
     if (!deliveryAdapter) {
       throw new WebhookRuntimeError('delivery adapter not ready');
     }
@@ -1345,25 +1394,8 @@ export function createWebhooksManifestRuntime(
           ? (params.lastAttempt as WebhookAttempt)
           : undefined,
     });
-  });
-
-  hooks.register('webhooks.captureAdapters', (ctx: EntityPluginAfterAdaptersContext) => {
-    endpointAdapterRef = requireEndpointRuntimeAdapter(ctx.adapters.WebhookEndpoint);
-    deliveryAdapterRef = requireDeliveryRuntimeAdapter(ctx.adapters.WebhookDelivery);
-    const runtime = buildRuntimeAdapter(endpointAdapterRef, deliveryAdapterRef, cipher, logger);
-    const runtimeWithDefinitions: WebhookRuntimeAdapter = {
-      ...runtime,
-      async initializeGovernance(definitions) {
-        definitionsRef = definitions;
-        await runtime.initializeGovernance(definitions);
-      },
-    };
-    onAdaptersReady(runtimeWithDefinitions);
-  });
-
-  return {
-    adapterTransforms,
-    customHandlers,
-    hooks,
   };
 }
+
+/** Type-narrowing helper used by `./modules.ts` when capturing the endpoint adapter. */
+export { requireEndpointRuntimeAdapter, requireDeliveryRuntimeAdapter };

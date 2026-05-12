@@ -6,9 +6,15 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import {
+  type RuntimeLogger,
   type WebhookRuntimeAdapter,
-  createWebhooksManifestRuntime,
-} from '../../src/manifest/runtime';
+  applyWebhookDeliveryRuntimeTransform,
+  applyWebhookEndpointRuntimeTransform,
+  buildWebhookRuntimeAdapter,
+  createWebhookSecretCipher,
+  requireDeliveryRuntimeAdapter,
+  requireEndpointRuntimeAdapter,
+} from '../../src/entities/runtime';
 import type { WebhookAttempt, WebhookEndpointSubscription } from '../../src/types/models';
 import { WebhookSecretDecryptError } from '../../src/types/queue';
 
@@ -176,65 +182,61 @@ function createDeliveryBaseAdapter(records: DeliveryRecord[]): BareEntityAdapter
   };
 }
 
-async function setupRuntime(options?: {
+interface SetupOptions {
   endpoints?: EndpointRecord[];
   deliveries?: DeliveryRecord[];
   endpointAdapter?: BareEntityAdapter;
   deliveryAdapter?: BareEntityAdapter;
-  manifestRuntimeOptions?: Parameters<typeof createWebhooksManifestRuntime>[1];
-}): Promise<{
+  encryptor?: Parameters<typeof createWebhookSecretCipher>[0]['encryptor'];
+  secretEncryptionKey?: string | null;
+  logger?: RuntimeLogger;
+}
+
+async function setupRuntime(options?: SetupOptions): Promise<{
   runtime: WebhookRuntimeAdapter;
   endpointCrud: BareEntityAdapter;
 }> {
-  let runtimeAdapter: WebhookRuntimeAdapter | undefined;
-  const manifestRuntime = createWebhooksManifestRuntime(adapter => {
-    runtimeAdapter = adapter;
-  }, options?.manifestRuntimeOptions);
-
-  const endpointAdapter =
-    options?.endpointAdapter ??
-    (createEndpointBaseAdapter(options?.endpoints ?? []) as BareEntityAdapter);
-  const deliveryAdapter =
-    options?.deliveryAdapter ??
-    (createDeliveryBaseAdapter(options?.deliveries ?? []) as BareEntityAdapter);
-
-  const transformCtx = {
-    app: {} as never,
-    bus: {} as never,
-    pluginName: 'webhooks',
-    entityName: 'WebhookEndpoint',
-    adapters: {},
-  };
-
-  const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
-    'webhooks.endpoint.runtime',
-  )(endpointAdapter, transformCtx as never);
-  const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
-    'webhooks.delivery.runtime',
-  )(deliveryAdapter, { ...transformCtx, entityName: 'WebhookDelivery' } as never);
-
-  await manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
-    app: {} as never,
-    bus: {} as never,
-    pluginName: 'webhooks',
-    adapters: {
-      WebhookEndpoint: transformedEndpointAdapter,
-      WebhookDelivery: transformedDeliveryAdapter,
-    },
-    permissions: null,
+  const definitionsRef: { current?: EventDefinitionRegistry } = {};
+  const cipher = createWebhookSecretCipher({
+    secretEncryptionKey: options?.secretEncryptionKey ?? null,
+    encryptor: options?.encryptor ?? null,
   });
 
-  if (!runtimeAdapter) {
-    throw new Error('failed to capture webhook runtime adapter');
-  }
+  const baseEndpointAdapter =
+    options?.endpointAdapter ?? createEndpointBaseAdapter(options?.endpoints ?? []);
+  const baseDeliveryAdapter =
+    options?.deliveryAdapter ?? createDeliveryBaseAdapter(options?.deliveries ?? []);
+
+  const endpointAdapter = applyWebhookEndpointRuntimeTransform(
+    baseEndpointAdapter,
+    cipher,
+    definitionsRef,
+  );
+  const deliveryAdapter = applyWebhookDeliveryRuntimeTransform(baseDeliveryAdapter);
+
+  // Replicate the post-resolution capture assertion the modules layer applies.
+  requireEndpointRuntimeAdapter(endpointAdapter);
+  requireDeliveryRuntimeAdapter(deliveryAdapter);
+
+  const logger: RuntimeLogger = options?.logger ?? {
+    error() {},
+    warn() {},
+  };
+  const runtime = buildWebhookRuntimeAdapter(
+    endpointAdapter,
+    deliveryAdapter,
+    cipher,
+    logger,
+    definitionsRef,
+  );
 
   return {
-    runtime: runtimeAdapter,
-    endpointCrud: transformedEndpointAdapter,
+    runtime,
+    endpointCrud: endpointAdapter,
   };
 }
 
-describe('webhooks manifest runtime', () => {
+describe('webhooks entity runtime', () => {
   it('paginates through filtered-out delivery statuses without returning empty pages', async () => {
     const { runtime } = await setupRuntime({
       deliveries: [
@@ -426,10 +428,8 @@ describe('webhooks manifest runtime', () => {
     ).rejects.toThrow(/deliveryTimeoutMs/);
   });
 
-  it('fails fast when delivery runtime hooks are incomplete', async () => {
-    const manifestRuntime = createWebhooksManifestRuntime(() => {});
-    const endpointAdapter = createEndpointBaseAdapter([]);
-    const deliveryAdapter = {
+  it('binds transition to applyTransition so direct programmatic writes still validate state', async () => {
+    const baseDeliveryAdapter = {
       async create(data: unknown) {
         return data;
       },
@@ -447,37 +447,14 @@ describe('webhooks manifest runtime', () => {
       },
     } satisfies BareEntityAdapter;
 
-    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
-      'webhooks.endpoint.runtime',
-    )(endpointAdapter, {
-      app: {} as never,
-      bus: {} as never,
-      pluginName: 'webhooks',
-      entityName: 'WebhookEndpoint',
-      adapters: {},
-    } as never);
-    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
-      'webhooks.delivery.runtime',
-    )(deliveryAdapter, {
-      app: {} as never,
-      bus: {} as never,
-      pluginName: 'webhooks',
-      entityName: 'WebhookDelivery',
-      adapters: {},
-    } as never);
-
-    expect(() =>
-      manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        adapters: {
-          WebhookEndpoint: transformedEndpointAdapter,
-          WebhookDelivery: transformedDeliveryAdapter,
-        },
-        permissions: null,
-      }),
-    ).toThrow('[slingshot-webhooks] delivery adapter runtime hooks are missing');
+    const wrapped = applyWebhookDeliveryRuntimeTransform(baseDeliveryAdapter);
+    expect(typeof wrapped.applyTransition).toBe('function');
+    expect(typeof wrapped.transition).toBe('function');
+    // Missing-row 404 surfaces through the validation path the queue
+    // processor depends on — proves transition delegates to applyTransition.
+    await expect(
+      wrapped.transition({ id: 'nope', status: 'delivered' } as never),
+    ).rejects.toThrow(/Delivery not found/);
   });
 
   it('routes endpoint secret writes through a custom SecretEncryptor and reads them back', async () => {
@@ -501,7 +478,7 @@ describe('webhooks manifest runtime', () => {
     const records: EndpointRecord[] = [];
     const { runtime, endpointCrud } = await setupRuntime({
       endpoints: records,
-      manifestRuntimeOptions: { encryptor },
+      encryptor,
     });
     await runtime.initializeGovernance(definitions);
 
@@ -564,15 +541,13 @@ describe('webhooks manifest runtime', () => {
 
     const { runtime } = await setupRuntime({
       endpoints: records,
-      manifestRuntimeOptions: {
-        encryptor: failingEncryptor,
-        logger: {
-          error(message, fields) {
-            errorMessages.push(message);
-            errorFields.push(fields);
-          },
-          warn() {},
+      encryptor: failingEncryptor,
+      logger: {
+        error(message, fields) {
+          errorMessages.push(message);
+          errorFields.push(fields);
         },
+        warn() {},
       },
     });
 

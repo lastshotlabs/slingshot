@@ -175,6 +175,8 @@ export const orchestrationPluginConfigSchema = z
   });
 
 /**
- * Typed manifest config accepted by the built-in orchestration plugin resolver.
+ * Typed declarative config accepted by the built-in orchestration plugin resolver.
+ * Kept under its historical `OrchestrationPluginManifestConfig` name for backward
+ * compatibility; the shape itself is the current `definePackage`-era config.
  */
 export type OrchestrationPluginManifestConfig = z.infer<typeof orchestrationPluginConfigSchema>;

@@ -258,9 +258,9 @@ export const searchPluginConfigSchema = z.object({
       'Built-in tenant resolution strategy for search queries. ' +
         '"framework" reads the tenant ID from the Hono context variable "tenantId", ' +
         'which is set by the framework tenancy middleware when tenancy.resolution is configured. ' +
-        'Requires tenancy to be configured in the manifest. ' +
+        'Requires `tenancy` to be configured on the app config. ' +
         'When set, the tenantField config must also be provided. ' +
-        'This is the manifest equivalent of tenantResolver: c => c.get("tenantId").',
+        'This is the declarative equivalent of tenantResolver: c => c.get("tenantId").',
     ),
   tenantField: z
     .string()

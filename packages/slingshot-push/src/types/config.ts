@@ -44,7 +44,7 @@ export interface FirebaseServiceAccount {
   readonly token_uri?: string;
 }
 
-/** APNS auth input accepted by the plugin config and manifest bootstrap. */
+/** APNS auth input accepted by the push package config. */
 export type ApnsAuthInput = {
   readonly kind: 'p8-token';
   readonly keyPem: string;

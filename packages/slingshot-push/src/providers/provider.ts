@@ -7,7 +7,9 @@ import type {
 } from '../types/models';
 
 /**
- * Per-provider observability snapshot exposed via `PushProvider.getHealth()`.
+ * Per-provider observability snapshot. Cross-package consumers should read the
+ * aggregated push health via `PushHealthCap`; this provider-internal
+ * `getHealth()` hook is what the package uses to populate that capability.
  *
  * Implementations must keep this cheap (no I/O) — it is read from a health
  * endpoint and may be polled.
@@ -40,8 +42,9 @@ export interface PushProvider {
     context?: PushProviderSendContext,
   ): Promise<PushSendResult>;
   /**
-   * Optional health snapshot. Cheap to call (no I/O). Operators wire this
-   * through the plugin's aggregated `getHealth()` for ops dashboards.
+   * Optional health snapshot. Cheap to call (no I/O). The package aggregates
+   * provider snapshots and publishes the result through `PushHealthCap` for
+   * cross-package consumers and ops dashboards.
    */
   getHealth?(): PushProviderHealth;
 }

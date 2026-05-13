@@ -17,7 +17,8 @@ export { Orchestration, OrchestrationRuntimeCap } from './public';
  */
 export { createSlingshotEventSink } from './eventSink';
 /**
- * Validate manifest and code-first orchestration plugin options.
+ * Validate the declarative orchestration plugin options accepted by the package
+ * factory.
  */
 export { orchestrationPluginConfigSchema } from './validation';
 /** Typed error classes thrown by the orchestration plugin integration layer. */

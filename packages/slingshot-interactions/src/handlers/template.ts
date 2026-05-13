@@ -28,7 +28,7 @@ const queueHandlerTemplateSchema = z
   })
   .strict();
 
-/** Declarative handler template used by manifest-safe interactions config. */
+/** Declarative handler template used by the interactions package config. */
 export const handlerTemplateSchema = z.discriminatedUnion('kind', [
   webhookHandlerTemplateSchema,
   routeHandlerTemplateSchema,

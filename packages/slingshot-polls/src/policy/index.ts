@@ -3,13 +3,13 @@
  *
  * Polls are content-agnostic — the poll entity has no idea whether it was
  * created inside a chat room or a community thread. Authorization is
- * delegated to consumer plugins via `definePolicyDispatch` on the
+ * delegated to consumer packages via `definePolicyDispatch` on the
  * `sourceType` discriminator field.
  *
- * Handler maps are caller-provided (owned by the plugin closure per Rule 3),
- * not module-scoped. Consumer plugins register per-source-type handlers via
- * `plugin.registerSourceHandler()` before `setupMiddleware` freezes the
- * policy dispatch tables.
+ * Handler maps are caller-provided (owned by the package closure per Rule 3),
+ * not module-scoped. Per-source-type handlers are declared at construction
+ * time on the `sourceHandlers` and `voteHandlers` fields of the polls package
+ * config; there is no runtime registration API.
  *
  * @module
  */

@@ -62,7 +62,7 @@ export interface ImageConfig {
 export interface AssetsPluginConfig {
   /** URL prefix for all asset routes. Defaults to `'/assets'`. */
   readonly mountPath?: string;
-  /** Storage adapter instance (code) or manifest-compatible built-in adapter ref. */
+  /** Storage adapter instance (code) or declarative built-in adapter ref. */
   readonly storage: StorageAdapter | StorageAdapterRef;
   /** Maximum allowed file size in bytes. */
   readonly maxFileSize?: number;

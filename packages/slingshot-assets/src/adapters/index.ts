@@ -77,10 +77,10 @@ export interface ResolveStorageAdapterOptions {
 }
 
 /**
- * Resolve a storage adapter from a manifest-compatible reference or pass through an existing
- * runtime adapter instance.
+ * Resolve a storage adapter from a declarative reference (`s3` / `local` /
+ * `memory`) or pass through an existing runtime adapter instance.
  *
- * @param ref - Runtime adapter instance or manifest-compatible adapter ref.
+ * @param ref - Runtime adapter instance or declarative adapter ref.
  * @param options - Optional overrides for built-in adapter configuration.
  * @returns The resolved storage adapter.
  */

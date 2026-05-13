@@ -34,7 +34,7 @@ function interpolate(template: string, notification: NotificationRecord): string
 }
 
 /**
- * Compile manifest-safe formatter templates into a runtime formatter table.
+ * Compile declarative formatter templates into a runtime formatter table.
  *
  * @param templates - Formatter templates keyed by notification type.
  * @returns A formatter table that supports lookup, runtime registration, and

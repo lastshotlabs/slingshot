@@ -63,9 +63,9 @@ import { PollResultsParamsSchema } from './validation/results';
  * Create the polls package.
  *
  * Per-sourceType policy handlers for poll authorization are declared on the
- * `sourceHandlers` (and `voteHandlers`) config fields. There is no runtime
- * `registerSourceHandler` — apps know which source types they expose at
- * package construction time.
+ * `sourceHandlers` (and `voteHandlers`) config fields at construction time;
+ * there is no runtime registration API. Apps know which source types they
+ * expose when they wire the package.
  *
  * @example
  * ```ts

@@ -12,7 +12,10 @@ import type { EvaluationCache } from './evaluationCache';
 
 /**
  * Health snapshot describing the evaluator's recent error and timeout activity.
- * Returned from `EvaluatorWithHealth.getHealth()`.
+ * Cross-package consumers should read this snapshot through `PermissionsHealthCap`
+ * rather than calling `getHealth()` directly; the capability is the canonical
+ * public surface and the local `getHealth()` is what the package uses to
+ * populate it.
  *
  * All fields are cumulative counters since evaluator creation; consumers track
  * deltas to compute rates if needed.

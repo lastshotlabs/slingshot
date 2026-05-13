@@ -85,7 +85,8 @@ export {
 } from './adapters/memory';
 
 /**
- * Resolve a manifest-compatible storage adapter reference.
+ * Resolve a declarative storage adapter reference (`s3` / `local` / `memory`)
+ * into a runtime adapter instance.
  */
 export { resolveStorageAdapter } from './adapters/index';
 /**

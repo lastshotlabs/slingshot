@@ -1,7 +1,14 @@
 // packages/slingshot-ssr/src/isr/revalidate.ts
 import type { IsrCacheAdapter } from './types';
 
-/** Stable plugin-state key used by `slingshot-ssr` ISR invalidators. */
+/**
+ * Stable plugin-state key used by `slingshot-ssr` ISR invalidators.
+ *
+ * @deprecated The canonical way to resolve ISR invalidators is through the
+ *   typed `IsrInvalidatorsCap` capability published by the SSR package.
+ *   This string-key handle remains documented for back-compat with custom
+ *   `pluginState` access patterns; new code should resolve the cap instead.
+ */
 export const SSR_ISR_INVALIDATORS_STATE_KEY = 'slingshot-ssr:isr' as const;
 
 /**

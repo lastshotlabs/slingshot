@@ -235,9 +235,12 @@ export function createSearchPackage(
         },
       };
 
-      // Legacy pluginState surface kept alongside the capability for now —
-      // consumers can migrate to ctx.capabilities.require(SearchRuntimeCap)
-      // at their leisure.
+      // Bridge period: in-tree consumers (notably the framework's
+      // `createContextStoreInfra` in `src/framework/persistence/`) still read
+      // the runtime via `getPluginState(app).get(SEARCH_PLUGIN_STATE_KEY)` /
+      // `getSearchPluginRuntime(app)`. Until those callers migrate to
+      // `ctx.capabilities.require(SearchRuntimeCap)`, this publish must stay.
+      // Remove alongside the SEARCH_PLUGIN_STATE_KEY export in the next major.
       publishPluginState(getPluginState(app), SEARCH_PLUGIN_STATE_KEY, runtime);
     },
 

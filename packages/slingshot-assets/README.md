@@ -65,10 +65,14 @@ The package gives you both data and byte-storage plumbing:
   - `AssetsOrphanedKeysCap` — bounded orphan-key registry for recovery flows
 
 ```ts
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { AssetsHealthCap, AssetsOrphanedKeysCap } from '@lastshotlabs/slingshot-assets';
 
-const health = ctx.capabilities.require(AssetsHealthCap)();
-const orphans = ctx.capabilities.require(AssetsOrphanedKeysCap)();
+function readAssetsHealth(ctx: HookServices) {
+  const health = ctx.capabilities.require(AssetsHealthCap)();
+  const orphans = ctx.capabilities.require(AssetsOrphanedKeysCap)();
+  return { health, orphans };
+}
 ```
 
 This makes it the right package to standardize uploads for the rest of the platform.

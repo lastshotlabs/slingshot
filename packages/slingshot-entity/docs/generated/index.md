@@ -26,6 +26,7 @@ bun add @lastshotlabs/slingshot-entity
 - `.`
 - `./routing`
 - `./seeder`
+- `./testing`
 
 ## Package Scripts
 

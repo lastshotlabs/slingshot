@@ -15,7 +15,7 @@ This example shows the current supported orchestration path in the worktree:
 ## What this demonstrates
 
 - `defineTask()` and `defineWorkflow()` as the authoring surface
-- `createOrchestrationPlugin()` with non-empty `routeMiddleware`
+- `createOrchestrationPackage()` with non-empty `routeMiddleware`
 - a second plugin depending on orchestration and triggering workflows directly
 - a minimal in-memory adapter setup that can later be swapped to SQLite or BullMQ
 
@@ -110,7 +110,7 @@ import {
   type AnyResolvedWorkflow,
   createMemoryAdapter,
 } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 declare const orchestrationTasks: AnyResolvedTask[];
 declare const orchestrationWorkflows: AnyResolvedWorkflow[];
@@ -130,7 +130,7 @@ export function buildAppConfig() {
         auth: { roles: ['user', 'admin'], defaultRole: 'user' },
         db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
       }),
-      createOrchestrationPlugin({
+      createOrchestrationPackage({
         adapter: createMemoryAdapter({ concurrency: 10 }),
         tasks: orchestrationTasks,
         workflows: orchestrationWorkflows,

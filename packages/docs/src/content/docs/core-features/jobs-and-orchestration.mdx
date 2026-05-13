@@ -102,9 +102,9 @@ Orchestration adapters control where and how tasks execute:
 
 ```typescript
 // @skip-typecheck
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 
-createOrchestrationPlugin({
+createOrchestrationPackage({
   adapter: 'sqlite', // swap to 'bullmq' when you need multi-instance
   tasks: [sendWelcomeEmail],
   workflows: [onboardUser],

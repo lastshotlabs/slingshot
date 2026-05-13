@@ -19,11 +19,11 @@ bun add @lastshotlabs/slingshot-chat
 
 ```ts
 import { createApp } from '@lastshotlabs/slingshot';
-import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+import { createChatPackage } from '@lastshotlabs/slingshot-chat';
 
 const { app } = await createApp({
-  plugins: [
-    createChatPlugin({
+  packages: [
+    createChatPackage({
       storeType: 'postgres',
       mountPath: '/chat',
       permissions: {
@@ -208,7 +208,7 @@ Any room admin can pin or unpin messages. Pins are managed through the `/chat/pi
 v1 provides server-side at-rest encryption through JSON-safe plugin config:
 
 ```ts
-createChatPlugin({
+createChatPackage({
   storeType: 'postgres',
   encryption: {
     provider: 'aes-gcm',

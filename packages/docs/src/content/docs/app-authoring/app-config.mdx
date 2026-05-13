@@ -164,12 +164,12 @@ you need.
 ```typescript
 // @skip-typecheck
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 defineApp({
   plugins: [
     createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } }),
-    createPermissionsPlugin({ adapter: 'postgres' }),
+    createPermissionsPackage({ adapter: 'postgres' }),
   ],
 });
 ```

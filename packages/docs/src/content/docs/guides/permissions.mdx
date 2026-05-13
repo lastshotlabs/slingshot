@@ -23,7 +23,7 @@ import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 import {
   createAuthGroupResolver,
-  createPermissionsPlugin,
+  createPermissionsPackage,
 } from '@lastshotlabs/slingshot-permissions';
 
 export default defineApp({
@@ -33,7 +33,7 @@ export default defineApp({
     createAuthPlugin({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
     }),
-    createPermissionsPlugin({
+    createPermissionsPackage({
       groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     }),
@@ -57,7 +57,7 @@ have excess groups silently ignored and a `console.warn` emitted. Raise the cap 
 
 ```typescript
 // @skip-typecheck
-createPermissionsPlugin({
+createPermissionsPackage({
   groupResolver: pluginState =>
     createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
   maxGroups: 200,

@@ -42,14 +42,14 @@ bun add @lastshotlabs/slingshot \
   <TabItem label="Server">
     ```typescript title="app.config.ts"
     import { defineApp } from '@lastshotlabs/slingshot';
-    import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
+    import { createAssetsPackage } from '@lastshotlabs/slingshot-assets';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
     import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
-    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
-    import { createSsrPlugin, type SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
+    import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
+    import { createSearchPackage } from '@lastshotlabs/slingshot-search';
+    import { createSsrPackage, type SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
     import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
     import { createKvIsrCache, type KvNamespace } from '@lastshotlabs/slingshot-runtime-edge/kv';
 
@@ -67,28 +67,30 @@ bun add @lastshotlabs/slingshot \
           auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
         }),
-        createNotificationsPlugin({
-          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-        }),
-        createPermissionsPlugin(),
-        createCommunityPlugin({ containerCreation: 'admin' }),
-        createAssetsPlugin({
-          storage: { adapter: 'memory' },
-          presignedUrls: true,
-          image: { allowedOrigins: ['assets.example.com'] },
-        }),
-        createSearchPlugin({
-          providers: {
-            default: { provider: 'db-native' },
-          },
-        }),
         createDeepLinksPlugin({
           fallbackBaseUrl: 'https://content.example.com',
           fallbackRedirects: {
             '/open/*': '/articles/:id',
           },
         }),
-        createSsrPlugin({
+      ],
+      packages: [
+        createNotificationsPackage({
+          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+        }),
+        createPermissionsPackage(),
+        createCommunityPackage({ containerCreation: 'admin' }),
+        createAssetsPackage({
+          storage: { adapter: 'memory' },
+          presignedUrls: true,
+          image: { allowedOrigins: ['assets.example.com'] },
+        }),
+        createSearchPackage({
+          providers: {
+            default: { provider: 'db-native' },
+          },
+        }),
+        createSsrPackage({
           renderer,
           serverRoutesDir: `${import.meta.dir}/server/routes`,
           assetsManifest: `${import.meta.dir}/dist/client/.vite/manifest.json`,

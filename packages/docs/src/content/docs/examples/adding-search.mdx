@@ -46,7 +46,7 @@ bun add @lastshotlabs/slingshot-search
     ```typescript title="app.config.ts"
     import { defineApp } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+    import { createSearchPackage } from '@lastshotlabs/slingshot-search';
 
     export default defineApp({
       plugins: [
@@ -54,7 +54,9 @@ bun add @lastshotlabs/slingshot-search
           auth: { roles: ['user'], defaultRole: 'user' },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
         }),
-        createSearchPlugin({
+      ],
+      packages: [
+        createSearchPackage({
           providers: {
             default: { provider: 'db-native' },
           },
@@ -158,7 +160,7 @@ Register a global search endpoint that queries across multiple entity types:
   </TabItem>
   <TabItem label="Code">
     ```typescript
-    createSearchPlugin({
+    createSearchPackage({
       adapter: 'memory',
       globalSearch: {
         enabled: true,

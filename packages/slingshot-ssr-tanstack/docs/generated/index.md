@@ -37,6 +37,8 @@ bun add @lastshotlabs/slingshot-ssr-tanstack
 
 ## Dependencies
 
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-permissions`: `workspace:*`
 - `@lastshotlabs/slingshot-ssr`: `workspace:*`
 
 ## Peer Dependencies

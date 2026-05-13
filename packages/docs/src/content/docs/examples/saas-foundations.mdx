@@ -40,9 +40,9 @@ bun add @lastshotlabs/slingshot \
     import { defineApp } from '@lastshotlabs/slingshot';
     import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
-    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+    import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
+    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
+    import { createSearchPackage } from '@lastshotlabs/slingshot-search';
 
     export default defineApp({
       port: 3000,
@@ -56,11 +56,11 @@ bun add @lastshotlabs/slingshot \
           },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
         }),
-        createOrganizationsPlugin({
+        createOrganizationsPackage({
           organizations: { enabled: true, defaultMemberRole: 'member' },
         }),
-        createPermissionsPlugin(),
-        createSearchPlugin({
+        createPermissionsPackage(),
+        createSearchPackage({
           providers: { default: { provider: 'db-native' } },
           tenantResolver: c => getRequestTenantId(c) ?? undefined,
           tenantField: 'organizationId',
@@ -80,9 +80,9 @@ bun add @lastshotlabs/slingshot \
     import { defineApp } from '@lastshotlabs/slingshot';
     import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
-    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+    import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
+    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
+    import { createSearchPackage } from '@lastshotlabs/slingshot-search';
 
     export default defineApp({
       port: 3000,
@@ -96,14 +96,14 @@ bun add @lastshotlabs/slingshot \
           },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
         }),
-        createOrganizationsPlugin({
+        createOrganizationsPackage({
           organizations: {
             enabled: true,
             defaultMemberRole: 'member',
           },
         }),
-        createPermissionsPlugin(),
-        createSearchPlugin({
+        createPermissionsPackage(),
+        createSearchPackage({
           providers: {
             default: { provider: 'db-native' },
           },
@@ -489,9 +489,9 @@ Register entities with the search plugin and scope queries to an `orgId`:
 ```typescript
 // @skip-typecheck
 import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
-import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+import { createSearchPackage } from '@lastshotlabs/slingshot-search';
 
-createSearchPlugin({
+createSearchPackage({
   providers: {
     default: { provider: 'db-native' },
   },

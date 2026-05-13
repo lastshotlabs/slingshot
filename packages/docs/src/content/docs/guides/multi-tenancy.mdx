@@ -55,7 +55,7 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
     ```typescript title="app.config.ts"
     import { defineApp } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 
     export default defineApp({
       port: 3000,
@@ -83,7 +83,9 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
             oauthState: 'memory',
           },
         }),
-        createCommunityPlugin({
+      ],
+      packages: [
+        createCommunityPackage({
           containerCreation: 'user',
           // No tenantResolver needed here — it reads from context automatically
         }),

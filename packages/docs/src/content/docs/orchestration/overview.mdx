@@ -74,7 +74,7 @@ For Slingshot integration:
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 const resizeImage = defineTask({
   name: 'resize-image',
@@ -89,7 +89,7 @@ const requireAdmin: MiddlewareHandler = async (_c, next) => {
   await next();
 };
 
-const orchestrationPlugin = createOrchestrationPlugin({
+const orchestrationPlugin = createOrchestrationPackage({
   adapter: createMemoryAdapter({ concurrency: 10 }),
   tasks: [resizeImage],
   workflows: [],

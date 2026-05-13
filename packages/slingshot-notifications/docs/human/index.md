@@ -71,9 +71,12 @@ At runtime, the package publishes typed capabilities:
 - `NotificationsHealthCap` — `() => NotificationsHealth` for the aggregated health snapshot
 
 ```ts
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { NotificationsHealthCap } from '@lastshotlabs/slingshot-notifications';
 
-const health = ctx.capabilities.require(NotificationsHealthCap)();
+function readNotificationsHealth(ctx: HookServices) {
+  return ctx.capabilities.require(NotificationsHealthCap)();
+}
 ```
 
 Internal state remains published under `NOTIFICATIONS_PLUGIN_STATE_KEY` for legacy consumers, but

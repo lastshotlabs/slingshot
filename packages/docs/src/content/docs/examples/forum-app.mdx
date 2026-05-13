@@ -71,9 +71,9 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
     ```typescript title="app.config.ts"
     import { defineApp, getActor } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
-    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
+    import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
     import type { Context, Next } from 'hono';
 
     const communityAuthBridge = async (c: Context, next: Next) => {
@@ -91,11 +91,13 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
           auth: { roles: ['user', 'moderator'], defaultRole: 'user' },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
         }),
-        createNotificationsPlugin({
+      ],
+      packages: [
+        createNotificationsPackage({
           dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
         }),
-        createPermissionsPlugin(),
-        createCommunityPlugin({
+        createPermissionsPackage(),
+        createCommunityPackage({
           containerCreation: 'user',
         }),
       ],

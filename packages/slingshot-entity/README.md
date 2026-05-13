@@ -24,7 +24,7 @@ It should not become a dumping ground for framework internals or feature-specifi
 - `generate()` should remain pure: config in, source strings out.
 - Entity authoring APIs should stay package-author friendly and should not require callers to understand framework-private implementation details.
 - Runtime orchestration should compose core contracts instead of inventing competing abstractions.
-- Manifest and migration support should stay aligned with the same entity model rather than drifting into a second configuration universe.
+- Migration support should stay aligned with the entity model rather than drifting into a second configuration universe.
 
 ## The Two Big Responsibilities
 
@@ -42,11 +42,17 @@ The goal is to make the declarative path easier than the hand-wired path.
 
 ### Runtime orchestration
 
-`createEntityPlugin()` and the routing helpers are the runtime proof that the same definitions can drive live packages, not just generated code. This is what lets packages like community express behavior through entity config, middleware references, registry-backed route events, composed extra routes, and generated executor overrides instead of bespoke route files.
+The canonical composition path is package-first: `definePackage(...)` in `slingshot-core` owns
+composition, `entity({ config, operations })` exported from this package wraps an entity for use
+inside a package, and `createApp({ packages: [...] })` mounts the result. Packages express their
+entities, domain routes, named middleware, capabilities, and lifecycle through one declarative
+input. Framework-side `compilePackages()` turns that input into the entity plugins and domain
+routers that run at request time.
 
-The default composition path is now package-first: `definePackage(...)` owns composition and
-`entity(...)` is the canonical home for entity-owned runtime behavior. `createEntityPlugin()` stays
-available as the lower-level compatibility and escape-hatch surface.
+`createEntityPlugin()` and the routing helpers are the lower-level surface that `compilePackages()`
+calls under the hood. They remain available as a compatibility and escape-hatch surface — apps
+that need to wire entities outside `definePackage(...)` (for instance, tests or framework
+internals) can still call it directly with `entities: [...]`.
 
 The stock CRUD list route is part of that contract. For entities mounted through
 `createEntityPlugin()`, `GET /{entity}` accepts the same allowlisted list query params that the

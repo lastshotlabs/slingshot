@@ -150,18 +150,18 @@ bun add @lastshotlabs/slingshot \
   <TabItem label="Code">
     ```typescript title="app.config.ts"
     import { defineApp } from '@lastshotlabs/slingshot';
-    import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
+    import { createAssetsPackage } from '@lastshotlabs/slingshot-assets';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
-    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createChatPackage } from '@lastshotlabs/slingshot-chat';
+    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
     import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
     import { createEmbedsPlugin } from '@lastshotlabs/slingshot-embeds';
     import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
     import { createGifsPlugin } from '@lastshotlabs/slingshot-gifs';
-    import { createInteractionsPlugin } from '@lastshotlabs/slingshot-interactions';
-    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
-    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-    import { createPollsPlugin } from '@lastshotlabs/slingshot-polls';
+    import { createInteractionsPackage } from '@lastshotlabs/slingshot-interactions';
+    import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
+    import { createPollsPackage } from '@lastshotlabs/slingshot-polls';
 
     export default defineApp({
       port: 3000,
@@ -170,25 +170,6 @@ bun add @lastshotlabs/slingshot \
         createAuthPlugin({
           auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
           db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-        }),
-        createNotificationsPlugin({
-          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-        }),
-        createPermissionsPlugin(),
-        createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
-        createChatPlugin({
-          storeType: 'memory',
-          permissions: {
-            createRoom: ['user', 'moderator', 'admin'],
-            sendMessage: ['user', 'moderator', 'admin'],
-          },
-        }),
-        createPollsPlugin(),
-        createAssetsPlugin({
-          storage: { adapter: 'memory' },
-          presignedUrls: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-          image: { allowedOrigins: ['localhost'] },
         }),
         createEmbedsPlugin({}),
         createGifsPlugin({
@@ -203,14 +184,35 @@ bun add @lastshotlabs/slingshot \
             '/share/*': '/thread/:id',
           },
         }),
-        createInteractionsPlugin({
+      ],
+      packages: [
+        createNotificationsPackage({
+          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+        }),
+        createPermissionsPackage(),
+        createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
+        createChatPackage({
+          storeType: 'memory',
+          permissions: {
+            createRoom: ['user', 'moderator', 'admin'],
+            sendMessage: ['user', 'moderator', 'admin'],
+          },
+        }),
+        createPollsPackage(),
+        createAssetsPackage({
+          storage: { adapter: 'memory' },
+          presignedUrls: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+          image: { allowedOrigins: ['localhost'] },
+        }),
+        createInteractionsPackage({
           handlers: {
             'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },
             'chat:pin:': { kind: 'queue', target: 'jobs:chat.pin', fireAndForget: true },
           },
         }),
+        createEmojiPackage({}),
       ],
-      packages: [createEmojiPackage({})],
     });
     ```
 

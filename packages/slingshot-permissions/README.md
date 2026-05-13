@@ -54,9 +54,12 @@ Consumers resolve the aggregated permissions health snapshot via the `Permission
 capability:
 
 ```ts
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { PermissionsHealthCap } from '@lastshotlabs/slingshot-permissions';
 
-const health = ctx.capabilities.require(PermissionsHealthCap)();
+function readPermissionsHealth(ctx: HookServices) {
+  return ctx.capabilities.require(PermissionsHealthCap)();
+}
 ```
 
 `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, and `PermissionsAdapterCap` are also

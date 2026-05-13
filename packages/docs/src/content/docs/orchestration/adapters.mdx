@@ -68,7 +68,7 @@ const adapter = createBullMQOrchestrationAdapter({
 });
 ```
 
-When used through `createOrchestrationPlugin()`, the plugin starts and shuts down the adapter for
+When used through `createOrchestrationPackage()`, the plugin starts and shuts down the adapter for
 you. When used directly through `createOrchestrationRuntime()`, the adapter now lazily starts on
 first use, so `runTask()` / `runWorkflow()` do not require a separate manual `start()` call.
 

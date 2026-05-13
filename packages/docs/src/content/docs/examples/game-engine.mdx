@@ -650,7 +650,7 @@ Register all game types with a single plugin instance:
 ```typescript title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createGameEnginePlugin } from '@lastshotlabs/slingshot-game-engine';
+import { createGameEnginePackage } from '@lastshotlabs/slingshot-game-engine';
 import { blackjack } from './src/blackjack.js';
 import { drawing } from './src/drawing.js';
 import { trivia } from './src/trivia.js';
@@ -663,7 +663,9 @@ export default defineApp({
       auth: { roles: ['user', 'admin'], defaultRole: 'user' },
       db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
     }),
-    createGameEnginePlugin({
+  ],
+  packages: [
+    createGameEnginePackage({
       games: [trivia, drawing, blackjack],
       mountPath: '/game',
     }),

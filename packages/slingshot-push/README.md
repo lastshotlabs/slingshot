@@ -37,9 +37,12 @@ createPushPackage({
 Consumers resolve the aggregated health snapshot via the `PushHealthCap` capability:
 
 ```ts
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { PushHealthCap } from '@lastshotlabs/slingshot-push';
 
-const health = ctx.capabilities.require(PushHealthCap)();
+function readPushHealth(ctx: HookServices) {
+  return ctx.capabilities.require(PushHealthCap)();
+}
 ```
 
 For iOS, add `ios: { auth: { kind: 'p8-token', keyPem: '...', keyId: 'ABC123', teamId: 'TEAM123456' } }`.

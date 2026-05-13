@@ -23,9 +23,9 @@ bun add @lastshotlabs/slingshot-webhooks
 ```
 
 ```ts
-import { createMemoryWebhookAdapter, createWebhookPlugin } from '@lastshotlabs/slingshot-webhooks';
+import { createMemoryWebhookAdapter, createWebhooksPackage } from '@lastshotlabs/slingshot-webhooks';
 
-const webhooks = createWebhookPlugin({
+const webhooks = createWebhooksPackage({
   mountPath: '/webhooks',
   adapter: createMemoryWebhookAdapter(),
   events: ['*'],

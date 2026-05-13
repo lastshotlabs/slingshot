@@ -14,7 +14,7 @@ next phase, not a hidden feature flag.
 1. Define tasks with Zod input and output schemas.
 2. Compose them into a workflow with `step()`, `parallel()`, and `sleep()`.
 3. Pick an adapter.
-4. Use `createOrchestrationRuntime()` directly or `createOrchestrationPlugin()` inside a Slingshot app.
+4. Use `createOrchestrationRuntime()` directly or `createOrchestrationPackage()` inside a Slingshot app.
 5. Trigger work from app code with `runtime.runTask()` / `runtime.runWorkflow()`.
 6. Add protected HTTP routes only if you actually want remote orchestration control.
 
@@ -141,7 +141,7 @@ optionally, exposed over protected HTTP routes.
 import type { MiddlewareHandler } from 'hono';
 import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -157,7 +157,7 @@ const requireOperationsKey: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-const orchestrationPlugin = createOrchestrationPlugin({
+const orchestrationPlugin = createOrchestrationPackage({
   adapter: createMemoryAdapter({ concurrency: 10 }),
   tasks: [capturePayment, generateInvoice, recordLedgerEntry, sendReceipt],
   workflows: [processInvoiceWorkflow],

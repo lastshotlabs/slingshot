@@ -494,13 +494,42 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
     csrfExemptPaths: inboundRoutePatterns,
     capabilities: {
       provides: [
+        // Capability resolution is eager: the framework invokes provider.resolve()
+        // during `setupMiddleware`, before `setupPost` has wired the runtime
+        // adapter. Return a Proxy that forwards method access to the live
+        // `runtimeAdapter` ref, so the eager publish call succeeds and consumers
+        // only see an error when they actually call a method on the adapter
+        // before it is ready.
         provideCapability(WebhookAdapterCap, () => {
-          if (!runtimeAdapter) {
-            throw new WebhookRuntimeError(
-              'WebhookAdapterCap accessed before setupPost wired the runtime adapter',
-            );
-          }
-          return runtimeAdapter;
+          // Capability resolution is eager: the framework invokes
+          // provider.resolve() during `setupMiddleware`, before `setupPost`
+          // has wired the runtime adapter, AND again during `setupPost`. When
+          // the adapter is already wired (the second pass, or the standalone
+          // `config.adapter` path that captures the adapter inside
+          // `setupMiddleware`) return the live reference so consumers observe
+          // strict identity. Otherwise return a forwarding Proxy that defers
+          // the access error until a real method call.
+          if (runtimeAdapter) return runtimeAdapter;
+          const target = Object.create(null) as WebhookAdapter;
+          const adapterProxy = new Proxy<WebhookAdapter>(target, {
+            get(_target, property) {
+              if (!runtimeAdapter) {
+                // Return undefined for symbol or thenable probes (e.g. `await`
+                // inspecting `.then`, JSON serialization touching
+                // `Symbol.toPrimitive`) so capability publication can succeed
+                // before the runtime is wired. Real adapter method calls fall
+                // through to the throw below.
+                if (typeof property === 'symbol' || property === 'then') {
+                  return undefined;
+                }
+                throw new WebhookRuntimeError(
+                  'WebhookAdapterCap accessed before setupPost wired the runtime adapter',
+                );
+              }
+              return Reflect.get(runtimeAdapter as object, property);
+            },
+          });
+          return adapterProxy;
         }),
       ],
     },

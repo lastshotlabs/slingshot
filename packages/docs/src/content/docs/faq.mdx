@@ -348,7 +348,7 @@ Yes. Slingshot's connection config is a map — provide connection strings for e
 ```typescript title="app.config.ts"
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 
 export default defineApp({
   db: {
@@ -361,7 +361,7 @@ export default defineApp({
     createAuthPlugin({
       db: { auth: 'postgres', sessions: 'redis', oauthState: 'redis' },
     }),
-    createCommunityPlugin({
+    createCommunityPackage({
       db: { threads: 'mongo', reactions: 'redis' },
     }),
   ],

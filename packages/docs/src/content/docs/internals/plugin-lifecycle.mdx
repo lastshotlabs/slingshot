@@ -85,7 +85,7 @@ Do not mount routes in `setupPost`. They'll miss tenant middleware and other ass
 Plugins declare their dependencies by name:
 
 ```typescript
-export function createCommunityPlugin() {
+export function createCommunityPackage() {
   return {
     name: 'slingshot-community',
     dependencies: ['slingshot-auth'],

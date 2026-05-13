@@ -304,18 +304,26 @@ export function createAssetsPackage(
 
     capabilities: {
       provides: [
+        // Capability resolution is eager: the framework invokes provider.resolve()
+        // during `setupMiddleware`, before the entity adapter is captured in
+        // `buildAdapter` (which runs in `setupRoutes`). Return a live view that
+        // reads `assetAdapterRef` lazily, so the eager publish call succeeds and
+        // real consumers only see an error when they touch `.assets` before the
+        // adapter is wired.
         provideCapability(AssetsRuntimeCap, () => {
-          if (!assetAdapterRef) {
-            throw new Error(
-              '[slingshot-assets] AssetsRuntimeCap resolved before the asset adapter was captured',
-            );
-          }
-          const state: AssetsPluginState = Object.freeze({
-            assets: assetAdapterRef,
+          const view: AssetsPluginState = Object.freeze({
+            get assets(): AssetAdapter {
+              if (!assetAdapterRef) {
+                throw new Error(
+                  '[slingshot-assets] AssetsRuntimeCap.assets accessed before the asset adapter was captured',
+                );
+              }
+              return assetAdapterRef;
+            },
             storage,
             config,
-          });
-          return state;
+          }) as AssetsPluginState;
+          return view;
         }),
         provideCapability(AssetsHealthCap, () => getHealth),
         provideCapability(AssetsOrphanedKeysCap, () => (since?: Date) =>

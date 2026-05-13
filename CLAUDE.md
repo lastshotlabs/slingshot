@@ -6,6 +6,7 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 - **Entity** - `@lastshotlabs/slingshot-entity`: config-driven entity CRUD, code generation, search, transitions
 - **Auth** - `@lastshotlabs/slingshot-auth`: auth providers, sessions, MFA, OAuth, WebAuthn, passkeys
 - **Community** - `@lastshotlabs/slingshot-community`: messaging, channels, reactions, notifications
+- **Packages** - 15 in-tree `definePackage(...)`-authored modules consumed via `createApp({ packages: [createXxxPackage(...)] })`
 - **CLI** - `slingshot init`, `slingshot migrate generate|apply|status|dev`, `slingshot deploy`
 
 ## Capability Map
@@ -25,13 +26,24 @@ imports its default export, and hands it to `createServer()`.
 // app.config.ts
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
 
 export default defineApp({
   meta: { name: 'my-app', version: '1.0.0' },
   routesDir: import.meta.dir + '/routes',
   plugins: [createAuthPlugin({ ... })],
+  packages: [createNotificationsPackage({ ... })],
 });
 ```
+
+Apps mix two tiers. The `plugins:` array holds framework-level `SlingshotPlugin`
+factories (auth, oauth, mail, image, etc.) that integrate directly with the runtime
+via the plugin contract. The `packages:` array holds feature modules authored with
+`definePackage(...)` and consumed through `createXxxPackage(...)` factories — these
+get an entity-aware lifecycle (entity hooks interleaved with package hooks) and
+exchange data through typed package contracts and capability handles. When
+`config.permissions` is set, the framework auto-prepends `createPermissionsPackage(...)`
+to `packages:` so RBAC is available to every other package without explicit wiring.
 
 `createApp()` and `createServer()` remain the lower-level imperative API for tests,
 tooling, and apps that need dynamic composition. `defineApp()` is a typed identity
@@ -40,20 +52,30 @@ annotating the config.
 
 ## Package Hierarchy
 
-    slingshot-core  (plugin contract, context, event bus, shared entity and operation types)
-      |-- slingshot-entity       (entity definitions, generators, config-driven runtime factories)
-      |-- slingshot-auth         (auth providers, sessions, MFA, OAuth, WebAuthn, passkeys)
-      |-- slingshot-permissions  (RBAC, grants, evaluators, adapter factories)
-      |-- slingshot-postgres     (Postgres auth adapter and connection helper)
-      |-- slingshot-bullmq       (durable BullMQ-backed event bus adapter)
-      `-- feature plugins
-          |-- slingshot-community      slingshot-chat           slingshot-notifications
-          |-- slingshot-search         slingshot-ssr            slingshot-ssg
-          |-- slingshot-assets         slingshot-push           slingshot-polls
-          |-- slingshot-webhooks       slingshot-interactions   slingshot-organizations
-          |-- slingshot-admin          slingshot-mail           slingshot-deep-links
-          |-- slingshot-image          slingshot-embeds         slingshot-gifs
-          `-- slingshot-emoji          slingshot-m2m            slingshot-oauth / slingshot-oidc / slingshot-scim
+Shared base layer:
+
+    slingshot-core   (plugin contract, definePackage/definePackageContract, capability handles,
+                      context, event bus, shared entity and operation types)
+      `-- slingshot-entity   (entity definitions, generators, config-driven runtime factories,
+                              compilePackages entry point, runPackageLifecycle test helper)
+
+Packages — 15 `definePackage(...)`-authored modules consumed through `packages:`:
+
+      |-- slingshot-emoji              slingshot-search             slingshot-orchestration-plugin
+      |-- slingshot-interactions       slingshot-notifications      slingshot-polls
+      |-- slingshot-push               slingshot-organizations      slingshot-assets
+      |-- slingshot-permissions        slingshot-ssr                slingshot-community
+      `-- slingshot-webhooks           slingshot-chat               slingshot-game-engine
+
+Plugins — 11 plugin-tier `SlingshotPlugin` factories consumed through `plugins:`:
+
+      |-- slingshot-auth      slingshot-oauth     slingshot-oidc     slingshot-scim
+      |-- slingshot-admin     slingshot-m2m       slingshot-mail     slingshot-image
+      `-- slingshot-deep-links  slingshot-embeds  slingshot-gifs
+
+Adapters and runtime backends (not authored as packages or plugins themselves):
+`slingshot-postgres`, `slingshot-bullmq`, `slingshot-kafka`, `slingshot-orchestration`,
+`slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-ssg`.
 
 Runtime packages: `packages/runtime-bun/`, `packages/runtime-node/`, `packages/runtime-edge/`
 
@@ -61,31 +83,51 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 
 ## Key Files
 
-| Area              | File                                                  | What                                                                     |
-| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ |
-| App bootstrap     | `src/app.ts`                                          | `createApp()` flow, framework middleware, plugin lifecycle orchestration |
-| Server bootstrap  | `src/server.ts`                                       | `createServer()` wrapper around runtime and app assembly                 |
-| Plugin contract   | `packages/slingshot-core/src/plugin.ts`               | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                 |
-| Context state     | `packages/slingshot-core/src/context/index.ts`        | `SlingshotContext`, `getContext()`, instance-scoped state                |
-| Entity types      | `packages/slingshot-core/src/entityConfig.ts`         | Shared field and entity config types                                     |
-| Event bus         | `packages/slingshot-core/src/eventBus.ts`             | Bus interface, in-process adapter, client-safe event rules               |
-| Entity plugin     | `packages/slingshot-entity/src/createEntityPlugin.ts` | Root entity plugin factory                                               |
-| Code generation   | `packages/slingshot-entity/src/generate.ts`           | Pure entity code generation entry point                                  |
-| App config helper | `src/defineApp.ts`                                    | `defineApp()` typed identity helper for `app.config.ts`                  |
-| CLI entry         | `src/cli/commands/start.ts`                           | `slingshot start` — discovers `app.config.ts` and boots                  |
+| Area               | File                                                       | What                                                                                                  |
+| ------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| App bootstrap      | `src/app.ts`                                               | `createApp()` flow, framework middleware, plugin lifecycle orchestration                              |
+| Server bootstrap   | `src/server.ts`                                            | `createServer()` wrapper around runtime and app assembly                                              |
+| Plugin contract    | `packages/slingshot-core/src/plugin.ts`                    | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                                              |
+| Package contract   | `packages/slingshot-core/src/packageAuthoring.ts`          | `definePackage()`, `definePackageContract()`, `SlingshotPackageDefinition`                            |
+| Package compiler   | `src/framework/packageAuthoring.ts`                        | `compilePackages()`, `publishPackageRuntimeState()`, entity↔package lifecycle interleave              |
+| Context state     | `packages/slingshot-core/src/context/index.ts`             | `SlingshotContext`, `getContext()`, instance-scoped state                                             |
+| Entity types       | `packages/slingshot-core/src/entityConfig.ts`              | Shared field and entity config types                                                                  |
+| Event bus          | `packages/slingshot-core/src/eventBus.ts`                  | Bus interface, in-process adapter, client-safe event rules                                            |
+| Entity plugin      | `packages/slingshot-entity/src/createEntityPlugin.ts`      | Root entity plugin factory — lower-level escape hatch that `compilePackages()` invokes internally     |
+| Code generation    | `packages/slingshot-entity/src/generate.ts`                | Pure entity code generation entry point                                                               |
+| App config helper  | `src/defineApp.ts`                                         | `defineApp()` typed identity helper for `app.config.ts`                                               |
+| CLI entry          | `src/cli/commands/start.ts`                                | `slingshot start` — discovers `app.config.ts` and boots                                               |
 
 ## Bootstrap Flow
 
 1. `validateAppConfig()` validates the root config before assembly.
-2. `createCoreRegistrar()` and `validateAndSortPlugins()` prepare plugin registration order.
-3. `resolveSecretBundle()` resolves framework secrets from the configured provider.
-4. `createInfrastructure()` wires databases, caches, queues, and framework adapters.
-5. `buildContext()` creates the instance-scoped Slingshot context attached to the app.
-6. `registerBoundaryAdapters()` connects shared adapters into the registrar snapshot.
-7. `runPluginMiddleware()` mounts plugin middleware in dependency order.
-8. `preloadModelSchemas()` loads shared Zod schemas before route registration.
-9. `runPluginRoutes()`, `mountRoutes()`, and `mountOpenApiDocs()` register HTTP surfaces.
-10. `runPluginPost()` finalizes post-route hooks, then `finalizeContext()` freezes the context.
+2. `compilePackages([...])` wraps each `SlingshotPackageDefinition` in a compiled
+   `SlingshotPlugin` that interleaves the entity-plugin lifecycle hooks with the
+   package's own hooks. The compiled plugins are then merged into the same
+   `plugins:` list as plain plugin-tier factories for the remaining steps.
+3. `createCoreRegistrar()` and `validateAndSortPlugins()` prepare plugin registration order.
+4. `resolveSecretBundle()` resolves framework secrets, `createInfrastructure()` wires
+   databases/caches/queues/framework adapters, `buildContext()` creates the
+   instance-scoped Slingshot context, and `registerBoundaryAdapters()` connects
+   shared adapters into the registrar snapshot.
+5. For each entry (compiled-package plugin or plain plugin), in dependency order,
+   run `setupMiddleware`. For compiled packages this internally does
+   `entityPlugin.setupMiddleware → publishPackageRuntimeState → pkg.setupMiddleware`.
+   For plain plugins it just calls `setupMiddleware`.
+6. `preloadModelSchemas()` loads shared Zod schemas before route registration.
+7. `runPluginRoutes()` runs `entityPlugin.setupRoutes → pkg.setupRoutes → mountRoutes`
+   for compiled packages; plain plugins just call `setupRoutes`.
+8. `mountRoutes()` and `mountOpenApiDocs()` finalize HTTP surfaces.
+9. `runPluginPost()` runs `entityPlugin.setupPost → publishPackageRuntimeState (second pass)
+   → pkg.setupPost` for compiled packages; plain plugins just call `setupPost`.
+10. `finalizeContext()` freezes the context.
+
+`publishPackageRuntimeState()` is invoked twice per package (after middleware and
+again before post-hooks). Capability resolvers registered via
+`provideCapability(Cap, () => view)` return the same long-lived value for the
+lifetime of the package instance, so consumers reading
+`ctx.capabilities.require(Cap)` at different lifecycle phases observe `===`
+identity stability.
 
 ## Full Contributor Guide
 

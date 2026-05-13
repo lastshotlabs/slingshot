@@ -7,29 +7,50 @@ Understanding the plugin lifecycle makes it clear why code goes where it goes �
 
 ## What happens when you call `createServer()`
 
+`createApp({ plugins, packages })` accepts two tiers. Plain plugin-tier entries flow through
+the lifecycle directly; package-tier entries are first compiled by `compilePackages()` into
+`SlingshotPackageDefinition`-wrapping plugins that interleave the entity-plugin hooks with
+the package's own hooks plus two `publishPackageRuntimeState()` passes. From step 3 onward,
+plain plugins and compiled packages share the same dispatch table.
+
 ```
 createServer(config)
   │
   ├── 1. Validate config
-  ├── 2. Create SlingshotContext (per-app state container, including any WS endpoint drafts)
-  ├── 3. Initialize infrastructure (DB connections, event bus)
-  ├── 4. Topologically sort plugins by dependency declarations
+  ├── 2. compilePackages([...]) — wrap each SlingshotPackageDefinition in a plugin that
+  │      interleaves entityPlugin.* hooks + publishPackageRuntimeState() with pkg.* hooks
+  ├── 3. Create SlingshotContext (per-app state, including any WS endpoint drafts)
+  ├── 4. Initialize infrastructure (DB connections, event bus, framework adapters)
+  ├── 5. Topologically sort the combined plugin list by dependency declarations
   │
-  ├── 5. Run setupMiddleware() on all plugins, in order
-  │      └── Auth middleware, CSRF, request guards, tenant resolution
+  ├── 6. Run setupMiddleware on every entry, in order
+  │      ├── Plain plugin: pkg.setupMiddleware
+  │      └── Compiled package:  entityPlugin.setupMiddleware
+  │                            → publishPackageRuntimeState() (first pass)
+  │                            → pkg.setupMiddleware
   │
-  ├── 6. Mount tenant middleware
+  ├── 7. Mount tenant middleware
   │
-  ├── 7. Run setupRoutes() on all plugins, in order
-  │      └── Auth routes, entity routes, package-owned routers
+  ├── 8. Run setupRoutes on every entry, in order
+  │      ├── Plain plugin: pkg.setupRoutes
+  │      └── Compiled package:  entityPlugin.setupRoutes
+  │                            → pkg.setupRoutes
+  │                            → mountRoutes (entity router for the package)
   │
-  ├── 8. Mount error handlers
+  ├── 9. Mount error handlers
   │
-  ├── 9. Run setupPost() on all plugins, in order
-  │      └── Event subscriptions, registrar writes, WS draft patching, final post-assembly hooks
+  ├── 10. Run setupPost on every entry, in order
+  │      ├── Plain plugin: pkg.setupPost
+  │      └── Compiled package:  entityPlugin.setupPost
+  │                            → publishPackageRuntimeState() (second pass)
+  │                            → pkg.setupPost
   │
-  └── 10. Start the HTTP server
+  └── 11. Start the HTTP server
 ```
+
+`publishPackageRuntimeState()` is called twice per package. Capability resolvers
+(`provideCapability(Cap, () => view)`) return the same long-lived value across both passes
+and across every later read of `ctx.capabilities.require(Cap)`, so `===` identity is stable.
 
 ## The three phases
 
@@ -96,9 +117,19 @@ export function createCommunityPackage() {
 
 Slingshot validates that all declared dependencies are present and topologically sorts execution order. Missing `slingshot-auth`? It throws at startup — not at the first request.
 
-## Plugin state
+## Cross-package data exchange
 
-Plugins store runtime state in `getContext(app).pluginState`, keyed by a plugin-owned constant, usually one that equals the plugin name. Cross-plugin communication goes through this map:
+Packages exchange data through typed package contracts. A provider declares a contract with
+`definePackageContract('my-package')`, names typed handles via `MyPackage.capability<T>('name')`,
+and publishes a resolver via `definePackage({ capabilities: { provides: [provideCapability(Cap, () => view)] } })`.
+Consumers resolve the handle through `ctx.capabilities.require(Cap)`. This is the canonical
+cross-tier discovery surface — see the
+[Package Contracts guide](/slingshot/authoring/plugin-interface/) for the full story.
+
+`pluginState` is the legacy escape hatch. It remains supported for plugin-tier modules that do
+not have a package contract (and for framework-owned slots like the entity adapter publishing
+hook used internally during `setupRoutes`), but new package-tier code should prefer capability
+handles:
 
 ```typescript
 import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
@@ -106,15 +137,12 @@ import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
 const MY_PLUGIN_STATE_KEY = 'my-plugin' as const;
 declare const app: object;
 
-// Plugin A publishes canonical state in the earliest safe phase.
-// Entity adapters are one framework-owned example published during setupRoutes.
 publishPluginState(getContext(app).pluginState, MY_PLUGIN_STATE_KEY, { someCapability: true });
-
-// Plugin B reads it in a later phase or request handler.
 const pluginAState = getContext(app).pluginState.get(MY_PLUGIN_STATE_KEY);
 ```
 
-`slingshot-auth` publishes user resolution for `slingshot-community` to consume — without either package importing the other's internals.
+`slingshot-auth` publishes user resolution this way for `slingshot-community` to consume — both
+sides are plugin-tier through this slot — without either package importing the other's internals.
 
 ## Teardown
 

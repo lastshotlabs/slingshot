@@ -179,7 +179,6 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
     // against the missing-adapter check below. The hook contract is
     // `() => void | Promise<void>`; we choose Promise to make the failure
     // observable through the same surface as async lifecycle hooks.
-    // eslint-disable-next-line @typescript-eslint/require-await
     async setupRoutes({ app }: PluginSetupContext) {
       if (!stateRef || !interactionEventsAdapterRef) {
         throw new Error(

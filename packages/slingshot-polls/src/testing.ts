@@ -27,13 +27,8 @@ import {
   publishPluginState,
   readPluginState,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { Poll } from './entities/poll';
-import { PollVote } from './entities/pollVote';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { pollFactories, pollVoteFactories } from './entities/factories';
-import { pollOperations, pollVoteOperations } from './operations/index';
 import { createPollsPackage } from './plugin';
 import type { PollAdapter, PollVoteAdapter } from './types/adapters';
 import type {
@@ -297,76 +292,14 @@ export async function createPollsTestApp(
     events,
   };
 
-  // The package's `entities: [...]` declaration is processed by the framework's
-  // `compilePackages()` during `createApp(...)`. This test helper bypasses
-  // that path, so we mount the entity routes manually here via
-  // `createEntityPlugin`, using the same `pollFactories` / `pollVoteFactories`
-  // configured on the package's entity modules. The `buildAdapter` callback
-  // here is what populates the package's `onAdapter`-captured refs by way of
-  // the closure-owned `Poll` / `PollVote` factory bundles — both surfaces
-  // share a single adapter instance per entity.
-  const sharedAdapters: { poll?: BareEntityAdapter; pollVote?: BareEntityAdapter } = {};
-  const entityEntries: EntityPluginEntry[] = [
-    {
-      config: Poll,
-      operations: pollOperations.operations,
-      buildAdapter: (storeType, infra) => {
-        sharedAdapters.poll = pollFactories[storeType](infra) as unknown as BareEntityAdapter;
-        return sharedAdapters.poll;
-      },
-    },
-    {
-      config: PollVote,
-      operations: pollVoteOperations.operations,
-      buildAdapter: (storeType, infra) => {
-        sharedAdapters.pollVote = pollVoteFactories[storeType](
-          infra,
-        ) as unknown as BareEntityAdapter;
-        return sharedAdapters.pollVote;
-      },
-    },
-  ];
-  const entityPlugin = createEntityPlugin({
-    name: 'slingshot-polls',
-    mountPath: plugin.mountPath ?? '/polls',
-    entities: entityEntries,
-    middleware: plugin.middleware,
-  });
-
-  // Run lifecycles in framework-equivalent order:
-  //   1. package setupMiddleware  — registers policies + dataScope hooks
-  //   2. entity setupMiddleware    — entity-plugin policy hooks
-  //   3. entity setupRoutes        — mounts entity CRUD + named-op routes
-  //      (also calls our buildAdapter callbacks; shared adapters are then
-  //       reused below to seed the package's vote-guard ref)
-  //   4. package setupRoutes       — mounts the /results route on top
-  //   5. entity setupPost / package setupPost — final wiring
-  await plugin.setupMiddleware?.(ctx);
-  await entityPlugin.setupMiddleware?.(ctx);
-  await entityPlugin.setupRoutes?.(ctx);
-
-  // The package's vote-guard middleware reads adapter refs that are normally
-  // populated by the framework's `onAdapter` callbacks on each entity module.
-  // This test helper bypasses `compilePackages()`, so we drive the same hooks
-  // manually with the shared adapters resolved by the entity-plugin step
-  // above.
-  for (const entityModule of plugin.entities) {
-    const impl = (entityModule as { implementation?: unknown }).implementation as
-      | { wiring?: { mode?: string; onAdapter?: (adapter: BareEntityAdapter) => void } }
-      | undefined;
-    const wiring = impl?.wiring;
-    if (wiring?.mode === 'factories') {
-      if (entityModule.entityName === 'Poll' && sharedAdapters.poll) {
-        wiring.onAdapter?.(sharedAdapters.poll);
-      } else if (entityModule.entityName === 'PollVote' && sharedAdapters.pollVote) {
-        wiring.onAdapter?.(sharedAdapters.pollVote);
-      }
-    }
-  }
-
-  await plugin.setupRoutes?.(ctx);
-  await entityPlugin.setupPost?.(ctx);
-  await plugin.setupPost?.(ctx);
+  // The package's `entities: [...]` declaration is normally processed by
+  // `compilePackages()` during `createApp(...)`. This helper bypasses that path
+  // and drives the same lifecycle phases through the shared
+  // `runPackageLifecycle()` helper, which delegates per-entity adapter
+  // construction to each module's own `wiring` (factories → onAdapter; manual →
+  // buildAdapter) — populating the package's adapter refs as the entity plugin's
+  // setupRoutes runs.
+  await runPackageLifecycle(plugin, ctx as never);
 
   const state = readPluginState(pluginState, POLLS_RUNTIME_KEY);
   if (!state) throw new Error('Polls package did not register state — lifecycle failed');

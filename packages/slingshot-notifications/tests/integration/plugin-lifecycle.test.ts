@@ -8,6 +8,7 @@ import {
   registerPluginCapabilities,
   resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createNotificationsPackage } from '../../src/plugin';
 import {
   NotificationsBuilderFactory,
@@ -38,33 +39,6 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
   attachContext(app, ctx as never);
 }
 
-/**
- * Drive each entity module's `factories`-mode `onAdapter` callback with an
- * adapter built from its own factory bundle. The package's adapter refs are
- * populated as a side effect — equivalent to what `compilePackages()` does
- * during `createApp()`, just inlined for this test harness.
- */
-function resolveEntityAdapters(
-  plugin: ReturnType<typeof createNotificationsPackage>,
-  storeType: 'memory',
-  infra: Record<string, unknown>,
-): void {
-  for (const entityModule of plugin.entities) {
-    const impl = (entityModule as { implementation?: unknown }).implementation as
-      | {
-          wiring?: {
-            mode?: string;
-            factories?: Record<string, (i: never) => unknown>;
-            onAdapter?: (adapter: unknown) => void;
-          };
-        }
-      | undefined;
-    const wiring = impl?.wiring;
-    if (wiring?.mode !== 'factories' || !wiring.factories) continue;
-    const adapter = wiring.factories[storeType](infra as never);
-    wiring.onAdapter?.(adapter);
-  }
-}
 
 describe('createNotificationsPackage lifecycle', () => {
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
@@ -139,20 +113,11 @@ describe('createNotificationsPackage lifecycle', () => {
     });
 
 
-    await plugin.setupMiddleware?.({
-      app: app as never,
-      config: createFrameworkConfig(),
-      bus,
-      events,
-    });
-    await plugin.setupRoutes?.({
-      app: app as never,
-      config: createFrameworkConfig(),
-      bus,
-      events,
-    });
-    resolveEntityAdapters(plugin, 'memory', {});
-    await plugin.setupPost?.({
+    // Drive the package's lifecycle the way `compilePackages()` does — the
+    // helper walks entity modules, builds adapters from their `wiring`,
+    // mounts the entity plugin, and runs the six lifecycle phases in
+    // framework-equivalent order.
+    await runPackageLifecycle(plugin, {
       app: app as never,
       config: createFrameworkConfig(),
       bus,
@@ -213,20 +178,7 @@ describe('createNotificationsPackage lifecycle', () => {
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
     });
 
-    await plugin.setupMiddleware?.({
-      app: app as never,
-      config: createFrameworkConfig(),
-      bus,
-      events,
-    });
-    await plugin.setupRoutes?.({
-      app: app as never,
-      config: createFrameworkConfig(),
-      bus,
-      events,
-    });
-    resolveEntityAdapters(plugin, 'memory', {});
-    await plugin.setupPost?.({
+    await runPackageLifecycle(plugin, {
       app: app as never,
       config: createFrameworkConfig(),
       bus,

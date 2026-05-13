@@ -30,23 +30,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { PushDelivery } from '../../src/entities/pushDelivery';
-import { PushSubscription } from '../../src/entities/pushSubscription';
-import { PushTopic } from '../../src/entities/pushTopic';
-import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
-import {
-  pushDeliveryFactories,
-  pushSubscriptionFactories,
-  pushTopicFactories,
-  pushTopicMembershipFactories,
-} from '../../src/entities/factories';
-import { pushDeliveryOperations } from '../../src/entities/pushDelivery';
-import { pushSubscriptionOperations } from '../../src/entities/pushSubscription';
-import { pushTopicOperations } from '../../src/entities/pushTopic';
-import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createPushPackage } from '../../src/plugin';
 import { type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
@@ -161,95 +145,17 @@ function toSetupContext(args: {
 }
 
 /**
- * Run the full package lifecycle, including manual entity-route mounting.
- *
- * Mirrors the polls testing helper: the test bypasses `createApp()` /
- * `compilePackages()`, so we drive the package's lifecycle hooks side-by-side
- * with a manually-constructed `createEntityPlugin` that mounts the four push
- * entity routes (subscriptions, topics, topic memberships, deliveries). The
- * adapter instances built by the entity-plugin step are fed back through the
- * package's per-entity-module `onAdapter` hooks so the bespoke routes
- * (topic-subscribe, ack) and the router share state with the entity routes.
+ * Drive the package's lifecycle and capability registration the same way
+ * `compilePackages()` does at framework boot. Delegates the entity-mount +
+ * lifecycle drive to the shared `runPackageLifecycle` helper, then publishes
+ * the declarative `capabilities.provides` slot into the slingshot context.
  */
 async function runPushPackageLifecycle(
   plugin: ReturnType<typeof createPushPackage>,
   ctx: import('@lastshotlabs/slingshot-core').PluginSetupContext,
 ): Promise<void> {
-  // Delegate adapter construction to each entity module's own wiring so the
-  // package's internal `onSubscriptions` / `onTopics` / ... closures fire as
-  // they would under the framework's createApp path. For manual-mode modules
-  // (PushSubscription) this means the upsert-wrapped adapter is what both the
-  // entity routes and the package state see.
-  function buildAdapterForEntity(
-    entityName: string,
-  ): EntityPluginEntry['buildAdapter'] {
-    const entityModule = plugin.entities.find(e => e.entityName === entityName);
-    if (!entityModule) throw new Error(`entity ${entityName} not found on plugin`);
-    const impl = (entityModule as { implementation: unknown }).implementation as {
-      wiring: { mode: string; buildAdapter?: EntityPluginEntry['buildAdapter']; factories?: unknown; onAdapter?: (a: BareEntityAdapter) => void };
-    };
-    const wiring = impl.wiring;
-    if (wiring.mode === 'manual' && wiring.buildAdapter) {
-      return wiring.buildAdapter;
-    }
-    if (wiring.mode === 'factories' && wiring.factories) {
-      const factories = wiring.factories as Record<string, (infra: never) => BareEntityAdapter>;
-      return (storeType, infra) => {
-        const adapter = factories[storeType](infra as never);
-        wiring.onAdapter?.(adapter);
-        return adapter;
-      };
-    }
-    throw new Error(`unsupported wiring mode for ${entityName}: ${wiring.mode}`);
-  }
+  await runPackageLifecycle(plugin, ctx);
 
-  const sharedAdapters: {
-    sub?: BareEntityAdapter;
-    topic?: BareEntityAdapter;
-    membership?: BareEntityAdapter;
-    delivery?: BareEntityAdapter;
-  } = {};
-  const entityEntries: EntityPluginEntry[] = [
-    {
-      config: PushSubscription,
-      operations: pushSubscriptionOperations.operations,
-      routePath: 'subscriptions',
-      buildAdapter: buildAdapterForEntity('PushSubscription'),
-    },
-    {
-      config: PushTopic,
-      operations: pushTopicOperations.operations,
-      buildAdapter: buildAdapterForEntity('PushTopic'),
-    },
-    {
-      config: PushTopicMembership,
-      operations: pushTopicMembershipOperations.operations,
-      buildAdapter: buildAdapterForEntity('PushTopicMembership'),
-    },
-    {
-      config: PushDelivery,
-      operations: pushDeliveryOperations.operations,
-      routePath: 'deliveries',
-      buildAdapter: buildAdapterForEntity('PushDelivery'),
-    },
-  ];
-  void sharedAdapters;
-  const entityPlugin = createEntityPlugin({
-    name: 'slingshot-push',
-    mountPath: plugin.mountPath ?? '/push',
-    entities: entityEntries,
-  });
-
-  await plugin.setupMiddleware?.(ctx);
-  await entityPlugin.setupMiddleware?.(ctx);
-  await entityPlugin.setupRoutes?.(ctx);
-  await plugin.setupRoutes?.(ctx);
-  await entityPlugin.setupPost?.(ctx);
-  await plugin.setupPost?.(ctx);
-
-  // Drive the declarative `definePackage({ capabilities: { provides } })` slot
-  // the same way `compilePackages` does at framework boot, since these tests
-  // bypass createApp/compilePackages.
   const slingshotCtx = getContextOrNull(ctx.app);
   if (slingshotCtx) {
     await registerPluginCapabilities(

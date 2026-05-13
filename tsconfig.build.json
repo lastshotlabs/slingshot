@@ -83,6 +83,9 @@
       "@lastshotlabs/slingshot-entity/routing": [
         "./packages/slingshot-entity/dist/src/routing/index.d.ts"
       ],
+      "@lastshotlabs/slingshot-entity/testing": [
+        "./packages/slingshot-entity/dist/src/testing.d.ts"
+      ],
       "@lastshotlabs/slingshot-infra": ["./packages/slingshot-infra/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-embeds": ["./packages/slingshot-embeds/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-emoji": ["./packages/slingshot-emoji/dist/src/index.d.ts"],

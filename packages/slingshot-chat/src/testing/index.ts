@@ -22,8 +22,6 @@ import type {
   PermissionEvaluator,
   PermissionsState,
   ResolvedEntityConfig,
-  SlingshotEventBus,
-  SlingshotPackageDefinition,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
@@ -45,14 +43,8 @@ import {
   NotificationsBuilderFactory,
   NotificationsDeliveryRegistry,
 } from '@lastshotlabs/slingshot-notifications';
-import {
-  createEntityFactories,
-  createEntityPlugin,
-} from '@lastshotlabs/slingshot-entity';
-import type {
-  BareEntityAdapter,
-  EntityPluginEntry,
-} from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
 import { createMemoryPermissionsAdapter } from '@lastshotlabs/slingshot-permissions/testing';
@@ -86,100 +78,6 @@ import type {
 // Memory adapters don't access infra — stub is safe
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
 const memoryInfra = {} as StoreInfra;
-
-// ─── Package mount helper ─────────────────────────────────────────────────────
-
-/**
- * Mount a chat package's entity modules through `createEntityPlugin`,
- * mirroring the framework's `compilePackages` path so each entity module's
- * `wiring.buildAdapter` populates the package's closure-owned refs.
- *
- * @internal
- */
-async function mountChatPackage(
-  pkg: SlingshotPackageDefinition,
-  ctx: {
-    app: Hono<AppEnv>;
-    config: never;
-    bus: SlingshotEventBus;
-    events: ReturnType<typeof createEventPublisher>;
-  },
-): Promise<{ teardown(): Promise<void> }> {
-  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
-    const impl = (entityModule as { implementation: unknown }).implementation as {
-      config: ResolvedEntityConfig;
-      operations?: Record<string, unknown>;
-      extraRoutes?: unknown;
-      overrides?: unknown;
-      channels?: unknown;
-      routePath?: string;
-      parentPath?: string;
-      wiring: {
-        mode: string;
-        buildAdapter?: unknown;
-        factories?: unknown;
-      };
-    };
-
-    let buildAdapter: ((storeType: StoreType, infra: unknown) => BareEntityAdapter) | undefined;
-    if (impl.wiring.mode === 'manual') {
-      buildAdapter = impl.wiring.buildAdapter as
-        | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
-        | undefined;
-    } else if (impl.wiring.mode === 'standard') {
-      buildAdapter = (storeType, infra) => {
-        const factories = createEntityFactories(
-          impl.config,
-          impl.operations as Parameters<typeof createEntityFactories>[1],
-        );
-        return resolveRepo(
-          factories,
-          storeType,
-          infra as StoreInfra,
-        ) as unknown as BareEntityAdapter;
-      };
-    }
-    if (!buildAdapter) {
-      throw new Error(
-        `[chat test harness] cannot resolve buildAdapter for entity '${entityModule.entityName}' (wiring mode '${impl.wiring.mode}')`,
-      );
-    }
-    return {
-      config: impl.config,
-      operations: impl.operations as never,
-      extraRoutes: impl.extraRoutes as never,
-      overrides: impl.overrides as never,
-      channels: impl.channels as never,
-      ...(impl.routePath ? { routePath: impl.routePath } : {}),
-      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
-      buildAdapter,
-    };
-  });
-
-  const entityPlugin = createEntityPlugin({
-    name: pkg.name,
-    mountPath: pkg.mountPath ?? '/chat',
-    entities: entityEntries,
-    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
-  });
-
-  // Lifecycle order matches the framework path. Entity setupRoutes is what
-  // runs buildAdapter and populates the package refs — must happen BEFORE
-  // the package's setupPost reads the refs.
-  await pkg.setupMiddleware?.(ctx as never);
-  await entityPlugin.setupMiddleware?.(ctx as never);
-  await entityPlugin.setupRoutes?.(ctx as never);
-  await pkg.setupRoutes?.(ctx as never);
-  await entityPlugin.setupPost?.(ctx as never);
-  await pkg.setupPost?.(ctx as never);
-
-  return {
-    async teardown() {
-      await pkg.teardown?.();
-      await entityPlugin.teardown?.();
-    },
-  };
-}
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -578,16 +476,16 @@ export async function createChatTestApp(
     await next();
   });
 
-  // Mount the package through `createEntityPlugin` — mirrors the framework's
-  // `compilePackages` path so each entity module's `wiring.buildAdapter`
-  // populates the package's closure-owned refs before `setupPost` reads them.
+  // Drive the package's lifecycle the way the framework's `compilePackages`
+  // path does, so each entity module's `wiring` populates the package's
+  // closure-owned adapter refs before `setupPost` reads them.
   const setupCtx = {
     app,
     config: frameworkConfig as never,
-    bus: bus as SlingshotEventBus,
+    bus,
     events,
   };
-  await mountChatPackage(pkg, setupCtx);
+  await runPackageLifecycle(pkg, setupCtx as never);
 
   // Read the plugin's resolved state
   const state = readPluginState(pluginState, CHAT_RUNTIME_KEY);

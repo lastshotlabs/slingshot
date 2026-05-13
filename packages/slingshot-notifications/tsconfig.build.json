@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "paths": {
       "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"],
-      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/dist/src/index.d.ts"]
+      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-entity/testing": ["../slingshot-entity/dist/src/testing.d.ts"]
     },
     "composite": true
   },

@@ -26,9 +26,7 @@ import {
   getActorId,
   publishPluginState,
 } from '@lastshotlabs/slingshot-core';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createMemoryWebhookAdapter } from './adapters/memory';
 import { WebhookRuntimeError } from './errors/webhookErrors';
 import { createWebhooksPackage } from './plugin';
@@ -245,55 +243,17 @@ export async function createWebhooksTestApp(
     events,
   };
 
-  await pkg.setupMiddleware?.(setupContext);
-
-  // Mount the package's entity modules manually via `createEntityPlugin`,
-  // delegating each module's own `wiring.buildAdapter`. Mirrors the pattern
-  // used by `slingshot-polls/src/testing.ts` and the organizations test
-  // harness.
-  let entityPlugin: ReturnType<typeof createEntityPlugin> | undefined;
+  // When the entity path is enabled, drive the package's lifecycle the same
+  // way `compilePackages()` does — through the shared `runPackageLifecycle`
+  // helper. In standalone mode (no entity plugin), we drive `pkg.setup*` hooks
+  // directly because there are no entities to mount.
   if (useEntityPath) {
-    const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
-      const impl = (entityModule as { implementation?: unknown }).implementation as {
-        config: ResolvedEntityConfig;
-        operations?: Record<string, unknown>;
-        extraRoutes?: unknown;
-        overrides?: unknown;
-        routePath?: string;
-        parentPath?: string;
-        wiring: { mode: string; buildAdapter?: unknown };
-      };
-      const buildAdapter = impl.wiring.buildAdapter as
-        | ((storeType: StoreType, infra: StoreInfra) => BareEntityAdapter)
-        | undefined;
-      if (impl.wiring.mode !== 'manual' || !buildAdapter) {
-        throw new WebhookRuntimeError(
-          `expected manual wiring on entity '${entityModule.entityName}', got '${impl.wiring.mode}'`,
-        );
-      }
-      return {
-        config: impl.config,
-        operations: impl.operations as never,
-        extraRoutes: impl.extraRoutes as never,
-        overrides: impl.overrides as never,
-        ...(impl.routePath ? { routePath: impl.routePath } : {}),
-        ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
-        buildAdapter,
-      };
-    });
-    entityPlugin = createEntityPlugin({
-      name: pkg.name,
-      mountPath: pkg.mountPath ?? '/webhooks',
-      entities: entityEntries,
-      middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
-    });
-    await entityPlugin.setupMiddleware?.(setupContext);
-    await entityPlugin.setupRoutes?.(setupContext);
+    await runPackageLifecycle(pkg, setupContext);
+  } else {
+    await pkg.setupMiddleware?.(setupContext);
+    await pkg.setupRoutes?.(setupContext);
+    await pkg.setupPost?.(setupContext);
   }
-
-  await pkg.setupRoutes?.(setupContext);
-  await entityPlugin?.setupPost?.(setupContext);
-  await pkg.setupPost?.(setupContext);
 
   // `createApp` publishes capability provider results into the canonical
   // `slingshot:package:capabilities:<name>` plugin-state slot. Bypassing

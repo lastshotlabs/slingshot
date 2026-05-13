@@ -24,11 +24,8 @@ import {
   publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type {
-  BareEntityAdapter,
-  EntityPluginEntry,
-} from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import {
   createMemoryPermissionsAdapter,
   createPermissionRegistry,
@@ -232,60 +229,10 @@ export async function createAssetsTestApp(
     events,
   } as unknown as import('@lastshotlabs/slingshot-core').PluginSetupContext;
 
-  // Manually mount the package's entity module via `createEntityPlugin`.
-  // The `buildAdapter` here delegates to each entity module's
-  // `wiring.buildAdapter`, which TTL-wraps the resolved adapter AND populates
-  // the package's closure-owned adapter ref. Same dual-population pattern used
-  // by slingshot-polls / slingshot-push / slingshot-organizations.
-  const entityEntries: EntityPluginEntry[] = pkg.entities.map(entityModule => {
-    const impl = (entityModule as { implementation: unknown }).implementation as {
-      config: ResolvedEntityConfig;
-      operations?: Record<string, unknown>;
-      extraRoutes?: unknown;
-      overrides?: unknown;
-      routePath?: string;
-      parentPath?: string;
-      wiring: { mode: string; buildAdapter?: unknown };
-    };
-    const buildAdapter = impl.wiring.buildAdapter as
-      | ((storeType: StoreType, infra: unknown) => BareEntityAdapter)
-      | undefined;
-    if (impl.wiring.mode !== 'manual' || !buildAdapter) {
-      throw new Error(
-        `[assets test harness] expected manual wiring on entity '${entityModule.entityName}', got '${impl.wiring.mode}'`,
-      );
-    }
-    return {
-      config: impl.config,
-      operations: impl.operations as never,
-      extraRoutes: impl.extraRoutes as never,
-      overrides: impl.overrides as never,
-      ...(impl.routePath ? { routePath: impl.routePath } : {}),
-      ...(impl.parentPath ? { parentPath: impl.parentPath } : {}),
-      buildAdapter,
-    };
-  });
-
-  const entityPlugin = createEntityPlugin({
-    name: 'slingshot-assets',
-    mountPath: pkg.mountPath ?? '/assets',
-    entities: entityEntries,
-    middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
-  });
-
-  // Lifecycle order matches the framework path:
-  //   1. package setupMiddleware     — registers events, captures publisher
-  //   2. entity setupMiddleware      — entity-plugin policy hooks
-  //   3. entity setupRoutes          — mounts CRUD + named-op routes (runs
-  //                                    buildAdapter, populates package refs)
-  //   4. package setupRoutes (none)  — assets has no extra setupRoutes
-  //   5. entity setupPost / package setupPost — final wiring
-  await pkg.setupMiddleware?.(setupContext);
-  await entityPlugin.setupMiddleware?.(setupContext);
-  await entityPlugin.setupRoutes?.(setupContext);
-  await pkg.setupRoutes?.(setupContext);
-  await entityPlugin.setupPost?.(setupContext);
-  await pkg.setupPost?.(setupContext);
+  // Drive the package's lifecycle the way the framework's `compilePackages`
+  // path does, so each entity module's `wiring` populates the package's
+  // closure-owned adapter refs before `setupPost` reads them.
+  await runPackageLifecycle(pkg, setupContext);
 
   // `createApp` would do this; the test harness bypasses that path so we
   // manually publish the package's capabilities through plugin state.

@@ -29,13 +29,14 @@ messaging and ephemeral conversation flows.
 
 `createCommunityPackage()` declares these dependencies. The framework topological sort uses
 the declared list to enforce order, but the consumed capabilities have to actually be
-available — list them all in your app's `plugins` array before community.
+available — register them in your app's `plugins` (for `slingshot-auth`) and `packages`
+(for `slingshot-permissions`, `slingshot-notifications`) arrays before community.
 
-| Plugin                    | How it's consumed                                                     |
-| ------------------------- | --------------------------------------------------------------------- |
-| `slingshot-auth`          | required; routes resolve the actor through the auth context           |
-| `slingshot-permissions`   | required; via `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, `PermissionsAdapterCap` |
-| `slingshot-notifications` | required; via `NotificationsBuilderFactory` for outbound notifications |
+| Module                    | Tier    | How it's consumed                                                     |
+| ------------------------- | ------- | --------------------------------------------------------------------- |
+| `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context           |
+| `slingshot-permissions`   | package | required; via `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, `PermissionsAdapterCap` |
+| `slingshot-notifications` | package | required; via `NotificationsBuilderFactory` for outbound notifications |
 
 Optional, opportunistically integrated when present:
 

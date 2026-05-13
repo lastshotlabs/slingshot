@@ -22,7 +22,7 @@ via `PushHealthCap`.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`, `packages/slingshot-entity/src/index.ts`, and `packages/slingshot-notifications/src/index.ts`
-- **Imported by**: app-level plugin composition
+- **Imported by**: app-level package composition
 
 ## Common Tasks
 

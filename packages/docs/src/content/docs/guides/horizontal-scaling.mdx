@@ -3,7 +3,7 @@ title: Horizontal Scaling
 description: Running multiple Slingshot instances — shared sessions, cross-instance events, WebSocket scaling
 ---
 
-import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 Slingshot's HTTP layer is stateless. Add instances freely - but shared storage for sessions, a shared event bus for app events, and a shared WebSocket transport are required so activity on one instance reaches clients on another.
 
@@ -21,76 +21,35 @@ Slingshot's HTTP layer is stateless. Add instances freely - but shared storage f
 
 Switch auth sessions to Redis. Each instance reads and writes the same session store:
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "db": {
-        "postgres": "${env:DATABASE_URL}",
-        "redis": "${env:REDIS_URL}"
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" },
-            "db": {
-              "auth": "postgres",
-              "sessions": "redis",
-              "oauthState": "redis"
-            }
-          }
-        }
-      ]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript
-    createAuthPlugin({
-      auth: { roles: ['user'], defaultRole: 'user' },
-      db: {
-        auth: 'postgres',     // durable records in Postgres
-        sessions: 'redis',    // sessions shared via Redis
-        oauthState: 'redis',  // OAuth flow state shared via Redis
-      },
-    })
-    ```
-  </TabItem>
-</Tabs>
+```typescript
+createAuthPlugin({
+  auth: { roles: ['user'], defaultRole: 'user' },
+  db: {
+    auth: 'postgres', // durable records in Postgres
+    sessions: 'redis', // sessions shared via Redis
+    oauthState: 'redis', // OAuth flow state shared via Redis
+  },
+});
+```
 
 ## Event bus
 
 The default `InProcessAdapter` is process-local. Events emitted on instance A never reach instance B.
 
-Switch to a shared event bus so app events cross instances. The built-in manifest option is BullMQ:
+Switch to a shared event bus so app events cross instances. The built-in option is BullMQ:
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "eventBus": "bullmq",
-      "secrets": { "provider": "env" }
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    import { defineApp } from '@lastshotlabs/slingshot';
-    import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
 
-    export default defineApp({
-      eventBus: createBullMQAdapter({
-        connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
-        prefix: 'slingshot:events',
-        attempts: 5,
-      }),
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+export default defineApp({
+  eventBus: createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
+    prefix: 'slingshot:events',
+    attempts: 5,
+  }),
+});
+```
 
 With a shared event bus:
 
@@ -102,47 +61,21 @@ With a shared event bus:
 
 Bun's native `ws.publish()` is in-process only. WebSocket room fan-out uses `ws.transport`, not the app event bus. For multi-instance room delivery, configure the Redis WebSocket transport:
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "db": {
-        "redis": "${env:REDIS_URL}"
-      },
-      "ws": {
-        "transport": {
-          "type": "redis",
-          "options": {
-            "connection": "${env:REDIS_URL}",
-            "channelPrefix": "ws:room:"
-          }
-        },
-        "endpoints": {
-          "/ws/chat": { "presence": true }
-        }
-      }
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
+```typescript title="app.config.ts (excerpt)"
+import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
 
-    export default defineApp({
-      ws: {
-        transport: createRedisTransport({
-          connection: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
-          channelPrefix: 'ws:room:',
-        }),
-        endpoints: {
-          '/ws/chat': { presence: true },
-        },
-      },
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+export default defineApp({
+  ws: {
+    transport: createRedisTransport({
+      connection: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+      channelPrefix: 'ws:room:',
+    }),
+    endpoints: {
+      '/ws/chat': { presence: true },
+    },
+  },
+});
+```
 
 Once `ws.transport` is configured, Slingshot bridges room pub/sub through Redis:
 
@@ -171,16 +104,16 @@ For ECS, the generated `sst.config.ts` sets up ALB with health check routing. Fo
 
 In-memory rate limiting doesn't scale. Switch the rate limiter to Redis:
 
-```json title="app.config.ts"
-{
-  "security": {
-    "rateLimit": {
-      "windowMs": 900000,
-      "max": 100,
-      "store": "redis"
-    }
-  }
-}
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  security: {
+    rateLimit: {
+      windowMs: 900_000,
+      max: 100,
+      store: 'redis',
+    },
+  },
+});
 ```
 
 With Redis-backed rate limiting, a client making 50 requests on instance A and 50 on instance B is correctly throttled at 100 total.
@@ -189,68 +122,62 @@ With Redis-backed rate limiting, a client making 50 requests on instance A and 5
 
 Switch the cache adapter to Redis so all instances share the same cache:
 
-```json
-{
-  "db": {
-    "redis": "${env:REDIS_URL}"
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    redis: process.env.REDIS_URL!,
   },
-  "cache": {
-    "store": "redis"
-  }
-}
+  cache: {
+    store: 'redis',
+  },
+});
 ```
 
 ## Full multi-instance config
 
-```json title="app.config.ts"
-{
-  "manifestVersion": 1,
-  "port": 3000,
+```typescript title="app.config.ts"
+import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 
-  "db": {
-    "postgres": "${env:DATABASE_URL}",
-    "redis": "${env:REDIS_URL}"
+export default defineApp({
+  port: 3000,
+  db: {
+    postgres: process.env.DATABASE_URL!,
+    redis: process.env.REDIS_URL!,
   },
-
-  "eventBus": "bullmq",
-  "secrets": { "provider": "env" },
-
-  "ws": {
-    "transport": {
-      "type": "redis",
-      "options": {
-        "connection": "${env:REDIS_URL}"
-      }
+  eventBus: createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
+  }),
+  ws: {
+    transport: createRedisTransport({
+      connection: process.env.REDIS_URL!,
+    }),
+    endpoints: {
+      '/ws/chat': { presence: true },
     },
-    "endpoints": {
-      "/ws/chat": { "presence": true }
-    }
   },
-
-  "security": {
-    "signing": { "secret": "${secret:SIGNING_SECRET}" },
-    "rateLimit": {
-      "windowMs": 900000,
-      "max": 100,
-      "store": "redis"
-    }
-  },
-
-  "plugins": [
-    {
-      "plugin": "slingshot-auth",
-      "config": {
-        "auth": { "roles": ["user"], "defaultRole": "user" },
-        "db": {
-          "auth": "postgres",
-          "sessions": "redis",
-          "oauthState": "redis"
-        }
-      }
+  security: {
+    signing: { secret: process.env.SIGNING_SECRET! },
+    rateLimit: {
+      windowMs: 900_000,
+      max: 100,
+      store: 'redis',
     },
-    { "plugin": "slingshot-community" }
-  ]
-}
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: {
+        auth: 'postgres',
+        sessions: 'redis',
+        oauthState: 'redis',
+      },
+    }),
+  ],
+  packages: [createCommunityPackage({ containerCreation: 'user' })],
+});
 ```
 
 ## Scaling in production

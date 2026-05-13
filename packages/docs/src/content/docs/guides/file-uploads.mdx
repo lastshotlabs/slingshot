@@ -17,83 +17,32 @@ bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
 
 ## Basic setup
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "upload": {
-        "storage": {
-          "adapter": "s3",
-          "config": {
-            "bucket": "${env:UPLOAD_BUCKET}",
-            "region": "${env:AWS_REGION}"
-          }
-        },
-        "maxFileSize": 10485760,
-        "generateKey": { "handler": "generateUploadKey" },
-        "authorization": {
-          "authorize": { "handler": "authorizeUpload" }
-        }
-      },
-      "plugins": [
-        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
-      ]
-    }
-    ```
+```typescript title="app.config.ts"
+import { defineApp, s3Storage } from '@lastshotlabs/slingshot';
 
-    ```typescript title="app.config.ts"
-    export function generateUploadKey(
-      file: { name: string; type: string },
-      ctx: { userId?: string }
-    ): string {
+export default defineApp({
+  port: 3000,
+  upload: {
+    storage: s3Storage({
+      bucket: process.env.UPLOAD_BUCKET!,
+      region: process.env.AWS_REGION!,
+    }),
+    maxFileSize: 10 * 1024 * 1024, // 10 MB
+
+    generateKey: (file, ctx) => {
       const ext = file.name.split('.').pop();
       return `uploads/${ctx.userId}/${Date.now()}.${ext}`;
-    }
+    },
 
-    export async function authorizeUpload(input: {
-      action: 'upload' | 'read' | 'delete';
-      key: string;
-      userId?: string;
-    }): Promise<boolean> {
-      if (!input.userId) return false;
-      // Only allow users to access their own files
-      return input.key.startsWith(`uploads/${input.userId}/`);
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts"
-    import { defineApp, s3Storage } from '@lastshotlabs/slingshot';
-
-    export default defineApp({
-      port: 3000,
-      upload: {
-        storage: s3Storage({
-          bucket: process.env.UPLOAD_BUCKET!,
-          region: process.env.AWS_REGION!,
-        }),
-        maxFileSize: 10 * 1024 * 1024, // 10 MB
-
-        generateKey: (file, ctx) => {
-          const ext = file.name.split('.').pop();
-          return `uploads/${ctx.userId}/${Date.now()}.${ext}`;
-        },
-
-        authorization: {
-          authorize: async ({ action, key, userId }) => {
-            if (!userId) return false;
-            return key.startsWith(`uploads/${userId}/`);
-          },
-        },
+    authorization: {
+      authorize: async ({ action, key, userId }) => {
+        if (!userId) return false;
+        return key.startsWith(`uploads/${userId}/`);
       },
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+    },
+  },
+});
+```
 
 ## What gets mounted
 

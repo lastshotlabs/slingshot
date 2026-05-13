@@ -3,7 +3,7 @@ title: WebSockets
 description: Bidirectional realtime connections — rooms, pub/sub, auth, and scaling
 ---
 
-import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 If you are learning WebSockets as a core app feature, start with
 [Core Features: Realtime](/slingshot/core-features/realtime/).
@@ -14,100 +14,41 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
 
 ## Define a WebSocket endpoint
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "ws": {
-        "endpoints": {
-          "/ws/chat": {
-            "upgrade": { "handler": "wsUpgrade" },
-            "on": {
-              "open":    { "handler": "wsOpen" },
-              "message": { "handler": "wsMessage" },
-              "close":   { "handler": "wsClose" }
-            }
-          }
-        }
-      },
-      "plugins": [
-        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
-      ]
-    }
-    ```
+```typescript title="app.config.ts"
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
 
-    ```typescript title="app.config.ts"
-    import type { ServerWebSocket } from 'bun';
+declare function verifyToken(token: string): string | null;
 
-    declare function verifyToken(token: string): string | null;
-
-    export async function wsUpgrade(req: Request, server: unknown) {
-      // Authenticate before upgrading
-      const auth = req.headers.get('authorization');
-      const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
-      if (!token) return new Response('Unauthorized', { status: 401 });
-      const userId = verifyToken(token);
-      if (!userId) return new Response('Unauthorized', { status: 401 });
-      // Data attached to the socket, available in all handlers
-      return { actorId: userId };
-    }
-
-    export async function wsOpen(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Connected:', ws.data.actorId);
-    }
-
-    export async function wsMessage(ws: ServerWebSocket<{ actorId: string }>, message: string | Buffer) {
-      // Echo back
-      ws.send(message);
-    }
-
-    export async function wsClose(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Disconnected:', ws.data.actorId);
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts"
-    // @skip-typecheck
-    import { defineApp } from '@lastshotlabs/slingshot';
-
-    declare function verifyToken(token: string): string | null;
-
-    export default defineApp({
-      port: 3000,
-      ws: {
-        endpoints: {
-          '/ws/chat': {
-            upgrade: async (req) => {
-              const auth = req.headers.get('authorization');
-              const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
-              if (!token) return new Response('Unauthorized', { status: 401 });
-              const userId = verifyToken(token);
-              if (!userId) return new Response('Unauthorized', { status: 401 });
-              return { actorId: userId }; // attached to ws.data
-            },
-            on: {
-              open: (ws) => {
-                console.log('Connected:', ws.data.actor.id);
-              },
-              message: (ws, message) => {
-                ws.send(message);
-              },
-              close: (ws) => {
-                console.log('Disconnected:', ws.data.actor.id);
-              },
-            },
+export default defineApp({
+  port: 3000,
+  ws: {
+    endpoints: {
+      '/ws/chat': {
+        upgrade: async req => {
+          const auth = req.headers.get('authorization');
+          const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
+          if (!token) return new Response('Unauthorized', { status: 401 });
+          const userId = verifyToken(token);
+          if (!userId) return new Response('Unauthorized', { status: 401 });
+          return { actorId: userId }; // attached to ws.data
+        },
+        on: {
+          open: ws => {
+            console.log('Connected:', ws.data.actor.id);
+          },
+          message: (ws, message) => {
+            ws.send(message);
+          },
+          close: ws => {
+            console.log('Disconnected:', ws.data.actor.id);
           },
         },
       },
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+    },
+  },
+});
+```
 
 ## Rooms and pub/sub
 
@@ -181,17 +122,19 @@ export async function wsUpgrade(req: Request) {
 Use the `onRoomSubscribe` hook to check permissions before a client joins a room:
 
 ```typescript title="app.config.ts (ws section)"
-{
-  "ws": {
-    "endpoints": {
-      "/ws": {
-        "upgrade": { "handler": "wsUpgrade" },
-        "onRoomSubscribe": { "handler": "wsRoomSubscribe" },
-        "on": { ... }
-      }
-    }
-  }
-}
+export default defineApp({
+  ws: {
+    endpoints: {
+      '/ws': {
+        upgrade: wsUpgrade,
+        onRoomSubscribe: wsRoomSubscribe,
+        on: {
+          /* ... */
+        },
+      },
+    },
+  },
+});
 ```
 
 ```typescript title="app.config.ts"
@@ -239,32 +182,34 @@ ws.onclose = () => {
 
 Define as many endpoints as you need:
 
-```json
-"ws": {
-  "endpoints": {
-    "/ws/chat":          { "upgrade": { "handler": "chatUpgrade" },    "on": { ... } },
-    "/ws/notifications": { "upgrade": { "handler": "notifUpgrade" },   "on": { ... } },
-    "/ws/collaboration": { "upgrade": { "handler": "colabUpgrade" },   "on": { ... } }
-  }
-}
+```typescript
+export default defineApp({
+  ws: {
+    endpoints: {
+      '/ws/chat': { upgrade: chatUpgrade, on: { /* ... */ } },
+      '/ws/notifications': { upgrade: notifUpgrade, on: { /* ... */ } },
+      '/ws/collaboration': { upgrade: colabUpgrade, on: { /* ... */ } },
+    },
+  },
+});
 ```
 
 ## Scaling WebSockets
 
 Bun's pub/sub is in-process. Multiple instances require a shared WebSocket transport. Configure Redis on `ws.transport`:
 
-```json
-{
-  "db": { "redis": "${env:REDIS_URL}" },
-  "ws": {
-    "transport": {
-      "type": "redis",
-      "options": {
-        "connection": "${env:REDIS_URL}"
-      }
-    }
-  }
-}
+```typescript
+import { createRedisTransport, defineApp } from '@lastshotlabs/slingshot';
+
+export default defineApp({
+  db: { redis: process.env.REDIS_URL! },
+  ws: {
+    transport: createRedisTransport({
+      connection: process.env.REDIS_URL!,
+    }),
+    endpoints: {},
+  },
+});
 ```
 
 With a Redis transport, `ws.publish()` broadcasts across all instances - clients on any instance receive messages published on any other.
@@ -278,9 +223,10 @@ See [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) for the full mul
 
 ## Entity channel config
 
-Plugins built on `createEntityPlugin()` (such as `slingshot-community`) can declare WebSocket channel
-behaviour directly on entity definitions. This wires presence, pub/sub forwarding, and incoming
-event handling without hand-writing route or socket logic.
+Packages authored with `definePackage(...)` (such as `slingshot-community`) can declare WebSocket
+channel behaviour directly on entity definitions. This wires presence, pub/sub forwarding, and
+incoming event handling without hand-writing route or socket logic. `createEntityPlugin(...)`
+remains the lower-level escape hatch that the package compiler uses internally.
 
 ### Channel fields
 
@@ -346,19 +292,23 @@ before relaying. The expected payload shape for a receive event:
 
 ### Self-wiring vs manual wiring
 
-**Manifest-first plugins** (like `slingshot-community`) self-wire their WS handlers during
+**Package-tier modules** (like `slingshot-community`) self-wire their WS handlers during
 `setupPost`. They read `SlingshotContext.wsPublish` and `SlingshotContext.ws` lazily, so no
-caller-supplied function references are needed. The manifest endpoint only needs `presence: true`:
+caller-supplied function references are needed. The endpoint only needs `presence: true`:
 
-```json
-{
-  "plugins": [{ "plugin": "slingshot-community", "config": { "wsEndpoint": "community" } }],
-  "ws": { "endpoints": { "community": { "presence": true } } }
-}
+```typescript
+// @skip-typecheck
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
+
+export default defineApp({
+  packages: [createCommunityPackage({ containerCreation: 'user', wsEndpoint: 'community' })],
+  ws: { endpoints: { community: { presence: true } } },
+});
 ```
 
-**Custom entity plugins** that do not self-wire expose `buildSubscribeGuard` and
-`buildReceiveIncoming` for manual wiring:
+**Custom entity plugins** that drop down to `createEntityPlugin()` directly (the lower-level
+escape hatch) expose `buildSubscribeGuard` and `buildReceiveIncoming` for manual wiring:
 
 ```typescript
 const plugin = createEntityPlugin({
@@ -387,6 +337,9 @@ export default defineApp({
   },
 });
 ```
+
+Most apps should prefer the package-tier path; reach for `createEntityPlugin()` only when you
+need the lower-level surface directly.
 
 Call both **after all plugins have initialized** — they read state set during `setupMiddleware`.
 

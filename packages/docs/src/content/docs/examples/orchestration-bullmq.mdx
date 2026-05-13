@@ -7,15 +7,14 @@ Source-backed example app: `examples/orchestration-bullmq/`
 
 Use this example when in-memory orchestration is no longer enough and workflow
 runs need to survive process restarts. It wires the BullMQ adapter into the
-orchestration plugin, protects the management routes, and shows how manifest
-handler references map back to exported TypeScript functions.
+orchestration plugin, protects the management routes, and shows how route
+middleware and request-context resolution attach to the orchestration surface.
 
 ## What this demonstrates
 
 - `createBullMQOrchestrationAdapter()` with Redis connection settings
 - protected orchestration routes with `routeMiddleware`
 - request context resolution from headers
-- manifest `$ref` handlers for route middleware and context resolution
 - bounded job retention for completed and failed workflow jobs
 
 ## Source Files
@@ -26,8 +25,8 @@ handler references map back to exported TypeScript functions.
 ## Production Notes
 
 Set `requireTls: true` in production and pass a real Redis TLS block. The
-example defaults to local Redis for development but the manifest keeps TLS
-enabled so production config fails closed.
+example defaults to local Redis for development but the `app.config.ts` keeps
+TLS enabled so production config fails closed.
 
 The example also sets `shutdownDrainTimeoutMs` and BullMQ retention limits.
 Those are operational controls, not cosmetic settings: they keep deploys from

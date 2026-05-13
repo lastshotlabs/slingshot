@@ -238,15 +238,15 @@ uses: ['db', 'cache'],
 // No manual env var wiring needed
 ```
 
-Pair this with the manifest secrets config:
+Pair this with the `db` block in `app.config.ts`:
 
-```json title="app.config.ts"
-{
-  "db": {
-    "postgres": "${env:DATABASE_URL}",
-    "redis": "${env:REDIS_URL}"
-  }
-}
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+  },
+});
 ```
 
 The deploy pipeline pulls `DATABASE_URL` and `REDIS_URL` from provisioned resource outputs and injects them into the container.

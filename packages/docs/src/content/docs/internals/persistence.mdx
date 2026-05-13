@@ -78,9 +78,12 @@ export const postAdapterFactories: RepoFactories<PostAdapter> = {
 
 If a store type doesn't make sense for a given concern (Redis for relational data, for instance), throw at startup. Don't silently fall back.
 
-## Using with `createEntityPlugin()`
+## Using inside a package or `createEntityPlugin()`
 
-Call `resolveRepo()` inside the `buildAdapter` callback:
+The canonical way to wire a repo is from inside a `definePackage(...)` module — the package
+compiler hands the resolved adapter to your entity hooks. When you drop down to the lower-level
+`createEntityPlugin()` escape hatch directly, call `resolveRepo()` inside the `buildAdapter`
+callback:
 
 ```typescript
 createEntityPlugin({

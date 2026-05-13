@@ -3,8 +3,6 @@ title: Production Databases
 description: Switch from in-memory to SQLite, Postgres, MongoDB, or Redis — one config change, zero code changes
 ---
 
-import { TabItem, Tabs } from '@astrojs/starlight/components';
-
 Slingshot's adapter model means your business logic never knows which database it's running against. Every package — auth, community, your own entities — takes a store type. Swap it in one place.
 
 ## The adapter model
@@ -23,45 +21,20 @@ db: { auth: 'postgres', sessions: 'redis' }
 
 SQLite requires no extra dependencies. It's built into Bun and is a great starting point for small deployments.
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "db": {
-        "sqlite": "${importMetaDir}/data/app.db"
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" },
-            "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
-          }
-        },
-        { "plugin": "slingshot-community" }
-      ]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      db: {
-        sqlite: './data/app.db',
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user'], defaultRole: 'user' },
-          db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
-        }),
-        createCommunityPackage({ ... }),
-      ],
-    });
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    sqlite: './data/app.db',
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+    }),
+  ],
+  packages: [createCommunityPackage()],
+});
+```
 
 ## PostgreSQL
 
@@ -69,45 +42,20 @@ SQLite requires no extra dependencies. It's built into Bun and is a great starti
 bun add @lastshotlabs/slingshot-postgres
 ```
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "db": {
-        "postgres": "${env:DATABASE_URL}"
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" },
-            "db": { "auth": "postgres", "sessions": "postgres", "oauthState": "postgres" }
-          }
-        },
-        { "plugin": "slingshot-community" }
-      ]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      db: {
-        postgres: process.env.DATABASE_URL,
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user'], defaultRole: 'user' },
-          db: { auth: 'postgres', sessions: 'postgres', oauthState: 'postgres' },
-        }),
-        createCommunityPackage({ ... }),
-      ],
-    });
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    postgres: process.env.DATABASE_URL,
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'postgres', sessions: 'postgres', oauthState: 'postgres' },
+    }),
+  ],
+  packages: [createCommunityPackage()],
+});
+```
 
 ## MongoDB
 
@@ -115,45 +63,20 @@ bun add @lastshotlabs/slingshot-postgres
 bun add mongoose
 ```
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "db": {
-        "mongo": "${env:MONGO_URL}"
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" },
-            "db": { "auth": "mongo", "sessions": "mongo", "oauthState": "mongo" }
-          }
-        },
-        { "plugin": "slingshot-community" }
-      ]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      db: {
-        mongo: process.env.MONGO_URL,
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user'], defaultRole: 'user' },
-          db: { auth: 'mongo', sessions: 'mongo', oauthState: 'mongo' },
-        }),
-        createCommunityPackage({ ... }),
-      ],
-    });
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    mongo: process.env.MONGO_URL,
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'mongo', sessions: 'mongo', oauthState: 'mongo' },
+    }),
+  ],
+  packages: [createCommunityPackage()],
+});
+```
 
 ## Redis sessions + SQL records
 
@@ -163,73 +86,38 @@ A common production setup: durable records in Postgres or SQLite, high-throughpu
 bun add ioredis
 ```
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json
-    {
-      "db": {
-        "postgres": "${env:DATABASE_URL}",
-        "redis": "${env:REDIS_URL}"
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "db": {
-              "auth": "postgres",
-              "sessions": "redis",
-              "oauthState": "postgres"
-            }
-          }
-        }
-      ]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      db: {
-        postgres: process.env.DATABASE_URL,
-        redis: process.env.REDIS_URL,
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user'], defaultRole: 'user' },
-          db: { auth: 'postgres', sessions: 'redis', oauthState: 'postgres' },
-        }),
-      ],
-    });
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'postgres', sessions: 'redis', oauthState: 'postgres' },
+    }),
+  ],
+});
+```
 
 ## Mixing adapters per concern
 
 Different parts of your app can use different stores. Each adapter config is independent:
 
-```json
-{
-  "db": {
-    "sqlite": "./data/app.db",
-    "redis": "${env:REDIS_URL}"
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  db: {
+    sqlite: './data/app.db',
+    redis: process.env.REDIS_URL!,
   },
-  "plugins": [
-    {
-      "plugin": "slingshot-auth",
-      "config": {
-        "db": {
-          "auth": "sqlite",
-          "sessions": "redis",
-          "oauthState": "memory"
-        }
-      }
-    },
-    {
-      "plugin": "slingshot-community"
-    }
-  ]
-}
+  plugins: [
+    createAuthPlugin({
+      db: { auth: 'sqlite', sessions: 'redis', oauthState: 'memory' },
+    }),
+  ],
+  packages: [createCommunityPackage()],
+});
 ```
 
 ## Running migrations
@@ -253,7 +141,7 @@ slingshot migrate dev --name add_nickname
 ```
 
 The backend is auto-detected from `infrastructure.db.postgres`,
-`infrastructure.db.sqlite`, or `infrastructure.db.mongo` in your manifest.
+`infrastructure.db.sqlite`, or `infrastructure.db.mongo` in `app.config.ts`.
 Override with `--backend postgres|sqlite|mongo`, or pass a connection string
 with `--db-url` (Postgres falls back to `DATABASE_URL`; Mongo to `MONGODB_URI`
 / `MONGO_URL`). Applied migrations are tracked in the

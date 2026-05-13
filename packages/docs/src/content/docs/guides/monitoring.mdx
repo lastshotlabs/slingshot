@@ -3,7 +3,7 @@ title: Monitoring and Observability
 description: Structured logging, Prometheus metrics, health checks, auth security events, error tracking, and distributed tracing for Slingshot apps in production.
 ---
 
-import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
 Production apps fail in ways that are invisible without instrumentation. Slingshot emits structured JSON logs, exposes a Prometheus `/metrics` endpoint, and publishes security-relevant auth events on the event bus.
 
@@ -13,32 +13,17 @@ Production apps fail in ways that are invisible without instrumentation. Slingsh
 
 Every request logs as a single JSON line to stdout.
 
-<Tabs>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      port: 3000,
-      logging: {
-        level: 'info',      // 'debug' | 'info' | 'warn' | 'error' | 'silent'
-        format: 'json',     // 'json' (default in production) | 'pretty' (default in dev)
-        requests: true,     // log every request (default: true)
-      },
-      // ...
-    });
-    ```
-  </TabItem>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "logging": {
-        "level": "info",
-        "format": "json",
-        "requests": true
-      }
-    }
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  port: 3000,
+  logging: {
+    level: 'info', // 'debug' | 'info' | 'warn' | 'error' | 'silent'
+    format: 'json', // 'json' (default in production) | 'pretty' (default in dev)
+    requests: true, // log every request (default: true)
+  },
+  // ...
+});
+```
 
 ### What each request log contains
 
@@ -92,34 +77,16 @@ Use `logging.enabled: false` in tests when you need deterministic output.
 
 Enable the `/metrics` endpoint with one config key:
 
-<Tabs>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    export default defineApp({
-      metrics: {
-        enabled: true,
-        path: '/metrics',   // default
-        // Restrict scraping to internal network or a bearer token:
-        auth: { type: 'bearer', token: process.env.METRICS_TOKEN },
-      },
-    });
-    ```
-  </TabItem>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "metrics": {
-        "enabled": true,
-        "path": "/metrics",
-        "auth": {
-          "type": "bearer",
-          "token": "${secret:METRICS_TOKEN}"
-        }
-      }
-    }
-    ```
-  </TabItem>
-</Tabs>
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  metrics: {
+    enabled: true,
+    path: '/metrics', // default
+    // Restrict scraping to internal network or a bearer token:
+    auth: { type: 'bearer', token: process.env.METRICS_TOKEN },
+  },
+});
+```
 
 ### Exported metrics
 

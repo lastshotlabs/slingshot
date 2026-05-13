@@ -3,7 +3,7 @@ title: Collaboration Workspace
 description: Chat, community, polls, interactions, assets, emoji, embeds, GIFs, and deep links in one app composition
 ---
 
-import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 This example is the "show me what the product can do" composition. It combines the collaboration,
 media, and interaction packages into one workspace-style backend instead of presenting them as
@@ -39,185 +39,73 @@ bun add @lastshotlabs/slingshot \
 
 ## Full setup
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "security": {
-        "signing": { "secret": "${secret:JWT_SECRET}" }
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAssetsPackage } from '@lastshotlabs/slingshot-assets';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createChatPackage } from '@lastshotlabs/slingshot-chat';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
+import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
+import { createEmbedsPlugin } from '@lastshotlabs/slingshot-embeds';
+import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
+import { createGifsPlugin } from '@lastshotlabs/slingshot-gifs';
+import { createInteractionsPackage } from '@lastshotlabs/slingshot-interactions';
+import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
+import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
+import { createPollsPackage } from '@lastshotlabs/slingshot-polls';
+
+export default defineApp({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createEmbedsPlugin({}),
+    createGifsPlugin({
+      provider: 'tenor',
+      apiKey: process.env.TENOR_API_KEY!,
+      rating: 'pg',
+    }),
+    createDeepLinksPlugin({
+      fallbackBaseUrl: 'https://app.example.com',
+      fallbackRedirects: {
+        '/join/*': '/workspace/:id',
+        '/share/*': '/thread/:id',
       },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": {
-              "roles": ["user", "moderator", "admin"],
-              "defaultRole": "user"
-            },
-            "db": {
-              "auth": "memory",
-              "sessions": "memory",
-              "oauthState": "memory"
-            }
-          }
-        },
-        {
-          "plugin": "slingshot-notifications",
-          "config": {
-            "dispatcher": { "enabled": false }
-          }
-        },
-        {
-          "plugin": "slingshot-permissions",
-          "config": {
-            "adapter": "memory"
-          }
-        },
-        {
-          "plugin": "slingshot-community",
-          "config": {
-            "authBridge": "auto",
-            "containerCreation": "user"
-          }
-        },
-        {
-          "plugin": "slingshot-chat",
-          "config": {
-            "storeType": "memory",
-            "permissions": {
-              "createRoom": ["user", "moderator", "admin"],
-              "sendMessage": ["user", "moderator", "admin"]
-            }
-          }
-        },
-        {
-          "plugin": "slingshot-polls",
-          "config": {}
-        },
-        {
-          "plugin": "slingshot-assets",
-          "config": {
-            "storage": { "adapter": "memory" },
-            "presignedUrls": true,
-            "allowedMimeTypes": ["image/png", "image/jpeg", "image/gif", "image/webp"],
-            "image": {
-              "allowedOrigins": ["localhost"]
-            }
-          }
-        },
-        {
-          "plugin": "slingshot-emoji",
-          "config": {}
-        },
-        {
-          "plugin": "slingshot-embeds",
-          "config": {}
-        },
-        {
-          "plugin": "slingshot-gifs",
-          "config": {
-            "provider": "tenor",
-            "apiKey": "${secret:TENOR_API_KEY}",
-            "rating": "pg"
-          }
-        },
-        {
-          "plugin": "slingshot-deep-links",
-          "config": {
-            "fallbackBaseUrl": "https://app.example.com",
-            "fallbackRedirects": {
-              "/join/*": "/workspace/:id",
-              "/share/*": "/thread/:id"
-            }
-          }
-        },
-        {
-          "plugin": "slingshot-interactions",
-          "config": {
-            "handlers": {
-              "polls:vote:": { "kind": "route", "target": "/internal/interactions/poll-vote" },
-              "chat:pin:": { "kind": "queue", "target": "jobs:chat.pin", "fireAndForget": true }
-            }
-          }
-        }
-      ]
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts"
-    import { defineApp } from '@lastshotlabs/slingshot';
-    import { createAssetsPackage } from '@lastshotlabs/slingshot-assets';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createChatPackage } from '@lastshotlabs/slingshot-chat';
-    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
-    import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
-    import { createEmbedsPlugin } from '@lastshotlabs/slingshot-embeds';
-    import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
-    import { createGifsPlugin } from '@lastshotlabs/slingshot-gifs';
-    import { createInteractionsPackage } from '@lastshotlabs/slingshot-interactions';
-    import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
-    import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
-    import { createPollsPackage } from '@lastshotlabs/slingshot-polls';
-
-    export default defineApp({
-      port: 3000,
-      security: { signing: { secret: process.env.JWT_SECRET! } },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
-          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-        }),
-        createEmbedsPlugin({}),
-        createGifsPlugin({
-          provider: 'tenor',
-          apiKey: process.env.TENOR_API_KEY!,
-          rating: 'pg',
-        }),
-        createDeepLinksPlugin({
-          fallbackBaseUrl: 'https://app.example.com',
-          fallbackRedirects: {
-            '/join/*': '/workspace/:id',
-            '/share/*': '/thread/:id',
-          },
-        }),
-      ],
-      packages: [
-        createNotificationsPackage({
-          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
-        }),
-        createPermissionsPackage(),
-        createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
-        createChatPackage({
-          storeType: 'memory',
-          permissions: {
-            createRoom: ['user', 'moderator', 'admin'],
-            sendMessage: ['user', 'moderator', 'admin'],
-          },
-        }),
-        createPollsPackage(),
-        createAssetsPackage({
-          storage: { adapter: 'memory' },
-          presignedUrls: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-          image: { allowedOrigins: ['localhost'] },
-        }),
-        createInteractionsPackage({
-          handlers: {
-            'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },
-            'chat:pin:': { kind: 'queue', target: 'jobs:chat.pin', fireAndForget: true },
-          },
-        }),
-        createEmojiPackage({}),
-      ],
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+    }),
+  ],
+  packages: [
+    createNotificationsPackage({
+      dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+    }),
+    createPermissionsPackage(),
+    createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' }),
+    createChatPackage({
+      storeType: 'memory',
+      permissions: {
+        createRoom: ['user', 'moderator', 'admin'],
+        sendMessage: ['user', 'moderator', 'admin'],
+      },
+    }),
+    createPollsPackage(),
+    createAssetsPackage({
+      storage: { adapter: 'memory' },
+      presignedUrls: true,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+      image: { allowedOrigins: ['localhost'] },
+    }),
+    createInteractionsPackage({
+      handlers: {
+        'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },
+        'chat:pin:': { kind: 'queue', target: 'jobs:chat.pin', fireAndForget: true },
+      },
+    }),
+    createEmojiPackage({}),
+  ],
+});
+```
 
 ## What you get
 

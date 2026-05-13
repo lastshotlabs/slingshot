@@ -22,53 +22,23 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
 
 ## Minimum setup
 
-<Tabs>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts"
-    import { defineApp } from '@lastshotlabs/slingshot';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 
-    export default defineApp({
-      port: 3000,
-      security: {
-        signing: { secret: process.env.JWT_SECRET! },
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
-          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-        }),
-      ],
-    });
-    ```
-
-  </TabItem>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "security": {
-        "signing": { "secret": "${secret:JWT_SECRET}" }
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
-          }
-        }
-      ]
-    }
-    ```
-
-    ```bash
-    slingshot start
-    ```
-
-  </TabItem>
-</Tabs>
+export default defineApp({
+  port: 3000,
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+  ],
+});
+```
 
 ## Mounted routes
 
@@ -189,17 +159,16 @@ Each adapter is independent. Mix and match:
 
 <Tabs>
   <TabItem label="SQLite">
-    ```json title="app.config.ts (db section)"
-    {
-      "db": { "sqlite": "${importMetaDir}/data/app.db" },
-      "plugins": [{
-        "plugin": "slingshot-auth",
-        "config": {
-          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-          "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
-        }
-      }]
-    }
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
+      db: { sqlite: `${import.meta.dir}/data/app.db` },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+          db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+        }),
+      ],
+    });
     ```
 
     SQLite is built into Bun. On Node.js, install `better-sqlite3` first.
@@ -210,17 +179,16 @@ Each adapter is independent. Mix and match:
     bun add @lastshotlabs/slingshot-postgres
     ```
 
-    ```json title="app.config.ts (db section)"
-    {
-      "db": { "postgres": "${env:DATABASE_URL}" },
-      "plugins": [{
-        "plugin": "slingshot-auth",
-        "config": {
-          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-          "db": { "auth": "postgres", "sessions": "postgres", "oauthState": "postgres" }
-        }
-      }]
-    }
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
+      db: { postgres: process.env.DATABASE_URL! },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+          db: { auth: 'postgres', sessions: 'postgres', oauthState: 'postgres' },
+        }),
+      ],
+    });
     ```
 
   </TabItem>
@@ -229,16 +197,18 @@ Each adapter is independent. Mix and match:
     bun add ioredis
     ```
 
-    ```json title="app.config.ts (db section)"
-    {
-      "db": { "sqlite": "${importMetaDir}/data/app.db", "redis": "${env:REDIS_URL}" },
-      "plugins": [{
-        "plugin": "slingshot-auth",
-        "config": {
-          "db": { "auth": "sqlite", "sessions": "redis", "oauthState": "memory" }
-        }
-      }]
-    }
+    ```typescript title="app.config.ts (excerpt)"
+    export default defineApp({
+      db: {
+        sqlite: `${import.meta.dir}/data/app.db`,
+        redis: process.env.REDIS_URL!,
+      },
+      plugins: [
+        createAuthPlugin({
+          db: { auth: 'sqlite', sessions: 'redis', oauthState: 'memory' },
+        }),
+      ],
+    });
     ```
 
     A common production setup: durable user records in SQLite or Postgres, high-throughput sessions in Redis.
@@ -252,52 +222,25 @@ Each adapter is independent. Mix and match:
 bun add @lastshotlabs/slingshot-oauth arctic
 ```
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json
-    {
-      "plugin": "slingshot-auth",
-      "config": {
-        "auth": {
-          "roles": ["user"],
-          "defaultRole": "user",
-          "oauth": {
-            "providers": {
-              "google": {
-                "clientId": "${secret:GOOGLE_CLIENT_ID}",
-                "clientSecret": "${secret:GOOGLE_CLIENT_SECRET}",
-                "redirectUri": "http://localhost:3000/auth/oauth/google/callback"
-              }
-            },
-            "postRedirect": "/dashboard"
-          }
-        }
-      }
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript
-    createAuthPlugin({
-      auth: {
-        roles: ['user'],
-        defaultRole: 'user',
-        oauth: {
-          providers: {
-            google: {
-              clientId: process.env.GOOGLE_CLIENT_ID!,
-              clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-              redirectUri: 'http://localhost:3000/auth/oauth/google/callback',
-            },
-          },
-          postRedirect: '/dashboard',
+```typescript
+createAuthPlugin({
+  auth: {
+    roles: ['user'],
+    defaultRole: 'user',
+    oauth: {
+      providers: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          redirectUri: 'http://localhost:3000/auth/oauth/google/callback',
         },
       },
-      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-    })
-    ```
-  </TabItem>
-</Tabs>
+      postRedirect: '/dashboard',
+    },
+  },
+  db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+});
+```
 
 OAuth routes mount automatically: `GET /auth/oauth/:provider` → `GET /auth/oauth/:provider/callback`. Redirect the user to `/auth/oauth/google` to start the flow. After the callback, they have a session.
 

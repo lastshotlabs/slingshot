@@ -3,8 +3,6 @@ title: Realtime with SSE
 description: Server-sent events for live updates — community notifications, entity changes, custom event streams
 ---
 
-import { TabItem, Tabs } from '@astrojs/starlight/components';
-
 Slingshot's SSE support bridges the event bus to browser clients. Events from plugins and entities flow directly to connected clients — no WebSocket server, no polling.
 
 ## How it works
@@ -27,78 +25,42 @@ Register `createNotificationsPackage()` alongside `createCommunityPackage()` and
 
 For a custom event stream, define your own SSE endpoint:
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "sse": {
-        "endpoints": {
-          "/__sse/activity": {
-            "events": ["blog:post.created", "blog:post.published"],
-            "upgrade": { "handler": "sseUpgrade" },
-            "filter": { "handler": "sseFilter" }
-          }
-        }
-      },
-      "plugins": [
-        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
-      ]
-    }
-    ```
+```typescript title="app.config.ts (excerpt)"
+import { defineApp } from '@lastshotlabs/slingshot';
 
-    ```typescript title="app.config.ts"
-    export async function sseUpgrade(req: Request) {
-      const token = req.headers.get('authorization')?.replace('Bearer ', '');
-      if (!token) return new Response('Unauthorized', { status: 401 });
+export default defineApp({
+  sse: {
+    endpoints: {
+      '/__sse/activity': {
+        events: ['blog:post.created', 'blog:post.published'],
 
-      // Verify and decode the JWT
-      const userId = verifyToken(token);
-      if (!userId) return new Response('Unauthorized', { status: 401 });
-
-      // Return client data — available to the filter function
-      return { actor: { id: userId, kind: 'user' as const, tenantId: null, sessionId: null, roles: null, claims: {} }, requestTenantId: null };
-    }
-
-    export async function sseFilter(message: unknown, clientData: { actor: { id: string | null } }) {
-      // Return true to send this event to this client, false to skip
-      // message.key is the event key, message.payload is the event payload
-      return true; // send all client-safe events
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts (excerpt)"
-    import { defineApp } from '@lastshotlabs/slingshot';
-
-    export default defineApp({
-      sse: {
-        endpoints: {
-          '/__sse/activity': {
-            events: ['blog:post.created', 'blog:post.published'],
-
-            upgrade: async (req) => {
-              const token = req.headers.get('authorization')?.replace('Bearer ', '');
-              if (!token) return new Response('Unauthorized', { status: 401 });
-              const userId = verifyToken(token);
-              if (!userId) return new Response('Unauthorized', { status: 401 });
-              return { actor: { id: userId, kind: 'user' as const, tenantId: null, sessionId: null, roles: null, claims: {} }, requestTenantId: null };
+        upgrade: async req => {
+          const token = req.headers.get('authorization')?.replace('Bearer ', '');
+          if (!token) return new Response('Unauthorized', { status: 401 });
+          const userId = verifyToken(token);
+          if (!userId) return new Response('Unauthorized', { status: 401 });
+          return {
+            actor: {
+              id: userId,
+              kind: 'user' as const,
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
             },
+            requestTenantId: null,
+          };
+        },
 
-            filter: async (message, clientData) => {
-              // Per-user filtering — only send events relevant to this client
-              return true;
-            },
-          },
+        filter: async (message, clientData) => {
+          // Per-user filtering — only send events relevant to this client
+          return true;
         },
       },
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+    },
+  },
+});
+```
 
 ## Entity-level client-safe events
 
@@ -178,21 +140,21 @@ filter: async (message, clientData: { actor: { id: string | null } }) => {
 
 For bidirectional communication, Slingshot also supports WebSocket endpoints:
 
-```json
-{
-  "ws": {
-    "endpoints": {
-      "/api/chat": {
-        "upgrade": { "handler": "wsUpgrade" },
-        "on": {
-          "open": { "handler": "wsOpen" },
-          "message": { "handler": "wsMessage" },
-          "close": { "handler": "wsClose" }
-        }
-      }
-    }
-  }
-}
+```typescript title="app.config.ts (excerpt)"
+export default defineApp({
+  ws: {
+    endpoints: {
+      '/api/chat': {
+        upgrade: wsUpgrade,
+        on: {
+          open: wsOpen,
+          message: wsMessage,
+          close: wsClose,
+        },
+      },
+    },
+  },
+});
 ```
 
 ```typescript title="app.config.ts"
@@ -217,13 +179,17 @@ export async function wsClose(ws: ServerWebSocket) {
 
 ## Multi-instance SSE
 
-For multi-instance deployments, replace the in-process event bus with a shared bus so SSE events cross instance boundaries. BullMQ is the built-in manifest option:
+For multi-instance deployments, replace the in-process event bus with a shared bus so SSE events cross instance boundaries. BullMQ is the built-in option:
 
-```json
-{
-  "eventBus": "bullmq",
-  "secrets": { "provider": "env" }
-}
+```typescript
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+
+export default defineApp({
+  eventBus: createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST!, port: 6379 },
+  }),
+});
 ```
 
 If you want Redis pub/sub, NATS, Kafka, or another broker instead, register it as a custom event bus and select it with the object form shown in [Custom Event Bus](/slingshot/examples/custom-event-bus/).

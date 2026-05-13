@@ -74,7 +74,7 @@ includes `ws`, `createApp()` copies the declared endpoint map into `ctx.wsEndpoi
 then boots from that same live endpoint map instead of rebuilding it from scratch later.
 The root `ws` field is typed as the normal `WsConfig` shape on both `createApp()` and
 `createServer()`, so plugin authors are mutating the same typed draft regardless of whether the
-app is being assembled for tests, manifest bootstrap, or a live server process.
+app is being assembled for tests, package bootstrap, or a live server process.
 App assembly owns seeding the endpoint draft into context; server bootstrap owns turning that draft
 into a live transport listener.
 
@@ -142,8 +142,8 @@ Dependency ordering is enforced before any plugin code runs. Slingshot rejects m
 Standalone-only plugins are also treated explicitly: a package that defines only `setup()` can still support plain Hono usage, but `createApp()` and `createServer()` skip it unless it also exposes one of the framework lifecycle phases.
 
 That same lifecycle ordering also applies when Slingshot assembles an app for non-listening hosts
-such as manifest inspection, tests, or Lambda cold start. The host boundary changes, but the plugin
-phases and context finalization rules stay the same.
+such as package inspection (`inspectPackage`), tests, or Lambda cold start. The host boundary
+changes, but the plugin phases and context finalization rules stay the same.
 
 ## See also
 

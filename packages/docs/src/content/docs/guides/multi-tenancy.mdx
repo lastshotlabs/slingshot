@@ -17,84 +17,46 @@ For multi-tenant apps: return a different string per tenant — from the subdoma
 
 ## Setting up a tenant resolver
 
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.config.ts"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "tenancy": {
-        "resolution": "subdomain",
-        "onResolve": { "handler": "resolveTenant" }
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user"], "defaultRole": "user" }
-          }
-        },
-        {
-          "plugin": "slingshot-community",
-          "config": { "containerCreation": "user" }
-        }
-      ]
-    }
-    ```
+```typescript title="app.config.ts"
+import { defineApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 
-    ```typescript title="app.config.ts"
-    export async function resolveTenant(tenantId: string) {
-      // Subdomain: app1.example.com → 'app1'
+export default defineApp({
+  port: 3000,
+  security: {
+    signing: {
+      secret: process.env.JWT_SECRET!,
+    },
+  },
+  tenancy: {
+    resolution: 'subdomain',
+    onResolve: async tenantId => {
       if (!tenantId || tenantId === 'www') return null;
       return { slug: tenantId };
-    }
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="app.config.ts"
-    import { defineApp } from '@lastshotlabs/slingshot';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-    import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
-
-    export default defineApp({
-      port: 3000,
-      security: {
-        signing: {
-          secret: process.env.JWT_SECRET!,
-        },
+    },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: {
+        roles: ['admin', 'member'],
+        defaultRole: 'member',
       },
-      tenancy: {
-        resolution: 'subdomain',
-        onResolve: async tenantId => {
-          if (!tenantId || tenantId === 'www') return null;
-          return { slug: tenantId };
-        },
+      db: {
+        auth: 'memory',
+        sessions: 'memory',
+        oauthState: 'memory',
       },
-      plugins: [
-        createAuthPlugin({
-          auth: {
-            roles: ['admin', 'member'],
-            defaultRole: 'member',
-          },
-          db: {
-            auth: 'memory',
-            sessions: 'memory',
-            oauthState: 'memory',
-          },
-        }),
-      ],
-      packages: [
-        createCommunityPackage({
-          containerCreation: 'user',
-          // No tenantResolver needed here — it reads from context automatically
-        }),
-      ],
-    });
-    ```
-
-  </TabItem>
-</Tabs>
+    }),
+  ],
+  packages: [
+    createCommunityPackage({
+      containerCreation: 'user',
+      // No tenantResolver needed here — it reads from context automatically
+    }),
+  ],
+});
+```
 
 ## Tenant resolution strategies
 

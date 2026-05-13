@@ -195,7 +195,13 @@ afterAll(async () => {
 
 ## Testing generated entity routes
 
-Entity routes created by `createEntityPlugin()` can be tested through ordinary HTTP requests. Use a small in-memory adapter that satisfies `BareEntityAdapter`.
+For a full package-tier test driver that bypasses `createApp()` see
+`runPackageLifecycle()` from `@lastshotlabs/slingshot-entity/testing` — it's the canonical helper
+for exercising a `definePackage(...)` module in isolation.
+
+Below is the lower-level entry point: entity routes produced by the `createEntityPlugin()`
+escape hatch (which the package compiler wraps internally) can be tested through ordinary HTTP
+requests using a small in-memory adapter that satisfies `BareEntityAdapter`.
 
 ```typescript title="tests/entity-routes.test.ts"
 import { beforeEach, describe, expect, test } from 'bun:test';

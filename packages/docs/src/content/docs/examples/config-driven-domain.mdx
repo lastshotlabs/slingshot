@@ -115,7 +115,13 @@ export const postOperations = defineOperations(Post, {
 });
 ```
 
-## Build the plugin
+## Build the package
+
+The canonical authoring path uses `definePackage(...)` (via the `createXxxPackage(...)` factory
+the package exposes); the framework's package compiler wraps it in the `createEntityPlugin(...)`
+plumbing internally. The example below shows the lower-level escape hatch — useful when you need
+direct control over the entity-plugin surface, but for most domain packages you should reach for
+`definePackage(...)` first.
 
 ```typescript title="src/plugin.ts"
 import { createEntityFactories } from '@lastshotlabs/slingshot';

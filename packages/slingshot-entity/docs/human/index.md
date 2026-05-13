@@ -7,7 +7,7 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-entity
 
 ## Purpose
 
-`@lastshotlabs/slingshot-entity` is Slingshot's authoring and orchestration layer for config-driven data models. It turns the shared types from `slingshot-core` into real tools for declaring entities, generating artifacts, validating manifests, planning migrations, and assembling runtime plugins.
+`@lastshotlabs/slingshot-entity` is Slingshot's authoring and orchestration layer for config-driven data models. It turns the shared types from `slingshot-core` into real tools for declaring entities, generating artifacts, planning migrations, and assembling runtime entity plugins behind the `definePackage(...)` package contract.
 
 ## Package Boundaries
 
@@ -137,10 +137,29 @@ registered by default; named operations resolve through the same pipeline.
 - `slingshot-entity` turns those contracts into authoring and orchestration tools.
 - Feature packages such as community consume the tools and provide domain-specific adapters, middleware, and side effects.
 
+## Testing entry point
+
+`runPackageLifecycle()` from `@lastshotlabs/slingshot-entity/testing` is the canonical way
+to drive a `definePackage(...)` module in tests that bypass `createApp()` /
+`compilePackages()`. It exposes the package's compiled entity plugin and publishes the
+runtime state the package's capability resolvers depend on, so tests can exercise the same
+boot sequence the framework runs at startup without spinning up a real HTTP host.
+
+## Capability identity invariant
+
+Cross-package consumers resolve published services through
+`ctx.capabilities.require(Cap)`. Capability resolvers return the same long-lived value for
+the lifetime of the package instance: a consumer reading the capability handle during
+`setupMiddleware`, `setupRoutes`, `setupPost`, and again at request time observes `===`
+identity. This lets consumers cache the handle reference safely and lets identity checks
+(`===`, `WeakMap` keys, `instanceof`) hold across lifecycle phases without explicit
+versioning. `publishPackageRuntimeState()` is invoked twice per package during bootstrap,
+but the resolver's return value remains stable across both passes.
+
 ## Review Heuristics
 
 - If a change introduces framework-private assumptions into the authoring DSL, pause and recheck the boundary.
-- If a new feature duplicates what manifests, migrations, or generation already know how to express, prefer extending the shared model instead.
+- If a new feature duplicates what migrations or generation already know how to express, prefer extending the shared model instead.
 - If runtime helpers start growing domain rules, those rules probably belong in the consuming package instead.
 
 ## Related Reading

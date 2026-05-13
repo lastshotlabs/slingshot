@@ -146,6 +146,26 @@ export function createAssetsPackage(
   // all read through this ref.
   let assetAdapterRef: AssetAdapter | undefined;
 
+  // Long-lived runtime view published through `AssetsRuntimeCap`. Constructed
+  // once per package instance so consumers reading the cap at different
+  // lifecycle phases observe a stable reference (===). The framework calls
+  // `provider.resolve()` twice (setupMiddleware + setupPost) and republishes
+  // the cap slot each time; returning the same frozen view from both calls
+  // keeps identity stable. The `assets` getter defers to the live
+  // `assetAdapterRef` and throws if read before bootstrap captured it.
+  const runtimeView: AssetsPluginState = Object.freeze({
+    get assets(): AssetAdapter {
+      if (!assetAdapterRef) {
+        throw new Error(
+          '[slingshot-assets] AssetsRuntimeCap.assets accessed before the asset adapter was captured (read it from `setupPost` or later).',
+        );
+      }
+      return assetAdapterRef;
+    },
+    storage,
+    config,
+  }) as AssetsPluginState;
+
   const orphanRegistry: OrphanedKeyRegistry = createOrphanedKeyRegistry();
 
   // `events` is populated lazily during `setupMiddleware` once the host has
@@ -304,27 +324,12 @@ export function createAssetsPackage(
 
     capabilities: {
       provides: [
-        // Capability resolution is eager: the framework invokes provider.resolve()
-        // during `setupMiddleware`, before the entity adapter is captured in
-        // `buildAdapter` (which runs in `setupRoutes`). Return a live view that
-        // reads `assetAdapterRef` lazily, so the eager publish call succeeds and
-        // real consumers only see an error when they touch `.assets` before the
-        // adapter is wired.
-        provideCapability(AssetsRuntimeCap, () => {
-          const view: AssetsPluginState = Object.freeze({
-            get assets(): AssetAdapter {
-              if (!assetAdapterRef) {
-                throw new Error(
-                  '[slingshot-assets] AssetsRuntimeCap.assets accessed before the asset adapter was captured',
-                );
-              }
-              return assetAdapterRef;
-            },
-            storage,
-            config,
-          }) as AssetsPluginState;
-          return view;
-        }),
+        // Always return the same long-lived `runtimeView`. The framework
+        // calls `provider.resolve()` twice (setupMiddleware + setupPost) and
+        // republishes the cap slot each time — returning a single stable
+        // reference means consumers reading the cap at any lifecycle phase
+        // observe `===` identity.
+        provideCapability(AssetsRuntimeCap, () => runtimeView),
         provideCapability(AssetsHealthCap, () => getHealth),
         provideCapability(AssetsOrphanedKeysCap, () => (since?: Date) =>
           orphanRegistry.listOrphanedKeys(since),

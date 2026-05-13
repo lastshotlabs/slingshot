@@ -56,7 +56,13 @@ describe('standalone adapter mode', () => {
     });
 
     try {
-      expect(runtime).toBe(adapter);
+      // `runtime` is the long-lived `WebhookAdapterCap` view (a stable Proxy
+      // that forwards to the live external adapter). It is not `===` to the
+      // raw adapter itself; method access reads through to the underlying
+      // reference.
+      expect(runtime).toBeDefined();
+      expect(typeof runtime.getEndpoint).toBe('function');
+      expect(typeof runtime.listEnabledEndpoints).toBe('function');
     } finally {
       await teardown();
     }

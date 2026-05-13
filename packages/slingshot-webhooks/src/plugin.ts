@@ -447,6 +447,40 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
   const refs: WebhookAdapterRefs = {};
   const definitionsRef: { current?: EventDefinitionRegistry } = {};
   let runtimeAdapter: WebhookAdapter | undefined;
+
+  // Forwarding view published through `WebhookAdapterCap`. Constructed once
+  // per package instance so consumers reading the cap at different lifecycle
+  // phases observe a stable reference (===). All access defers to the live
+  // `runtimeAdapter` ref — populated in `setupMiddleware` (external adapter
+  // path) or `setupPost` (entity-driven path). Method access is bound to the
+  // live adapter so destructured references work; `has` reflects the live
+  // adapter's surface; symbol/`then` reads return `undefined` so capability
+  // publication and `await` probes don't error before the runtime is wired.
+  const adapterTarget = Object.create(null) as WebhookAdapter;
+  const adapterView: WebhookAdapter = new Proxy<WebhookAdapter>(adapterTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!runtimeAdapter) {
+        throw new WebhookRuntimeError(
+          'WebhookAdapterCap accessed before the runtime adapter was wired (read it from `setupPost` or later).',
+        );
+      }
+      const value = Reflect.get(runtimeAdapter as object, property);
+      return typeof value === 'function' ? value.bind(runtimeAdapter) : value;
+    },
+    has(_target, property) {
+      if (!runtimeAdapter) return false;
+      return Reflect.has(runtimeAdapter as object, property);
+    },
+    ownKeys() {
+      if (!runtimeAdapter) return [];
+      return Reflect.ownKeys(runtimeAdapter as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!runtimeAdapter) return undefined;
+      return Reflect.getOwnPropertyDescriptor(runtimeAdapter as object, property);
+    },
+  });
   let inboundRateLimiter: RateLimiter | undefined;
   let unsubscribers: Array<() => void> = [];
 
@@ -493,45 +527,12 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
     publicPaths: inboundRoutePatterns,
     csrfExemptPaths: inboundRoutePatterns,
     capabilities: {
-      provides: [
-        // Capability resolution is eager: the framework invokes provider.resolve()
-        // during `setupMiddleware`, before `setupPost` has wired the runtime
-        // adapter. Return a Proxy that forwards method access to the live
-        // `runtimeAdapter` ref, so the eager publish call succeeds and consumers
-        // only see an error when they actually call a method on the adapter
-        // before it is ready.
-        provideCapability(WebhookAdapterCap, () => {
-          // Capability resolution is eager: the framework invokes
-          // provider.resolve() during `setupMiddleware`, before `setupPost`
-          // has wired the runtime adapter, AND again during `setupPost`. When
-          // the adapter is already wired (the second pass, or the standalone
-          // `config.adapter` path that captures the adapter inside
-          // `setupMiddleware`) return the live reference so consumers observe
-          // strict identity. Otherwise return a forwarding Proxy that defers
-          // the access error until a real method call.
-          if (runtimeAdapter) return runtimeAdapter;
-          const target = Object.create(null) as WebhookAdapter;
-          const adapterProxy = new Proxy<WebhookAdapter>(target, {
-            get(_target, property) {
-              if (!runtimeAdapter) {
-                // Return undefined for symbol or thenable probes (e.g. `await`
-                // inspecting `.then`, JSON serialization touching
-                // `Symbol.toPrimitive`) so capability publication can succeed
-                // before the runtime is wired. Real adapter method calls fall
-                // through to the throw below.
-                if (typeof property === 'symbol' || property === 'then') {
-                  return undefined;
-                }
-                throw new WebhookRuntimeError(
-                  'WebhookAdapterCap accessed before setupPost wired the runtime adapter',
-                );
-              }
-              return Reflect.get(runtimeAdapter as object, property);
-            },
-          });
-          return adapterProxy;
-        }),
-      ],
+      // Always return the same long-lived `adapterView` Proxy. The framework
+      // calls `provider.resolve()` twice (once at `setupMiddleware`, once at
+      // `setupPost`) and republishes the cap slot each time — returning a
+      // single stable reference means consumers reading the cap at any
+      // lifecycle phase observe `===` identity.
+      provides: [provideCapability(WebhookAdapterCap, () => adapterView)],
     },
 
     async setupMiddleware() {

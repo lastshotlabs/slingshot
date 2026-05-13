@@ -82,29 +82,55 @@ export function createOrchestrationPackage(
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
   let eventSink: SlingshotEventSink | null = null;
 
+  // Long-lived Proxy view published through `OrchestrationRuntimeCap`.
+  // Constructed once per package instance so consumers reading the cap at
+  // different lifecycle phases observe a stable reference (===). The
+  // framework calls `provider.resolve()` twice (setupMiddleware + setupPost)
+  // and republishes the cap slot each time; returning the same Proxy from
+  // both calls keeps identity stable. All access defers to the live
+  // `runtime` ref; method access is bound to the live ref so destructured
+  // references work; `has` reflects the live ref's surface; symbol/`then`
+  // reads return `undefined` so capability publication and `await` probes
+  // don't error before the runtime is wired.
+  const runtimeTarget = Object.create(null) as OrchestrationRuntime;
+  const runtimeView: OrchestrationRuntime = new Proxy<OrchestrationRuntime>(runtimeTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!runtime) {
+        throw new Error(
+          `[slingshot-orchestration-plugin] runtime.${String(property)} accessed before setupRoutes constructed it; resolve OrchestrationRuntimeCap from setupPost or later.`,
+        );
+      }
+      const value = Reflect.get(runtime as object, property);
+      return typeof value === 'function' ? value.bind(runtime) : value;
+    },
+    has(_target, property) {
+      if (!runtime) return false;
+      return Reflect.has(runtime as object, property);
+    },
+    ownKeys() {
+      if (!runtime) return [];
+      return Reflect.ownKeys(runtime as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!runtime) return undefined;
+      return Reflect.getOwnPropertyDescriptor(runtime as object, property);
+    },
+  });
+
   return definePackage({
     name: ORCHESTRATION_PLUGIN_KEY,
     dependencies: [],
     capabilities: {
       provides: [
-        // Return a Proxy: the framework eagerly resolves capability values at
-        // setupMiddleware time, before our setupRoutes constructs `runtime`
-        // from the provided adapter. Field access throws a clear error if
-        // reached before the runtime is wired.
-        provideCapability(OrchestrationRuntimeCap, () => {
-          const target: OrchestrationRuntime = Object.create(null) as OrchestrationRuntime;
-          return new Proxy(target, {
-            get(_target, prop, receiver) {
-              if (typeof prop === 'symbol' || prop === 'then') return undefined;
-              if (!runtime) {
-                throw new Error(
-                  `[slingshot-orchestration-plugin] runtime.${String(prop)} accessed before setupRoutes constructed it; resolve OrchestrationRuntimeCap from setupPost or later.`,
-                );
-              }
-              return Reflect.get(runtime, prop, receiver);
-            },
-          });
-        }),
+        // Always return the same long-lived `runtimeView` Proxy. The framework
+        // calls `provider.resolve()` twice (once at `setupMiddleware`, once at
+        // `setupPost`) and republishes the cap slot each time — returning a
+        // single stable reference means consumers reading the cap at any
+        // lifecycle phase observe `===` identity. Field access defers to the
+        // live `runtime` and throws a clear error if reached before
+        // setupRoutes has constructed it.
+        provideCapability(OrchestrationRuntimeCap, () => runtimeView),
       ],
     },
 

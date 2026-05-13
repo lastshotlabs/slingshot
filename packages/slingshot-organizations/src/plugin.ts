@@ -435,6 +435,15 @@ export function createOrganizationsPackage(
     groupMembershipModule,
   ].filter((m): m is NonNullable<typeof m> => m !== null);
 
+  // Build the org service once per package instance. The methods read
+  // `refs.organizations` / `refs.members` lazily, so the service is safe to
+  // construct before `setupMiddleware` populates the refs. The framework
+  // calls `provider.resolve()` twice and republishes the cap slot each time;
+  // returning the same reference from both calls keeps cross-phase identity
+  // stable (===). `createOrgService` is a hoisted function declaration in
+  // this same closure.
+  const orgServiceView = createOrgService();
+
   return definePackage({
     name: 'slingshot-organizations',
     mountPath: config.mountPath,
@@ -443,7 +452,14 @@ export function createOrganizationsPackage(
     middleware,
     tenantExemptPaths,
     capabilities: {
-      provides: [provideCapability(OrgServiceCap, () => createOrgService())],
+      // Construct the org service once per package instance and return the
+      // same reference from every resolve. The framework calls
+      // `provider.resolve()` twice (setupMiddleware + setupPost) and
+      // republishes the cap slot each time — returning a single stable
+      // reference means consumers reading the cap at any lifecycle phase
+      // observe `===` identity. The service methods read `refs.organizations`
+      // / `refs.members` lazily, so deferring still works the same way.
+      provides: [provideCapability(OrgServiceCap, () => orgServiceView)],
     },
 
     setupMiddleware(ctx: PluginSetupContext) {

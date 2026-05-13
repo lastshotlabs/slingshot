@@ -47,6 +47,42 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
   let interactionEventsAdapterRef: InteractionEventsAdapter | undefined;
   let stateRef: InteractionsPluginState | undefined;
 
+  // Long-lived Proxy view published through `InteractionsRuntimeCap`.
+  // Constructed once per package instance so consumers reading the cap at
+  // different lifecycle phases observe a stable reference (===). The
+  // framework calls `provider.resolve()` twice (setupMiddleware + setupPost)
+  // and republishes the cap slot each time; returning the same Proxy from
+  // both calls keeps identity stable. All access defers to the live
+  // `stateRef`; method access is bound to the live ref so destructured
+  // references work; `has` reflects the live ref's surface; symbol/`then`
+  // reads return `undefined` so capability publication and `await` probes
+  // don't error before the runtime is wired.
+  const runtimeTarget = Object.create(null) as InteractionsPluginState;
+  const runtimeView: InteractionsPluginState = new Proxy<InteractionsPluginState>(runtimeTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!stateRef) {
+        throw new Error(
+          `[slingshot-interactions] runtime.${String(property)} accessed before setupMiddleware completed; resolve InteractionsRuntimeCap from setupRoutes or later.`,
+        );
+      }
+      const value = Reflect.get(stateRef as object, property);
+      return typeof value === 'function' ? value.bind(stateRef) : value;
+    },
+    has(_target, property) {
+      if (!stateRef) return false;
+      return Reflect.has(stateRef as object, property);
+    },
+    ownKeys() {
+      if (!stateRef) return [];
+      return Reflect.ownKeys(stateRef as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!stateRef) return undefined;
+      return Reflect.getOwnPropertyDescriptor(stateRef as object, property);
+    },
+  });
+
   return definePackage({
     name: INTERACTIONS_PLUGIN_STATE_KEY,
     mountPath: config.mountPath,
@@ -54,23 +90,14 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
     entities: [interactionEventModule],
     capabilities: {
       provides: [
-        // Return a Proxy: the framework eagerly resolves capability values at
-        // setupMiddleware time. Field access throws a clear error if reached
-        // before our setupMiddleware populates `stateRef`.
-        provideCapability(InteractionsRuntimeCap, () => {
-          const target: InteractionsPluginState = Object.create(null) as InteractionsPluginState;
-          return new Proxy(target, {
-            get(_target, prop, receiver) {
-              if (typeof prop === 'symbol' || prop === 'then') return undefined;
-              if (!stateRef) {
-                throw new Error(
-                  `[slingshot-interactions] runtime.${String(prop)} accessed before setupMiddleware completed; resolve InteractionsRuntimeCap from setupRoutes or later.`,
-                );
-              }
-              return Reflect.get(stateRef, prop, receiver);
-            },
-          });
-        }),
+        // Always return the same long-lived `runtimeView` Proxy. The framework
+        // calls `provider.resolve()` twice (once at `setupMiddleware`, once at
+        // `setupPost`) and republishes the cap slot each time — returning a
+        // single stable reference means consumers reading the cap at any
+        // lifecycle phase observe `===` identity. Field access defers to the
+        // live `stateRef` and throws a clear error if reached before
+        // setupMiddleware has populated it.
+        provideCapability(InteractionsRuntimeCap, () => runtimeView),
       ],
     },
 

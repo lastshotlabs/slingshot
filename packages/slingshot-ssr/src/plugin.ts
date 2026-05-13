@@ -88,30 +88,56 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
   let entityConfigMap = new Map<string, ResolvedEntityConfig>();
   const unsubscribers: Array<() => void> = [];
 
+  // Long-lived Proxy view published through `IsrInvalidatorsCap`. Constructed
+  // once per package instance so consumers reading the cap at different
+  // lifecycle phases observe a stable reference (===). The framework calls
+  // `provider.resolve()` twice (setupMiddleware + setupPost) and republishes
+  // the cap slot each time; returning the same Proxy from both calls keeps
+  // identity stable. All access defers to the live `isrInvalidators`; method
+  // access is bound to the live ref so destructured references work; `has`
+  // reflects the live ref's surface; symbol/`then` reads return `undefined`
+  // so capability publication and `await` probes don't error before the
+  // runtime is wired.
+  const invalidatorsTarget = Object.create(null) as IsrInvalidators;
+  const invalidatorsView: IsrInvalidators = new Proxy<IsrInvalidators>(invalidatorsTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!isrInvalidators) {
+        throw new Error(
+          `[slingshot-ssr] ISR invalidators.${String(property)} accessed before setupMiddleware completed or ISR is disabled; ensure config.isr is set and resolve IsrInvalidatorsCap from setupPost or later.`,
+        );
+      }
+      const value = Reflect.get(isrInvalidators as object, property);
+      return typeof value === 'function' ? value.bind(isrInvalidators) : value;
+    },
+    has(_target, property) {
+      if (!isrInvalidators) return false;
+      return Reflect.has(isrInvalidators as object, property);
+    },
+    ownKeys() {
+      if (!isrInvalidators) return [];
+      return Reflect.ownKeys(isrInvalidators as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!isrInvalidators) return undefined;
+      return Reflect.getOwnPropertyDescriptor(isrInvalidators as object, property);
+    },
+  });
+
   return definePackage({
     name: 'slingshot-ssr',
     dependencies: [],
     entities: [],
     capabilities: {
       provides: [
-        // Return a Proxy: the framework eagerly resolves capability values at
-        // setupMiddleware time, before our setupMiddleware populates
-        // `isrInvalidators` (and only when config.isr is set). Field access
+        // Always return the same long-lived `invalidatorsView` Proxy. The
+        // framework calls `provider.resolve()` twice (once at
+        // `setupMiddleware`, once at `setupPost`) and republishes the cap
+        // slot each time — returning a single stable reference means
+        // consumers reading the cap at any lifecycle phase observe `===`
+        // identity. Field access defers to the live `isrInvalidators` and
         // throws a clear error if reached before ISR is wired.
-        provideCapability(IsrInvalidatorsCap, () => {
-          const target: IsrInvalidators = Object.create(null) as IsrInvalidators;
-          return new Proxy(target, {
-            get(_target, prop, receiver) {
-              if (typeof prop === 'symbol' || prop === 'then') return undefined;
-              if (!isrInvalidators) {
-                throw new Error(
-                  `[slingshot-ssr] ISR invalidators.${String(prop)} accessed before setupMiddleware completed or ISR is disabled; ensure config.isr is set and resolve IsrInvalidatorsCap from setupPost or later.`,
-                );
-              }
-              return Reflect.get(isrInvalidators, prop, receiver);
-            },
-          });
-        }),
+        provideCapability(IsrInvalidatorsCap, () => invalidatorsView),
       ],
     },
 

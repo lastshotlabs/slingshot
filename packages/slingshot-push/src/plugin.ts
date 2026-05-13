@@ -19,7 +19,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
 import { PushFormatterRegistryCap, PushHealthCap, PushRuntimeCap } from './public';
-import type { PushPluginHealth } from './public';
+import type { PushFormatterRegistry, PushPluginHealth } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
 import { buildPushEntityModules } from './entities/modules';
@@ -99,6 +99,59 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
   // Hoisted ref read by the declarative `PushRuntimeCap` resolver. Populated
   // in setupPost; resolver throws a clear "not ready" error when read earlier.
   let runtimeStateRef: PushPluginState | undefined;
+
+  // Long-lived Proxy view published through `PushRuntimeCap`. Constructed
+  // once per package instance so consumers reading the cap at different
+  // lifecycle phases observe a stable reference (===). The framework calls
+  // `provider.resolve()` twice (setupMiddleware + setupPost) and republishes
+  // the cap slot each time; returning the same Proxy from both calls keeps
+  // identity stable. All access defers to the live `runtimeStateRef`; method
+  // access is bound to the live ref so destructured references work; `has`
+  // reflects the live ref's surface; symbol/`then` reads return `undefined`
+  // so capability publication and `await` probes don't error before the
+  // runtime is wired.
+  const runtimeTarget = Object.create(null) as PushPluginState;
+  const runtimeView: PushPluginState = new Proxy<PushPluginState>(runtimeTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!runtimeStateRef) {
+        throw new Error(
+          `[slingshot-push] runtime.${String(property)} accessed before setupPost completed; resolve PushRuntimeCap from setupPost or later.`,
+        );
+      }
+      const value = Reflect.get(runtimeStateRef as object, property);
+      return typeof value === 'function' ? value.bind(runtimeStateRef) : value;
+    },
+    has(_target, property) {
+      if (!runtimeStateRef) return false;
+      return Reflect.has(runtimeStateRef as object, property);
+    },
+    ownKeys() {
+      if (!runtimeStateRef) return [];
+      return Reflect.ownKeys(runtimeStateRef as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!runtimeStateRef) return undefined;
+      return Reflect.getOwnPropertyDescriptor(runtimeStateRef as object, property);
+    },
+  });
+
+  // Long-lived formatter registry view published through
+  // `PushFormatterRegistryCap`. Same identity-stability concern as
+  // `runtimeView`. The registry has only one method (`registerFormatter`)
+  // which delegates to the live runtime; we expose it once and the closure
+  // reads `runtimeStateRef` lazily on every call.
+  const formatterRegistryImpl: PushFormatterRegistry = {
+    registerFormatter(type, formatter) {
+      if (!runtimeStateRef) {
+        throw new Error(
+          '[slingshot-push] formatter registry used before setupPost completed; resolve PushFormatterRegistryCap from setupPost or later.',
+        );
+      }
+      runtimeStateRef.registerFormatter(type, formatter);
+    },
+  };
+  const formatterRegistryView: PushFormatterRegistry = Object.freeze(formatterRegistryImpl);
 
   // The unified metrics emitter is owned by the framework context and not
   // available until `setupPost` runs (the router is constructed there). We
@@ -184,45 +237,18 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
     csrfExemptPaths: [`${config.mountPath}/*`],
     capabilities: {
       provides: [
-        // The framework eagerly resolves capability values at setupMiddleware
-        // time, before our setupPost populates `runtimeStateRef`. Return a
-        // Proxy that defers field access to the live ref so the resolver
-        // succeeds at boot and failures surface only when a consumer actually
-        // touches the runtime before setupPost has run.
-        provideCapability(PushRuntimeCap, () => {
-          // The framework eagerly resolves capability values at setupMiddleware
-          // time, before our setupPost populates `runtimeStateRef`. Return a
-          // Proxy that defers field access to the live ref; failures surface
-          // only when a consumer actually touches the runtime before setupPost.
-          const target: PushPluginState = Object.create(null) as PushPluginState;
-          return new Proxy(target, {
-            get(_target, prop, receiver) {
-              // Skip symbol probes (the framework awaits resolve() and the
-              // Promise machinery probes `.then`) so the Proxy is await-safe.
-              if (typeof prop === 'symbol' || prop === 'then') return undefined;
-              if (!runtimeStateRef) {
-                throw new Error(
-                  `[slingshot-push] runtime.${String(prop)} accessed before setupPost completed; resolve PushRuntimeCap from setupPost or later.`,
-                );
-              }
-              return Reflect.get(runtimeStateRef, prop, receiver);
-            },
-          });
-        }),
+        // Always return the same long-lived `runtimeView` Proxy. The framework
+        // calls `provider.resolve()` twice (once at `setupMiddleware`, once at
+        // `setupPost`) and republishes the cap slot each time — returning a
+        // single stable reference means consumers reading the cap at any
+        // lifecycle phase observe `===` identity. Field access defers to the
+        // live `runtimeStateRef` and throws a clear error if reached before
+        // setupPost has run.
+        provideCapability(PushRuntimeCap, () => runtimeView),
         provideCapability(PushHealthCap, () => getHealth),
-        provideCapability(
-          PushFormatterRegistryCap,
-          () => ({
-            registerFormatter(type, formatter) {
-              if (!runtimeStateRef) {
-                throw new Error(
-                  '[slingshot-push] formatter registry used before setupPost completed; resolve PushFormatterRegistryCap from setupPost or later.',
-                );
-              }
-              runtimeStateRef.registerFormatter(type, formatter);
-            },
-          }),
-        ),
+        // Same identity stability concern — return the same frozen registry
+        // view every resolve.
+        provideCapability(PushFormatterRegistryCap, () => formatterRegistryView),
       ],
     },
 

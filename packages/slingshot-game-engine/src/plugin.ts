@@ -119,6 +119,43 @@ export function createGameEnginePackage(
   // error when read earlier.
   let runtimeStateRef: import('./types/state').GameEnginePluginState | undefined;
 
+  // Long-lived Proxy view published through `GameEngineRuntimeCap`.
+  // Constructed once per package instance so consumers reading the cap at
+  // different lifecycle phases observe a stable reference (===). The
+  // framework calls `provider.resolve()` twice (setupMiddleware + setupPost)
+  // and republishes the cap slot each time; returning the same Proxy from
+  // both calls keeps identity stable. All access defers to the live
+  // `runtimeStateRef`; method access is bound to the live ref so destructured
+  // references work; `has` reflects the live ref's surface; symbol/`then`
+  // reads return `undefined` so capability publication and `await` probes
+  // don't error before the runtime is wired.
+  type GameEnginePluginState = import('./types/state').GameEnginePluginState;
+  const runtimeTarget = Object.create(null) as GameEnginePluginState;
+  const runtimeView: GameEnginePluginState = new Proxy<GameEnginePluginState>(runtimeTarget, {
+    get(_target, property) {
+      if (typeof property === 'symbol' || property === 'then') return undefined;
+      if (!runtimeStateRef) {
+        throw new Error(
+          `[slingshot-game-engine] runtime.${String(property)} accessed before setupPost completed; resolve GameEngineRuntimeCap from setupPost or later.`,
+        );
+      }
+      const value = Reflect.get(runtimeStateRef as object, property);
+      return typeof value === 'function' ? value.bind(runtimeStateRef) : value;
+    },
+    has(_target, property) {
+      if (!runtimeStateRef) return false;
+      return Reflect.has(runtimeStateRef as object, property);
+    },
+    ownKeys() {
+      if (!runtimeStateRef) return [];
+      return Reflect.ownKeys(runtimeStateRef as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (!runtimeStateRef) return undefined;
+      return Reflect.getOwnPropertyDescriptor(runtimeStateRef as object, property);
+    },
+  });
+
   // Lazy accessor closures for middleware that runs before adapters are resolved.
   const getSessionAdapter = (): SessionAdapterShape => {
     if (!refs.session) {
@@ -181,25 +218,14 @@ export function createGameEnginePackage(
     entities: [sessionModule, playerModule],
     capabilities: {
       provides: [
-        // Return a Proxy: the framework eagerly resolves capability values at
-        // setupMiddleware time, before our setupPost populates the runtime
-        // state. Field access throws a clear error if reached before
+        // Always return the same long-lived `runtimeView` Proxy. The framework
+        // calls `provider.resolve()` twice (once at `setupMiddleware`, once at
+        // `setupPost`) and republishes the cap slot each time — returning a
+        // single stable reference means consumers reading the cap at any
+        // lifecycle phase observe `===` identity. Field access defers to the
+        // live `runtimeStateRef` and throws a clear error if reached before
         // setupPost has run.
-        provideCapability(GameEngineRuntimeCap, () => {
-          type GameEnginePluginState = import('./types/state').GameEnginePluginState;
-          const target: GameEnginePluginState = Object.create(null) as GameEnginePluginState;
-          return new Proxy(target, {
-            get(_target, prop, receiver) {
-              if (typeof prop === 'symbol' || prop === 'then') return undefined;
-              if (!runtimeStateRef) {
-                throw new Error(
-                  `[slingshot-game-engine] runtime.${String(prop)} accessed before setupPost completed; resolve GameEngineRuntimeCap from setupPost or later.`,
-                );
-              }
-              return Reflect.get(runtimeStateRef, prop, receiver);
-            },
-          });
-        }),
+        provideCapability(GameEngineRuntimeCap, () => runtimeView),
       ],
     },
     middleware,

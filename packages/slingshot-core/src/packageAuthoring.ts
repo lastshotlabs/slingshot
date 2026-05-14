@@ -503,10 +503,10 @@ export interface SlingshotPackageDefinition {
    */
   readonly teardown?: () => void | Promise<void>;
   /**
-   * Manifest-seed lifecycle hook. Invoked after the server is fully started when
-   * manifest seed data is present. Mirrors `SlingshotPlugin.seed` — packages that
-   * own seedable resources (orgs, users, etc.) read their slice from
-   * `manifestSeed` and publish cross-package references via `seedState`.
+   * Idempotent seed lifecycle hook. Invoked after the server is fully started
+   * when declarative seed input is present. Mirrors `SlingshotPlugin.seed` —
+   * packages that own seedable resources (orgs, users, etc.) read their slice
+   * from `seedInput` and publish cross-package references via `seedState`.
    */
   readonly seed?: (ctx: PluginSeedContext) => void | Promise<void>;
   /** Contract metadata when the package was produced through `definePackageContract`. */
@@ -566,10 +566,10 @@ export interface DefinePackageInput {
    */
   readonly teardown?: () => void | Promise<void>;
   /**
-   * Manifest-seed lifecycle hook. Invoked after the server is fully started when
-   * manifest seed data is present. Mirrors `SlingshotPlugin.seed` — packages that
-   * own seedable resources read their slice from `manifestSeed` and publish
-   * cross-package references via `seedState`.
+   * Idempotent seed lifecycle hook. Invoked after the server is fully started
+   * when declarative seed input is present. Mirrors `SlingshotPlugin.seed` —
+   * packages that own seedable resources read their slice from `seedInput`
+   * and publish cross-package references via `seedState`.
    */
   readonly seed?: (ctx: PluginSeedContext) => void | Promise<void>;
   /**

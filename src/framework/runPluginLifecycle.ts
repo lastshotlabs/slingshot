@@ -318,16 +318,16 @@ export async function runPluginPost(
 /**
  * Run the `seed()` phase for all sorted plugins in dependency order.
  *
- * Called after the server is fully started when manifest seed data is present.
- * Each plugin reads the keys it owns from `manifestSeed` and writes
- * cross-plugin references (e.g. created user IDs) to the shared `seedState`
- * map. Must be idempotent — safe to call on every boot.
+ * Called after the server is fully started when declarative seed input is
+ * present. Each plugin/package reads the keys it owns from `seedInput` and
+ * writes cross-plugin references (e.g. created user IDs) to the shared
+ * `seedState` map. Must be idempotent — safe to call on every boot.
  *
  * @param sortedPlugins - Plugins in topological order.
  * @param app - The fully-assembled `OpenAPIHono` app instance.
  * @param bus - The instance-owned `SlingshotEventBus`.
  * @param events - The event publisher shared across all plugins.
- * @param manifestSeed - Raw manifest seed data.
+ * @param seedInput - Raw declarative seed input.
  * @param tracer - Optional OTel tracer.
  */
 export async function runPluginSeed(
@@ -335,7 +335,7 @@ export async function runPluginSeed(
   app: OpenAPIHono<AppEnv>,
   bus: SlingshotEventBus,
   events: SlingshotEvents,
-  manifestSeed: Record<string, unknown>,
+  seedInput: Record<string, unknown>,
   tracer?: Tracer,
 ): Promise<void> {
   const seedState = new Map<string, unknown>();
@@ -346,10 +346,10 @@ export async function runPluginSeed(
         await withSpan(tracer, `slingshot.plugin.${plugin.name}.seed`, async span => {
           span.setAttribute('slingshot.plugin.name', plugin.name);
           span.setAttribute('slingshot.plugin.phase', 'seed');
-          await seed({ app, bus, events, manifestSeed, seedState });
+          await seed({ app, bus, events, seedInput, seedState });
         });
       } else {
-        await seed({ app, bus, events, manifestSeed, seedState });
+        await seed({ app, bus, events, seedInput, seedState });
       }
     }
   }

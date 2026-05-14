@@ -674,9 +674,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
      * Plain Hono apps call setup() directly since there is no framework to orchestrate phases.
      * Calls setupMiddleware then setupRoutes in sequence.
      */
-    async seed({ manifestSeed, seedState }: PluginSeedContext) {
+    async seed({ seedInput, seedState }: PluginSeedContext) {
       const result = await bootstrapReady;
-      const users = manifestSeed.users as
+      const users = seedInput.users as
         | ReadonlyArray<{ email: string; password: string; superAdmin?: boolean }>
         | undefined;
       if (!users?.length) return;

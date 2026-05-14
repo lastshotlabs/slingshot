@@ -493,7 +493,7 @@ export function createOrganizationsPackage(
       );
     },
 
-    async seed({ app, manifestSeed, seedState }: PluginSeedContext) {
+    async seed({ app, seedInput, seedState }: PluginSeedContext) {
       const orgService = getOrganizationsOrgServiceOrNull(getPluginState(app));
       if (!orgService) return;
 
@@ -504,7 +504,7 @@ export function createOrganizationsPackage(
         metadata?: Record<string, unknown>;
         members?: ReadonlyArray<{ email: string; roles?: string[] }>;
       };
-      const orgs = manifestSeed.orgs as ReadonlyArray<SeedOrg> | undefined;
+      const orgs = seedInput.orgs as ReadonlyArray<SeedOrg> | undefined;
       if (!orgs?.length) return;
 
       for (const seedOrg of orgs) {

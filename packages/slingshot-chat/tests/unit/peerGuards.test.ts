@@ -2,9 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import {
-  ASSETS_PLUGIN_STATE_KEY,
   type AppEnv,
-  POLLS_PLUGIN_STATE_KEY,
+  PACKAGE_CAPABILITIES_PREFIX,
   attachContext,
 } from '@lastshotlabs/slingshot-core';
 import {
@@ -15,8 +14,10 @@ import {
 function buildApp(opts: { hasPolls?: boolean; hasAssets?: boolean }) {
   const app = new Hono<AppEnv>();
   const pluginState = new Map<string, unknown>();
-  if (opts.hasPolls) pluginState.set(POLLS_PLUGIN_STATE_KEY, {});
-  if (opts.hasAssets) pluginState.set(ASSETS_PLUGIN_STATE_KEY, {});
+  // Mirror what `publishPackageRuntimeState()` does for a registered package —
+  // each package's slot is the only canonical signal for `isPackageRegistered()`.
+  if (opts.hasPolls) pluginState.set(`${PACKAGE_CAPABILITIES_PREFIX}slingshot-polls`, {});
+  if (opts.hasAssets) pluginState.set(`${PACKAGE_CAPABILITIES_PREFIX}slingshot-assets`, {});
 
   attachContext(app, {
     app,

@@ -7,6 +7,7 @@ import type {
   RoutePermissionConfig,
   RouteRateLimitConfig,
 } from './entityRouteConfig';
+import { getContextOrNull } from './context/contextStore';
 import type { Actor } from './identity';
 import type { PluginSeedContext, PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';
@@ -1158,6 +1159,39 @@ export const route = Object.freeze({
  * (out-of-request hooks) instead.
  */
 export const PACKAGE_CAPABILITIES_PREFIX = 'slingshot:package:capabilities:';
+
+/**
+ * Detect whether a `definePackage(...)`-authored package is registered on the
+ * active app context.
+ *
+ * Works by checking for the framework-owned capabilities slot that
+ * `publishPackageRuntimeState()` writes for every registered package (always,
+ * even when the package publishes no capabilities of its own). Use this when a
+ * package needs to gate behavior on the presence of a sibling package without
+ * importing that sibling's typed capability handle.
+ *
+ * Returns `false` when the app context is missing or when the slot has not
+ * been published yet — i.e. during early `setupMiddleware` of the FIRST
+ * package, before any sibling has been bootstrapped.
+ *
+ * @example
+ * ```ts
+ * import { isPackageRegistered } from '@lastshotlabs/slingshot-core';
+ *
+ * if (isPackageRegistered(app, 'slingshot-assets')) {
+ *   // Mount attachment routes…
+ * }
+ * ```
+ *
+ * @param app - The Hono app instance with a `SlingshotContext` attached.
+ * @param packageName - The exact `pkg.name` declared in `definePackage({ name })`.
+ * @returns `true` when the package's capabilities slot has been published.
+ */
+export function isPackageRegistered(app: object, packageName: string): boolean {
+  const ctx = getContextOrNull(app);
+  if (!ctx) return false;
+  return ctx.pluginState.has(`${PACKAGE_CAPABILITIES_PREFIX}${packageName}`);
+}
 
 /**
  * Build the `capabilityProviders` map key for a capability handle.

@@ -1,7 +1,7 @@
 /**
  * Optional-peer 503 guards for community.
  *
- * Fail loudly when a request uses an optional feature whose backing plugin
+ * Fail loudly when a request uses an optional feature whose backing package
  * is absent. Must run BEFORE any persistence so no side effects occur on
  * a 503 path.
  *
@@ -14,18 +14,14 @@
 import type { Context, Next } from 'hono';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import { isPackageRegistered } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import {
-  ASSETS_PLUGIN_STATE_KEY,
-  POLLS_PLUGIN_STATE_KEY,
-  getPluginStateOrNull,
-} from '@lastshotlabs/slingshot-core';
 
 /**
  * Build the 503 guard for poll features in community threads/replies.
  *
  * Checks if the request body contains a `poll` field. If so, verifies
- * that `slingshot-polls` is registered in pluginState.
+ * that `slingshot-polls` is registered.
  */
 export function buildPollRequiredGuard(app: Hono<AppEnv>) {
   return async (c: Context, next: Next) => {
@@ -39,12 +35,11 @@ export function buildPollRequiredGuard(app: Hono<AppEnv>) {
     }
 
     if (body.poll) {
-      const hasPolls = getPluginStateOrNull(app)?.has(POLLS_PLUGIN_STATE_KEY) ?? false;
-      if (!hasPolls) {
+      if (!isPackageRegistered(app, 'slingshot-polls')) {
         throw new HTTPException(503, {
           message:
-            'slingshot-polls plugin is required for poll features but is not registered. ' +
-            'Add slingshot-polls to your app manifest or plugin list.',
+            'slingshot-polls is required for poll features but is not registered. ' +
+            'Add createPollsPackage() to your app\'s `packages` array.',
         });
       }
     }
@@ -57,7 +52,7 @@ export function buildPollRequiredGuard(app: Hono<AppEnv>) {
  * Build the 503 guard for attachment features in community threads/replies.
  *
  * Checks if the request body contains a non-empty `attachments` array. If
- * so, verifies that `slingshot-assets` is registered in pluginState.
+ * so, verifies that `slingshot-assets` is registered.
  */
 export function buildAttachmentRequiredGuard(app: Hono<AppEnv>) {
   return async (c: Context, next: Next) => {
@@ -71,12 +66,11 @@ export function buildAttachmentRequiredGuard(app: Hono<AppEnv>) {
     }
 
     if (Array.isArray(body.attachments) && body.attachments.length > 0) {
-      const hasAssets = getPluginStateOrNull(app)?.has(ASSETS_PLUGIN_STATE_KEY) ?? false;
-      if (!hasAssets) {
+      if (!isPackageRegistered(app, 'slingshot-assets')) {
         throw new HTTPException(503, {
           message:
-            'slingshot-assets plugin is required for attachment features but is not registered. ' +
-            'Add slingshot-assets to your app manifest or plugin list.',
+            'slingshot-assets is required for attachment features but is not registered. ' +
+            'Add createAssetsPackage() to your app\'s `packages` array.',
         });
       }
     }

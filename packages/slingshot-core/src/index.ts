@@ -145,6 +145,7 @@ export {
   entityRef,
   inspectPackage,
   PACKAGE_CAPABILITIES_PREFIX,
+  isPackageRegistered,
   provideCapability,
   registerPluginCapabilities,
   resolveCapabilityValue,

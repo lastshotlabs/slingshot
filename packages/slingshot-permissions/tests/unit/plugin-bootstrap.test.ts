@@ -462,7 +462,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       resourceId: null,
       roles: ['super-admin'],
       effect: 'allow',
-      grantedBy: 'manifest-seed',
+      grantedBy: 'seed',
     });
     expect(info).toHaveBeenCalledWith(expect.stringContaining('Granted super-admin'));
   });

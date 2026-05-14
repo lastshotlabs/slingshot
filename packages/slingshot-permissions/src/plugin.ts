@@ -362,7 +362,7 @@ export function createPermissionsPackage(
           resourceId: null,
           roles: [SUPER_ADMIN_ROLE],
           effect: 'allow',
-          grantedBy: 'manifest-seed',
+          grantedBy: 'seed',
         });
         logger.info(`[slingshot-permissions seed] Granted super-admin to '${email}'.`);
       }

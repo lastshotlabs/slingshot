@@ -534,7 +534,7 @@ export function createOrganizationsPackage(
             );
             continue;
           }
-          await orgService.addOrgMember(org.id, userId, member.roles ?? [], 'manifest-seed');
+          await orgService.addOrgMember(org.id, userId, member.roles ?? [], 'seed');
           logger.info(
             `[slingshot-organizations seed] Added '${member.email}' to org '${seedOrg.slug}'.`,
           );

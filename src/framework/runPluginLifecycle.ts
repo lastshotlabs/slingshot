@@ -80,16 +80,24 @@ function getEarliestPhase(p: SlingshotPlugin): number {
   if (p.setupMiddleware) return 0;
   if (p.setupRoutes) return 1;
   if (p.setupPost) return 2;
-  return 3; // setup-only (standalone)
+  if (p.seed) return 3;
+  return 4; // setup-only (standalone)
 }
 
-const PHASE_NAMES = ['setupMiddleware', 'setupRoutes', 'setupPost', 'setup-only (standalone)'];
+const PHASE_NAMES = [
+  'setupMiddleware',
+  'setupRoutes',
+  'setupPost',
+  'seed',
+  'setup-only (standalone)',
+];
 
 function participatesInFrameworkLifecycle(plugin: SlingshotPlugin): boolean {
   return (
     typeof plugin.setupMiddleware === 'function' ||
     typeof plugin.setupRoutes === 'function' ||
-    typeof plugin.setupPost === 'function'
+    typeof plugin.setupPost === 'function' ||
+    typeof plugin.seed === 'function'
   );
 }
 
@@ -144,9 +152,15 @@ export function validateAndSortPlugins(plugins: SlingshotPlugin[]): SlingshotPlu
       }
     }
     // Each plugin must define at least one lifecycle method
-    if (!plugin.setupMiddleware && !plugin.setupRoutes && !plugin.setupPost && !plugin.setup) {
+    if (
+      !plugin.setupMiddleware &&
+      !plugin.setupRoutes &&
+      !plugin.setupPost &&
+      !plugin.setup &&
+      !plugin.seed
+    ) {
       throw new Error(
-        `[slingshot] Plugin "${plugin.name}" must define at least one of: setupMiddleware, setupRoutes, setupPost, or setup.`,
+        `[slingshot] Plugin "${plugin.name}" must define at least one of: setupMiddleware, setupRoutes, setupPost, seed, or setup.`,
       );
     }
     // setup()-only plugins are standalone-only — the framework skips them
@@ -160,7 +174,7 @@ export function validateAndSortPlugins(plugins: SlingshotPlugin[]): SlingshotPlu
   // Cross-phase dependency validation
   for (const plugin of plugins) {
     const pluginPhase = getEarliestPhase(plugin);
-    if (pluginPhase === 3) continue; // standalone-only: no framework phase to validate
+    if (pluginPhase === 4) continue; // standalone-only: no framework phase to validate
     for (const depName of plugin.dependencies ?? []) {
       const dep = nameToPlugin.get(depName);
       if (!dep)

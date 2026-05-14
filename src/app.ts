@@ -23,6 +23,7 @@ import {
   runPluginMiddleware,
   runPluginPost,
   runPluginRoutes,
+  runPluginSeed,
   validateAndSortPlugins,
 } from '@framework/runPluginLifecycle';
 import { resolveSecretBundle } from '@framework/secrets';
@@ -285,6 +286,28 @@ export interface CreateAppConfig<T extends object = object> {
    */
   packages?: readonly SlingshotPackageDefinition[];
   /**
+   * Optional declarative seed input. When set, the framework calls each
+   * plugin's and package's `seed()` lifecycle hook after `setupPost` so they
+   * can create idempotent default rows (users, orgs, super-admin grants,
+   * etc.). Each plugin/package reads the keys it owns from this record and
+   * writes cross-plugin references (e.g. created user IDs) to the shared
+   * `seedState` map provided by the framework.
+   *
+   * Omit to skip the seed phase entirely.
+   *
+   * @example
+   * ```ts
+   * createApp({
+   *   packages: [createPermissionsPackage(), createOrganizationsPackage()],
+   *   seed: {
+   *     users: [{ email: 'owner@example.com', password: '…', superAdmin: true }],
+   *     orgs:  [{ name: 'Acme', slug: 'acme', members: [{ email: 'owner@example.com' }] }],
+   *   },
+   * });
+   * ```
+   */
+  seed?: Record<string, unknown>;
+  /**
    * Event bus for cross-plugin communication. Defaults to an in-process EventEmitter adapter.
    */
   eventBus?: SlingshotEventBus;
@@ -457,6 +480,8 @@ interface AppAssembly extends AppBootstrap {
   tenantCacheCarrier: {
     cache: import('@framework/middleware/tenant').TenantResolutionCache | null;
   };
+  /** Declarative seed input forwarded from `CreateAppConfig.seed`. */
+  seedInput: Record<string, unknown> | undefined;
 }
 
 async function cleanupBootstrapFailure(bootstrap: AppBootstrap): Promise<void> {
@@ -757,7 +782,7 @@ async function assembleApp<T extends object>(
   app.use('*', createActorResolutionMiddleware());
   for (const mw of middleware) app.use(mw);
 
-  return { ...bootstrap, app, ctx, tenantCacheCarrier };
+  return { ...bootstrap, app, ctx, tenantCacheCarrier, seedInput: config.seed };
 }
 
 // ---------------------------------------------------------------------------
@@ -850,6 +875,7 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
     drain,
     tenantCacheCarrier,
     infra,
+    seedInput,
   } = assembly;
   const tracer = getTracer(assembly.tracingConfig);
   const activeFrameworkPlugins = sortedPlugins.filter(
@@ -859,6 +885,16 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
   await withSpan(tracer, 'slingshot.bootstrap.post', async () => {
     await runPluginPost(sortedPlugins, app, infra.frameworkConfig, bus, events, tracer);
   });
+
+  // Declarative seed phase. Runs only when the caller passed `seed: {...}` on
+  // CreateAppConfig — each plugin/package reads its own slice and writes
+  // cross-plugin references into the shared seedState map. Must be
+  // idempotent; safe to call on every boot.
+  if (seedInput !== undefined) {
+    await withSpan(tracer, 'slingshot.bootstrap.seed', async () => {
+      await runPluginSeed(sortedPlugins, app, bus, events, seedInput, tracer);
+    });
+  }
 
   if (kafkaConnectors) {
     await withSpan(tracer, 'slingshot.bootstrap.kafka_connectors', async () => {

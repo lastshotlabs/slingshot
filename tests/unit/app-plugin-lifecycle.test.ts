@@ -110,7 +110,7 @@ describe('Plugin lifecycle', () => {
       name: 'empty-plugin',
     } as unknown as SlingshotPlugin;
     await expect(createApp({ ...baseConfig, plugins: [badPlugin] })).rejects.toThrow(
-      'Plugin "empty-plugin" must define at least one of: setupMiddleware, setupRoutes, setupPost, or setup',
+      'Plugin "empty-plugin" must define at least one of: setupMiddleware, setupRoutes, setupPost, seed, or setup',
     );
   });
 

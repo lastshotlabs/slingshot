@@ -148,6 +148,7 @@ export const appConfigSchema = z
     versioning: z.union([versioningObjectSchema.loose(), z.array(z.string())]).optional(),
     plugins: z.array(z.unknown()).optional(),
     packages: z.array(z.unknown()).optional(),
+    seed: z.record(z.string(), z.unknown()).optional(),
     requestScopes: z.array(z.unknown()).optional(),
     configs: z.array(z.unknown()).optional(),
     eventBus: z.unknown().optional(),

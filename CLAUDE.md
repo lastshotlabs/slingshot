@@ -120,7 +120,11 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 8. `mountRoutes()` and `mountOpenApiDocs()` finalize HTTP surfaces.
 9. `runPluginPost()` runs `entityPlugin.setupPost → publishPackageRuntimeState (second pass)
    → pkg.setupPost` for compiled packages; plain plugins just call `setupPost`.
-10. `finalizeContext()` freezes the context.
+10. `runPluginSeed()` — only when `CreateAppConfig.seed: {…}` was provided — calls each
+    plugin's/package's `seed()` hook in dependency order. Each consumer reads its slice
+    of `seedInput` and writes cross-plugin references (e.g. created user IDs) into the
+    shared `seedState` map. Must be idempotent.
+11. `finalizeContext()` freezes the context.
 
 `publishPackageRuntimeState()` is invoked twice per package (after middleware and
 again before post-hooks). Capability resolvers registered via

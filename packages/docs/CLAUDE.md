@@ -28,3 +28,31 @@ sync pipeline and the API reference generator.
 - **Changing agent guidance or top-level onboarding**: update `src/content/docs/start-here.mdx`, `src/content/docs/agent-flows/`, `astro.config.mjs`, root `CLAUDE.md`, and `slingshot-docs/documentation-policy.md` together
 - **Changing API generation**: update `generate-api.ts`, then run `bun run docs:api`
 - **Changing sync behavior**: update `sync-workspace-docs.ts`, then verify the generated package pages still match the workspace
+
+## Doc Authoring Locations
+
+For any given package, three doc files coexist with overlapping audiences. They are authored
+independently — only the docs site is generated:
+
+| File                                                              | Authored where    | Synced from                                                      |
+| ----------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------- |
+| `packages/<pkg>/CLAUDE.md`                                        | hand-authored     | not synced — agent-facing, navigational                          |
+| `packages/<pkg>/README.md`                                        | hand-authored     | not synced — npm/GitHub-facing (see drift note below)            |
+| `packages/<pkg>/docs/human/index.md`                              | hand-authored     | canonical user-facing source                                     |
+| `packages/<pkg>/docs/{maintainer,operator,...}/**/*.md`           | hand-authored     | canonical per-lane source                                        |
+| `packages/docs/src/content/docs/packages/<pkg>/overview.md`       | generated         | from `docs/human/index.md` via `bun run docs:sync`               |
+| `packages/docs/src/content/docs/packages/<pkg>/<lane>/**/*.md`    | generated         | from `docs/<lane>/**/*.md` via `bun run docs:sync`               |
+| `packages/docs/src/content/docs/api/<pkg>/index.mdx`              | generated         | from `packages/<pkg>/src/**/*.ts` TSDoc via `bun run docs:api`   |
+| `packages/docs/src/content/docs/{guides,examples,...}/**/*.mdx`   | hand-authored     | top-level docs; not tied to any single package                   |
+
+### Drift hazard: README ↔ docs/human/index.md
+
+`sync-workspace-docs.ts` reads from `<pkg>/docs/` and writes into the Astro tree. It does
+**not** touch `<pkg>/README.md`. When the human guide and the README cover the same content
+(dependency tables, install snippets, the high-level "what does this package do" blurb), they
+drift silently — there is no validation step.
+
+**Convention:** keep `README.md` thin. Install / usage one-liner, link to the human guide
+for the canonical content, then a short "what it does" paragraph. Anything deeper belongs
+in `docs/human/index.md` only. If a README needs to mirror dependency tables or
+configuration walkthroughs, expect to update it by hand every time the human guide changes.

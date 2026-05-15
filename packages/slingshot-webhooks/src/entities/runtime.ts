@@ -6,7 +6,7 @@
  * transition contract. The exported `buildWebhookRuntimeAdapter()` builds
  * the high-level {@link WebhookRuntimeAdapter} from the captured entity
  * adapters; the package factory wires it into a closure-owned refs bag and
- * publishes it through {@link WebhookAdapterCap}.
+ * publishes it through {@link WebhooksAdapterCap}.
  *
  * This module is consumed by `./modules.ts`. Every function here returns
  * either a plain adapter transform `(adapter) => adapter` or a plain async
@@ -789,7 +789,7 @@ type AsyncCipher = {
 /**
  * Construct the high-level webhook runtime adapter from the captured entity
  * adapters. The returned adapter is the canonical surface published through
- * `WebhookAdapterCap` and consumed by the queue processor, delivery test
+ * `WebhooksAdapterCap` and consumed by the queue processor, delivery test
  * route, and event-bus subscribers.
  *
  * `definitionsRef` is a closure-shared reference filled in by the package

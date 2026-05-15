@@ -43,7 +43,7 @@ The package depends on `slingshot-auth` being registered first.
 ## Package Boundaries
 
 - Owns organization and group entity definitions, membership records, and invitation flows.
-- Owns the org service published as the `OrgServiceCap` capability (also accessible via the legacy `getOrganizationsOrgServiceOrNull` helper).
+- Owns the org service published as the `OrganizationsOrgServiceCap` capability (also accessible via the legacy `getOrganizationsOrgServiceOrNull` helper).
 - Depends on `slingshot-auth` for user auth middleware, route auth, and actor identity resolution.
 - Depends on `slingshot-entity` for entity-backed CRUD routes and config-driven runtime.
 - Does not own auth session management, user identity, or the permissions grant system.

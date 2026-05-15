@@ -5,7 +5,7 @@
  * WebhookDelivery entities, wires the queue lifecycle, dispatches delivery
  * jobs, supplies the `/endpoints/:id/test` and `/admin/deliveries/:id/replay`
  * routes, and mounts the inbound webhook receiver router. Cross-package
- * consumers resolve the runtime adapter via {@link WebhookAdapterCap}.
+ * consumers resolve the runtime adapter via {@link WebhooksAdapterCap}.
  *
  * Every adapter ref, queue handle, rate-limit backend, and inbound router
  * closure is owned by the factory's closure (Rule 3) — multiple package
@@ -49,7 +49,7 @@ import { wireEventSubscriptions } from './lib/eventWiring';
 import { logWebhookEvent } from './lib/log';
 import type { RateLimiter } from './lib/rateLimit';
 import { createSlidingWindowRateLimiter } from './lib/rateLimit';
-import { WebhookAdapterCap } from './public';
+import { WebhooksAdapterCap } from './public';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
 import { WEBHOOK_ROUTES } from './routes/index';
@@ -416,7 +416,7 @@ async function resolveTestDelivery(
  * normalization, secret encryption, and the transition state machine),
  * starts the queue lifecycle, supplies the bespoke `/endpoints/:id/test`
  * and `/admin/deliveries/:id/replay` routes plus the inbound webhook
- * receiver, and publishes the unified {@link WebhookAdapterCap} capability
+ * receiver, and publishes the unified {@link WebhooksAdapterCap} capability
  * once the runtime is ready.
  *
  * When `config.adapter` is supplied, the package skips entity wiring and
@@ -448,7 +448,7 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
   const definitionsRef: { current?: EventDefinitionRegistry } = {};
   let runtimeAdapter: WebhookAdapter | undefined;
 
-  // Forwarding view published through `WebhookAdapterCap`. Constructed once
+  // Forwarding view published through `WebhooksAdapterCap`. Constructed once
   // per package instance so consumers reading the cap at different lifecycle
   // phases observe a stable reference (===). All access defers to the live
   // `runtimeAdapter` ref — populated in `setupMiddleware` (external adapter
@@ -462,7 +462,7 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
       if (typeof property === 'symbol' || property === 'then') return undefined;
       if (!runtimeAdapter) {
         throw new WebhookRuntimeError(
-          'WebhookAdapterCap accessed before the runtime adapter was wired (read it from `setupPost` or later).',
+          'WebhooksAdapterCap accessed before the runtime adapter was wired (read it from `setupPost` or later).',
         );
       }
       const value = Reflect.get(runtimeAdapter as object, property);
@@ -532,7 +532,7 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
       // `setupPost`) and republishes the cap slot each time — returning a
       // single stable reference means consumers reading the cap at any
       // lifecycle phase observe `===` identity.
-      provides: [provideCapability(WebhookAdapterCap, () => adapterView)],
+      provides: [provideCapability(WebhooksAdapterCap, () => adapterView)],
     },
 
     async setupMiddleware() {

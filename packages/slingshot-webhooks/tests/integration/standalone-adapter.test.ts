@@ -56,7 +56,7 @@ describe('standalone adapter mode', () => {
     });
 
     try {
-      // `runtime` is the long-lived `WebhookAdapterCap` view (a stable Proxy
+      // `runtime` is the long-lived `WebhooksAdapterCap` view (a stable Proxy
       // that forwards to the live external adapter). It is not `===` to the
       // raw adapter itself; method access reads through to the underlying
       // reference.

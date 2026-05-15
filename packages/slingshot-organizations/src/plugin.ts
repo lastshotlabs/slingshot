@@ -46,7 +46,7 @@ import {
   type OrganizationsOrgService,
   getOrganizationsOrgServiceOrNull,
 } from './orgService';
-import { OrgServiceCap } from './public';
+import { OrganizationsOrgServiceCap } from './public';
 import { ORGANIZATIONS_RECONCILE_STATE_KEY, type OrganizationsReconcileService } from './reconcile';
 
 const memberRoleSchema = z.string().min(1);
@@ -459,7 +459,7 @@ export function createOrganizationsPackage(
       // reference means consumers reading the cap at any lifecycle phase
       // observe `===` identity. The service methods read `refs.organizations`
       // / `refs.members` lazily, so deferring still works the same way.
-      provides: [provideCapability(OrgServiceCap, () => orgServiceView)],
+      provides: [provideCapability(OrganizationsOrgServiceCap, () => orgServiceView)],
     },
 
     setupMiddleware(ctx: PluginSetupContext) {

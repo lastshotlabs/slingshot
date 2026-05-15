@@ -1,7 +1,7 @@
 /**
  * Public contract for `slingshot-webhooks`.
  *
- * Cross-package consumers resolve `WebhookAdapterCap` through `ctx.capabilities.require(...)`
+ * Cross-package consumers resolve `WebhooksAdapterCap` through `ctx.capabilities.require(...)`
  * to send/manage outbound webhook deliveries through the unified adapter.
  */
 
@@ -14,7 +14,7 @@ export const Webhooks = definePackageContract('slingshot-webhooks');
 /**
  * Capability handle for the unified webhook adapter.
  *
- * Cross-package consumers resolve it through `ctx.capabilities.require(WebhookAdapterCap)`
+ * Cross-package consumers resolve it through `ctx.capabilities.require(WebhooksAdapterCap)`
  * to send and manage outbound webhook deliveries.
  */
-export const WebhookAdapterCap = Webhooks.capability<WebhookAdapter>('adapter');
+export const WebhooksAdapterCap = Webhooks.capability<WebhookAdapter>('adapter');

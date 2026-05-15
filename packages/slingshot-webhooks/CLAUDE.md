@@ -4,7 +4,7 @@ Inbound and outbound webhook **package** with entity-backed endpoints + deliveri
 signing helpers, queue-backed retries, and provider-driven intake. Authored via
 `definePackage(...)` and consumed through
 `createApp({ packages: [createWebhooksPackage(...)] })`. Cross-package consumers
-resolve the unified runtime adapter via `WebhookAdapterCap`.
+resolve the unified runtime adapter via `WebhooksAdapterCap`.
 
 ## Key Files
 

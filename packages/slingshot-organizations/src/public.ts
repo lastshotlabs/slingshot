@@ -1,7 +1,7 @@
 /**
  * Public contract for `slingshot-organizations`.
  *
- * Cross-package consumers resolve `OrgServiceCap` through `ctx.capabilities.require(...)`.
+ * Cross-package consumers resolve `OrganizationsOrgServiceCap` through `ctx.capabilities.require(...)`.
  * The legacy `getOrganizationsOrgService(...)` helper is retained as a thin wrapper that
  * resolves through the same contract path.
  */
@@ -15,7 +15,7 @@ export const Organizations = definePackageContract('slingshot-organizations');
 /**
  * Capability handle for the organizations org service.
  *
- * Cross-package consumers resolve it through `ctx.capabilities.require(OrgServiceCap)`
+ * Cross-package consumers resolve it through `ctx.capabilities.require(OrganizationsOrgServiceCap)`
  * to look up org membership, create orgs, and manage org-scoped state.
  */
-export const OrgServiceCap = Organizations.capability<OrganizationsOrgService>('orgService');
+export const OrganizationsOrgServiceCap = Organizations.capability<OrganizationsOrgService>('orgService');

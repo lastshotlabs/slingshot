@@ -1,6 +1,6 @@
 import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
-// Note: `OrgServiceCap` lives in ./public; the helpers below resolve through the
+// Note: `OrganizationsOrgServiceCap` lives in ./public; the helpers below resolve through the
 // PACKAGE_CAPABILITIES_PREFIX slot directly to avoid a static cycle (public.ts
 // imports from this file).
 
@@ -75,7 +75,7 @@ export function getOrganizationsOrgServiceOrNull(
 
   // Contract resolution: read the capability slot the plugin writes via
   // `registerPluginCapabilities`. New consumers should prefer
-  // `ctx.capabilities.require(OrgServiceCap)` for typed access.
+  // `ctx.capabilities.require(OrganizationsOrgServiceCap)` for typed access.
   const slot = pluginState.get('slingshot:package:capabilities:slingshot-organizations') as
     | { orgService?: OrganizationsOrgService }
     | undefined;

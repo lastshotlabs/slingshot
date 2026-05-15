@@ -10,7 +10,7 @@ export { createWebhooksPackage } from './plugin';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
-export { Webhooks, WebhookAdapterCap } from './public';
+export { Webhooks, WebhooksAdapterCap } from './public';
 /**
  * Route identifiers mounted by the webhooks plugin.
  */

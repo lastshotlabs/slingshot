@@ -14,7 +14,7 @@ export type { OrganizationsPluginConfig, OrganizationsPluginDeps } from './plugi
 export { SlugConflictError, isUniqueViolationError } from './errors';
 /**
  * Accessors for the organization service registered by the package (resolves
- * through the typed `OrgServiceCap` capability under the hood).
+ * through the typed `OrganizationsOrgServiceCap` capability under the hood).
  */
 export { getOrganizationsOrgService, getOrganizationsOrgServiceOrNull } from './orgService';
 /**
@@ -24,7 +24,7 @@ export type { OrganizationsOrgService } from './orgService';
 /**
  * Provider-owned package contract for cross-package consumers.
  */
-export { Organizations, OrgServiceCap } from './public';
+export { Organizations, OrganizationsOrgServiceCap } from './public';
 /**
  * State key and accessors for the organizations reconciliation service.
  */

@@ -5,6 +5,7 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  deepFreeze,
   defineEvent,
   definePackage,
   getPermissionsStateOrNull,
@@ -13,6 +14,7 @@ import {
   provideCapability,
   publishPluginState,
   resolveRepo,
+  validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { InteractionsRuntimeCap } from './public';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
@@ -42,7 +44,9 @@ type InteractionsLogger = Pick<Console, 'warn' | 'info' | 'debug'>;
  * @returns A `SlingshotPackageDefinition` ready for `createApp({ packages })`.
  */
 export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageDefinition {
-  const config: InteractionsPluginConfig = interactionsPluginConfigSchema.parse(rawConfig);
+  const config: InteractionsPluginConfig = deepFreeze(
+    validatePluginConfig('slingshot-interactions', rawConfig, interactionsPluginConfigSchema),
+  );
 
   let interactionEventsAdapterRef: InteractionEventsAdapter | undefined;
   let stateRef: InteractionsPluginState | undefined;

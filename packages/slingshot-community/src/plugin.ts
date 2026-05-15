@@ -160,7 +160,7 @@ export function createCommunityPackage(
   rawConfig: CommunityPluginConfig,
 ): SlingshotPackageDefinition {
   const config = deepFreeze(
-    validatePluginConfig(COMMUNITY_PLUGIN_STATE_KEY, rawConfig, communityPluginConfigSchema),
+    validatePluginConfig('slingshot-community', rawConfig, communityPluginConfigSchema),
   );
 
   // The `scoring` config is parsed and frozen here purely for validation —

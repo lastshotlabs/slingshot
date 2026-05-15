@@ -111,7 +111,7 @@ import { buildIncomingDispatch } from './ws/incoming';
  */
 export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackageDefinition {
   const config: Readonly<ChatPluginConfig> = deepFreeze(
-    validatePluginConfig(CHAT_PLUGIN_STATE_KEY, rawConfig, chatPluginConfigSchema),
+    validatePluginConfig('slingshot-chat', rawConfig, chatPluginConfigSchema),
   );
   const tenantId = config.tenantId ?? 'default';
   const mountPath = config.mountPath ?? '/chat';

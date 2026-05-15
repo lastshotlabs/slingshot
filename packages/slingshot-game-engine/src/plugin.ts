@@ -88,7 +88,7 @@ export function createGameEnginePackage(
 
   // Validate + freeze config at construction time (Rule 10).
   const config = deepFreeze(
-    validatePluginConfig(GAME_ENGINE_PLUGIN_STATE_KEY, configInput, GameEnginePluginConfigSchema),
+    validatePluginConfig('slingshot-game-engine', configInput, GameEnginePluginConfigSchema),
   );
 
   // ─── Closure-owned adapter refs (Rule 3 — no globals) ─────────────────────

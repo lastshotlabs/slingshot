@@ -7,6 +7,7 @@ import type {
 import {
   definePackage,
   provideCapability,
+  validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { buildActionRouter } from './actions/routes';
 import { SsrAssetManifestError, type ViteManifest, readAssetManifest } from './assets';
@@ -47,7 +48,7 @@ function toTagValue(value: unknown): string | null {
  * @returns A `SlingshotPackageDefinition` ready to pass to `createApp({ packages })`.
  */
 export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDefinition {
-  const validated = ssrPluginConfigSchema.parse(rawConfig);
+  const validated = validatePluginConfig('slingshot-ssr', rawConfig, ssrPluginConfigSchema);
 
   // Pick the route source. Explicit `routeSource` wins; otherwise build a
   // file-based source from `serverRoutesDir`. The schema refine guarantees at

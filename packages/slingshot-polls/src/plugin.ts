@@ -88,7 +88,7 @@ export function createPollsPackage(
 ): SlingshotPackageDefinition {
   // Validate + freeze config at construction time (Rule 12).
   const config = deepFreeze(
-    validatePluginConfig(POLLS_PLUGIN_STATE_KEY, rawConfig, PollsPluginConfigSchema),
+    validatePluginConfig('slingshot-polls', rawConfig, PollsPluginConfigSchema),
   ) as PollsPluginConfig;
 
   // Closure-owned adapter refs populated by the entity modules' `onAdapter`

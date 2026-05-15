@@ -19,7 +19,9 @@ import {
   provideCapability,
   registerPluginCapabilities,
   resolveRepoAsync,
+  validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { z } from 'zod';
 import {
   PermissionsAdapterCap,
   PermissionsEvaluatorCap,
@@ -147,9 +149,29 @@ export interface PermissionsPluginConfig {
  * });
  * ```
  */
+/**
+ * Zod schema for `PermissionsPluginConfig`. Function-shaped fields
+ * (`groupResolver`, `logger`) are accepted via `z.custom`; numeric and string
+ * fields validate normally so apps get a clear error for typos like
+ * `maxGroupz`.
+ */
+const permissionsPluginConfigSchema = z.object({
+  adapter: z.enum(['sqlite', 'postgres', 'mongo', 'memory']).optional(),
+  groupResolver: z.custom<NonNullable<PermissionsPluginConfig['groupResolver']>>().optional(),
+  maxGroups: z.number().int().positive().optional(),
+  queryTimeoutMs: z.number().int().positive().optional(),
+  failOpenOnGroupExpansionError: z.boolean().optional(),
+  logger: z.custom<Logger>().optional(),
+});
+
 export function createPermissionsPackage(
-  config?: PermissionsPluginConfig,
+  rawConfig?: PermissionsPluginConfig,
 ): SlingshotPackageDefinition {
+  const config: PermissionsPluginConfig = validatePluginConfig(
+    'slingshot-permissions',
+    rawConfig ?? {},
+    permissionsPluginConfigSchema,
+  );
   const logger: Logger =
     config?.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-permissions' } });
   // Captured from setupMiddleware so the health capability can return a

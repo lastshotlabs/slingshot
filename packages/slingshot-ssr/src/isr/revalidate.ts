@@ -2,21 +2,9 @@
 import type { IsrCacheAdapter } from './types';
 
 /**
- * Stable plugin-state key used by `slingshot-ssr` ISR invalidators.
- *
- * @deprecated The canonical way to resolve ISR invalidators is through the
- *   typed `IsrInvalidatorsCap` capability published by the SSR package.
- *   This string-key handle remains documented for back-compat with custom
- *   `pluginState` access patterns; new code should resolve the cap instead.
- */
-export const SSR_ISR_INVALIDATORS_STATE_KEY = 'slingshot-ssr:isr' as const;
-
-/**
  * ISR invalidation utilities bound to a specific cache adapter instance.
- *
- * Created by `createIsrInvalidators()` and stored in `pluginState` under
- * `SSR_ISR_INVALIDATORS_STATE_KEY`. Server actions and route handlers retrieve
- * them via `bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY)`.
+ * Resolved by consumers through `IsrInvalidatorsCap` published by the SSR
+ * package.
  */
 export interface IsrInvalidators {
   /**
@@ -26,12 +14,6 @@ export interface IsrInvalidators {
    * render. The result is then cached again if `revalidate` is set.
    *
    * @param path - The URL pathname to invalidate (e.g. `'/posts/nba-finals'`).
-   *
-   * @example
-   * ```ts
-   * const { revalidatePath } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
-   * await revalidatePath('/posts');
-   * ```
    */
   revalidatePath(path: string): Promise<void>;
 
@@ -42,13 +24,6 @@ export interface IsrInvalidators {
    * or broad tags like `'posts'` to invalidate all pages that list posts.
    *
    * @param tag - The tag to invalidate (e.g. `'posts'`, `'post:abc123'`).
-   *
-   * @example
-   * ```ts
-   * const { revalidateTag } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
-   * await revalidateTag('posts');              // all listing pages
-   * await revalidateTag(`post:${post.id}`);   // specific post page
-   * ```
    */
   revalidateTag(tag: string): Promise<void>;
 }
@@ -56,24 +31,12 @@ export interface IsrInvalidators {
 /**
  * Create ISR invalidation utilities bound to a specific cache adapter.
  *
- * The returned object is stored in `pluginState` during `createSsrPackage()`
- * setup so that server actions and route handlers can retrieve it without
- * importing from a global singleton (Rule 3 — no module-level mutable state).
+ * Published through `IsrInvalidatorsCap` during `createSsrPackage()` setup so
+ * that server actions and route handlers can resolve it without importing from
+ * a global singleton.
  *
  * @param cache - The ISR cache adapter to bind to.
  * @returns An {@link IsrInvalidators} object with `revalidatePath` and `revalidateTag`.
- *
- * @example
- * ```ts
- * // In plugin setup:
- * const invalidators = createIsrInvalidators(isrAdapter);
- * publishPluginState(getContext(app).pluginState, SSR_ISR_INVALIDATORS_STATE_KEY, invalidators);
- *
- * // In a server action or route handler:
- * const { revalidatePath, revalidateTag } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
- * await revalidatePath('/posts');
- * await revalidateTag('posts');
- * ```
  */
 export function createIsrInvalidators(cache: IsrCacheAdapter): IsrInvalidators {
   return {

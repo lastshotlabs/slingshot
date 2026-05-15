@@ -1,7 +1,4 @@
-import {
-  POLLS_PLUGIN_STATE_KEY as CORE_POLLS_PLUGIN_STATE_KEY,
-  definePluginStateKey,
-} from '@lastshotlabs/slingshot-core';
+import { definePluginStateKey } from '@lastshotlabs/slingshot-core';
 import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -18,10 +15,10 @@ import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
 /**
  * Plugin state key for polls plugin state in `ctx.pluginState`.
  *
- * Plain string matching the `plugin.name`. Consumers look up polls
- * state via `ctx.pluginState.get(POLLS_PLUGIN_STATE_KEY)`.
+ * Plain string matching the `plugin.name`. Used internally by the polls
+ * package to publish its runtime slot.
  */
-export const POLLS_PLUGIN_STATE_KEY = CORE_POLLS_PLUGIN_STATE_KEY;
+export const POLLS_PLUGIN_STATE_KEY = 'slingshot-polls' as const;
 
 // --- Create inputs ---
 
@@ -268,9 +265,10 @@ export interface PollsPluginState {
 /**
  * Typed plugin-state key for the polls runtime slot.
  *
- * @deprecated Resolve the polls runtime via `PollsRuntimeCap` (from
- * `@lastshotlabs/slingshot-polls`) using `ctx.capabilities.require(PollsRuntimeCap)`.
- * This plugin-state slot is preserved for back-compat.
+ * @internal Cross-package code should resolve `PollsRuntimeCap` via
+ * `ctx.capabilities.require(...)` instead of reading this slot directly. Used
+ * internally by the polls package to publish its runtime and by the package's
+ * test harness to inspect it.
  */
 export const POLLS_RUNTIME_KEY = definePluginStateKey<PollsPluginState>(POLLS_PLUGIN_STATE_KEY);
 

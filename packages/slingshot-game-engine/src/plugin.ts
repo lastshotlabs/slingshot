@@ -443,20 +443,3 @@ export function createGameEnginePackage(
   });
 }
 
-/**
- * Register a game definition with an existing game engine package instance.
- *
- * Call this during application setup, before the package's `setupRoutes` runs.
- * For the primary registration path, pass games via
- * `createGameEnginePackage({ games: [...] })`.
- *
- * @deprecated Use `createGameEnginePackage({ games: [...] })` instead.
- */
-export function registerGame(
-  pkg: SlingshotPackageDefinition & { _registry?: Map<string, GameDefinition> },
-  definition: GameDefinition,
-): void {
-  if (pkg._registry) {
-    pkg._registry.set(definition.name, definition);
-  }
-}

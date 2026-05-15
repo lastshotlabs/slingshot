@@ -6,7 +6,7 @@ export type { MemoryIsrCacheOptions } from './memory';
 
 export { createRedisIsrCache } from './redis';
 
-export { createIsrInvalidators, SSR_ISR_INVALIDATORS_STATE_KEY } from './revalidate';
+export { createIsrInvalidators } from './revalidate';
 export type { IsrInvalidators } from './revalidate';
 
 export type { IsrCacheAdapter, IsrCacheEntry, IsrConfig, RedisLike, RedisMultiLike } from './types';

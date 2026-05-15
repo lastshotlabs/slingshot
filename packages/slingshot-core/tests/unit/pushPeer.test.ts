@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { PUSH_PLUGIN_STATE_KEY } from '../../src/pluginKeys';
 import { getPushFormatterPeer, getPushFormatterPeerOrNull } from '../../src/pushPeer';
+
+const PUSH_PLUGIN_STATE_KEY = 'slingshot-push' as const;
 
 describe('getPushFormatterPeerOrNull', () => {
   test('returns null for null input', () => {

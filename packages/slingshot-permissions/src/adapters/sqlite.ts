@@ -192,11 +192,6 @@ function rowToGrant(row: GrantRow): PermissionGrant {
  */
 export type PermissionsSqliteAdapter = TestablePermissionsAdapter;
 
-/** @deprecated Use createSqlitePermissionsAdapter — schema init is handled internally. */
-export function initPermissionsSchema(db: RuntimeSqliteDatabase): void {
-  runMigrations(db);
-}
-
 /**
  * Creates a SQLite-backed `PermissionsAdapter` using a `RuntimeSqliteDatabase`.
  *

@@ -4,8 +4,7 @@ Community/forum **package** with containers, threads, replies, moderation, react
 and entity-driven operations layered on the Slingshot runtime. Authored via
 `definePackage(...)` and consumed through
 `createApp({ packages: [createCommunityPackage(...)] })`. Cross-package consumers resolve the
-interactions peer via `CommunityInteractionsPeerCap` and the community plugin-state slot via
-`CommunityPluginStateRef`.
+interactions peer via `CommunityInteractionsPeerCap`.
 
 ## Key Files
 

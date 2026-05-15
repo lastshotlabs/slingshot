@@ -26,11 +26,6 @@ export { pollFactories, pollVoteFactories } from './entities/factories';
 // Operations
 export { pollOperations, pollVoteOperations } from './operations/index';
 
-// Plugin state key
-/**
- * @deprecated Use the typed `PollsRuntimeCap` capability instead.
- */
-export { POLLS_PLUGIN_STATE_KEY } from './types';
 export { POLL_VOTE_ERRORS, CLIENT_SAFE_POLL_EVENTS } from './types';
 
 /**

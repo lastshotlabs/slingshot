@@ -102,11 +102,12 @@ export type { ChatInteractionsPeer } from './public';
 
 /**
  * Plugin state key under which the chat package publishes a partial
- * `ChatPluginState` (currently `interactionsPeer`) for back-compat with
- * `getPublishedInteractionsPeerOrNull` consumers. Prefer the public contract
- * (`ChatInteractionsPeerCap`) for new cross-package code.
+ * `ChatPluginState` (currently `interactionsPeer`). Load-bearing internal
+ * infrastructure for the `probeChatPeer` / `getPublishedInteractionsPeerOrNull`
+ * bridge in `slingshot-interactions`.
  *
- * @deprecated Use the typed `ChatInteractionsPeerCap` capability instead.
+ * @internal Cross-package code should resolve `ChatInteractionsPeerCap` via
+ * `ctx.capabilities.require(...)` instead of reading this slot directly.
  */
 export { CHAT_PLUGIN_STATE_KEY } from './state';
 

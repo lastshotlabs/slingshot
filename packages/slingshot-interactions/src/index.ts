@@ -2,7 +2,11 @@ import './events';
 
 export { createInteractionsPackage } from './plugin';
 /**
- * @deprecated Use the typed `InteractionsRuntimeCap` capability instead.
+ * Stable key under which the interactions package publishes its runtime state.
+ *
+ * @internal Cross-package code should resolve `InteractionsRuntimeCap` via
+ * `ctx.capabilities.require(...)` instead of reading this slot directly. The
+ * export is retained for back-compat tests that verify slot publication.
  */
 export { INTERACTIONS_PLUGIN_STATE_KEY } from './state';
 export type { InteractionsPluginState } from './state';

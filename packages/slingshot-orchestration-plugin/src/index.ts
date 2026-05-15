@@ -9,7 +9,11 @@ export { createOrchestrationPackage } from './plugin';
  */
 export { getOrchestration, getOrchestrationOrNull } from './context';
 /**
- * @deprecated Use the typed `OrchestrationRuntimeCap` capability instead.
+ * Stable package name (`'slingshot-orchestration-plugin'`). Use this when
+ * declaring `dependencies: [...]` on a downstream plugin or package so the
+ * orchestration runtime is resolved before your hooks run. For runtime access
+ * to the orchestration handle itself, resolve `OrchestrationRuntimeCap` via
+ * `ctx.capabilities.require(...)`.
  */
 export { ORCHESTRATION_PLUGIN_STATE_KEY } from './context';
 /**

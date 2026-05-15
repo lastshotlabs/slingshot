@@ -68,9 +68,11 @@ export { GameEnginePluginConfigSchema } from './validation/config';
 // ── Plugin State Key ────────────────────────────────────────────
 
 /**
- * Stable key for reading or publishing the game-engine plugin state.
+ * Stable key under which the game-engine package publishes its runtime state.
  *
- * @deprecated Use the typed `GameEngineRuntimeCap` capability instead.
+ * @internal Cross-package code should resolve `GameEngineRuntimeCap` via
+ * `ctx.capabilities.require(...)` instead of reading this slot directly. The
+ * export is retained for back-compat tests that verify slot publication.
  */
 export { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
 

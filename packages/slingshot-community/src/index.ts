@@ -39,23 +39,17 @@ export type {
 
 /**
  * Runtime state shape published into `pluginState` under
- * `COMMUNITY_PLUGIN_STATE_KEY`. Prefer the public contract
- * (`CommunityInteractionsPeerCap`) for cross-package access; this slot exists
- * for back-compat with `getPublishedInteractionsPeerOrNull` consumers.
+ * `COMMUNITY_PLUGIN_STATE_KEY`. Cross-package consumers should resolve
+ * `CommunityInteractionsPeerCap` instead of reading the slot directly.
  */
 export type { CommunityPluginState } from './types/state';
 /**
- * @deprecated Use the typed `CommunityInteractionsPeerCap` capability for
- * cross-package access. The plugin-state slot remains populated to keep the
- * `probeCommunityPeer` / `getPublishedInteractionsPeerOrNull` bridge wired
- * during the deprecation window.
- */
-export { CommunityPluginStateRef } from './types/state';
-/**
- * Plugin state key for looking up community state in `ctx.pluginState`.
+ * Plugin state key under which the community package publishes its runtime
+ * state. Load-bearing internal infrastructure for the `probeCommunityPeer` /
+ * `getPublishedInteractionsPeerOrNull` bridge in `slingshot-interactions`.
  *
- * @deprecated Use the typed `CommunityInteractionsPeerCap` capability (or
- * `CommunityEntities` refs) instead.
+ * @internal Cross-package code should resolve `CommunityInteractionsPeerCap`
+ * via `ctx.capabilities.require(...)` instead of reading this slot directly.
  */
 export { COMMUNITY_PLUGIN_STATE_KEY } from './types/state';
 

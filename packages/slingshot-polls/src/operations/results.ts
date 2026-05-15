@@ -9,7 +9,7 @@
  */
 import { HTTPException } from 'hono/http-exception';
 import type { PollAdapter, PollVoteAdapter } from '../types/adapters';
-import type { PollResult, PollResultsResponse } from '../types/public';
+import type { PollResult, PollResultsResponse } from '../types';
 
 /**
  * Create the results handler.

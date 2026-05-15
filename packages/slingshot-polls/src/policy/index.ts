@@ -15,7 +15,7 @@
  */
 import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
 import { definePolicyDispatch } from '@lastshotlabs/slingshot-entity';
-import type { PollRecord, PollVoteRecord } from '../types/public';
+import type { PollRecord, PollVoteRecord } from '../types';
 
 /** Stable registry key for poll source policy. */
 export const POLL_SOURCE_POLICY_KEY = 'polls:sourcePolicy' as const;

@@ -8,7 +8,7 @@
  */
 
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
-import type { PollsPluginState } from './types/public';
+import type { PollsPluginState } from './types';
 
 /** Provider-owned package contract for `slingshot-polls`. */
 export const Polls = definePackageContract('slingshot-polls');

@@ -22,7 +22,7 @@ import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { getActorId } from '@lastshotlabs/slingshot-core';
 import type { PollAdapter, PollVoteAdapter } from '../types/adapters';
-import { POLL_VOTE_ERRORS } from '../types/public';
+import { POLL_VOTE_ERRORS } from '../types';
 
 function isPollVoteBody(value: unknown): value is { pollId: string; optionIndex: number } {
   if (typeof value !== 'object' || value === null) return false;

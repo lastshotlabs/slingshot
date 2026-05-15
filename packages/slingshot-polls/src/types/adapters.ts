@@ -7,7 +7,7 @@
  *
  * @internal
  */
-import type { PollRecord, PollVoteRecord } from './public';
+import type { PollRecord, PollVoteRecord } from './index';
 
 /** Resolved Poll entity adapter shape used internally by the plugin. */
 export interface PollAdapter {

@@ -36,8 +36,8 @@ import type {
   PollVoteRecord,
   PollsPluginConfig,
   PollsPluginState,
-} from './types/public';
-import { POLLS_RUNTIME_KEY } from './types/public';
+} from './types';
+import { POLLS_RUNTIME_KEY } from './types';
 
 const memoryInfra = {} as unknown as StoreInfra;
 

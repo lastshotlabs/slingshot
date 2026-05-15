@@ -54,7 +54,7 @@ import {
   type PollVoteRecord,
   type PollsPluginConfig,
   type PollsPluginState,
-} from './types/public';
+} from './types';
 import { PollsPluginConfigSchema } from './validation/config';
 import { buildPollSchemas } from './validation/polls';
 import { PollResultsParamsSchema } from './validation/results';

@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { startCloseSweep } from '../../src/lib/closeSweep';
 import type { PollAdapter } from '../../src/types/adapters';
-import type { PollRecord } from '../../src/types/public';
+import type { PollRecord } from '../../src/types';
 
 function makePoll(overrides: Partial<PollRecord> = {}): PollRecord {
   return {

@@ -44,6 +44,12 @@ export type {
  * for back-compat with `getPublishedInteractionsPeerOrNull` consumers.
  */
 export type { CommunityPluginState } from './types/state';
+/**
+ * @deprecated Use the typed `CommunityInteractionsPeerCap` capability for
+ * cross-package access. The plugin-state slot remains populated to keep the
+ * `probeCommunityPeer` / `getPublishedInteractionsPeerOrNull` bridge wired
+ * during the deprecation window.
+ */
 export { CommunityPluginStateRef } from './types/state';
 /**
  * Plugin state key for looking up community state in `ctx.pluginState`.

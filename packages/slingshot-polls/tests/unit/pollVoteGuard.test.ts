@@ -15,8 +15,8 @@ import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { buildPollVoteGuard } from '../../src/middleware/pollVoteGuard';
 import type { PollAdapter, PollVoteAdapter } from '../../src/types/adapters';
-import { POLL_VOTE_ERRORS } from '../../src/types/public';
-import type { PollRecord, PollVoteRecord } from '../../src/types/public';
+import { POLL_VOTE_ERRORS } from '../../src/types';
+import type { PollRecord, PollVoteRecord } from '../../src/types';
 
 function makePoll(overrides: Partial<PollRecord> = {}): PollRecord {
   return {

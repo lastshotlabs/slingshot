@@ -5,9 +5,13 @@ import './events';
  */
 export { createOrchestrationPackage } from './plugin';
 /**
- * Runtime lookup helpers and the plugin name used by Slingshot integrations.
+ * Runtime lookup helpers used by Slingshot integrations.
  */
-export { getOrchestration, getOrchestrationOrNull, ORCHESTRATION_PLUGIN_KEY } from './context';
+export { getOrchestration, getOrchestrationOrNull } from './context';
+/**
+ * @deprecated Use the typed `OrchestrationRuntimeCap` capability instead.
+ */
+export { ORCHESTRATION_PLUGIN_STATE_KEY } from './context';
 /**
  * Provider-owned package contract for cross-package consumers.
  */

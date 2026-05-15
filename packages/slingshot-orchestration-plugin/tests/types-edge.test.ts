@@ -40,8 +40,8 @@ describe('plugin public exports', () => {
     expect(pluginExports.orchestrationPluginConfigSchema).toBeDefined();
   });
 
-  test('exports ORCHESTRATION_PLUGIN_KEY', () => {
-    expect(pluginExports.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
+  test('exports ORCHESTRATION_PLUGIN_STATE_KEY', () => {
+    expect(pluginExports.ORCHESTRATION_PLUGIN_STATE_KEY).toBe('slingshot-orchestration-plugin');
   });
 
   test('exports InvalidResolverResultError', () => {

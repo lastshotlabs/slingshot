@@ -18,7 +18,7 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
+import { ORCHESTRATION_PLUGIN_STATE_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
 import * as pluginIndex from '../src/index';
 import { createOrchestrationPackage } from '../src/plugin';
 
@@ -160,12 +160,12 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
   });
 });
 
-describe('ORCHESTRATION_PLUGIN_KEY', () => {
+describe('ORCHESTRATION_PLUGIN_STATE_KEY', () => {
   test('is the string slingshot-orchestration-plugin', () => {
-    expect(ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
+    expect(ORCHESTRATION_PLUGIN_STATE_KEY).toBe('slingshot-orchestration-plugin');
   });
 
   test('is exported from the package index', () => {
-    expect(pluginIndex.ORCHESTRATION_PLUGIN_KEY).toBe('slingshot-orchestration-plugin');
+    expect(pluginIndex.ORCHESTRATION_PLUGIN_STATE_KEY).toBe('slingshot-orchestration-plugin');
   });
 });

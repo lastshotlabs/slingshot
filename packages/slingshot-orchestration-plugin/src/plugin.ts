@@ -12,7 +12,7 @@ import {
   type OrchestrationRuntime,
   createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY } from './context';
+import { ORCHESTRATION_PLUGIN_STATE_KEY } from './context';
 import { OrchestrationRuntimeCap } from './public';
 import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
@@ -119,7 +119,7 @@ export function createOrchestrationPackage(
   });
 
   return definePackage({
-    name: ORCHESTRATION_PLUGIN_KEY,
+    name: ORCHESTRATION_PLUGIN_STATE_KEY,
     dependencies: [],
     capabilities: {
       provides: [

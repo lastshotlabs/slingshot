@@ -16,7 +16,7 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
+import { ORCHESTRATION_PLUGIN_STATE_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
 import { createOrchestrationPackage } from '../src/plugin';
 
 // ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ describe('createOrchestrationPackage — metadata', () => {
   test('plugin has the correct name', () => {
     const adapter = makeMockAdapter();
     const plugin = createOrchestrationPackage({ adapter, tasks: [noopTask], routes: false });
-    expect(plugin.name).toBe(ORCHESTRATION_PLUGIN_KEY);
+    expect(plugin.name).toBe(ORCHESTRATION_PLUGIN_STATE_KEY);
     expect(plugin.name).toBe('slingshot-orchestration-plugin');
   });
 

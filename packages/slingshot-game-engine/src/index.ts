@@ -67,7 +67,11 @@ export { GameEnginePluginConfigSchema } from './validation/config';
 
 // ── Plugin State Key ────────────────────────────────────────────
 
-/** Stable key for reading or publishing the game-engine plugin state. */
+/**
+ * Stable key for reading or publishing the game-engine plugin state.
+ *
+ * @deprecated Use the typed `GameEngineRuntimeCap` capability instead.
+ */
 export { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
 
 /**

@@ -47,6 +47,9 @@ export type { CommunityPluginState } from './types/state';
 export { CommunityPluginStateRef } from './types/state';
 /**
  * Plugin state key for looking up community state in `ctx.pluginState`.
+ *
+ * @deprecated Use the typed `CommunityInteractionsPeerCap` capability (or
+ * `CommunityEntities` refs) instead.
  */
 export { COMMUNITY_PLUGIN_STATE_KEY } from './types/state';
 

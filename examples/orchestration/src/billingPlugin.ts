@@ -1,6 +1,6 @@
 import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
 import {
-  ORCHESTRATION_PLUGIN_KEY,
+  ORCHESTRATION_PLUGIN_STATE_KEY,
   getOrchestration,
 } from '@lastshotlabs/slingshot-orchestration-plugin';
 import { processInvoiceWorkflow } from './orchestration.ts';
@@ -8,7 +8,7 @@ import { processInvoiceWorkflow } from './orchestration.ts';
 export function createBillingApiPlugin(): SlingshotPlugin {
   return {
     name: 'billing-api',
-    dependencies: [ORCHESTRATION_PLUGIN_KEY],
+    dependencies: [ORCHESTRATION_PLUGIN_STATE_KEY],
     setupRoutes({ app }) {
       app.post('/billing/invoices/:invoiceId/process', async c => {
         const runtime = getOrchestration(getContext(app));

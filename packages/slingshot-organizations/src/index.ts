@@ -27,6 +27,10 @@ export type { OrganizationsOrgService } from './orgService';
 export { Organizations, OrganizationsOrgServiceCap } from './public';
 /**
  * State key and accessors for the organizations reconciliation service.
+ *
+ * @internal The reconcile service is intentionally non-cross-package; no typed
+ * capability exists yet. Treat this state-key export as internal infrastructure
+ * for orgs-owned wiring.
  */
 export {
   ORGANIZATIONS_RECONCILE_STATE_KEY,

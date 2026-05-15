@@ -105,6 +105,8 @@ export type { ChatInteractionsPeer } from './public';
  * `ChatPluginState` (currently `interactionsPeer`) for back-compat with
  * `getPublishedInteractionsPeerOrNull` consumers. Prefer the public contract
  * (`ChatInteractionsPeerCap`) for new cross-package code.
+ *
+ * @deprecated Use the typed `ChatInteractionsPeerCap` capability instead.
  */
 export { CHAT_PLUGIN_STATE_KEY } from './state';
 

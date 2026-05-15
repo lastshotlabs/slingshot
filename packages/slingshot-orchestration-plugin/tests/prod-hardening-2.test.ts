@@ -23,7 +23,7 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_KEY } from '../src/context';
+import { ORCHESTRATION_PLUGIN_STATE_KEY } from '../src/context';
 import { createOrchestrationPackage } from '../src/plugin';
 
 const noopTask = defineTask({

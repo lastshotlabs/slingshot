@@ -104,7 +104,7 @@ function compare(a: DeckCard, b: DeckCard): -1 | 0 | 1 {
  */
 function evaluatePokerHand(cards: Card[]): PokerHandResult {
   if (cards.length !== 5) {
-    throw new Error('Poker hand evaluation requires exactly 5 cards.');
+    throw new Error('[slingshot-game-engine] Poker hand evaluation requires exactly 5 cards.');
   }
 
   const sorted = [...cards].sort((a, b) => a.value - b.value);

@@ -473,6 +473,7 @@ export {
   validatePluginConfig,
   validateAdapterShape,
   disableRoutesSchema,
+  assertMountPath,
 } from './configValidation';
 export { isPublicPath } from './publicPath';
 

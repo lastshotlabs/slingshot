@@ -124,7 +124,7 @@ function requireS3Client(): S3ClientModule {
   try {
     return require('@aws-sdk/client-s3') as S3ClientModule;
   } catch {
-    throw new Error('@aws-sdk/client-s3 is not installed. Run: bun add @aws-sdk/client-s3');
+    throw new Error('[slingshot-assets] @aws-sdk/client-s3 is not installed. Run: bun add @aws-sdk/client-s3');
   }
 }
 
@@ -133,7 +133,7 @@ function requirePresigner(): PresignerModule {
     return require('@aws-sdk/s3-request-presigner') as PresignerModule;
   } catch {
     throw new Error(
-      '@aws-sdk/s3-request-presigner is not installed. Run: bun add @aws-sdk/s3-request-presigner',
+      '[slingshot-assets] @aws-sdk/s3-request-presigner is not installed. Run: bun add @aws-sdk/s3-request-presigner',
     );
   }
 }
@@ -142,7 +142,7 @@ function requireLibStorage(): LibStorageModule {
   try {
     return require('@aws-sdk/lib-storage') as LibStorageModule;
   } catch {
-    throw new Error('@aws-sdk/lib-storage is not installed. Run: bun add @aws-sdk/lib-storage');
+    throw new Error('[slingshot-assets] @aws-sdk/lib-storage is not installed. Run: bun add @aws-sdk/lib-storage');
   }
 }
 
@@ -289,7 +289,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): 
     }
   }
   // unreachable — loop always throws or returns before here
-  throw new Error('[s3Storage] withRetry: unreachable');
+  throw new Error('[slingshot-assets] withRetry: unreachable');
 }
 
 /**

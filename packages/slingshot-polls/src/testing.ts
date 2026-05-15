@@ -302,7 +302,7 @@ export async function createPollsTestApp(
   await runPackageLifecycle(plugin, ctx as never);
 
   const state = readPluginState(pluginState, POLLS_RUNTIME_KEY);
-  if (!state) throw new Error('Polls package did not register state — lifecycle failed');
+  if (!state) throw new Error('[slingshot-polls] Polls package did not register state — lifecycle failed');
 
   return { app, state, bus };
 }

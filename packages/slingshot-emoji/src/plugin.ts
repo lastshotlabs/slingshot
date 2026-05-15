@@ -1,6 +1,7 @@
 import type { DynamicEventBus, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import {
   type SlingshotPackageDefinition,
+  createConsoleLogger,
   definePackage,
   getContext,
   validatePluginConfig,
@@ -45,9 +46,10 @@ export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefiniti
     emojiPackageConfigSchema,
   );
   const frozenConfig = Object.freeze({ ...config });
+  const logger = createConsoleLogger({ base: { plugin: 'slingshot-emoji' } });
   if (frozenConfig.presignExpirySeconds !== undefined) {
-    console.warn(
-      '[slingshot-emoji] `presignExpirySeconds` is deprecated and ignored. Emoji asset URLs are owned by the upload/storage layer.',
+    logger.warn(
+      '`presignExpirySeconds` is deprecated and ignored. Emoji asset URLs are owned by the upload/storage layer.',
     );
   }
 
@@ -65,8 +67,8 @@ export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefiniti
         | null
         | undefined;
       if (!storageAdapter) {
-        console.warn(
-          '[slingshot-emoji] No storage adapter configured — emoji delete will not cascade to storage.',
+        logger.warn(
+          'No storage adapter configured — emoji delete will not cascade to storage.',
         );
         return;
       }
@@ -75,8 +77,8 @@ export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefiniti
       const deletedHandler = async (payload: unknown) => {
         const uploadKey = (payload as Record<string, unknown>).uploadKey as string | undefined;
         if (!uploadKey) {
-          console.warn(
-            '[slingshot-emoji] emoji:emoji.deleted payload missing uploadKey — skipping delete.',
+          logger.warn(
+            'emoji:emoji.deleted payload missing uploadKey — skipping delete.',
           );
           return;
         }

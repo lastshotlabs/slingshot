@@ -12,12 +12,12 @@ import type { WebhookQueue } from './queue';
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.startsWith('/')) {
-    throw new WebhookConfigError("mountPath must start with '/'");
+    throw new WebhookConfigError("[slingshot-webhooks] mountPath must start with '/'");
   }
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new WebhookConfigError("mountPath must not be '/'");
+    throw new WebhookConfigError("[slingshot-webhooks] mountPath must not be '/'");
   }
 
   return normalized;

@@ -79,7 +79,7 @@ function compileEntityEntryForTest(entityModule: {
   if (impl.wiring.mode === 'manual') {
     if (!impl.wiring.buildAdapter) {
       throw new Error(
-        `[runPackageLifecycle] entity '${entityModule.entityName}' has wiring.mode='manual' but no buildAdapter`,
+        `[slingshot-entity] runPackageLifecycle: entity '${entityModule.entityName}' has wiring.mode='manual' but no buildAdapter`,
       );
     }
     return { ...base, buildAdapter: impl.wiring.buildAdapter };
@@ -88,7 +88,7 @@ function compileEntityEntryForTest(entityModule: {
   if (impl.wiring.mode === 'factories') {
     if (!impl.wiring.factories) {
       throw new Error(
-        `[runPackageLifecycle] entity '${entityModule.entityName}' has wiring.mode='factories' but no factories`,
+        `[slingshot-entity] runPackageLifecycle: entity '${entityModule.entityName}' has wiring.mode='factories' but no factories`,
       );
     }
     return {
@@ -112,7 +112,7 @@ function compileEntityEntryForTest(entityModule: {
         | undefined;
       if (!creator) {
         throw new Error(
-          `[runPackageLifecycle] entity '${entityModule.entityName}' uses standard wiring but ` +
+          `[slingshot-entity] runPackageLifecycle: entity '${entityModule.entityName}' uses standard wiring but ` +
             `RESOLVE_ENTITY_FACTORIES is not available on storeInfra. Either populate it (e.g. ` +
             `Reflect.set(infra, RESOLVE_ENTITY_FACTORIES, createEntityFactories)) or convert the ` +
             `entity module to 'factories' / 'manual' wiring.`,

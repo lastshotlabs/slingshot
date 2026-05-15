@@ -1,14 +1,13 @@
 import { z } from 'zod';
+import { assertMountPath } from '@lastshotlabs/slingshot-core';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
-  }
+  assertMountPath('slingshot-notifications', trimmed);
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new Error("[slingshot-notifications] mountPath must not be '/'");
   }
 
   return normalized;

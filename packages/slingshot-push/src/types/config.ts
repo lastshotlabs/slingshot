@@ -1,16 +1,14 @@
 import { z } from 'zod';
-import type { NotificationRecord } from '@lastshotlabs/slingshot-core';
+import { assertMountPath, type NotificationRecord } from '@lastshotlabs/slingshot-core';
 import type { PushMessage, PushPlatform } from './models';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
-  }
+  assertMountPath('slingshot-push', trimmed);
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new Error("[slingshot-push] mountPath must not be '/'");
   }
 
   return normalized;

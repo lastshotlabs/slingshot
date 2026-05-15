@@ -23,6 +23,7 @@ import type {
   WsPluginEndpoint,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   deepFreeze,
   defineEvent,
   definePackage,
@@ -113,6 +114,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   const config: Readonly<ChatPluginConfig> = deepFreeze(
     validatePluginConfig('slingshot-chat', rawConfig, chatPluginConfigSchema),
   );
+  const logger = createConsoleLogger({ base: { plugin: 'slingshot-chat' } });
   const tenantId = config.tenantId ?? 'default';
   const mountPath = config.mountPath ?? '/chat';
   const enablePresence = config.enablePresence ?? true;
@@ -543,8 +545,8 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
               )
               .catch((err: unknown) => {
                 const message = err instanceof Error ? err.message : String(err);
-                console.warn(
-                  `[slingshot-chat] Failed to update lastMessage for room ${msg.roomId}: ${message}`,
+                logger.warn(
+                  `Failed to update lastMessage for room ${msg.roomId}: ${message}`,
                 );
               });
           }

@@ -33,7 +33,7 @@ export function deriveUuidV4FromKey(key: string): string {
   const versionByte = bytes[6];
   const variantByte = bytes[8];
   if (versionByte === undefined || variantByte === undefined) {
-    throw new Error('unable to derive UUID from idempotency key');
+    throw new Error('[slingshot-push] unable to derive UUID from idempotency key');
   }
   // Set version (4) in byte 6 and variant (10xx) in byte 8 per RFC 4122.
   bytes[6] = (versionByte & 0x0f) | 0x40;

@@ -489,7 +489,7 @@ export async function createChatTestApp(
 
   // Read the plugin's resolved state
   const state = readPluginState(pluginState, CHAT_RUNTIME_KEY);
-  if (!state) throw new Error('Chat plugin did not register state — lifecycle failed');
+  if (!state) throw new Error('[slingshot-chat] Chat package did not register state — lifecycle failed');
 
   // Wire the lazy evaluator to the actual adapters
   wire(state.members, state.messages);

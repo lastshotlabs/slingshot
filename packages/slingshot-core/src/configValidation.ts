@@ -171,3 +171,24 @@ export function validatePluginConfig<S extends z.ZodObject>(
   }
   return result.data as z.infer<S>;
 }
+
+/**
+ * Assert that a mount path is a non-root path beginning with a slash.
+ *
+ * Centralizes the validation rule shared by every package that accepts an
+ * HTTP `mountPath` option (`slingshot-admin`, `slingshot-assets`,
+ * `slingshot-notifications`, `slingshot-organizations`, `slingshot-push`,
+ * `slingshot-search`, `slingshot-webhooks`, etc.) so the error message follows
+ * the workspace `[slingshot-<pkg>] <message>` convention uniformly.
+ *
+ * @throws Error with the `[slingshot-<pkg>] mountPath must …` prefix when the
+ * path is `'/'` or does not start with `'/'`.
+ */
+export function assertMountPath(pluginName: string, mountPath: string): void {
+  if (!mountPath.startsWith('/')) {
+    throw new Error(`[${pluginName}] mountPath must start with '/'`);
+  }
+  if (mountPath === '/') {
+    throw new Error(`[${pluginName}] mountPath must not be '/'`);
+  }
+}

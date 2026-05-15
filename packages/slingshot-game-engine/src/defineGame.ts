@@ -46,38 +46,38 @@ export function defineGame<
 >(input: GameDefinitionInput<TRules, TGameState, TContent>): GameDefinition {
   // Validate required fields
   if (!input.name || typeof input.name !== 'string') {
-    throw new Error('defineGame: `name` is required and must be a non-empty string.');
+    throw new Error('[slingshot-game-engine] defineGame: `name` is required and must be a non-empty string.');
   }
   if (!input.display || typeof input.display !== 'string') {
-    throw new Error('defineGame: `display` is required and must be a non-empty string.');
+    throw new Error('[slingshot-game-engine] defineGame: `display` is required and must be a non-empty string.');
   }
   if (typeof input.minPlayers !== 'number' || input.minPlayers < 1) {
-    throw new Error('defineGame: `minPlayers` must be at least 1.');
+    throw new Error('[slingshot-game-engine] defineGame: `minPlayers` must be at least 1.');
   }
   if (typeof input.maxPlayers !== 'number' || input.maxPlayers < input.minPlayers) {
-    throw new Error('defineGame: `maxPlayers` must be >= minPlayers.');
+    throw new Error('[slingshot-game-engine] defineGame: `maxPlayers` must be >= minPlayers.');
   }
   if (Object.keys(input.phases).length === 0) {
-    throw new Error('defineGame: at least one phase is required.');
+    throw new Error('[slingshot-game-engine] defineGame: at least one phase is required.');
   }
 
   // Validate handler references in phases
   for (const [phaseName, phaseDef] of Object.entries(input.phases)) {
     if (phaseDef.onEnter && !(phaseDef.onEnter in input.handlers)) {
       throw new Error(
-        `defineGame: phase '${phaseName}' references handler '${phaseDef.onEnter}' (onEnter) but it is not defined in handlers.`,
+        `[slingshot-game-engine] defineGame: phase '${phaseName}' references handler '${phaseDef.onEnter}' (onEnter) but it is not defined in handlers.`,
       );
     }
     if (phaseDef.onExit && !(phaseDef.onExit in input.handlers)) {
       throw new Error(
-        `defineGame: phase '${phaseName}' references handler '${phaseDef.onExit}' (onExit) but it is not defined in handlers.`,
+        `[slingshot-game-engine] defineGame: phase '${phaseName}' references handler '${phaseDef.onExit}' (onExit) but it is not defined in handlers.`,
       );
     }
     if (phaseDef.channels) {
       for (const [channelName, channelDef] of Object.entries(phaseDef.channels)) {
         if (channelDef.process && !(channelDef.process in input.handlers)) {
           throw new Error(
-            `defineGame: channel '${channelName}' in phase '${phaseName}' references handler '${channelDef.process}' (process) but it is not defined in handlers.`,
+            `[slingshot-game-engine] defineGame: channel '${channelName}' in phase '${phaseName}' references handler '${channelDef.process}' (process) but it is not defined in handlers.`,
           );
         }
       }
@@ -87,12 +87,12 @@ export function defineGame<
       for (const [subPhaseName, subPhaseDef] of Object.entries(phaseDef.subPhases)) {
         if (subPhaseDef.onEnter && !(subPhaseDef.onEnter in input.handlers)) {
           throw new Error(
-            `defineGame: sub-phase '${subPhaseName}' in phase '${phaseName}' references handler '${subPhaseDef.onEnter}' (onEnter) but it is not defined in handlers.`,
+            `[slingshot-game-engine] defineGame: sub-phase '${subPhaseName}' in phase '${phaseName}' references handler '${subPhaseDef.onEnter}' (onEnter) but it is not defined in handlers.`,
           );
         }
         if (subPhaseDef.onExit && !(subPhaseDef.onExit in input.handlers)) {
           throw new Error(
-            `defineGame: sub-phase '${subPhaseName}' in phase '${phaseName}' references handler '${subPhaseDef.onExit}' (onExit) but it is not defined in handlers.`,
+            `[slingshot-game-engine] defineGame: sub-phase '${subPhaseName}' in phase '${phaseName}' references handler '${subPhaseDef.onExit}' (onExit) but it is not defined in handlers.`,
           );
         }
       }
@@ -102,7 +102,7 @@ export function defineGame<
   // Validate game loop handler reference
   if (input.loop?.onTick && !(input.loop.onTick in input.handlers)) {
     throw new Error(
-      `defineGame: game loop references handler '${input.loop.onTick}' (onTick) but it is not defined in handlers.`,
+      `[slingshot-game-engine] defineGame: game loop references handler '${input.loop.onTick}' (onTick) but it is not defined in handlers.`,
     );
   }
 

@@ -19,6 +19,7 @@ import type {
   SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
+  assertMountPath,
   createConsoleLogger,
   deepFreeze,
   definePackage,
@@ -55,12 +56,10 @@ const DEFAULT_KNOWN_ROLES = ['owner', 'admin', 'member'] as const;
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
-  }
+  assertMountPath('slingshot-organizations', trimmed);
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new Error("[slingshot-organizations] mountPath must not be '/'");
   }
   return normalized;
 }

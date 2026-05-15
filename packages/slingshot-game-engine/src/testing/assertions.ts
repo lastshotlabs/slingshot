@@ -15,7 +15,7 @@ function playerState(harness: TestGameHarness, userId: string, expectedState: st
   const player = harness.getPlayer(userId);
   if (player.playerState !== expectedState) {
     throw new Error(
-      `Expected player '${userId}' state to be '${expectedState}', got '${player.playerState}'`,
+      `[slingshot-game-engine] Expected player '${userId}' state to be '${expectedState}', got '${player.playerState}'`,
     );
   }
 }
@@ -29,7 +29,7 @@ function activePlayer(harness: TestGameHarness, expectedUserId: string): void {
   const players = harness.getPlayers();
   const active = players.find(p => p.userId === expectedUserId);
   if (!active) {
-    throw new Error(`Player '${expectedUserId}' not found`);
+    throw new Error(`[slingshot-game-engine] Player '${expectedUserId}' not found`);
   }
 }
 
@@ -47,7 +47,7 @@ function channelOpen(harness: TestGameHarness, channelName: string): void {
   });
 
   if (openMessages.length <= closeMessages.length) {
-    throw new Error(`Expected channel '${channelName}' to be open`);
+    throw new Error(`[slingshot-game-engine] Expected channel '${channelName}' to be open`);
   }
 }
 
@@ -57,7 +57,7 @@ function channelOpen(harness: TestGameHarness, channelName: string): void {
 function score(harness: TestGameHarness, userId: string, expectedScore: number): void {
   const actual = harness.getScore(userId);
   if (actual !== expectedScore) {
-    throw new Error(`Expected player '${userId}' score to be ${expectedScore}, got ${actual}`);
+    throw new Error(`[slingshot-game-engine] Expected player '${userId}' score to be ${expectedScore}, got ${actual}`);
   }
 }
 
@@ -72,11 +72,11 @@ function leaderboardPosition(
   const lb = harness.leaderboard;
   const entry = lb.find(e => e.userId === userId);
   if (!entry) {
-    throw new Error(`Player '${userId}' not found in leaderboard`);
+    throw new Error(`[slingshot-game-engine] Player '${userId}' not found in leaderboard`);
   }
   if (entry.rank !== expectedPosition) {
     throw new Error(
-      `Expected player '${userId}' to be at position ${expectedPosition}, got ${entry.rank}`,
+      `[slingshot-game-engine] Expected player '${userId}' to be at position ${expectedPosition}, got ${entry.rank}`,
     );
   }
 }
@@ -86,7 +86,7 @@ function leaderboardPosition(
  */
 function phase(harness: TestGameHarness, expectedPhase: string): void {
   if (harness.phase !== expectedPhase) {
-    throw new Error(`Expected phase '${expectedPhase}', got '${harness.phase}'`);
+    throw new Error(`[slingshot-game-engine] Expected phase '${expectedPhase}', got '${harness.phase}'`);
   }
 }
 
@@ -106,12 +106,12 @@ function phaseHistory(harness: TestGameHarness, expectedPhases: string[]): void 
   for (let i = 0; i < expectedPhases.length; i++) {
     if (i >= phaseMessages.length) {
       throw new Error(
-        `Expected phase '${expectedPhases[i]}' at position ${i}, but only ${phaseMessages.length} phases occurred`,
+        `[slingshot-game-engine] Expected phase '${expectedPhases[i]}' at position ${i}, but only ${phaseMessages.length} phases occurred`,
       );
     }
     if (phaseMessages[i] !== expectedPhases[i]) {
       throw new Error(
-        `Expected phase '${expectedPhases[i]}' at position ${i}, got '${phaseMessages[i]}'`,
+        `[slingshot-game-engine] Expected phase '${expectedPhases[i]}' at position ${i}, got '${phaseMessages[i]}'`,
       );
     }
   }
@@ -134,7 +134,7 @@ async function replayContains(
   });
 
   if (!found) {
-    throw new Error(`Replay log does not contain event matching: ${JSON.stringify(match)}`);
+    throw new Error(`[slingshot-game-engine] Replay log does not contain event matching: ${JSON.stringify(match)}`);
   }
 }
 
@@ -144,11 +144,11 @@ async function replayContains(
 function winner(harness: TestGameHarness, expectedWinnerId: string): void {
   const result = harness.getWinResult();
   if (!result) {
-    throw new Error('Game has not ended yet');
+    throw new Error('[slingshot-game-engine] Game has not ended yet');
   }
   if (!result.winners || !result.winners.includes(expectedWinnerId)) {
     throw new Error(
-      `Expected winner '${expectedWinnerId}', got winners: ${JSON.stringify(result.winners)}`,
+      `[slingshot-game-engine] Expected winner '${expectedWinnerId}', got winners: ${JSON.stringify(result.winners)}`,
     );
   }
 }
@@ -159,7 +159,7 @@ function winner(harness: TestGameHarness, expectedWinnerId: string): void {
 function playerConnected(harness: TestGameHarness, userId: string): void {
   const player = harness.getPlayer(userId);
   if (!player.connected) {
-    throw new Error(`Expected player '${userId}' to be connected`);
+    throw new Error(`[slingshot-game-engine] Expected player '${userId}' to be connected`);
   }
 }
 
@@ -169,7 +169,7 @@ function playerConnected(harness: TestGameHarness, userId: string): void {
 function playerDisconnected(harness: TestGameHarness, userId: string): void {
   const player = harness.getPlayer(userId);
   if (player.connected) {
-    throw new Error(`Expected player '${userId}' to be disconnected`);
+    throw new Error(`[slingshot-game-engine] Expected player '${userId}' to be disconnected`);
   }
 }
 

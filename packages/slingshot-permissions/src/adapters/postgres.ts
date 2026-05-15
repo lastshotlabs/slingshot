@@ -265,7 +265,7 @@ function isGrantEffect(v: PgParam | string[]): v is GrantEffect {
  */
 function str(v: PgParam | string[], field: string): string {
   if (typeof v === 'string') return v;
-  throw new Error(`expected string for '${field}'`);
+  throw new Error(`[slingshot-permissions] expected string for '${field}'`);
 }
 
 /**
@@ -278,7 +278,7 @@ function str(v: PgParam | string[], field: string): string {
 function strOrNull(v: PgParam | string[]): string | null {
   if (v === null) return null;
   if (typeof v === 'string') return v;
-  throw new Error(`expected string | null`);
+  throw new Error(`[slingshot-permissions] expected string | null`);
 }
 
 /**
@@ -293,7 +293,7 @@ function strOrNull(v: PgParam | string[]): string | null {
 function dateOrUndef(v: PgParam | string[]): Date | undefined {
   if (v === null) return undefined;
   if (v instanceof Date) return v;
-  throw new Error(`expected Date | null`);
+  throw new Error(`[slingshot-permissions] expected Date | null`);
 }
 
 /**
@@ -309,10 +309,10 @@ function dateOrUndef(v: PgParam | string[]): Date | undefined {
 function rowToGrant(row: PgRow): PermissionGrant {
   const subjectType = row.subject_type;
   const effect = row.effect;
-  if (!isSubjectType(subjectType)) throw new Error(`invalid subject_type: ${String(subjectType)}`);
-  if (!isGrantEffect(effect)) throw new Error(`invalid effect: ${String(effect)}`);
+  if (!isSubjectType(subjectType)) throw new Error(`[slingshot-permissions] invalid subject_type: ${String(subjectType)}`);
+  if (!isGrantEffect(effect)) throw new Error(`[slingshot-permissions] invalid effect: ${String(effect)}`);
   const roles = row.roles;
-  if (!Array.isArray(roles)) throw new Error('roles must be an array');
+  if (!Array.isArray(roles)) throw new Error('[slingshot-permissions] roles must be an array');
   return {
     id: str(row.id, 'id'),
     subjectId: str(row.subject_id, 'subject_id'),
@@ -433,7 +433,7 @@ export async function createPermissionsPostgresAdapter(
       revokedReason?: string,
     ): Promise<boolean> {
       if (revokedReason !== undefined && revokedReason.length > 1024) {
-        throw new Error('revokedReason exceeds maximum length of 1024');
+        throw new Error('[slingshot-permissions] revokedReason exceeds maximum length of 1024');
       }
       const params: PgParam[] = [revokedBy, revokedReason ?? null, grantId];
       let sql = `UPDATE permission_grants SET revoked_by = $1, revoked_at = NOW(), revoked_reason = $2

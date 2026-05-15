@@ -1,15 +1,13 @@
 import { z } from 'zod';
-import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+import { assertMountPath, type StorageAdapter } from '@lastshotlabs/slingshot-core';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
-  }
+  assertMountPath('slingshot-assets', trimmed);
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new Error("[slingshot-assets] mountPath must not be '/'");
   }
 
   return normalized;

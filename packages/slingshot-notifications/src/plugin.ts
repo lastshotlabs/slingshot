@@ -52,7 +52,7 @@ function errorLogFields(err: unknown): { err: string; name?: string } {
 
 function validateNotificationAdapter(adapter: unknown): NotificationAdapter {
   if (typeof adapter !== 'object' || adapter === null) {
-    throw new Error('Notification adapter is not an object');
+    throw new Error('[slingshot-notifications] Notification adapter is not an object');
   }
   const required = [
     'create',
@@ -76,7 +76,7 @@ function validateNotificationAdapter(adapter: unknown): NotificationAdapter {
   ] as const;
   for (const method of required) {
     if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
-      throw new Error(`Notification adapter missing required method: ${method}`);
+      throw new Error(`[slingshot-notifications] Notification adapter missing required method: ${method}`);
     }
   }
   return adapter as NotificationAdapter;
@@ -84,7 +84,7 @@ function validateNotificationAdapter(adapter: unknown): NotificationAdapter {
 
 function validateNotificationPreferenceAdapter(adapter: unknown): NotificationPreferenceAdapter {
   if (typeof adapter !== 'object' || adapter === null) {
-    throw new Error('NotificationPreference adapter is not an object');
+    throw new Error('[slingshot-notifications] NotificationPreference adapter is not an object');
   }
   const required = [
     'create',
@@ -98,7 +98,7 @@ function validateNotificationPreferenceAdapter(adapter: unknown): NotificationPr
   ] as const;
   for (const method of required) {
     if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
-      throw new Error(`NotificationPreference adapter missing required method: ${method}`);
+      throw new Error(`[slingshot-notifications] NotificationPreference adapter missing required method: ${method}`);
     }
   }
   return adapter as NotificationPreferenceAdapter;

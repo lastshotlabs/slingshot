@@ -13,12 +13,12 @@ import type { AnySearchProviderConfig } from './provider';
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.startsWith('/')) {
-    throw new SearchConfigError("mountPath must start with '/'");
+    throw new SearchConfigError("[slingshot-search] mountPath must start with '/'");
   }
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new SearchConfigError("mountPath must not be '/'");
+    throw new SearchConfigError("[slingshot-search] mountPath must not be '/'");
   }
 
   return normalized;

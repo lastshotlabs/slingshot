@@ -24,14 +24,14 @@ export function createRouteDispatcher(
         );
 
         if (response.status < 200 || response.status >= 300) {
-          throw new Error(`non-2xx: ${response.status}`);
+          throw new Error(`[slingshot-interactions] non-2xx: ${response.status}`);
         }
 
         const json: unknown = await response.json().catch(() => ({ status: 'ok' }));
         return dispatchResultSchema.parse(json);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error('timeout', { cause: error });
+          throw new Error('[slingshot-interactions] timeout', { cause: error });
         }
         throw error;
       } finally {

@@ -22,6 +22,7 @@ import type {
   SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   deepFreeze,
   definePackage,
   getContext,
@@ -261,7 +262,10 @@ export function createGameEnginePackage(
       const capturedSessionAdapter = refs.session;
       const capturedPlayerAdapter = refs.player;
 
-      // Shared log object for runtime and WS callbacks.
+      // Shared log object for runtime and WS callbacks. Routed through the
+      // workspace logger boundary so production deployments can pipe to their
+      // structured log sink instead of writing directly to stdout/stderr.
+      const packageLogger = createConsoleLogger({ base: { plugin: 'slingshot-game-engine' } });
       const log: SessionRuntime['log'] = {
         debug() {
           /* noop in production */
@@ -270,10 +274,10 @@ export function createGameEnginePackage(
           /* noop in production */
         },
         warn(message, data) {
-          console.warn(`[game-engine] ${message}`, data);
+          packageLogger.warn(message, data as Record<string, unknown> | undefined);
         },
         error(message, data) {
-          console.error(`[game-engine] ${message}`, data);
+          packageLogger.error(message, data as Record<string, unknown> | undefined);
         },
       };
 

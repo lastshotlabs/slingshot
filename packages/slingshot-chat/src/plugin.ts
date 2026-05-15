@@ -36,7 +36,7 @@ import {
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
 import { buildChatEntityModules } from './entities/modules';
@@ -78,7 +78,7 @@ import { buildIncomingDispatch } from './ws/incoming';
  *
  * **Cross-package contracts:**
  * - Requires `slingshot-permissions` for `PermissionsState`.
- * - Requires `slingshot-notifications` for `NotificationsBuilderFactory`.
+ * - Requires `slingshot-notifications` for `NotificationsBuilderFactoryCap`.
  * - Publishes `ChatInteractionsPeerCap` for consumers (notably
  *   `slingshot-interactions`).
  *
@@ -106,7 +106,7 @@ import { buildIncomingDispatch } from './ws/incoming';
  *
  * @throws {Error} If `rawConfig` fails Zod schema validation.
  * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs.
- * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
+ * @throws {Error} If `NotificationsBuilderFactoryCap` is unavailable when
  *   `setupPost` runs.
  */
 export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackageDefinition {
@@ -131,7 +131,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   // Permission-dependent refs (memberGrant) are populated in
   // `setupMiddleware` once permissions are resolved.
   // Notification-dependent refs (messageNotify, memberInviteNotify) are
-  // populated in `setupPost` once `NotificationsBuilderFactory` is
+  // populated in `setupPost` once `NotificationsBuilderFactoryCap` is
   // resolvable through the capability system.
   const archiveGuardRef = createLazyMiddleware();
   const broadcastGuardRef = createLazyMiddleware();
@@ -345,7 +345,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       const slingshotCtx = getContext(app);
       const notificationsBuilderFactory = resolveCapabilityValue(
         slingshotCtx,
-        NotificationsBuilderFactory,
+        NotificationsBuilderFactoryCap,
       );
       if (!notificationsBuilderFactory) {
         throw new Error(

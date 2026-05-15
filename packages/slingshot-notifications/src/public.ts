@@ -21,25 +21,30 @@ export const Notifications = definePackageContract('slingshot-notifications');
 /**
  * Capability for creating source-scoped notification builders.
  *
- * Consumers do `ctx.capabilities.require(NotificationsBuilderFactory)({ source: 'my-plugin' })`
+ * Consumers do `ctx.capabilities.require(NotificationsBuilderFactoryCap)({ source: 'my-plugin' })`
  * to get a builder bound to their plugin name. Each builder publishes notifications,
  * resolves preferences, and applies rate limits on behalf of the calling source.
  */
-export const NotificationsBuilderFactory = Notifications.capability<
+export const NotificationsBuilderFactoryCap = Notifications.capability<
   (opts: { source: string }) => NotificationBuilder
 >('builderFactory');
 
 /**
- * Capability for registering a delivery adapter.
- *
- * Plugins like `slingshot-push` and mailers register adapters that fire on every
- * dispatched notification. The notifications plugin invokes registered adapters
- * via the in-process event bus when a notification is created and dispatched.
+ * Typed registry for delivery adapters published by sibling packages
+ * (`slingshot-push`, mailers, etc.). The notifications package invokes
+ * registered adapters via the in-process event bus when a notification is
+ * created and dispatched.
  */
 export interface NotificationsDeliveryRegistry {
   register(adapter: DeliveryAdapter): void;
 }
-export const NotificationsDeliveryRegistry =
+
+/**
+ * Capability for registering a delivery adapter. Consumers resolve through
+ * `ctx.capabilities.require(NotificationsDeliveryRegistryCap)` and call
+ * `register(adapter)` once per dispatch sink.
+ */
+export const NotificationsDeliveryRegistryCap =
   Notifications.capability<NotificationsDeliveryRegistry>('deliveryRegistry');
 
 /**

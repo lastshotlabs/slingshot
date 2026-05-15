@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { InProcessAdapter, getContext, resolveCapabilityValue } from '@lastshotlabs/slingshot-core';
-import { NotificationsBuilderFactory, NotificationsDeliveryRegistry } from '../../src/public';
+import { NotificationsBuilderFactoryCap, NotificationsDeliveryRegistryCap } from '../../src/public';
 import {
   createNotificationsTestAdapters,
   createNotificationsTestBootstrap,
@@ -242,8 +242,8 @@ describe('notifications testing helpers', () => {
 
     expect(ctx.bus).toBe(bootstrap.bus);
 
-    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactory);
-    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistry);
+    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactoryCap);
+    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistryCap);
     expect(builderFactory).toBeDefined();
     expect(deliveryRegistry).toBeDefined();
 

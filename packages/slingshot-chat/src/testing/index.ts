@@ -40,8 +40,8 @@ import {
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import {
-  NotificationsBuilderFactory,
-  NotificationsDeliveryRegistry,
+  NotificationsBuilderFactoryCap,
+  NotificationsDeliveryRegistryCap,
 } from '@lastshotlabs/slingshot-notifications';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
@@ -408,9 +408,9 @@ export async function createChatTestApp(
   // `registerPluginCapabilities` does at runtime, sized for test fixtures that don't
   // build a full SlingshotContext.
   publishPluginState(pluginState, `${PACKAGE_CAPABILITIES_PREFIX}slingshot-notifications`, {
-    [NotificationsBuilderFactory.name]: ({ source }: { source: string }) =>
+    [NotificationsBuilderFactoryCap.name]: ({ source }: { source: string }) =>
       notificationState.createBuilder(source),
-    [NotificationsDeliveryRegistry.name]: { register() {} },
+    [NotificationsDeliveryRegistryCap.name]: { register() {} },
   });
 
   attachContext(app, {
@@ -421,8 +421,8 @@ export async function createChatTestApp(
     bus,
     events,
     capabilityProviders: new Map<string, string>([
-      [capabilityProviderKey(NotificationsBuilderFactory), 'slingshot-notifications'],
-      [capabilityProviderKey(NotificationsDeliveryRegistry), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsBuilderFactoryCap), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsDeliveryRegistryCap), 'slingshot-notifications'],
       ['slingshot-permissions:evaluator', 'slingshot-permissions'],
       ['slingshot-permissions:registry', 'slingshot-permissions'],
       ['slingshot-permissions:adapter', 'slingshot-permissions'],

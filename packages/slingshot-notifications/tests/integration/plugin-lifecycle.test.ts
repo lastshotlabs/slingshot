@@ -11,8 +11,8 @@ import {
 import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createNotificationsPackage } from '../../src/plugin';
 import {
-  NotificationsBuilderFactory,
-  NotificationsDeliveryRegistry,
+  NotificationsBuilderFactoryCap,
+  NotificationsDeliveryRegistryCap,
   NotificationsHealthCap,
 } from '../../src/public';
 import { createNotificationsTestEvents } from '../../src/testing';
@@ -129,8 +129,8 @@ describe('createNotificationsPackage lifecycle', () => {
     // does at framework boot.
     await registerPluginCapabilities(ctx as never, plugin.name, plugin.capabilities.provides);
 
-    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactory);
-    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistry);
+    const builderFactory = resolveCapabilityValue(ctx, NotificationsBuilderFactoryCap);
+    const deliveryRegistry = resolveCapabilityValue(ctx, NotificationsDeliveryRegistryCap);
     expect(builderFactory).toBeDefined();
     expect(deliveryRegistry).toBeDefined();
 
@@ -193,7 +193,7 @@ describe('createNotificationsPackage lifecycle', () => {
 
     const deliveryRegistry = resolveCapabilityValue(
       getContext(app),
-      NotificationsDeliveryRegistry,
+      NotificationsDeliveryRegistryCap,
     );
     expect(deliveryRegistry).toBeDefined();
 

@@ -11,7 +11,7 @@ import {
   createInteractionsPackage,
 } from '@lastshotlabs/slingshot-interactions';
 import {
-  NotificationsBuilderFactory,
+  NotificationsBuilderFactoryCap,
   createNotificationsPackage,
 } from '@lastshotlabs/slingshot-notifications';
 import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
@@ -83,7 +83,7 @@ describe('package plugin lifecycle', () => {
       'slingshot:package:capabilities:slingshot-notifications',
     ) as { builderFactory?: unknown } | undefined;
     expect(slot?.builderFactory).toBeDefined();
-    expect(NotificationsBuilderFactory.contract).toBe('slingshot-notifications');
+    expect(NotificationsBuilderFactoryCap.contract).toBe('slingshot-notifications');
 
     const response = await app.request('/notifications/sse');
     expect(response.status).toBe(401);

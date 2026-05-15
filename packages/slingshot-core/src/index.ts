@@ -416,7 +416,7 @@ export { getEmailTemplates, getEmailTemplate } from './emailTemplates';
  * Shared notification record / adapter / builder types. The runtime surface that uses
  * these (cross-package builder factory, delivery adapter registry) is published as a
  * typed contract by `@lastshotlabs/slingshot-notifications` — consumers resolve it
- * through `ctx.capabilities.require(NotificationsBuilderFactory)` etc.
+ * through `ctx.capabilities.require(NotificationsBuilderFactoryCap)` etc.
  */
 export type {
   DeliveryAdapter,

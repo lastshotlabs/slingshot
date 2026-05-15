@@ -10,12 +10,12 @@ export { createNotificationsPackage } from './plugin';
  */
 export {
   Notifications,
-  NotificationsBuilderFactory,
-  NotificationsDeliveryRegistry,
+  NotificationsBuilderFactoryCap,
+  NotificationsDeliveryRegistryCap,
   NotificationsHealthCap,
 } from './public';
-/** Aggregated health snapshot type for the notifications package. */
-export type { NotificationsHealth } from './public';
+/** Aggregated health snapshot + delivery registry interface types. */
+export type { NotificationsHealth, NotificationsDeliveryRegistry } from './public';
 /**
  * Zod schema used to validate notifications plugin configuration.
  */

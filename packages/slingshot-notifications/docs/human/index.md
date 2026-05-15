@@ -65,9 +65,9 @@ The package provides:
 
 At runtime, the package publishes typed capabilities:
 
-- `NotificationsBuilderFactory` — `({ source }) => NotificationBuilder` for building source-scoped
+- `NotificationsBuilderFactoryCap` — `({ source }) => NotificationBuilder` for building source-scoped
   notification builders
-- `NotificationsDeliveryRegistry` — `.register(adapter)` for registering delivery adapters
+- `NotificationsDeliveryRegistryCap` — `.register(adapter)` for registering delivery adapters
 - `NotificationsHealthCap` — `() => NotificationsHealth` for the aggregated health snapshot
 
 ```ts

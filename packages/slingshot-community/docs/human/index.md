@@ -36,7 +36,7 @@ available — register them in your app's `plugins` (for `slingshot-auth`) and `
 | ------------------------- | ------- | --------------------------------------------------------------------- |
 | `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context           |
 | `slingshot-permissions`   | package | required; via `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, `PermissionsAdapterCap` |
-| `slingshot-notifications` | package | required; via `NotificationsBuilderFactory` for outbound notifications |
+| `slingshot-notifications` | package | required; via `NotificationsBuilderFactoryCap` for outbound notifications |
 
 Optional, opportunistically integrated when present:
 
@@ -281,7 +281,7 @@ plugin emits the event after applying the unfurl.
 
 ## Notifications Emitted
 
-Community emits these notification types through `NotificationsBuilderFactory`. Register
+Community emits these notification types through `NotificationsBuilderFactoryCap`. Register
 push formatters for them in `slingshot-push` (community registers defaults automatically when
 push is present).
 

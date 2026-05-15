@@ -20,11 +20,11 @@ import { createIntervalDispatcher } from './dispatcher';
 import type { DispatcherAdapter } from './dispatcher';
 import { buildNotificationsEntityModules } from './entities/modules';
 import {
-  NotificationsBuilderFactory,
-  NotificationsDeliveryRegistry,
+  NotificationsBuilderFactoryCap,
+  NotificationsDeliveryRegistryCap,
   NotificationsHealthCap,
 } from './public';
-import type { NotificationsHealth } from './public';
+import type { NotificationsDeliveryRegistry, NotificationsHealth } from './public';
 import { resolveRateLimitBackend } from './rateLimit';
 import { createNotificationSseRoute } from './sse';
 import type {
@@ -294,15 +294,15 @@ export function createNotificationsPackage(
         // deferring closure so the resolver succeeds at boot and the failure
         // is surfaced only if a consumer actually invokes the factory before
         // setupPost has run.
-        provideCapability(NotificationsBuilderFactory, () => (opts: { source: string }) => {
+        provideCapability(NotificationsBuilderFactoryCap, () => (opts: { source: string }) => {
           if (!builderFactoryRef) {
             throw new Error(
-              '[slingshot-notifications] builder factory invoked before setupPost completed; resolve NotificationsBuilderFactory from setupPost or later.',
+              '[slingshot-notifications] builder factory invoked before setupPost completed; resolve NotificationsBuilderFactoryCap from setupPost or later.',
             );
           }
           return builderFactoryRef(opts);
         }),
-        provideCapability(NotificationsDeliveryRegistry, () => deliveryRegistry),
+        provideCapability(NotificationsDeliveryRegistryCap, () => deliveryRegistry),
         provideCapability(NotificationsHealthCap, () => buildHealth),
       ],
     },

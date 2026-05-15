@@ -17,7 +17,7 @@ import {
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { NotificationsDeliveryRegistry } from '@lastshotlabs/slingshot-notifications';
+import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications';
 import { PushFormatterRegistryCap, PushHealthCap, PushRuntimeCap } from './public';
 import type { PushFormatterRegistry, PushPluginHealth } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
@@ -481,11 +481,11 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
       runtimeStateRef = state;
 
       // Consume the slingshot-notifications contract: register our delivery adapter
-      // through the typed `NotificationsDeliveryRegistry` capability when notifications
+      // through the typed `NotificationsDeliveryRegistryCap` capability when notifications
       // is loaded. No-op when notifications isn't installed at all.
       const slingshotCtx = getContextOrNull(app);
       const deliveryRegistry = slingshotCtx
-        ? resolveCapabilityValue(slingshotCtx, NotificationsDeliveryRegistry)
+        ? resolveCapabilityValue(slingshotCtx, NotificationsDeliveryRegistryCap)
         : undefined;
       if (deliveryRegistry) {
         deliveryRegistry.register(state.createDeliveryAdapter());

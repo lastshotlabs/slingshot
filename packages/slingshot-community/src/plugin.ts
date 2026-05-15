@@ -37,7 +37,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
-import { NotificationsBuilderFactory } from '@lastshotlabs/slingshot-notifications';
+import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
 import type { MiddlewareHandler } from 'hono';
 import { buildCommunityEntityModules } from './entities/modules';
 import type { CommunityAdapterRefs, RedeemPermissionsAdapter } from './entities/runtime';
@@ -138,7 +138,7 @@ function buildInteractionsPeer(refs: CommunityAdapterRefs): CommunityInteraction
  *
  * **Cross-package contracts:**
  * - Requires `slingshot-permissions` for `PermissionsState`.
- * - Requires `slingshot-notifications` for `NotificationsBuilderFactory`.
+ * - Requires `slingshot-notifications` for `NotificationsBuilderFactoryCap`.
  * - Publishes `CommunityInteractionsPeerCap` for consumers (notably
  *   `slingshot-interactions`).
  *
@@ -153,7 +153,7 @@ function buildInteractionsPeer(refs: CommunityAdapterRefs): CommunityInteraction
  *
  * @throws {Error} If `rawConfig` fails Zod schema validation.
  * @throws {Error} If `PermissionsState` is absent when `setupMiddleware` runs.
- * @throws {Error} If `NotificationsBuilderFactory` is unavailable when
+ * @throws {Error} If `NotificationsBuilderFactoryCap` is unavailable when
  *   `setupPost` runs.
  */
 export function createCommunityPackage(
@@ -447,7 +447,7 @@ export function createCommunityPackage(
         const slingshotCtx = getContext(app);
         notificationsBuilderFactoryRef = resolveCapabilityValue(
           slingshotCtx,
-          NotificationsBuilderFactory,
+          NotificationsBuilderFactoryCap,
         );
       }
       if (!notificationsBuilderFactoryRef) {

@@ -14,8 +14,8 @@ import { notificationFactories, notificationPreferenceFactories } from './entiti
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS } from './preferences';
 import { createNoopRateLimitBackend } from './rateLimit';
 import {
-  NotificationsBuilderFactory,
-  NotificationsDeliveryRegistry,
+  NotificationsBuilderFactoryCap,
+  NotificationsDeliveryRegistryCap,
 } from './public';
 import type {
   NotificationAdapter,
@@ -402,15 +402,15 @@ export function createNotificationsTestBootstrap() {
       [
         'slingshot:package:capabilities:slingshot-notifications',
         {
-          [NotificationsBuilderFactory.name]: ({ source }: { source: string }) =>
+          [NotificationsBuilderFactoryCap.name]: ({ source }: { source: string }) =>
             adapters.createBuilder(source),
-          [NotificationsDeliveryRegistry.name]: { register() {} },
+          [NotificationsDeliveryRegistryCap.name]: { register() {} },
         },
       ],
     ]),
     capabilityProviders: new Map<string, string>([
-      [capabilityProviderKey(NotificationsBuilderFactory), 'slingshot-notifications'],
-      [capabilityProviderKey(NotificationsDeliveryRegistry), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsBuilderFactoryCap), 'slingshot-notifications'],
+      [capabilityProviderKey(NotificationsDeliveryRegistryCap), 'slingshot-notifications'],
     ]),
     ws: null,
     wsEndpoints: {},

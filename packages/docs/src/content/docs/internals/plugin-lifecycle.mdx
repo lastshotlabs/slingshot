@@ -184,6 +184,8 @@ or `setupPost` to detect optional peer packages. The cross-package idiom for "if
 ```typescript
 import { isPackageRegistered } from '@lastshotlabs/slingshot-core';
 
+declare const app: object;
+
 if (isPackageRegistered(app, 'slingshot-interactions')) {
   // wire the optional integration
 }

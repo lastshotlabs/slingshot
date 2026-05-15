@@ -102,6 +102,21 @@ export interface PermissionsPluginConfig {
 }
 
 /**
+ * Zod schema for `PermissionsPluginConfig`. Function-shaped fields
+ * (`groupResolver`, `logger`) are accepted via `z.custom`; numeric and string
+ * fields validate normally so apps get a clear error for typos like
+ * `maxGroupz`.
+ */
+const permissionsPluginConfigSchema = z.object({
+  adapter: z.enum(['sqlite', 'postgres', 'mongo', 'memory']).optional(),
+  groupResolver: z.custom<NonNullable<PermissionsPluginConfig['groupResolver']>>().optional(),
+  maxGroups: z.number().int().positive().optional(),
+  queryTimeoutMs: z.number().int().positive().optional(),
+  failOpenOnGroupExpansionError: z.boolean().optional(),
+  logger: z.custom<Logger>().optional(),
+});
+
+/**
  * Creates the slingshot-permissions package.
  *
  * Resolves the permissions adapter from the active store type during
@@ -149,21 +164,6 @@ export interface PermissionsPluginConfig {
  * });
  * ```
  */
-/**
- * Zod schema for `PermissionsPluginConfig`. Function-shaped fields
- * (`groupResolver`, `logger`) are accepted via `z.custom`; numeric and string
- * fields validate normally so apps get a clear error for typos like
- * `maxGroupz`.
- */
-const permissionsPluginConfigSchema = z.object({
-  adapter: z.enum(['sqlite', 'postgres', 'mongo', 'memory']).optional(),
-  groupResolver: z.custom<NonNullable<PermissionsPluginConfig['groupResolver']>>().optional(),
-  maxGroups: z.number().int().positive().optional(),
-  queryTimeoutMs: z.number().int().positive().optional(),
-  failOpenOnGroupExpansionError: z.boolean().optional(),
-  logger: z.custom<Logger>().optional(),
-});
-
 export function createPermissionsPackage(
   rawConfig?: PermissionsPluginConfig,
 ): SlingshotPackageDefinition {

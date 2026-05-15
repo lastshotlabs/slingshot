@@ -35,7 +35,7 @@ The search plugin supports built-in strategy strings for common cases:
 - **`adminGate: "authenticated"`** — allows access to admin routes for any authenticated
   user (checks the request actor is not anonymous).
 
-These strategy strings are resolved by the plugin at setup time. Pass functions directly when
+These strategy strings are resolved by the package at setup time. Pass functions directly when
 you need fully custom resolution.
 
 ## Operational Notes
@@ -43,9 +43,9 @@ you need fully custom resolution.
 - `adminGate` is optional. Admin routes are only mounted when it is present.
 - If startup warns that the entity registry contains no searchable entities, the problem is usually
   missing entity config rather than provider failure.
-- Transform functions must be registered when the plugin is created. They are copied into the
+- Transform functions must be registered when the package is created. They are copied into the
   plugin's internal registry before discovery and indexing begin.
-- Search sync is now registry-backed. When `syncMode: "event-bus"` is enabled, the plugin relies on
+- Search sync is now registry-backed. When `syncMode: "event-bus"` is enabled, the package relies on
   canonical event definitions and `ctx.events.publish(...)` envelopes rather than legacy
   `clientSafeEvents` registration or raw bus payload assumptions.
 
@@ -58,7 +58,7 @@ you need fully custom resolution.
   not be complete.
 - `mountPath` must start with `/`; trailing slashes are trimmed before route mounting.
 - The package can target external providers or the DB-native provider. Docs should be careful not
-  to imply one deployment shape when the plugin is designed to support several.
+  to imply one deployment shape when the package is designed to support several.
 - When `syncMode: "event-bus"` is used, failed flush operations (both index and delete) restore
   the affected documents to the pending queue so the next flush retries them. This means a
   transient provider outage does not cause silent data loss — documents accumulate in the pending

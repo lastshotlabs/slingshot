@@ -229,7 +229,7 @@ The last formatter registered for a given notification type wins, so this plugin
 - `mountPath` — defaults to `/community`
 - `scoring` — built-in ranking algorithm and weights for thread/reply ordering
 - `disableRoutes` — turn off specific generated route groups
-- `ws.wsEndpoint` — WebSocket endpoint name; when set, the plugin self-wires
+- `ws.wsEndpoint` — WebSocket endpoint name; when set, the package self-wires
   `onRoomSubscribe` and `incoming` handlers onto `SlingshotContext.wsEndpoints[wsEndpoint]`
   during `setupPost`
 
@@ -302,7 +302,7 @@ Community routes expect a `communityPrincipal` on the request context. The built
 createCommunityPackage({ authBridge: 'auto', containerCreation: 'user' });
 ```
 
-When `authBridge` is `'auto'`, the plugin installs middleware on `${mountPath}/*` that reads
+When `authBridge` is `'auto'`, the package installs middleware on `${mountPath}/*` that reads
 `actor.id` and `roles` from the framework auth context and sets `communityPrincipal` for
 community routes. Use `'none'` only when you need to wire the bridge yourself — typical only
 when you are consuming community routes from an environment without the standard `getActor()`

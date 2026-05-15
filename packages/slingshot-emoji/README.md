@@ -36,7 +36,7 @@ The most common config is:
 - `mountPath`, which defaults to `/emoji`
 - optional explicit `permissions`
 
-If you omit `permissions`, the plugin declares a dependency on `slingshot-permissions` and throws at
+If you omit `permissions`, the package declares a dependency on `slingshot-permissions` and throws at
 startup if the shared state is missing.
 
 ## What You Get
@@ -73,10 +73,10 @@ If you need to modify behavior, start in:
   rejected.
 - The plugin does not own upload ingestion. Missing upload plumbing is an app integration problem,
   not an emoji-plugin feature gap.
-- `presignExpirySeconds` is a deprecated legacy field. If supplied, the plugin warns and ignores it.
-- Delete cascades require an upload storage adapter. Without one, the plugin logs a warning and the
+- `presignExpirySeconds` is a deprecated legacy field. If supplied, the package warns and ignores it.
+- Delete cascades require an upload storage adapter. Without one, the package logs a warning and the
   metadata row is deleted without removing the file bytes.
-- Passing explicit `permissions` changes dependencies: the plugin then depends only on
+- Passing explicit `permissions` changes dependencies: the package then depends only on
   `slingshot-auth`.
 
 ## Key Files

@@ -173,6 +173,44 @@ That same lifecycle ordering also applies when Slingshot assembles an app for no
 such as package inspection (`inspectPackage`), tests, or Lambda cold start. The host boundary
 changes, but the plugin phases and context finalization rules stay the same.
 
+## Helpers introduced with the package-first migration
+
+Three companion helpers ship alongside `definePackage()` and the `seed` lifecycle phase:
+
+**`isPackageRegistered(app, packageName)`** — boolean check used inside `setupMiddleware`
+or `setupPost` to detect optional peer packages. The cross-package idiom for "if
+`slingshot-interactions` is wired, attach the peer-publish hook; otherwise no-op":
+
+```typescript
+import { isPackageRegistered } from '@lastshotlabs/slingshot-core';
+
+if (isPackageRegistered(app, 'slingshot-interactions')) {
+  // wire the optional integration
+}
+```
+
+**`createLazyMiddleware(resolveAdapter, build)`** — wraps a middleware factory so the
+adapter is resolved at first request rather than at registration time. Lets a package
+register middleware in `setupMiddleware` before a peer package's `setupPost` has
+published the adapter through `provideCapability(...)`. Used by `slingshot-chat` and
+`slingshot-community` to attach permissions guards without ordering hazards.
+
+**`runPackageLifecycle(packageDefinition, ctx)`** — testing-only helper exported from
+`@lastshotlabs/slingshot-entity/testing`. Drives a package through its lifecycle phases
+inside a unit test without spinning up a full `createApp()` graph. Use it when you need
+to assert that a single package wires its capabilities and entity adapters correctly in
+isolation.
+
+### The `seed` lifecycle phase
+
+`CreateAppConfig.seed` adds a boot-time, idempotent seed phase that runs after
+`setupPost` and before HTTP listen. Packages implement it by exporting a `seed` hook
+from `definePackage(...)`; `slingshot-auth`, `slingshot-permissions`, and
+`slingshot-organizations` use it today to ensure super-admin grants, default roles, and
+default organization records exist on every boot. This is distinct from the
+`slingshot seed` CLI command, which generates faker-based entity fixtures for local
+development.
+
 ## See also
 
 - [Context and Registrar](/slingshot/internals/context-registrar/) — what's inside `SlingshotContext`

@@ -225,6 +225,19 @@ setupPost({ app }) {
 }
 ```
 
+## Stable capability identity
+
+Capability resolvers must return a stable reference across every lifecycle phase. The
+framework calls `provider.resolve()` twice per package (once in `setupMiddleware` and
+once in `setupPost`) and republishes the slot each time; if you return a fresh object
+on each call, downstream consumers that captured the cap in `setupMiddleware` will
+observe `!==` against the same cap resolved in `setupPost`. The canonical pattern is
+to construct a long-lived `Proxy` once per package instance and have it defer to a
+closure-owned `stateRef` that gets populated as adapters become available — see
+`packages/slingshot-interactions/src/plugin.ts` and
+`packages/slingshot-orchestration-plugin/src/plugin.ts` for representative
+implementations.
+
 ## Standalone `setup()`
 
 The framework never calls `setup()`. It exists for packages that also support a plain Hono integration outside `createApp()`:

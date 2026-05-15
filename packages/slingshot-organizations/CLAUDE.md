@@ -32,4 +32,5 @@ service via the `ORGANIZATIONS_RECONCILE_STATE_KEY` plugin-state slot.
 
 - **Adding or changing entities**: update the relevant file under `src/entities/`, then keep `src/index.ts` exports and `src/entities/modules.ts` aligned
 - **Changing runtime adapter or handler behavior**: update `src/entities/runtime.ts`, then verify the wiring in `src/entities/modules.ts`
+- **Boot-time seeding**: this package implements the `seed` lifecycle hook (default-org provisioning). Apps trigger it through the top-level `CreateAppConfig.seed` flag — distinct from the `slingshot seed` CLI fixture generator.
 - **Testing**: `packages/slingshot-organizations/tests/`

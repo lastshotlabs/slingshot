@@ -27,4 +27,5 @@ Can also be used as a library — import the evaluator, registry, and adapter fa
 - **Adding an adapter**: add the adapter under `src/adapters/`, then register it in `src/factories.ts`
 - **Changing evaluator behavior**: update `src/lib/evaluator.ts` and any registry contract changes in `src/lib/registry.ts`
 - **Changing config options**: update the `PermissionsPluginConfig` type in `src/plugin.ts`, then update `docs/human/index.md`
+- **Boot-time seeding**: this package implements the `seed` lifecycle hook (super-admin grant provisioning). Apps trigger it through the top-level `CreateAppConfig.seed` flag — distinct from the `slingshot seed` CLI fixture generator.
 - **Testing**: `packages/slingshot-permissions/tests/`

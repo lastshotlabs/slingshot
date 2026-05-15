@@ -123,7 +123,8 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 10. `runPluginSeed()` — only when `CreateAppConfig.seed: {…}` was provided — calls each
     plugin's/package's `seed()` hook in dependency order. Each consumer reads its slice
     of `seedInput` and writes cross-plugin references (e.g. created user IDs) into the
-    shared `seedState` map. Must be idempotent.
+    shared `seedState` map. Must be idempotent. Distinct from the `slingshot seed` CLI
+    command which generates faker-based entity fixtures for local development.
 11. `finalizeContext()` freezes the context.
 
 `publishPackageRuntimeState()` is invoked twice per package (after middleware and

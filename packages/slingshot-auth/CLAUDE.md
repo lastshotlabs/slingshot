@@ -26,4 +26,5 @@ middleware, and the `/auth/*` route surface.
 
 - **Adding an auth adapter**: add the adapter under `src/adapters/`, then wire it through `src/bootstrap.ts`
 - **Changing auth config**: update `src/types/config.ts` and `src/config/authConfig.ts`, then update `docs/human/index.md`
+- **Boot-time seeding**: this package implements the `seed` lifecycle hook (idempotent super-admin / default-role provisioning). Apps trigger it through the top-level `CreateAppConfig.seed` flag — distinct from the `slingshot seed` CLI fixture generator.
 - **Testing**: `packages/slingshot-auth/tests/`

@@ -58,10 +58,8 @@ import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middlewa
 import { createPublishedThreadGuardMiddleware } from './middleware/publishedThreadGuard';
 import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecrement';
 import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
-import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
 import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createSolutionReplyGuardMiddleware } from './middleware/solutionReplyGuard';
-import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
 import { createThreadStateGuardMiddleware } from './middleware/threadStateGuard';
 import { probeEmbedsPeer } from './peers/embeds';
 import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
@@ -274,8 +272,6 @@ export function createCommunityPackage(
       roleAssignmentGuard: async (c, next) => roleAssignmentGuardRef.handler(c, next),
       pollRequiredGuard: async (c, next) => pollRequiredGuardRef.handler(c, next),
       attachmentRequiredGuard: async (c, next) => attachmentRequiredGuardRef.handler(c, next),
-      threadPostCreate: createThreadPostCreateMiddleware(),
-      replyPostCreate: createReplyPostCreateMiddleware(),
       replyCountUpdate: async (c, next) => replyCountUpdateRef.handler(c, next),
       replyCountDecrement: async (c, next) => replyCountDecrementRef.handler(c, next),
     };

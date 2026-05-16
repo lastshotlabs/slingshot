@@ -935,7 +935,6 @@ describe('createCommunityPackage — middleware execution order', () => {
       'attachmentRequiredGuard',
       'banCheck',
       'autoMod',
-      'threadPostCreate',
     ]);
 
     const { Reply } = await import('../../src/entities/reply');
@@ -949,7 +948,6 @@ describe('createCommunityPackage — middleware execution order', () => {
       'threadStateGuard',
       'banCheck',
       'autoMod',
-      'replyPostCreate',
       'replyCountUpdate',
     ]);
   });

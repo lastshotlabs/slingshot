@@ -171,7 +171,6 @@ export const Thread = defineEntity('Thread', {
         'attachmentRequiredGuard',
         'banCheck',
         'autoMod',
-        'threadPostCreate',
       ],
     },
     update: {
@@ -419,7 +418,6 @@ export const Thread = defineEntity('Thread', {
       autoMod: true,
       publishedThreadGuard: true,
       solutionReplyGuard: true,
-      threadPostCreate: true,
     },
 
     cascades: [

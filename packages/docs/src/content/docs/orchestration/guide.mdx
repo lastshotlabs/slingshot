@@ -3,11 +3,9 @@ title: Orchestration Guide
 description: End-to-end orchestration with tasks, workflows, adapters, plugin wiring, and runtime lookup
 ---
 
-orchestration is authored in code. You define tasks and workflows in TypeScript, pick
-an adapter, and then use the runtime either directly or through the Slingshot plugin wrapper.
-
-Manifest-driven orchestration is not shipped in this worktree yet. Treat manifest support as the
-next phase, not a hidden feature flag.
+Orchestration is authored in code. You define tasks and workflows in TypeScript, pick
+an adapter, and then use the runtime either directly or through the
+`createOrchestrationPackage()` wrapper inside a Slingshot app.
 
 ## The shortest working path
 
@@ -226,18 +224,6 @@ Current route surface:
 - `createMemoryAdapter()` for local development and tests
 - `createSqliteAdapter()` for durable single-node execution
 - `createBullMQOrchestrationAdapter()` for Redis-backed queues, scheduling, and worker fleets
-
-## Manifest next
-
-The current answer for orchestration is still "code first". The next manifest phase will need to
-cover:
-
-- task and workflow registration
-- handler export resolution
-- route middleware export resolution
-- adapter/provider selection
-
-Until that lands, the supported usage path is direct TypeScript composition.
 
 ## Source-backed reference
 

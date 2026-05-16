@@ -203,9 +203,9 @@ Favorites appear at the top of the room list. `sortOrder` is stored on the favor
 
 Any room admin can pin or unpin messages. Pins are managed through the `/chat/pins` entity routes.
 
-## Encryption (v1: Manifest-Safe Provider)
+## Encryption (v1: server-side at-rest)
 
-v1 provides server-side at-rest encryption through JSON-safe plugin config:
+v1 provides server-side at-rest encryption through JSON-safe package config:
 
 ```ts
 createChatPackage({

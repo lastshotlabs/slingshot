@@ -637,7 +637,7 @@ export interface ValidationResult {
  *
  * Runs the same Zod schema used by `defineEntity()` without throwing on
  * failure. Useful for validating JSON blobs from external sources (CLI input,
- * manifest files, etc.) before passing them to `defineEntity()`.
+ * config files, etc.) before passing them to `defineEntity()`.
  *
  * @param config - The raw value to validate (typically `unknown` JSON).
  * @returns A `ValidationResult` — `{ success: true }` or

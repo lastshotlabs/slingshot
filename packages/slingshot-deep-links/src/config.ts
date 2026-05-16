@@ -40,7 +40,7 @@ export const androidAppLinkSchema = z
   })
   .strict();
 
-/** Manifest-safe config schema for {@link createDeepLinksPlugin}. */
+/** Config schema for {@link createDeepLinksPlugin}. */
 export const deepLinksConfigSchema = z
   .object({
     apple: z

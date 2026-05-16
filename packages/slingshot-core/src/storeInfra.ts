@@ -43,8 +43,9 @@ import type { StoreType } from './storeType';
  * inside a `buildAdapter` closure to create `RepoFactories<T>` from an entity
  * config without a direct import from the root app.
  *
- * This is the DI mechanism for manifest-driven entity factory creation.
- * See CLAUDE.md Rule 16.
+ * This is the DI mechanism that lets `buildAdapter` closures inside a
+ * package's entity-module wiring create factories without a direct import
+ * from the root app. See CLAUDE.md Rule 16.
  */
 export const RESOLVE_ENTITY_FACTORIES: symbol = Symbol.for('slingshot.resolveEntityFactories');
 

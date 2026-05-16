@@ -1167,8 +1167,8 @@ export interface EntityStorageFieldMap {
  * Resolved (defaulted) system fields attached to `ResolvedEntityConfig`.
  *
  * All fields are guaranteed non-null — defaults are applied at definition time
- * by `defineEntity()`. Adapters, route builders, and manifest helpers read
- * these resolved names instead of hardcoding first-party conventions.
+ * by `defineEntity()`. Adapters and route builders read these resolved names
+ * instead of hardcoding first-party conventions.
  */
 export interface ResolvedEntitySystemFields {
   /** Resolved created-by audit field name. */

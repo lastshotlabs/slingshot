@@ -234,7 +234,7 @@ describe('presignPut error propagation', () => {
       presignedUrls: true,
     });
 
-    // The manifest runtime wraps storage errors and returns 502
+    // Storage errors are wrapped and surfaced as 502
     const res = await app.request('/assets/assets/presign-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-id': 'user-1' },
@@ -288,7 +288,7 @@ describe('presignGet error propagation', () => {
     expect(uploadRes.status).toBe(200);
     const { key } = (await uploadRes.json()) as { key: string };
 
-    // The manifest runtime wraps storage errors and returns 502
+    // Storage errors are wrapped and surfaced as 502
     const downRes = await app.request('/assets/assets/presign-download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-id': 'user-1' },

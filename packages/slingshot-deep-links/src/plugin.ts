@@ -19,7 +19,7 @@ import { DEEP_LINKS_PLUGIN_STATE_KEY } from './stateKey';
  * The plugin declares both well-known paths in `publicPaths` so auth middleware
  * skips them automatically — no manual exclusion is needed.
  *
- * @param input - Raw deep-links config (JSON-safe, accepted from manifest bootstrap).
+ * @param input - Raw deep-links config.
  * @returns A Slingshot plugin that serves `/.well-known/apple-app-site-association`
  *   and/or `/.well-known/assetlinks.json`.
  *

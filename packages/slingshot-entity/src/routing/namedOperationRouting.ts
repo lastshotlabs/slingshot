@@ -55,7 +55,7 @@ function defaultNamedOperationPath(opName: string, opConfig?: OperationConfig): 
  * Resolve the HTTP method and path for a named entity operation.
  *
  * Resolution priority: explicit `overrides` → custom operation `http` config → defaults
- * based on operation kind. This cascade allows route config, manifest, and entity
+ * based on operation kind. This cascade allows route config and entity
  * definitions to each influence the final route shape.
  *
  * @param opName - The operation name (used to derive the base path).

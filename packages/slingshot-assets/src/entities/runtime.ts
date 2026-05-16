@@ -1,12 +1,11 @@
 /**
  * Asset entity runtime helpers.
  *
- * Lifted from the legacy `src/manifest/runtime.ts`. Exposes plain adapter
- * transforms (TTL) and plain async custom-op handlers (presignUpload,
- * presignDownload, serveImage) consumed by `entities/modules.ts`. No
- * manifest registries — the package's entity-module `wiring.buildAdapter`
- * applies the TTL transform inline, and the custom-op handlers are bound
- * to entity-route executor overrides on the corresponding module.
+ * Exposes plain adapter transforms (TTL) and plain async custom-op handlers
+ * (presignUpload, presignDownload, serveImage) consumed by
+ * `entities/modules.ts`. The package's entity-module `wiring.buildAdapter`
+ * applies the TTL transform inline; the custom-op handlers are bound to
+ * entity-route executor overrides on the corresponding module.
  *
  * @internal
  */
@@ -137,8 +136,7 @@ function isAssetAdapter(value: BareEntityAdapter): value is BareEntityAdapter & 
 }
 
 /**
- * Wrap a resolved bare adapter with the lazy asset-TTL transform. Mirrors the
- * legacy manifest's `assets.asset.ttl` adapter transform.
+ * Wrap a resolved bare adapter with the lazy asset-TTL transform.
  */
 export function applyAssetTtlTransform(
   adapter: BareEntityAdapter,
@@ -178,9 +176,8 @@ function requireAssetAdapter(deps: AssetsHandlerDeps): AssetAdapter {
 }
 
 /**
- * Build the `presignUpload` handler. Returns the same shape as the legacy
- * manifest custom-handler — caller invokes with `(input)` extracted from the
- * route executor's params.
+ * Build the `presignUpload` handler. Caller invokes with `(input)` extracted
+ * from the route executor's params.
  */
 export function createPresignUploadHandler(deps: AssetsHandlerDeps) {
   const { config, storage, logger } = deps;
@@ -323,8 +320,7 @@ export function createPresignUploadHandler(deps: AssetsHandlerDeps) {
 }
 
 /**
- * Build the `presignDownload` handler. Returns the same shape as the legacy
- * manifest custom-handler.
+ * Build the `presignDownload` handler.
  */
 export function createPresignDownloadHandler(deps: AssetsHandlerDeps) {
   const { config, storage, logger } = deps;

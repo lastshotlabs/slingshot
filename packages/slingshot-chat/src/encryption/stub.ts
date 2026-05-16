@@ -2,7 +2,7 @@
 /**
  * @status PENDING — full Signal protocol implementation is v2.
  *
- * v1: server-side at-rest encryption is configured through the manifest-safe
+ * v1: server-side at-rest encryption is configured through
  * `ChatPluginConfig.encryption` provider settings. Message encryption/decryption
  * runs automatically when `Room.encrypted = true`.
  *

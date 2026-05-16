@@ -707,7 +707,7 @@ export interface ChatPluginConfig {
    */
   readonly enablePresence?: boolean;
   /**
-   * Manifest-safe encryption provider for encrypted rooms.
+   * Encryption provider for encrypted rooms.
    *
    * When omitted, encrypted rooms store plaintext until an encryption provider is
    * configured. `provider: 'aes-gcm'` enables server-side at-rest encryption.

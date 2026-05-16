@@ -1234,9 +1234,8 @@ export interface WebhookSecretCipherOptions {
 
 /**
  * Resolve the async cipher used by the endpoint adapter transform and the
- * runtime adapter. Mirrors the legacy manifest behaviour: the explicit
- * encryptor wins; otherwise a key-derived cipher is built (plaintext when
- * no key is configured).
+ * runtime adapter. Resolution order: explicit `encryptor` wins; otherwise a
+ * key-derived cipher is built (plaintext when no key is configured).
  */
 export function createWebhookSecretCipher(options: WebhookSecretCipherOptions): AsyncCipher {
   if (options.encryptor) {

@@ -148,10 +148,9 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
   const claimDueReminders = createClaimDueRemindersHandler(refs);
 
   /**
-   * Bind a custom-op handler to an entity route executor. Routing /
-   * auth / middleware comes from each entity's `routes.operations.{name}`
-   * config so the response shape and authorization story stay identical
-   * to the manifest path.
+   * Bind a custom-op handler to an entity route executor. Routing, auth, and
+   * middleware are sourced from each entity's `routes.operations.{name}`
+   * config.
    */
   const wrapHandler =
     (handler: (input: unknown) => Promise<unknown>): EntityRouteExecutorBuilder =>
@@ -219,8 +218,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
 
   // ─── Message ───────────────────────────────────────────────────────────────
   // Adapter transforms compose innermost → outermost: editedAt first, then
-  // cipher. Matches the legacy `chat.message.editedAt` + `chat.message.cipher`
-  // manifest order.
+  // cipher.
   const messageOverrides: EntityRouteExecutorOverrides = {
     operations: {
       forwardMessage: wrapHandler(forwardMessage),

@@ -92,9 +92,9 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = Object.freeze({
  * custom integrations.
  *
  * @remarks
- * `createCommunityPackage()` no longer accepts an `adminGate` config field on
- * the manifest-safe path. This interface remains exported for the internal
- * moderation middleware/runtime contracts that power tests and package-owned
+ * `createCommunityPackage()` does not accept an `adminGate` config field.
+ * This interface remains exported for the internal moderation
+ * middleware/runtime contracts that power tests and package-owned
  * integrations.
  */
 export interface CommunityAdminGate {
@@ -141,9 +141,9 @@ export type ModerationDecision = 'allow' | 'flag' | 'reject';
  * written to the database.
  *
  * @remarks
- * `createCommunityPackage()` no longer accepts an `autoModerationHook` config
- * field on the manifest-safe path. This type remains exported for the
- * package-owned moderation middleware/runtime contracts.
+ * `createCommunityPackage()` does not accept an `autoModerationHook` config
+ * field. This type remains exported for the package-owned moderation
+ * middleware/runtime contracts.
  */
 export interface ModerationTarget {
   /** Whether the content is a thread or a reply. */
@@ -173,7 +173,7 @@ export interface ModerationTarget {
  *
  * @example
  * ```ts
- * // Manifest-compatible — only wsEndpoint is required:
+ * // Only wsEndpoint is required:
  * createCommunityPackage({
  *   containerCreation: 'admin',
  *   ws: { wsEndpoint: 'community' },

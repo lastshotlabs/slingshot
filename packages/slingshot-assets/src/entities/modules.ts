@@ -5,16 +5,14 @@
  *
  *   - Resolve a config-driven adapter via `createEntityFactories(...)` (or the
  *     framework-supplied resolver from `RESOLVE_ENTITY_FACTORIES`),
- *   - Apply the asset-TTL transform inline (replaces the manifest's
- *     `assets.asset.ttl` adapter transform),
+ *   - Apply the asset-TTL transform inline,
  *   - Hand the resolved (TTL-wrapped) adapter back to the package via the
  *     `onAdapter` callback so the delete-cascade middleware and custom-op
  *     handlers all see the same adapter instance (Rule 3).
  *
  * The three bespoke routes (`presignUpload`, `presignDownload`, `serveImage`)
  * are declared as `overrides.operations` on this module. Their route paths
- * and middleware come from the entity's `routes.operations.*` config so the
- * HTTP contract is unchanged from the manifest path.
+ * and middleware come from the entity's `routes.operations.*` config.
  *
  * @internal
  */
@@ -80,9 +78,8 @@ export function buildAssetsEntityModules(args: {
 
   /**
    * Bind a JSON-returning custom-op handler to an entity route executor.
-   * Routing/auth/middleware comes from the entity's `routes.operations.{name}`
-   * config so the response shape and authorization stay identical to the
-   * manifest path.
+   * Routing, auth, and middleware are sourced from the entity's
+   * `routes.operations.{name}` config.
    */
   const wrapJsonHandler =
     (handler: (input: unknown) => Promise<unknown>): EntityRouteExecutorBuilder =>

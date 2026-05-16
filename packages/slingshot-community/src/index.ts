@@ -150,7 +150,7 @@ export {
 
 /**
  * Entity factory registries for resolving repos against the active store
- * backend. Used by manifest runtime and tests; most app code does not need
+ * backend. Used by tests and advanced wiring; most app code does not need
  * these directly.
  */
 export {

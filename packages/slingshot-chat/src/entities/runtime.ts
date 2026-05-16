@@ -82,8 +82,7 @@ function withEditedAtInput(input: UpdateMessageInput): UpdateMessageInput {
 
 /**
  * Wrap the resolved Message adapter to auto-stamp `editedAt` whenever the
- * caller updates the message body. Mirrors the legacy
- * `chat.message.editedAt` manifest transform.
+ * caller updates the message body.
  *
  * Callers pass the typed `MessageAdapter` view of the resolved adapter so
  * this wrapper can call typed methods directly. The return is widened to
@@ -104,7 +103,7 @@ export function applyEditedAtTransform(messageAdapter: MessageAdapter): BareEnti
 /**
  * Wrap the resolved Message adapter so encrypted-room messages are stored as
  * ciphertext and decrypted on read. When `provider` is null the adapter is
- * returned unchanged. Mirrors the legacy `chat.message.cipher` transform.
+ * returned unchanged.
  *
  * Reads `roomAdapterRef.rooms` from the shared refs bag at request time so
  * the encryption layer always sees the latest Room adapter.
@@ -195,7 +194,7 @@ export interface ChatPermissionsAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// Custom-op handlers (lifted from the manifest runtime)
+// Custom-op handlers
 // ---------------------------------------------------------------------------
 
 export interface CreateFindOrCreateDmHandlerArgs {
@@ -205,8 +204,7 @@ export interface CreateFindOrCreateDmHandlerArgs {
 }
 
 /**
- * Build the `findOrCreateDm` handler — mirrors the legacy manifest
- * `chat.room.findOrCreateDm` exactly.
+ * Build the `findOrCreateDm` handler.
  *
  * Deterministic room id `dm-{sorted(userId,targetUserId).join('-')}`,
  * bidirectional block check (403), idempotent on second call.
@@ -286,9 +284,8 @@ export function createFindOrCreateDmHandler(args: CreateFindOrCreateDmHandlerArg
 /**
  * Build the `unreadCount` handler bound to a refs bag.
  *
- * Mirrors the legacy `chat.member.unreadCount` manifest handler. Reads
- * member adapter for memberships and message adapter for `listByRoom` to
- * count unread messages per room.
+ * Reads member adapter for memberships and message adapter for `listByRoom`
+ * to count unread messages per room.
  */
 export function createUnreadCountOpHandler(refs: ChatAdapterRefs) {
   return async (input: unknown) => {
@@ -368,7 +365,6 @@ export function applyClaimDueScheduledMessagesMethod(
 /**
  * Build the `forwardMessage` handler bound to a refs bag.
  *
- * Mirrors the legacy `chat.message.forward` manifest handler exactly.
  * Validates source/target membership, target room archive state, then
  * creates a forwarded message with `forwardedFromId` referencing the
  * original.
@@ -450,9 +446,8 @@ export interface CreateRedeemInviteHandlerArgs {
 /**
  * Build the `redeemInvite` handler bound to a refs bag.
  *
- * Mirrors the legacy `chat.invite.redeem` manifest handler exactly: token
- * lookup, revoke/expiry checks, idempotent member probe, block check,
- * atomic claim/release, member create, best-effort grant.
+ * Flow: token lookup, revoke/expiry checks, idempotent member probe, block
+ * check, atomic claim/release, member create, best-effort grant.
  */
 export function createRedeemInviteHandler(args: CreateRedeemInviteHandlerArgs) {
   const { refs, permissionsAdapter, tenantId } = args;
@@ -534,8 +529,8 @@ export function createRedeemInviteHandler(args: CreateRedeemInviteHandlerArgs) {
 
 /**
  * Build the `claimInviteSlot` operation bound directly to a RoomInvite
- * adapter. Internal — the legacy manifest exposed it as a custom op with
- * no route. Used by `redeemInvite` via direct call.
+ * adapter. Internal helper invoked by `redeemInvite` via direct call (no
+ * route exposure).
  */
 export function buildClaimInviteSlotOp(inviteAdapter: RoomInviteAdapter) {
   return async (params: { id?: string }) => {

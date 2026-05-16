@@ -1,7 +1,7 @@
 import type { PaginatedResult, StorageAdapter } from '@lastshotlabs/slingshot-core';
 
 /**
- * Manifest-compatible storage adapter reference.
+ * Reference to a built-in storage adapter resolved by name.
  *
  * Use this shape in config-driven mode to resolve a built-in storage adapter
  * without passing a runtime object instance.

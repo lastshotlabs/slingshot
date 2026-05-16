@@ -29,8 +29,7 @@ import type { PushRouterRepos } from '../router';
 
 /**
  * Wrap the PushSubscription adapter so the entity's POST create path performs
- * an upsert-by-device instead of a plain insert. Mirrors the legacy manifest's
- * `push.subscription.upsertOnCreate` adapter transform.
+ * an upsert-by-device instead of a plain insert.
  */
 function applySubscriptionUpsertTransform(adapter: BareEntityAdapter): BareEntityAdapter {
   const subs = adapter as unknown as PushRouterRepos['subscriptions'];

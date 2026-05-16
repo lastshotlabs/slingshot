@@ -186,7 +186,7 @@ export interface CommunityAdapterRefs {
 }
 
 // ---------------------------------------------------------------------------
-// Invite slot helpers (formerly manifest custom handlers)
+// Invite slot helpers
 // ---------------------------------------------------------------------------
 
 function getUserId(params: Record<string, unknown>): string {
@@ -279,11 +279,9 @@ export interface CreateRedeemHandlerArgs {
  * Build the `redeemInvite` handler — the bespoke route mounted at
  * `POST /:mount/container-invites/redeem`.
  *
- * Lifts the manifest's `community.containerInvite.redeemInvite` handler into
- * a plain async function bound to the refs bag and an injected permissions
- * adapter. Behavior matches the manifest version exactly: token lookup,
- * revoke/expiry checks, idempotent membership probe, atomic claim/release,
- * member creation, best-effort grant.
+ * Bound to the refs bag and an injected permissions adapter. Flow: token
+ * lookup, revoke/expiry checks, idempotent membership probe, atomic
+ * claim/release, member creation, best-effort grant.
  */
 export function createRedeemInviteHandler(args: CreateRedeemHandlerArgs) {
   const { refs, permissionsAdapter, tenantId } = args;

@@ -208,8 +208,7 @@ export function buildCommunityEntityModules(args: BuildCommunityEntityModulesArg
 
   // ─── Reaction ──────────────────────────────────────────────────────────────
   // The `updateScore` op.custom is intentionally route-disabled and has no
-  // adapter wiring — preserving the legacy manifest behaviour where the
-  // dormant custom-handler was never invoked at runtime.
+  // adapter wiring — the custom-handler is dormant and never invoked at runtime.
   const reactionModule = entity({
     config: Reaction,
     operations: reactionOperations,

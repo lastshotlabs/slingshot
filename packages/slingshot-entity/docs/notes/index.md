@@ -7,13 +7,12 @@ description: Working notes for @lastshotlabs/slingshot-entity
 
 - Keep the generated and runtime paths conceptually aligned so features do not behave differently depending on how they are consumed.
 - Document operation semantics and route-config behavior with more small examples.
-- Watch for overlap between manifest support, entity definitions, and migration planning.
+- Watch for overlap between entity definitions, package authoring via `definePackage(...)`, and migration planning.
 
 ## Good Next Docs
 
-- A minimal end-to-end tutorial from `defineEntity()` to generated routes and a mounted plugin.
+- A minimal end-to-end tutorial from `defineEntity()` to generated routes and a mounted package.
 - A cheat sheet for which concerns belong in operations, route config, middleware, or `setupPost()`.
-- A manifest parity page describing what JSON can express today versus what still requires code.
 
 ## Review Checklist
 

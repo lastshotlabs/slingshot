@@ -15,11 +15,6 @@
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
     },
-    "./manifest": {
-      "bun": "./dist/src/manifest/webhooksManifest.js",
-      "types": "./dist/src/manifest/webhooksManifest.d.ts",
-      "import": "./dist/src/manifest/webhooksManifest.js"
-    },
     "./bullmq": {
       "bun": "./dist/src/queues/bullmq.js",
       "types": "./dist/src/queues/bullmq.d.ts",

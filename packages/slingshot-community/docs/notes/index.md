@@ -5,7 +5,7 @@ description: Working notes for @lastshotlabs/slingshot-community
 
 ## Current Focus Areas
 
-- Keep the plugin thin and prevent route-by-route logic from creeping back in.
+- Keep the package thin and prevent route-by-route logic from creeping back in.
 - Watch the moderation, scoring, and notification paths because they are the most side-effect heavy parts of the package.
 - Keep auth and permissions assumptions explicit when adding new entity operations.
 

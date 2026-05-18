@@ -24,7 +24,7 @@ search config into live query and indexing behavior.
 
 ## Common Flows
 
-- configure providers, then add the plugin to the app
+- configure providers, then add the package to the app
 - let `setupPost` discover entities with `search` config from the entity registry
 - register transforms up front if entity documents need reshaping before indexing
 

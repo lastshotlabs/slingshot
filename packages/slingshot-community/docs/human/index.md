@@ -218,8 +218,9 @@ export function createBrandedPushFormattersPlugin() {
 }
 ```
 
-The last formatter registered for a given notification type wins, so this plugin must declare
-`'slingshot-community'` (and `'slingshot-push'`) as dependencies to run after them.
+The last formatter registered for a given notification type wins, so a custom override
+plugin must declare `'slingshot-community'` (and `'slingshot-push'`) as dependencies to
+run after them.
 
 ## First Config Knobs To Know
 

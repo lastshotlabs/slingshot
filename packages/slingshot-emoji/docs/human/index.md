@@ -19,14 +19,14 @@ Do not use it if you only need static built-in emoji. This package exists for ma
 
 ## What You Need Before Wiring It In
 
-The plugin always depends on `slingshot-auth`.
+The package always depends on `slingshot-auth`.
 
 Permissions work in one of two modes:
 
-- pass `permissions` explicitly in plugin config, or
-- register `slingshot-permissions` before this plugin so it can read shared permission state
+- pass `permissions` explicitly in package config, or
+- register `slingshot-permissions` before this package so it can read shared permission state
 
-The plugin does not upload files itself. Clients must upload the image first and then create the
+The package does not upload files itself. Clients must upload the image first and then create the
 emoji record using the resulting `uploadKey`.
 
 ## Minimum Setup

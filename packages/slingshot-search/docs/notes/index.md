@@ -7,8 +7,8 @@ description: Working notes for @lastshotlabs/slingshot-search
 
 ## Current Follow-Ups
 
-- Add docs that pair entity `search` config with the plugin-level provider config so the full story
-  is visible in one flow.
+- Add docs that pair entity `search` config with the package-level provider config so the full
+  story is visible in one flow.
 - Document the supported sync modes and the practical tradeoffs between event-bus sync and other
   approaches.
 - Add a provider comparison page or matrix once the API surface stabilizes.

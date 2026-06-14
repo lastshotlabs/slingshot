@@ -452,9 +452,9 @@ describe('webhooks entity runtime', () => {
     expect(typeof wrapped.transition).toBe('function');
     // Missing-row 404 surfaces through the validation path the queue
     // processor depends on — proves transition delegates to applyTransition.
-    await expect(
-      wrapped.transition({ id: 'nope', status: 'delivered' } as never),
-    ).rejects.toThrow(/Delivery not found/);
+    await expect(wrapped.transition({ id: 'nope', status: 'delivered' } as never)).rejects.toThrow(
+      /Delivery not found/,
+    );
   });
 
   it('routes endpoint secret writes through a custom SecretEncryptor and reads them back', async () => {

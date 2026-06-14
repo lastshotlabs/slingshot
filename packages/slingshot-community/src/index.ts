@@ -156,29 +156,8 @@ export {
   containerSettingOperations,
 } from './entities/containerSetting';
 
-/**
- * Entity factory registries for resolving repos against the active store
- * backend. Used by tests and advanced wiring; most app code does not need
- * these directly.
- */
-export {
-  containerFactories,
-  threadFactories,
-  replyFactories,
-  reactionFactories,
-  containerMemberFactories,
-  containerRuleFactories,
-  reportFactories,
-  banFactories,
-  tagFactories,
-  threadTagFactories,
-  containerInviteFactories,
-  containerSubscriptionFactories,
-  threadSubscriptionFactories,
-  userMuteFactories,
-  bookmarkFactories,
-  autoModRuleFactories,
-  warningFactories,
-  auditLogEntryFactories,
-  containerSettingFactories,
-} from './entities/factories';
+// Entity factory registries (`./entities/factories`) are an internal wiring
+// detail consumed by `src/testing.ts` and cross-package wiring tests via the
+// module path. They are intentionally NOT re-exported from the package root:
+// the runtime wires adapters through `buildCommunityEntityModules` (manual
+// mode), so app code never needs these directly.

@@ -13,8 +13,7 @@
  * import { createEmojiPackage } from '@lastshotlabs/slingshot-emoji';
  *
  * export default defineApp({
- *   packages: [createPermissionsPackage({ adapter })],
- *   packages: [createEmojiPackage({ mountPath: '/emoji' })],
+ *   packages: [createPermissionsPackage({ adapter }), createEmojiPackage({ mountPath: '/emoji' })],
  * });
  * ```
  */

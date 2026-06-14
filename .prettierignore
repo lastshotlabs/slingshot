@@ -8,3 +8,4 @@ packages/docs/dist
 .oclif.manifest.json
 bun.lock
 package-lock.json
+**/__tmp_*__/

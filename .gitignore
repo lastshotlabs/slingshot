@@ -44,3 +44,6 @@ packages/*/tsconfig.build.tsbuildinfo
 # Stray SQLite test artifacts
 file:test-*
 .test-cleanup*
+
+# Transient test scratch dirs (slingshot-ssg renderer/crawler tests write these)
+**/__tmp_*__/

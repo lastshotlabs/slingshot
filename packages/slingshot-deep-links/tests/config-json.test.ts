@@ -18,7 +18,7 @@ import type { DeepLinksConfigInput } from '../src/config';
 import { createDeepLinksPlugin } from '../src/plugin';
 
 /**
- * Simulate how a manifest bootstrap would work: take a JSON-serializable
+ * Simulate how a config-driven bootstrap would work: take a JSON-serializable
  * config blob (as you'd get from JSON.parse of an app config), pass
  * it to createDeepLinksPlugin, and wire up the plugin.
  */
@@ -47,7 +47,7 @@ function bootFromManifestJson(configJson: string): Hono {
   return app;
 }
 
-// Phase 6 example manifest JSON (all fields JSON-serializable, no functions).
+// Example config JSON (all fields JSON-serializable, no functions).
 const FULL_MANIFEST_JSON = JSON.stringify({
   apple: [
     {
@@ -68,7 +68,7 @@ const FULL_MANIFEST_JSON = JSON.stringify({
   },
 });
 
-describe('Manifest-first compliance — JSON round-trip', () => {
+describe('Config-first compliance — JSON round-trip', () => {
   test('config survives JSON.parse/JSON.stringify without information loss', () => {
     const original: DeepLinksConfigInput = {
       apple: [
@@ -98,8 +98,8 @@ describe('Manifest-first compliance — JSON round-trip', () => {
   });
 });
 
-describe('Manifest boot — AASA route', () => {
-  test('GET /.well-known/apple-app-site-association returns 200 from manifest JSON', async () => {
+describe('Config boot — AASA route', () => {
+  test('GET /.well-known/apple-app-site-association returns 200 from JSON config', async () => {
     const app = bootFromManifestJson(FULL_MANIFEST_JSON);
     const res = await app.request('/.well-known/apple-app-site-association');
     expect(res.status).toBe(200);
@@ -116,8 +116,8 @@ describe('Manifest boot — AASA route', () => {
   });
 });
 
-describe('Manifest boot — assetlinks route', () => {
-  test('GET /.well-known/assetlinks.json returns 200 from manifest JSON', async () => {
+describe('Config boot — assetlinks route', () => {
+  test('GET /.well-known/assetlinks.json returns 200 from JSON config', async () => {
     const app = bootFromManifestJson(FULL_MANIFEST_JSON);
     const res = await app.request('/.well-known/assetlinks.json');
     expect(res.status).toBe(200);
@@ -131,8 +131,8 @@ describe('Manifest boot — assetlinks route', () => {
   });
 });
 
-describe('Manifest boot — fallback redirects', () => {
-  test('fallback redirect works from manifest JSON config', async () => {
+describe('Config boot — fallback redirects', () => {
+  test('fallback redirect works from JSON config', async () => {
     const app = bootFromManifestJson(FULL_MANIFEST_JSON);
     const res = await app.request('/share/abc');
     expect([301, 302]).toContain(res.status);
@@ -141,7 +141,7 @@ describe('Manifest boot — fallback redirects', () => {
   });
 });
 
-describe('Manifest boot — apple-only (no android)', () => {
+describe('Config boot — apple-only (no android)', () => {
   test('AASA route 200, assetlinks 404 when android absent', async () => {
     const appleOnlyJson = JSON.stringify({
       apple: {
@@ -160,7 +160,7 @@ describe('Manifest boot — apple-only (no android)', () => {
   });
 });
 
-describe('Manifest boot — android-only (no apple)', () => {
+describe('Config boot — android-only (no apple)', () => {
   test('assetlinks 200, AASA 404 when apple absent', async () => {
     const androidOnlyJson = JSON.stringify({
       android: {
@@ -180,7 +180,7 @@ describe('Manifest boot — android-only (no apple)', () => {
   });
 });
 
-describe('Manifest boot — invalid config rejected at setup time', () => {
+describe('Config boot — invalid config rejected at setup time', () => {
   test('invalid teamId throws before any request is served', () => {
     const badJson = JSON.stringify({
       apple: {

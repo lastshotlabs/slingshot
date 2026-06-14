@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createPollsTestApp } from '../../src/testing';
 
-describe('manifest bootstrap — JSON-only poll lifecycle', () => {
+describe('config bootstrap — JSON-only poll lifecycle', () => {
   it('boots from config and runs full lifecycle', async () => {
     const { app } = await createPollsTestApp();
 

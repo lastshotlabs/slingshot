@@ -79,8 +79,8 @@ afterAll(async () => {
   await disconnectTestServices();
 });
 
-describe('Webhooks MongoDB manifest runtime (docker)', () => {
-  test('persists endpoints and deliveries through the manifest runtime and management routes', async () => {
+describe('Webhooks MongoDB entity runtime (docker)', () => {
+  test('persists endpoints and deliveries through the entity runtime and management routes', async () => {
     const tenantId = `tenant-mongo-${crypto.randomUUID()}`;
     const eventName = `auth:mongo:${crypto.randomUUID()}`;
     const { app, runtime, teardown } = await createWebhooksTestApp(

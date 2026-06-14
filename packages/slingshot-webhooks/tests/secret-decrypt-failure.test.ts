@@ -188,19 +188,19 @@ function createDeliveryBaseAdapter(records: DeliveryRecord[]): BareEntityAdapter
   };
 }
 
-type ManifestRuntimeOptions = WebhookSecretCipherOptions & {
+type EntityRuntimeOptions = WebhookSecretCipherOptions & {
   logger?: RuntimeLogger;
 };
 
 async function setupRuntime(options: {
   endpoints: EndpointRecord[];
   deliveries?: DeliveryRecord[];
-  manifestRuntimeOptions?: ManifestRuntimeOptions;
+  entityRuntimeOptions?: EntityRuntimeOptions;
 }): Promise<{ runtime: WebhookRuntimeAdapter }> {
   const definitionsRef: { current?: undefined } = {};
   const cipher = createWebhookSecretCipher({
-    secretEncryptionKey: options.manifestRuntimeOptions?.secretEncryptionKey ?? null,
-    encryptor: options.manifestRuntimeOptions?.encryptor ?? null,
+    secretEncryptionKey: options.entityRuntimeOptions?.secretEncryptionKey ?? null,
+    encryptor: options.entityRuntimeOptions?.encryptor ?? null,
   });
 
   const baseEndpointAdapter = createEndpointBaseAdapter(options.endpoints);
@@ -213,7 +213,7 @@ async function setupRuntime(options: {
   );
   const deliveryAdapter = applyWebhookDeliveryRuntimeTransform(baseDeliveryAdapter);
 
-  const logger: RuntimeLogger = options.manifestRuntimeOptions?.logger ?? {
+  const logger: RuntimeLogger = options.entityRuntimeOptions?.logger ?? {
     error() {},
     warn() {},
   };
@@ -279,7 +279,7 @@ describe('webhook secret decrypt failure path', () => {
 
     const { runtime } = await setupRuntime({
       endpoints,
-      manifestRuntimeOptions: {
+      entityRuntimeOptions: {
         encryptor: failingEncryptor,
         logger: {
           error(message, fields) {
@@ -388,7 +388,7 @@ describe('webhook secret decrypt failure path', () => {
 
     const { runtime } = await setupRuntime({
       endpoints,
-      manifestRuntimeOptions: {
+      entityRuntimeOptions: {
         encryptor: failingEncryptor,
         logger: {
           error(_message, fields) {
@@ -468,7 +468,7 @@ describe('webhook secret decrypt failure path', () => {
     // Phase 1: broken cipher — getEndpoint fails closed.
     const broken = await setupRuntime({
       endpoints,
-      manifestRuntimeOptions: {
+      entityRuntimeOptions: {
         encryptor: brokenEncryptor,
         logger: { error() {}, warn() {} },
       },
@@ -481,7 +481,7 @@ describe('webhook secret decrypt failure path', () => {
     // Phase 2: rotated cipher — same stored row now decrypts cleanly.
     const rotated = await setupRuntime({
       endpoints,
-      manifestRuntimeOptions: {
+      entityRuntimeOptions: {
         encryptor: workingEncryptor,
         logger: { error() {}, warn() {} },
       },

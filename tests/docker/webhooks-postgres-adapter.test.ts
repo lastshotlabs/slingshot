@@ -49,8 +49,8 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('Webhooks Postgres manifest runtime (docker)', () => {
-  test('persists endpoints and deliveries through the manifest runtime and management routes', async () => {
+describe('Webhooks Postgres entity runtime (docker)', () => {
+  test('persists endpoints and deliveries through the entity runtime and management routes', async () => {
     const tenantId = `tenant-postgres-${crypto.randomUUID()}`;
     const eventName = `auth:postgres:${crypto.randomUUID()}`;
     const { app, runtime, teardown } = await createWebhooksTestApp(

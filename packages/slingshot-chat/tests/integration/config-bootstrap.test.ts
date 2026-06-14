@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import { createChatTestApp, seedMember, seedRoom } from '../../src/testing';
 
-describe('manifest-safe bootstrap', () => {
+describe('config-safe bootstrap', () => {
   it('boots from JSON-only config and exposes chat routes', async () => {
     const { app, state } = await createChatTestApp({
       mountPath: '/api/chat',

@@ -712,7 +712,7 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
       }
 
       if (!runtimeAdapter) {
-        throw new WebhookRuntimeError('Manifest adapters were not resolved during setup');
+        throw new WebhookRuntimeError('Entity adapters were not resolved during setup');
       }
 
       // Resolve the framework-owned metrics emitter so the dispatcher

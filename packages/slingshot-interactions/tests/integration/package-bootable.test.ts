@@ -255,8 +255,8 @@ async function bootFromManifest(): Promise<Harness> {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Manifest-first compliance — JSON round-trip', () => {
-  test('manifest config survives JSON.parse / JSON.stringify without information loss', () => {
+describe('Config-first compliance — JSON round-trip', () => {
+  test('JSON config survives JSON.parse / JSON.stringify without information loss', () => {
     const roundTripped = JSON.parse(MANIFEST_JSON) as unknown;
     expect(JSON.stringify(roundTripped)).toBe(MANIFEST_JSON);
   });
@@ -268,7 +268,7 @@ describe('Manifest-first compliance — JSON round-trip', () => {
   });
 });
 
-describe('Plugin bootstrap from manifest JSON', () => {
+describe('Plugin bootstrap from JSON config', () => {
   test('plugin boots without errors', async () => {
     await expect(bootFromManifest()).resolves.toBeDefined();
   });
@@ -320,7 +320,7 @@ describe('Plugin bootstrap from manifest JSON', () => {
   });
 });
 
-describe('Queue dispatcher — via manifest config', () => {
+describe('Queue dispatcher — via JSON config', () => {
   let harness: Harness;
   const emitted: Array<{ event: string; payload: unknown }> = [];
 
@@ -371,7 +371,7 @@ describe('Queue dispatcher — via manifest config', () => {
   });
 });
 
-describe('Route dispatcher — via manifest config', () => {
+describe('Route dispatcher — via JSON config', () => {
   test('route dispatcher calls the internal route and returns 200', async () => {
     const { app } = await bootFromManifest();
     const { getContext } = await import('@lastshotlabs/slingshot-core');
@@ -402,7 +402,7 @@ describe('Route dispatcher — via manifest config', () => {
   });
 });
 
-describe('Webhook dispatcher — via manifest config', () => {
+describe('Webhook dispatcher — via JSON config', () => {
   test('webhook dispatcher POSTs to configured target with HMAC signature', async () => {
     const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({ status: 'ok' }), {
@@ -450,7 +450,7 @@ describe('Webhook dispatcher — via manifest config', () => {
   });
 });
 
-describe('Config validation from manifest', () => {
+describe('Config validation', () => {
   test('invalid handler kind throws at plugin creation', () => {
     const badConfig = JSON.stringify({
       handlers: {

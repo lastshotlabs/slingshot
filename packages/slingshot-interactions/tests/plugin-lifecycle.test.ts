@@ -323,7 +323,11 @@ describe('createInteractionsPackage lifecycle', () => {
       | undefined;
     ctxState?.registerHandler(
       'runtime:',
-      createFakeDispatcher(async () => ({ status: 'ok' as const, message: 'ok', body: { ok: true } })),
+      createFakeDispatcher(async () => ({
+        status: 'ok' as const,
+        message: 'ok',
+        body: { ok: true },
+      })),
     );
 
     // Dispatch writes an InteractionEvent audit row through the dispatch

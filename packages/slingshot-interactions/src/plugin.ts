@@ -1,7 +1,4 @@
-import type {
-  PluginSetupContext,
-  SlingshotPackageDefinition,
-} from '@lastshotlabs/slingshot-core';
+import type { PluginSetupContext, SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
   defineEvent,

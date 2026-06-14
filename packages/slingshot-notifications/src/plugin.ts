@@ -14,8 +14,8 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { createNotificationBuilder } from './builder';
 import type { NotificationBuilder } from '@lastshotlabs/slingshot-core';
+import { createNotificationBuilder } from './builder';
 import { createIntervalDispatcher } from './dispatcher';
 import type { DispatcherAdapter } from './dispatcher';
 import { buildNotificationsEntityModules } from './entities/modules';
@@ -76,7 +76,9 @@ function validateNotificationAdapter(adapter: unknown): NotificationAdapter {
   ] as const;
   for (const method of required) {
     if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
-      throw new Error(`[slingshot-notifications] Notification adapter missing required method: ${method}`);
+      throw new Error(
+        `[slingshot-notifications] Notification adapter missing required method: ${method}`,
+      );
     }
   }
   return adapter as NotificationAdapter;
@@ -98,7 +100,9 @@ function validateNotificationPreferenceAdapter(adapter: unknown): NotificationPr
   ] as const;
   for (const method of required) {
     if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
-      throw new Error(`[slingshot-notifications] NotificationPreference adapter missing required method: ${method}`);
+      throw new Error(
+        `[slingshot-notifications] NotificationPreference adapter missing required method: ${method}`,
+      );
     }
   }
   return adapter as NotificationPreferenceAdapter;

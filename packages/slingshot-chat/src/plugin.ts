@@ -37,17 +37,15 @@ import {
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
+import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { chatPluginConfigSchema } from './config.schema';
-import { buildChatEntityModules } from './entities/modules';
-import {
-  type ChatAdapterRefs,
-  buildChatPluginStateSnapshot,
-} from './entities/runtime';
 import { resolveChatEncryptionProvider } from './encryption/provider';
 import { buildEncryptionRouter } from './encryption/stub';
 import type { ChatEncryptionProvider } from './encryption/types';
+import { buildChatEntityModules } from './entities/modules';
+import { type ChatAdapterRefs, buildChatPluginStateSnapshot } from './entities/runtime';
 import { registerChatPushFormatters } from './lib/pushFormatters';
 import { createArchiveGuardMiddleware } from './middleware/archiveGuard';
 import { createBroadcastGuardMiddleware } from './middleware/broadcastGuard';
@@ -61,7 +59,6 @@ import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecr
 import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
 import { createRoomCreatorGrantMiddleware } from './middleware/roomCreatorGrant';
 import { probeEmbedsPeer } from './peers/embeds';
-import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { ChatInteractionsPeerCap } from './public';
 import type { ChatInteractionsPeer } from './public';
 import { CHAT_PLUGIN_STATE_KEY, CHAT_RUNTIME_KEY } from './state';
@@ -377,9 +374,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
         !refs.blocks ||
         !refs.favorites
       ) {
-        throw new Error(
-          '[slingshot-chat] required adapters were not captured during entity setup',
-        );
+        throw new Error('[slingshot-chat] required adapters were not captured during entity setup');
       }
 
       // ─── Adapter-dependent middleware ───────────────────────────────────
@@ -438,9 +433,10 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       bus.on('chat:message.created', async (payload: Record<string, unknown>) => {
         const id = typeof payload.id === 'string' ? payload.id : undefined;
         if (!id) return;
-        const record = (await msgAdapter.getById(id)) as
-          | { body?: string; format?: 'plain' | 'markdown' }
-          | null;
+        const record = (await msgAdapter.getById(id)) as {
+          body?: string;
+          format?: 'plain' | 'markdown';
+        } | null;
         if (!record) return;
         const parsed = parseBody(record.body, record.format ?? 'markdown');
         try {
@@ -545,9 +541,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
               )
               .catch((err: unknown) => {
                 const message = err instanceof Error ? err.message : String(err);
-                logger.warn(
-                  `Failed to update lastMessage for room ${msg.roomId}: ${message}`,
-                );
+                logger.warn(`Failed to update lastMessage for room ${msg.roomId}: ${message}`);
               });
           }
         } catch {

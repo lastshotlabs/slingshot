@@ -9,11 +9,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  PACKAGE_CAPABILITIES_PREFIX,
-  attachContext,
-  isPackageRegistered,
-} from '../src/index';
+import { PACKAGE_CAPABILITIES_PREFIX, attachContext, isPackageRegistered } from '../src/index';
 
 function buildApp(registeredPackages: readonly string[] = []): Hono {
   const app = new Hono();

@@ -95,9 +95,9 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
           query<T>(sql: string): { all(...args: unknown[]): T[] };
         };
         const rows = database
-          .query<Record<string, unknown>>(
-            'SELECT * FROM notification_preferences WHERE user_id = ?',
-          )
+          .query<
+            Record<string, unknown>
+          >('SELECT * FROM notification_preferences WHERE user_id = ?')
           .all(userId);
         return Promise.resolve(
           rows.map(row =>

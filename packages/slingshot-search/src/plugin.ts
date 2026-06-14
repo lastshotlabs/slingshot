@@ -19,12 +19,11 @@ import type {
   SearchPluginRuntime,
   SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
-import { SearchRuntimeCap } from './public';
 import {
   SEARCH_PLUGIN_STATE_KEY,
   createNoopMetricsEmitter,
-  definePackage,
   defineEvent,
+  definePackage,
   getContextOrNull,
   getPluginState,
   noopLogger,
@@ -34,6 +33,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { createEventSyncManager } from './eventSync';
 import type { EventSyncManager } from './eventSync';
+import { SearchRuntimeCap } from './public';
 import { createAdminRouter } from './routes/admin';
 import { createFederatedRouter } from './routes/federated';
 import { SEARCH_ROUTES } from './routes/index';

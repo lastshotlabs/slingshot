@@ -24,10 +24,9 @@
 //   4. For each candidate route file, look for a sibling companion file with
 //      the same base name and a `.server.{ts,tsx}` suffix. Record its absolute
 //      path (or null when absent).
-
 import { readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
-import { translatePath, type TranslatedPath } from './pathSyntax';
+import { type TranslatedPath, translatePath } from './pathSyntax';
 
 /** A scanned route file before SSR-companion detection. */
 export interface ScannedRouteFile {
@@ -69,10 +68,7 @@ export function scanRoutesDirectory(routesDirectory: string): {
   // whether a given companion exists without re-touching the filesystem.
   const filesByPath = new Set(allFiles);
 
-  const layouts = new Map<
-    string,
-    { filePath: string; serverFilePath: string | null }
-  >();
+  const layouts = new Map<string, { filePath: string; serverFilePath: string | null }>();
   let rootLayoutPath: string | null = null;
   let rootLayoutServerPath: string | null = null;
   const leaves: ScannedRouteFile[] = [];
@@ -112,10 +108,9 @@ export function scanRoutesDirectory(routesDirectory: string): {
       translation = translatePath(noExt);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `[slingshot-ssr-tanstack] failed to translate route '${rel}': ${message}`,
-        { cause: err },
-      );
+      throw new Error(`[slingshot-ssr-tanstack] failed to translate route '${rel}': ${message}`, {
+        cause: err,
+      });
     }
 
     if (translation.isRoot) continue;
@@ -158,11 +153,7 @@ function isServerCompanionStem(noExt: string): boolean {
  * absolute path of the first match, preferring `.server.ts` when both exist
  * (deterministic precedence).
  */
-function findCompanion(
-  files: ReadonlySet<string>,
-  filePath: string,
-  ext: string,
-): string | null {
+function findCompanion(files: ReadonlySet<string>, filePath: string, ext: string): string | null {
   const stem = filePath.slice(0, -ext.length);
   const tsCompanion = `${stem}.server.ts`;
   if (files.has(tsCompanion)) return tsCompanion;

@@ -17,10 +17,8 @@ import {
   resolveCapabilityValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications';
-import { PushFormatterRegistryCap, PushHealthCap, PushRuntimeCap } from './public';
-import type { PushFormatterRegistry, PushPluginHealth } from './public';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
+import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
 import { buildPushEntityModules } from './entities/modules';
 import { compilePushFormatters } from './formatter';
@@ -28,6 +26,8 @@ import { ApnsTokenAuth, createApnsProvider } from './providers/apns';
 import { createFcmProvider } from './providers/fcm';
 import type { PushProvider } from './providers/provider';
 import { createWebPushProvider } from './providers/web';
+import { PushFormatterRegistryCap, PushHealthCap, PushRuntimeCap } from './public';
+import type { PushFormatterRegistry, PushPluginHealth } from './public';
 import { type PushRouterRepos, createPushRouter } from './router';
 import { type PushPluginState } from './state';
 import {
@@ -164,25 +164,21 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
     timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
   };
 
-  const {
-    pushSubscriptionModule,
-    pushTopicModule,
-    pushTopicMembershipModule,
-    pushDeliveryModule,
-  } = buildPushEntityModules({
-    onSubscriptions: adapter => {
-      subscriptionsRef = adapter as unknown as PushRouterRepos['subscriptions'];
-    },
-    onTopics: adapter => {
-      topicsRef = adapter as unknown as PushRouterRepos['topics'];
-    },
-    onTopicMemberships: adapter => {
-      membershipsRef = adapter as unknown as PushRouterRepos['topicMemberships'];
-    },
-    onDeliveries: adapter => {
-      deliveriesRef = adapter as unknown as PushRouterRepos['deliveries'];
-    },
-  });
+  const { pushSubscriptionModule, pushTopicModule, pushTopicMembershipModule, pushDeliveryModule } =
+    buildPushEntityModules({
+      onSubscriptions: adapter => {
+        subscriptionsRef = adapter as unknown as PushRouterRepos['subscriptions'];
+      },
+      onTopics: adapter => {
+        topicsRef = adapter as unknown as PushRouterRepos['topics'];
+      },
+      onTopicMemberships: adapter => {
+        membershipsRef = adapter as unknown as PushRouterRepos['topicMemberships'];
+      },
+      onDeliveries: adapter => {
+        deliveriesRef = adapter as unknown as PushRouterRepos['deliveries'];
+      },
+    });
 
   function getHealth(): PushPluginHealth {
     const providers: Partial<
@@ -413,9 +409,7 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
       ).registerForbiddenClientSafePrefix?.('push:');
 
       if (!subscriptionsRef || !topicsRef || !membershipsRef || !deliveriesRef) {
-        throw new Error(
-          '[slingshot-push] Push entity adapters were not resolved during bootstrap',
-        );
+        throw new Error('[slingshot-push] Push entity adapters were not resolved during bootstrap');
       }
 
       const providers: Partial<Record<'web' | 'ios' | 'android', PushProvider>> = {};

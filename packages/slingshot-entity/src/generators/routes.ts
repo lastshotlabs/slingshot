@@ -408,7 +408,9 @@ function generateOpRoute(
       const requestField =
         params.length > 0 ? `      request: { params: z.object({ ${paramSchema} }) },` : '';
       const paramsAssign =
-        params.length > 0 ? `      const urlParams = c.req.valid('param');` : `      const urlParams = {};`;
+        params.length > 0
+          ? `      const urlParams = c.req.valid('param');`
+          : `      const urlParams = {};`;
       if (op.returns === 'one') {
         lines.push(`  // Operation: ${opName} (lookup one)`);
         lines.push(`  router.openapi(`);
@@ -476,7 +478,9 @@ function generateOpRoute(
       const requestField =
         params.length > 0 ? `      request: { params: z.object({ ${paramSchema} }) },` : '';
       const paramsAssign =
-        params.length > 0 ? `      const urlParams = c.req.valid('param');` : `      const urlParams = {};`;
+        params.length > 0
+          ? `      const urlParams = c.req.valid('param');`
+          : `      const urlParams = {};`;
       lines.push(`  // Operation: ${opName} (exists)`);
       lines.push(`  router.openapi(`);
       lines.push(`    createRoute({`);

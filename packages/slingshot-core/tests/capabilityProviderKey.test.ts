@@ -20,16 +20,12 @@ describe('capabilityProviderKey — contract-scoped namespacing', () => {
     const pluginState = new Map<string, unknown>();
     const capabilityProviders = new Map<string, string>();
 
-    await registerPluginCapabilities(
-      { pluginState, capabilityProviders },
-      'slingshot-assets',
-      [provideCapability(AssetsRuntimeCap, () => ({ kind: 'assets' as const }))],
-    );
-    await registerPluginCapabilities(
-      { pluginState, capabilityProviders },
-      'slingshot-search',
-      [provideCapability(SearchRuntimeCap, () => ({ kind: 'search' as const }))],
-    );
+    await registerPluginCapabilities({ pluginState, capabilityProviders }, 'slingshot-assets', [
+      provideCapability(AssetsRuntimeCap, () => ({ kind: 'assets' as const })),
+    ]);
+    await registerPluginCapabilities({ pluginState, capabilityProviders }, 'slingshot-search', [
+      provideCapability(SearchRuntimeCap, () => ({ kind: 'search' as const })),
+    ]);
 
     expect(resolveCapabilityValue({ pluginState, capabilityProviders }, AssetsRuntimeCap)).toEqual({
       kind: 'assets',

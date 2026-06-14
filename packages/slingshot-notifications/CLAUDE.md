@@ -8,19 +8,19 @@ is the runtime shell that wires storage, dispatch, and delivery. Composed via
 
 ## Key Files
 
-| File                              | What                                                              |
-| --------------------------------- | ----------------------------------------------------------------- |
-| src/index.ts                      | Public API surface for package, builder, dispatcher, and entities |
-| src/plugin.ts                     | `createNotificationsPackage()` factory (`SlingshotPackageDefinition`) |
-| src/entities/notification.ts      | `Notification` entity, operations, and `notificationModule`       |
-| src/entities/preference.ts        | `NotificationPreference` entity, operations, and `notificationPreferenceModule` |
-| src/public.ts                     | `Notifications` contract; `BuilderFactory`, `DeliveryRegistry`, `HealthCap` capabilities |
-| src/types/config.ts               | Notifications package config schema                               |
-| src/builder.ts            | Notification builder entry points                                |
-| src/dispatcher.ts         | Delivery dispatcher implementation                               |
-| src/preferences.ts        | Preference and quiet-hours resolution                            |
-| src/rateLimit/registry.ts | Notification rate-limit registry                                 |
-| docs/human/index.md       | Package guide synced into the docs site                          |
+| File                         | What                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| src/index.ts                 | Public API surface for package, builder, dispatcher, and entities                        |
+| src/plugin.ts                | `createNotificationsPackage()` factory (`SlingshotPackageDefinition`)                    |
+| src/entities/notification.ts | `Notification` entity, operations, and `notificationModule`                              |
+| src/entities/preference.ts   | `NotificationPreference` entity, operations, and `notificationPreferenceModule`          |
+| src/public.ts                | `Notifications` contract; `BuilderFactory`, `DeliveryRegistry`, `HealthCap` capabilities |
+| src/types/config.ts          | Notifications package config schema                                                      |
+| src/builder.ts               | Notification builder entry points                                                        |
+| src/dispatcher.ts            | Delivery dispatcher implementation                                                       |
+| src/preferences.ts           | Preference and quiet-hours resolution                                                    |
+| src/rateLimit/registry.ts    | Notification rate-limit registry                                                         |
+| docs/human/index.md          | Package guide synced into the docs site                                                  |
 
 ## Connections
 

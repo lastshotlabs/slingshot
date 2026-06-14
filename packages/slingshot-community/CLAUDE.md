@@ -8,17 +8,17 @@ interactions peer via `CommunityInteractionsPeerCap`.
 
 ## Key Files
 
-| File                        | What                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| src/index.ts                | Public API surface for package, entities, operations, and peer contracts          |
-| src/plugin.ts               | `createCommunityPackage()` factory (`SlingshotPackageDefinition`)                 |
-| src/entities/modules.ts     | `buildCommunityEntityModules(...)` — 19 entity modules with manual adapter wiring |
-| src/entities/runtime.ts     | Adapter ref shapes + lifted custom-op handlers (`redeemInvite`, slot helpers)     |
-| src/entities/thread.ts      | Representative entity definition and operations export                            |
-| src/types/config.ts         | Community package config schema and public config types                           |
-| src/types/state.ts          | Plugin state key and runtime state contracts                                      |
-| src/public.ts               | `Community` contract, `CommunityEntities` refs, `CommunityInteractionsPeerCap`    |
-| docs/human/index.md         | Package guide synced into the docs site                                           |
+| File                    | What                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| src/index.ts            | Public API surface for package, entities, operations, and peer contracts          |
+| src/plugin.ts           | `createCommunityPackage()` factory (`SlingshotPackageDefinition`)                 |
+| src/entities/modules.ts | `buildCommunityEntityModules(...)` — 19 entity modules with manual adapter wiring |
+| src/entities/runtime.ts | Adapter ref shapes + lifted custom-op handlers (`redeemInvite`, slot helpers)     |
+| src/entities/thread.ts  | Representative entity definition and operations export                            |
+| src/types/config.ts     | Community package config schema and public config types                           |
+| src/types/state.ts      | Plugin state key and runtime state contracts                                      |
+| src/public.ts           | `Community` contract, `CommunityEntities` refs, `CommunityInteractionsPeerCap`    |
+| docs/human/index.md     | Package guide synced into the docs site                                           |
 
 ## Connections
 

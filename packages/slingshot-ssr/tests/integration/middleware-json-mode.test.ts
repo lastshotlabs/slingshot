@@ -14,7 +14,6 @@
 // Plus: verify that the `_data` protocol parameter is stripped from
 // `ctx.query` before the loader sees it (so it doesn't pollute filter
 // queries the loader passes through to entity adapters).
-
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'bun:test';
@@ -85,7 +84,7 @@ function buildApp(routesDir: string): Hono {
     ),
   );
   // Concrete fallback so unmatched HTML requests don't 404 from Hono itself.
-  app.get('*', (c) => c.text('SPA fallback'));
+  app.get('*', c => c.text('SPA fallback'));
   return app;
 }
 

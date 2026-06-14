@@ -166,12 +166,7 @@ export const Thread = defineEntity('Thread', {
           resourceId: 'record:containerId',
         },
       },
-      middleware: [
-        'pollRequiredGuard',
-        'attachmentRequiredGuard',
-        'banCheck',
-        'autoMod',
-      ],
+      middleware: ['pollRequiredGuard', 'attachmentRequiredGuard', 'banCheck', 'autoMod'],
     },
     update: {
       // Editable surface — narrower than create. Author can revise

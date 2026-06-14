@@ -9,9 +9,9 @@ function asNever<T>(v: T): never {
 }
 
 function readHealth(ctx: { pluginState: Map<string, unknown> }): PermissionsHealth | null {
-  const slot = ctx.pluginState.get(
-    'slingshot:package:capabilities:slingshot-permissions',
-  ) as { health?: () => PermissionsHealth } | undefined;
+  const slot = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as
+    | { health?: () => PermissionsHealth }
+    | undefined;
   if (!slot?.health) return null;
   return slot.health();
 }

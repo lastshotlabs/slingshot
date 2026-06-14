@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type {
   GroupResolver,
   Logger,
@@ -21,7 +22,9 @@ import {
   resolveRepoAsync,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { z } from 'zod';
+import { permissionsAdapterFactories } from './factories';
+import { type EvaluatorWithHealth, createPermissionEvaluator } from './lib/evaluator';
+import { createPermissionRegistry } from './lib/registry';
 import {
   PermissionsAdapterCap,
   PermissionsEvaluatorCap,
@@ -29,12 +32,6 @@ import {
   PermissionsRegistryCap,
 } from './public';
 import type { PermissionsHealth } from './public';
-import { permissionsAdapterFactories } from './factories';
-import {
-  type EvaluatorWithHealth,
-  createPermissionEvaluator,
-} from './lib/evaluator';
-import { createPermissionRegistry } from './lib/registry';
 
 export type { PermissionsHealth } from './public';
 

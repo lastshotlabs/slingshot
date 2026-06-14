@@ -26,11 +26,6 @@ import {
   provideCapability,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import {
-  AssetsHealthCap,
-  AssetsOrphanedKeysCap,
-  AssetsRuntimeCap,
-} from './public';
 import { resolveStorageAdapter } from './adapters/index';
 import type { S3CircuitBreakerHealth, S3StorageAdapter } from './adapters/s3';
 import { assetsPluginConfigSchema } from './config.schema';
@@ -44,6 +39,7 @@ import {
   createDeleteStorageFileMiddleware,
   createOrphanedKeyRegistry,
 } from './middleware/deleteStorageFile';
+import { AssetsHealthCap, AssetsOrphanedKeysCap, AssetsRuntimeCap } from './public';
 import {
   type AssetAdapter,
   type AssetsHealth,
@@ -331,8 +327,9 @@ export function createAssetsPackage(
         // observe `===` identity.
         provideCapability(AssetsRuntimeCap, () => runtimeView),
         provideCapability(AssetsHealthCap, () => getHealth),
-        provideCapability(AssetsOrphanedKeysCap, () => (since?: Date) =>
-          orphanRegistry.listOrphanedKeys(since),
+        provideCapability(
+          AssetsOrphanedKeysCap,
+          () => (since?: Date) => orphanRegistry.listOrphanedKeys(since),
         ),
       ],
     },

@@ -19,18 +19,12 @@ import { buildDevErrorOverlay } from './dev/overlay';
 import { isDraftRequest, withDraftContext } from './draft/index';
 import type { IsrCacheAdapter } from './isr/types';
 import { isRouteParamTooLargeError } from './resolver';
+import { retry } from './retry';
+import type { RetryOptions } from './retry';
+import { executeRouteModule } from './routeExecution';
 import { createFileBasedRouteSource } from './routeSource/fileBased';
 import type { SsrRouteSource } from './routeSource/types';
-import { retry } from './retry';
-import { executeRouteModule } from './routeExecution';
-import {
-  isForbidden,
-  isLoadResult,
-  isNotFound,
-  isRedirect,
-  isUnauthorized,
-} from './types';
-import type { RetryOptions } from './retry';
+import { isForbidden, isLoadResult, isNotFound, isRedirect, isUnauthorized } from './types';
 import type {
   IsrSink,
   SsrCacheControl,
@@ -625,10 +619,7 @@ export function buildSsrMiddleware(
       // parse. Return a structured JSON 404 so the client surfaces a
       // useful error.
       if (wantsJsonResponse(c)) {
-        return c.json(
-          { notFound: true, reason: 'no_ssr_route_matched', pathname },
-          404,
-        );
+        return c.json({ notFound: true, reason: 'no_ssr_route_matched', pathname }, 404);
       }
       return next();
     }
@@ -747,10 +738,7 @@ export function buildSsrMiddleware(
           route: pathname,
           error: err instanceof Error ? err.message : String(err),
         });
-        return c.json(
-          { error: err instanceof Error ? err.message : String(err) },
-          500,
-        );
+        return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
       }
     }
     // ── End JSON-mode ─────────────────────────────────────────────────────────

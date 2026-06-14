@@ -344,9 +344,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
       try {
         const mod = (await import(sitemapPath)) as Record<string, unknown>;
         const fn = (mod['default'] ?? mod['sitemap']) as
-          | ((
-              ctx?: MetadataContext,
-            ) => Promise<SitemapEntry[]> | SitemapEntry[])
+          | ((ctx?: MetadataContext) => Promise<SitemapEntry[]> | SitemapEntry[])
           | undefined;
         if (typeof fn !== 'function') {
           return c.body('Not Found', 404, { 'Content-Type': 'text/plain' });
@@ -400,9 +398,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
       try {
         const mod = (await import(manifestPath)) as Record<string, unknown>;
         const fn = (mod['default'] ?? mod['manifest']) as
-          | ((
-              ctx?: MetadataContext,
-            ) => Promise<Record<string, unknown>> | Record<string, unknown>)
+          | ((ctx?: MetadataContext) => Promise<Record<string, unknown>> | Record<string, unknown>)
           | undefined;
         if (typeof fn !== 'function') {
           return c.body('Not Found', 404, { 'Content-Type': 'text/plain' });

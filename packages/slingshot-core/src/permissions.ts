@@ -455,7 +455,11 @@ export function getPermissionsStateOrNull(
   const map = getPluginStateOrNull(input);
   if (!map) return null;
   const slot = map.get('slingshot:package:capabilities:slingshot-permissions') as
-    | { evaluator?: PermissionEvaluator; registry?: PermissionRegistry; adapter?: PermissionsAdapter }
+    | {
+        evaluator?: PermissionEvaluator;
+        registry?: PermissionRegistry;
+        adapter?: PermissionsAdapter;
+      }
     | undefined;
   if (slot?.evaluator && slot.registry && slot.adapter) {
     return { evaluator: slot.evaluator, registry: slot.registry, adapter: slot.adapter };

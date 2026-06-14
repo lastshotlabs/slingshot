@@ -47,12 +47,14 @@ export const MatchSeats = Matches.capability<MatchSeatService>('seats');
 ```typescript title="src/packages/matches/index.ts"
 // @skip-typecheck
 import { provideCapability } from '@lastshotlabs/slingshot';
-import { Matches, MatchSeats } from './public';
+import { MatchSeats, Matches } from './public';
 
 export const matchesPackage = Matches.definePackage({
   mountPath: '/api',
   entities: [matchModule],
-  domains: [/* ... */],
+  domains: [
+    /* ... */
+  ],
   capabilities: {
     provides: [
       provideCapability(MatchSeats, () => ({
@@ -68,7 +70,7 @@ export const matchesPackage = Matches.definePackage({
 ```typescript title="src/packages/gameplay/index.ts"
 // @skip-typecheck
 import { definePackageContract, domain, route } from '@lastshotlabs/slingshot';
-import { Matches, MatchRefs, MatchSeats } from '../matches/public';
+import { MatchRefs, MatchSeats, Matches } from '../matches/public';
 
 export const Gameplay = definePackageContract('gameplay');
 
@@ -127,7 +129,7 @@ const PostRefs = Posts.publicEntities({
 // @skip-typecheck
 const post = entities.get(PostRefs.Post);
 await post.getById('id-1'); // ok
-await post.list({});        // ok
+await post.list({}); // ok
 // @ts-expect-error — `delete` is not part of the public surface
 await post.delete('id-1');
 ```

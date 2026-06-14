@@ -38,19 +38,19 @@ import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { PushDelivery } from '../../src/entities/pushDelivery';
-import { PushSubscription } from '../../src/entities/pushSubscription';
-import { PushTopic } from '../../src/entities/pushTopic';
-import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
 import {
   pushDeliveryFactories,
   pushSubscriptionFactories,
   pushTopicFactories,
   pushTopicMembershipFactories,
 } from '../../src/entities/factories';
+import { PushDelivery } from '../../src/entities/pushDelivery';
 import { pushDeliveryOperations } from '../../src/entities/pushDelivery';
+import { PushSubscription } from '../../src/entities/pushSubscription';
 import { pushSubscriptionOperations } from '../../src/entities/pushSubscription';
+import { PushTopic } from '../../src/entities/pushTopic';
 import { pushTopicOperations } from '../../src/entities/pushTopic';
+import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
 import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
 import { createPushPackage } from '../../src/plugin';
 import { type PushPluginState } from '../../src/state';
@@ -191,9 +191,7 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   // Delegate adapter construction to each entity module's own wiring so the
   // package's onAdapter / manual-wiring buildAdapter closures all fire and
   // the entity routes share state with the package's internal refs.
-  function buildAdapterForEntity(
-    entityName: string,
-  ): EntityPluginEntry['buildAdapter'] {
+  function buildAdapterForEntity(entityName: string): EntityPluginEntry['buildAdapter'] {
     const entityModule = plugin.entities.find(e => e.entityName === entityName);
     if (!entityModule) throw new Error(`entity ${entityName} not found on plugin`);
     const impl = (entityModule as { implementation: unknown }).implementation as {

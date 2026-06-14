@@ -1,3 +1,5 @@
+import { useLoaderData } from '@tanstack/react-router';
+
 // packages/slingshot-ssr-tanstack/src/client.ts
 //
 // Client-side helpers for TanStack Router routes whose data flows through
@@ -96,9 +98,7 @@ export class SsrLoaderError extends Error {
  *
  * Drop-in: pass directly as `loader` on `createFileRoute(...)({ loader })`.
  */
-export async function fetchSsrLoader<TData = unknown>(
-  ctx: SsrLoaderContext,
-): Promise<TData> {
+export async function fetchSsrLoader<TData = unknown>(ctx: SsrLoaderContext): Promise<TData> {
   const url = buildUrl(ctx);
   const res = await fetch(url, {
     method: 'GET',
@@ -187,8 +187,7 @@ function buildUrl(ctx: SsrLoaderContext): string {
   // Normalise to a leading-`?` form so the concatenation below is safe even
   // if a non-standard `searchStr` is passed in (e.g. tests, future TanStack
   // versions).
-  const search =
-    rawSearch.length === 0 || rawSearch.startsWith('?') ? rawSearch : `?${rawSearch}`;
+  const search = rawSearch.length === 0 || rawSearch.startsWith('?') ? rawSearch : `?${rawSearch}`;
   // Append `_data=1` so the request explicitly opts into JSON mode even if
   // a proxy normalises Accept headers. The slingshot middleware accepts
   // either signal.
@@ -261,8 +260,4 @@ type PageComponent<TLoaderData> = (props: { loaderData: TLoaderData }) => unknow
  * receive `loaderData` as a prop (passed by snapshot's renderer); CSR-time
  * invocations receive empty props (TanStack doesn't pass loaderData).
  */
-type SsrAwarePageComponent<TLoaderData> = (props?: {
-  loaderData?: TLoaderData;
-}) => unknown;
-
-import { useLoaderData } from '@tanstack/react-router';
+type SsrAwarePageComponent<TLoaderData> = (props?: { loaderData?: TLoaderData }) => unknown;

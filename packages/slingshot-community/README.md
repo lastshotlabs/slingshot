@@ -32,18 +32,18 @@ the declared list to enforce order, but the consumed capabilities have to actual
 available — register them in your app's `plugins` (for `slingshot-auth`) and `packages`
 (for `slingshot-permissions`, `slingshot-notifications`) arrays before community.
 
-| Module                    | Tier    | How it's consumed                                                     |
-| ------------------------- | ------- | --------------------------------------------------------------------- |
-| `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context           |
+| Module                    | Tier    | How it's consumed                                                                          |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context                                |
 | `slingshot-permissions`   | package | required; via `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, `PermissionsAdapterCap` |
-| `slingshot-notifications` | package | required; via `NotificationsBuilderFactoryCap` for outbound notifications |
+| `slingshot-notifications` | package | required; via `NotificationsBuilderFactoryCap` for outbound notifications                  |
 
 Optional, opportunistically integrated when present:
 
-| Plugin                    | What it does                                                          |
-| ------------------------- | --------------------------------------------------------------------- |
-| `slingshot-push`          | community registers push formatters for each notification type        |
-| `slingshot-interactions`  | resolves `CommunityInteractionsPeerCap` for component dispatch        |
+| Plugin                   | What it does                                                   |
+| ------------------------ | -------------------------------------------------------------- |
+| `slingshot-push`         | community registers push formatters for each notification type |
+| `slingshot-interactions` | resolves `CommunityInteractionsPeerCap` for component dispatch |
 
 ## Public Contract
 
@@ -195,7 +195,7 @@ export const moderationPackage = definePackage({
 
 When `slingshot-push` is loaded, community registers default push formatters for its own
 notification types (`community:reply`, `community:mention`, `community:ban`, `community:warning`,
-`community:thread.subscribed_reply`). Override or extend by registering your own *after*
+`community:thread.subscribed_reply`). Override or extend by registering your own _after_
 community runs `setupPost`:
 
 ```ts
@@ -258,23 +258,23 @@ run after them.
 Community augments `SlingshotEventMap` so every event below is fully typed when you call
 `bus.on(...)`.
 
-| Event                                  | Notes                                                  |
-| -------------------------------------- | ------------------------------------------------------ |
-| `community:container.created`          | new container created                                  |
-| `community:container.deleted`          | container deleted (cascades through entity definitions) |
-| `community:thread.created`             | new thread; payload includes `format`                  |
-| `community:thread.updated`             | thread fields updated                                  |
-| `community:thread.deleted`             | thread deleted                                         |
-| `community:thread.published`           | thread state transitioned to published                 |
-| `community:thread.locked` / `.unlocked` | thread lock state changed                              |
-| `community:thread.pinned` / `.unpinned` | thread pin state changed                               |
-| `community:thread.solved` / `.unsolved` | solution-reply state changed                           |
-| `community:reply.created`              | new reply; payload includes `parentId` for threading   |
-| `community:reply.deleted`              | reply deleted                                          |
-| `community:reaction.added` / `.removed` | reaction toggled on a thread or reply                  |
-| `community:thread.embeds.resolved`     | embed unfurl results applied to a thread               |
-| `community:reply.embeds.resolved`      | embed unfurl results applied to a reply                |
-| `community:invite.redeemed`            | invite accepted; payload includes `alreadyMember`      |
+| Event                                   | Notes                                                   |
+| --------------------------------------- | ------------------------------------------------------- |
+| `community:container.created`           | new container created                                   |
+| `community:container.deleted`           | container deleted (cascades through entity definitions) |
+| `community:thread.created`              | new thread; payload includes `format`                   |
+| `community:thread.updated`              | thread fields updated                                   |
+| `community:thread.deleted`              | thread deleted                                          |
+| `community:thread.published`            | thread state transitioned to published                  |
+| `community:thread.locked` / `.unlocked` | thread lock state changed                               |
+| `community:thread.pinned` / `.unpinned` | thread pin state changed                                |
+| `community:thread.solved` / `.unsolved` | solution-reply state changed                            |
+| `community:reply.created`               | new reply; payload includes `parentId` for threading    |
+| `community:reply.deleted`               | reply deleted                                           |
+| `community:reaction.added` / `.removed` | reaction toggled on a thread or reply                   |
+| `community:thread.embeds.resolved`      | embed unfurl results applied to a thread                |
+| `community:reply.embeds.resolved`       | embed unfurl results applied to a reply                 |
+| `community:invite.redeemed`             | invite accepted; payload includes `alreadyMember`       |
 
 The `embeds.resolved` events are emitted by an embed-aware peer (e.g. `slingshot-embeds`),
 not by community itself — community owns the storage update and event registration; the peer
@@ -286,13 +286,13 @@ Community emits these notification types through `NotificationsBuilderFactoryCap
 push formatters for them in `slingshot-push` (community registers defaults automatically when
 push is present).
 
-| Type                                  | When                                                              |
-| ------------------------------------- | ----------------------------------------------------------------- |
-| `community:reply`                     | a reply is created on your thread                                 |
-| `community:mention`                   | you are `@`-mentioned in a thread or reply                        |
-| `community:ban`                       | you have been banned from a container                             |
-| `community:warning`                   | a moderator issued a warning                                      |
-| `community:thread.subscribed_reply`   | a reply on a thread you subscribed to                             |
+| Type                                | When                                       |
+| ----------------------------------- | ------------------------------------------ |
+| `community:reply`                   | a reply is created on your thread          |
+| `community:mention`                 | you are `@`-mentioned in a thread or reply |
+| `community:ban`                     | you have been banned from a container      |
+| `community:warning`                 | a moderator issued a warning               |
+| `community:thread.subscribed_reply` | a reply on a thread you subscribed to      |
 
 ## Auth Bridge
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { assertMountPath, type StorageAdapter } from '@lastshotlabs/slingshot-core';
+import { type StorageAdapter, assertMountPath } from '@lastshotlabs/slingshot-core';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();

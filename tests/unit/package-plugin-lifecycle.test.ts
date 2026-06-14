@@ -79,9 +79,9 @@ describe('package plugin lifecycle', () => {
     const ctx = getContext(app);
     createdApps.push(ctx);
 
-    const slot = ctx.pluginState.get(
-      'slingshot:package:capabilities:slingshot-notifications',
-    ) as { builderFactory?: unknown } | undefined;
+    const slot = ctx.pluginState.get('slingshot:package:capabilities:slingshot-notifications') as
+      | { builderFactory?: unknown }
+      | undefined;
     expect(slot?.builderFactory).toBeDefined();
     expect(NotificationsBuilderFactoryCap.contract).toBe('slingshot-notifications');
 

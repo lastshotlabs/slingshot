@@ -1,7 +1,4 @@
-import type {
-  PluginSetupContext,
-  SlingshotPackageDefinition,
-} from '@lastshotlabs/slingshot-core';
+import type { PluginSetupContext, SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import {
   createConsoleLogger,
   definePackage,
@@ -13,8 +10,8 @@ import {
   createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_STATE_KEY } from './context';
-import { OrchestrationRuntimeCap } from './public';
 import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
+import { OrchestrationRuntimeCap } from './public';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
 

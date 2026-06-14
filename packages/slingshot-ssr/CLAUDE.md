@@ -6,18 +6,18 @@ Authored via `definePackage(...)` and consumed through `createApp({ packages: [.
 
 ## Key Files
 
-| File                 | What                                                                |
-| -------------------- | ------------------------------------------------------------------- |
-| src/index.ts         | Public API surface for package, route helpers, and SSR types        |
-| src/plugin.ts        | `createSsrPackage()` factory (`SlingshotPackageDefinition`)         |
-| src/public.ts        | `definePackageContract('slingshot-ssr')` + `IsrInvalidatorsCap`     |
-| src/config.schema.ts | SSR package config schema                                           |
-| src/resolver.ts      | Route and asset resolution helpers                                  |
-| src/pageResolver.ts  | Page declaration resolution                                         |
-| src/pageLoaders.ts   | Loader resolution and page loading                                  |
-| src/middleware.ts    | SSR request middleware, ISR tracker, cache write drain              |
-| src/actions/index.ts | SSR action exports                                                  |
-| docs/human/index.md  | Package guide synced into the docs site                             |
+| File                 | What                                                            |
+| -------------------- | --------------------------------------------------------------- |
+| src/index.ts         | Public API surface for package, route helpers, and SSR types    |
+| src/plugin.ts        | `createSsrPackage()` factory (`SlingshotPackageDefinition`)     |
+| src/public.ts        | `definePackageContract('slingshot-ssr')` + `IsrInvalidatorsCap` |
+| src/config.schema.ts | SSR package config schema                                       |
+| src/resolver.ts      | Route and asset resolution helpers                              |
+| src/pageResolver.ts  | Page declaration resolution                                     |
+| src/pageLoaders.ts   | Loader resolution and page loading                              |
+| src/middleware.ts    | SSR request middleware, ISR tracker, cache write drain          |
+| src/actions/index.ts | SSR action exports                                              |
+| docs/human/index.md  | Package guide synced into the docs site                         |
 
 ## Connections
 

@@ -34,16 +34,16 @@ sync pipeline and the API reference generator.
 For any given package, three doc files coexist with overlapping audiences. They are authored
 independently — only the docs site is generated:
 
-| File                                                              | Authored where    | Synced from                                                      |
-| ----------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------- |
-| `packages/<pkg>/CLAUDE.md`                                        | hand-authored     | not synced — agent-facing, navigational                          |
-| `packages/<pkg>/README.md`                                        | hand-authored     | not synced — npm/GitHub-facing (see drift note below)            |
-| `packages/<pkg>/docs/human/index.md`                              | hand-authored     | canonical user-facing source                                     |
-| `packages/<pkg>/docs/{maintainer,operator,...}/**/*.md`           | hand-authored     | canonical per-lane source                                        |
-| `packages/docs/src/content/docs/packages/<pkg>/overview.md`       | generated         | from `docs/human/index.md` via `bun run docs:sync`               |
-| `packages/docs/src/content/docs/packages/<pkg>/<lane>/**/*.md`    | generated         | from `docs/<lane>/**/*.md` via `bun run docs:sync`               |
-| `packages/docs/src/content/docs/api/<pkg>/index.mdx`              | generated         | from `packages/<pkg>/src/**/*.ts` TSDoc via `bun run docs:api`   |
-| `packages/docs/src/content/docs/{guides,examples,...}/**/*.mdx`   | hand-authored     | top-level docs; not tied to any single package                   |
+| File                                                            | Authored where | Synced from                                                    |
+| --------------------------------------------------------------- | -------------- | -------------------------------------------------------------- |
+| `packages/<pkg>/CLAUDE.md`                                      | hand-authored  | not synced — agent-facing, navigational                        |
+| `packages/<pkg>/README.md`                                      | hand-authored  | not synced — npm/GitHub-facing (see drift note below)          |
+| `packages/<pkg>/docs/human/index.md`                            | hand-authored  | canonical user-facing source                                   |
+| `packages/<pkg>/docs/{maintainer,operator,...}/**/*.md`         | hand-authored  | canonical per-lane source                                      |
+| `packages/docs/src/content/docs/packages/<pkg>/overview.md`     | generated      | from `docs/human/index.md` via `bun run docs:sync`             |
+| `packages/docs/src/content/docs/packages/<pkg>/<lane>/**/*.md`  | generated      | from `docs/<lane>/**/*.md` via `bun run docs:sync`             |
+| `packages/docs/src/content/docs/api/<pkg>/index.mdx`            | generated      | from `packages/<pkg>/src/**/*.ts` TSDoc via `bun run docs:api` |
+| `packages/docs/src/content/docs/{guides,examples,...}/**/*.mdx` | hand-authored  | top-level docs; not tied to any single package                 |
 
 ### Drift hazard: README ↔ docs/human/index.md
 

@@ -18,7 +18,6 @@
 //   (`initRouteTree`, `resolveRoute`, `resolveRouteChain`,
 //   `resolveGlobalMiddlewarePath`) remain exported from `@lastshotlabs/slingshot-ssr`.
 //   Adapter authors can compose them; the file-based source already does.
-
 import type { SsrRouteChain, SsrRouteMatch } from '../types';
 
 /**

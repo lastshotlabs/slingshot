@@ -1,5 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { ZodTypeAny, z } from 'zod';
+import { getContextOrNull } from './context/contextStore';
 import type {
   RouteAuthConfig,
   RouteEventConfig,
@@ -7,7 +8,6 @@ import type {
   RoutePermissionConfig,
   RouteRateLimitConfig,
 } from './entityRouteConfig';
-import { getContextOrNull } from './context/contextStore';
 import type { Actor } from './identity';
 import type { PluginSeedContext, PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';

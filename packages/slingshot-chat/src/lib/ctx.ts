@@ -7,7 +7,9 @@
 export function getUserId(params: Record<string, unknown>): string {
   const id = params['actor.id'];
   if (typeof id !== 'string' || id.length === 0) {
-    throw new Error('[slingshot-chat] actor.id missing from operation params — is slingshot-auth wired?');
+    throw new Error(
+      '[slingshot-chat] actor.id missing from operation params — is slingshot-auth wired?',
+    );
   }
   return id;
 }

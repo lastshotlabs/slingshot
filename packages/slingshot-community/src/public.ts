@@ -17,7 +17,6 @@
  *     by `slingshot-interactions` for component-tree resolution and updates.
  *     Resolved via `ctx.capabilities.require(CommunityInteractionsPeerCap)`.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 // Import modules from their source files, not through ./index — index re-exports
 // from this file too, which would create a circular evaluation order and a
@@ -52,11 +51,7 @@ export const Community = definePackageContract('slingshot-community');
  * full middleware chain (banCheck, autoMod, threadStateGuard, …) runs.
  */
 export const CommunityEntities = Community.publicEntities({
-  Container: Community.publicEntity(containerModule).readonly([
-    'getById',
-    'list',
-    'getBySlug',
-  ]),
+  Container: Community.publicEntity(containerModule).readonly(['getById', 'list', 'getBySlug']),
   ContainerMember: Community.publicEntity(containerMemberModule).readonly([
     'list',
     'getMember',
@@ -69,14 +64,8 @@ export const CommunityEntities = Community.publicEntities({
     'listByContainerSorted',
     'search',
   ]),
-  Reply: Community.publicEntity(replyModule).readonly([
-    'listByThread',
-    'search',
-  ]),
-  Reaction: Community.publicEntity(reactionModule).readonly([
-    'listByTarget',
-    'getUserReaction',
-  ]),
+  Reply: Community.publicEntity(replyModule).readonly(['listByThread', 'search']),
+  Reaction: Community.publicEntity(reactionModule).readonly(['listByTarget', 'getUserReaction']),
 });
 
 /**

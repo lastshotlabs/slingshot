@@ -8,20 +8,20 @@ resolve the unified runtime adapter via `WebhooksAdapterCap`.
 
 ## Key Files
 
-| File                       | What                                                                                |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for package, entities, queues, adapters, and signing helpers     |
-| src/plugin.ts              | `createWebhooksPackage()` factory (`SlingshotPackageDefinition`)                     |
-| src/entities/modules.ts    | `buildWebhookEntityModules(...)` — entity modules with manual adapter wiring        |
-| src/entities/runtime.ts    | Lifted adapter transforms, secret cipher, governed runtime adapter, delivery state  |
-| src/entities/webhookEndpoint.ts | WebhookEndpoint entity definition                                              |
-| src/entities/webhookDelivery.ts | WebhookDelivery entity definition + operations                                 |
-| src/types/config.ts        | Webhook package config schema and public types                                      |
-| src/routes/index.ts        | Webhook route identifier constants                                                  |
-| src/routes/inbound.ts      | Provider-driven inbound webhook receiver router                                     |
-| src/queues/memory.ts       | In-memory webhook delivery queue                                                    |
-| src/queues/bullmq.ts       | BullMQ-backed webhook queue                                                         |
-| docs/human/index.md        | Package guide synced into the docs site                                             |
+| File                            | What                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| src/index.ts                    | Public API surface for package, entities, queues, adapters, and signing helpers    |
+| src/plugin.ts                   | `createWebhooksPackage()` factory (`SlingshotPackageDefinition`)                   |
+| src/entities/modules.ts         | `buildWebhookEntityModules(...)` — entity modules with manual adapter wiring       |
+| src/entities/runtime.ts         | Lifted adapter transforms, secret cipher, governed runtime adapter, delivery state |
+| src/entities/webhookEndpoint.ts | WebhookEndpoint entity definition                                                  |
+| src/entities/webhookDelivery.ts | WebhookDelivery entity definition + operations                                     |
+| src/types/config.ts             | Webhook package config schema and public types                                     |
+| src/routes/index.ts             | Webhook route identifier constants                                                 |
+| src/routes/inbound.ts           | Provider-driven inbound webhook receiver router                                    |
+| src/queues/memory.ts            | In-memory webhook delivery queue                                                   |
+| src/queues/bullmq.ts            | BullMQ-backed webhook queue                                                        |
+| docs/human/index.md             | Package guide synced into the docs site                                            |
 
 ## Connections
 

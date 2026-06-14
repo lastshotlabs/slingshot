@@ -1,5 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, mock, test } from 'bun:test';
+import type {
+  PackageCapabilityHandle,
+  PublishedPackageCapability,
+} from '@lastshotlabs/slingshot-core';
+import type { AssetsHealth } from '../../src/types';
 
 let sendShouldFail = false;
 let capturedSendError: Error | null = null;
@@ -28,11 +33,6 @@ const { createAssetsPackage } = await import('../../src/plugin');
 const { AssetsHealthCap } = await import('../../src/public');
 const { s3Storage } = await import('../../src/adapters/s3');
 const { createMemoryImageCache } = await import('../../src/image/cache');
-import type { AssetsHealth } from '../../src/types';
-import type {
-  PackageCapabilityHandle,
-  PublishedPackageCapability,
-} from '@lastshotlabs/slingshot-core';
 
 const fakeData = Buffer.from([1, 2, 3]);
 const fakeMeta = { mimeType: 'application/octet-stream', size: 3 };
@@ -41,7 +41,9 @@ const fakeMeta = { mimeType: 'application/octet-stream', size: 3 };
  * Resolve the package's published `AssetsHealthCap` value directly off the
  * `SlingshotPackageDefinition` — bypasses createApp / capabilities registry.
  */
-async function resolveHealthCap(pkg: ReturnType<typeof createAssetsPackage>): Promise<() => AssetsHealth> {
+async function resolveHealthCap(
+  pkg: ReturnType<typeof createAssetsPackage>,
+): Promise<() => AssetsHealth> {
   const provider = pkg.capabilities.provides.find(
     (p: PublishedPackageCapability<unknown>) =>
       (p.capability as PackageCapabilityHandle<unknown>).name ===

@@ -12,25 +12,22 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { SlingshotFrameworkConfig, StoreType } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import {
-  createEntityFactories,
-  createEntityPlugin,
-} from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { PushDelivery } from '../../src/entities/pushDelivery';
-import { PushSubscription } from '../../src/entities/pushSubscription';
-import { PushTopic } from '../../src/entities/pushTopic';
-import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
 import {
   pushDeliveryFactories,
   pushSubscriptionFactories,
   pushTopicFactories,
   pushTopicMembershipFactories,
 } from '../../src/entities/factories';
+import { PushDelivery } from '../../src/entities/pushDelivery';
 import { pushDeliveryOperations } from '../../src/entities/pushDelivery';
+import { PushSubscription } from '../../src/entities/pushSubscription';
 import { pushSubscriptionOperations } from '../../src/entities/pushSubscription';
+import { PushTopic } from '../../src/entities/pushTopic';
 import { pushTopicOperations } from '../../src/entities/pushTopic';
+import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
 import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
 import { createPushPackage } from '../../src/plugin';
 import { PushHealthCap } from '../../src/public';
@@ -98,9 +95,7 @@ describe('createPushPackage health capability', () => {
     // Mount entity routes manually since this test bypasses createApp().
     // Delegate adapter construction to each entity module's own wiring so the
     // package's adapter-ref closures fire as they would under the framework path.
-    function buildAdapterForEntity(
-      entityName: string,
-    ): EntityPluginEntry['buildAdapter'] {
+    function buildAdapterForEntity(entityName: string): EntityPluginEntry['buildAdapter'] {
       const entityModule = pkg.entities.find(e => e.entityName === entityName);
       if (!entityModule) throw new Error(`entity ${entityName} not found on pkg`);
       const impl = (entityModule as { implementation: unknown }).implementation as {
@@ -166,11 +161,7 @@ describe('createPushPackage health capability', () => {
 
     // Drive the declarative capabilities slot the same way compilePackages
     // does at framework boot.
-    await registerPluginCapabilities(
-      getContext(app) as never,
-      pkg.name,
-      pkg.capabilities.provides,
-    );
+    await registerPluginCapabilities(getContext(app) as never, pkg.name, pkg.capabilities.provides);
 
     const getHealth = resolveCapabilityValue(getContext(app), PushHealthCap);
     expect(typeof getHealth).toBe('function');

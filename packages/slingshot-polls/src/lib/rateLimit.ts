@@ -92,7 +92,10 @@ export function createInMemoryRateLimiter(): RateLimitBackend {
  */
 export function parseDuration(input: string): number {
   const match = input.match(/^(\d+)([smh])$/);
-  if (!match) throw new Error(`[slingshot-polls] Invalid duration format: "${input}". Expected "Ns", "Nm", or "Nh".`);
+  if (!match)
+    throw new Error(
+      `[slingshot-polls] Invalid duration format: "${input}". Expected "Ns", "Nm", or "Nh".`,
+    );
 
   const value = parseInt(match[1], 10);
   switch (match[2]) {

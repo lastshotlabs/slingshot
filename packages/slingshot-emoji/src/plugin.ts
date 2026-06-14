@@ -67,9 +67,7 @@ export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefiniti
         | null
         | undefined;
       if (!storageAdapter) {
-        logger.warn(
-          'No storage adapter configured — emoji delete will not cascade to storage.',
-        );
+        logger.warn('No storage adapter configured — emoji delete will not cascade to storage.');
         return;
       }
 
@@ -77,9 +75,7 @@ export function createEmojiPackage(rawConfig: unknown): SlingshotPackageDefiniti
       const deletedHandler = async (payload: unknown) => {
         const uploadKey = (payload as Record<string, unknown>).uploadKey as string | undefined;
         if (!uploadKey) {
-          logger.warn(
-            'emoji:emoji.deleted payload missing uploadKey — skipping delete.',
-          );
+          logger.warn('emoji:emoji.deleted payload missing uploadKey — skipping delete.');
           return;
         }
         await storageAdapter.delete(uploadKey);

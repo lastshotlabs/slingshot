@@ -116,8 +116,7 @@ export function applyCipherTransform(
   if (!provider) {
     return messageAdapter as unknown as BareEntityAdapter;
   }
-  const getRoom = (roomId: string) =>
-    refs.rooms?.getById(roomId) ?? Promise.resolve(null);
+  const getRoom = (roomId: string) => refs.rooms?.getById(roomId) ?? Promise.resolve(null);
 
   return {
     ...messageAdapter,
@@ -570,9 +569,7 @@ export function createReleaseInviteSlotHandler(refs: ChatAdapterRefs) {
     const params = (input ?? {}) as { id?: string };
     const inviteAdapter = refs.invites;
     if (!inviteAdapter) {
-      throw new Error(
-        '[slingshot-chat] releaseInviteSlot executed before adapters were captured',
-      );
+      throw new Error('[slingshot-chat] releaseInviteSlot executed before adapters were captured');
     }
     return buildReleaseInviteSlotOp(inviteAdapter)(params);
   };
@@ -636,9 +633,7 @@ export function createClaimDueRemindersHandler(refs: ChatAdapterRefs) {
  * the resolved adapter — used by the reminder-delivery interval and by
  * test fixtures exercising the claim lifecycle without going through HTTP.
  */
-export function applyClaimDueRemindersMethod(
-  reminderAdapter: ReminderAdapter,
-): BareEntityAdapter {
+export function applyClaimDueRemindersMethod(reminderAdapter: ReminderAdapter): BareEntityAdapter {
   const claim = buildClaimDueRemindersOp(reminderAdapter);
   return {
     ...reminderAdapter,
@@ -671,9 +666,7 @@ export function buildChatPluginStateSnapshot(args: {
     !refs.blocks ||
     !refs.favorites
   ) {
-    throw new Error(
-      '[slingshot-chat] required adapters were not captured during entity setup',
-    );
+    throw new Error('[slingshot-chat] required adapters were not captured during entity setup');
   }
   return {
     rooms: refs.rooms,

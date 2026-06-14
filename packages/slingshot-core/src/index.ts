@@ -764,7 +764,12 @@ export type {
   ContentSegment,
 } from './content';
 export { MAX_CONTENT_BODY_LENGTH, MAX_CONTENT_MENTIONS, MAX_CONTENT_ATTACHMENTS } from './content';
-export { parseBody, parseContentTokens, extractMentionsFromBody, stripContentTokens } from './contentParser';
+export {
+  parseBody,
+  parseContentTokens,
+  extractMentionsFromBody,
+  stripContentTokens,
+} from './contentParser';
 export {
   assetRefSchema,
   quotePreviewSchema,

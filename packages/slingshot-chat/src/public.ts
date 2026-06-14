@@ -15,7 +15,6 @@
  *     by `slingshot-interactions` for component-tree resolution and
  *     updates. Resolved via `ctx.capabilities.require(ChatInteractionsPeerCap)`.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 // Import the standalone modules from each entity file. The package's
 // runtime-wired modules are built inside `buildChatEntityModules(...)`
@@ -24,8 +23,8 @@ import { definePackageContract } from '@lastshotlabs/slingshot-core';
 // operations) so the framework can derive typed adapter slices at compile
 // time and runtime.
 import { messageModule } from './entities/message';
-import { roomMemberModule } from './entities/room-member';
 import { roomModule } from './entities/room';
+import { roomMemberModule } from './entities/room-member';
 
 export const Chat = definePackageContract('slingshot-chat');
 
@@ -86,5 +85,4 @@ export interface ChatInteractionsPeer {
   ): Promise<void>;
 }
 
-export const ChatInteractionsPeerCap =
-  Chat.capability<ChatInteractionsPeer>('interactionsPeer');
+export const ChatInteractionsPeerCap = Chat.capability<ChatInteractionsPeer>('interactionsPeer');

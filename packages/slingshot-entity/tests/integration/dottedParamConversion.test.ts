@@ -5,8 +5,8 @@
  * `{actor.id}` segment lands in the spec; the runtime injects those values from
  * `getActor(c)` so the URL doesn't need them.
  */
-import { describe, expect, it } from 'bun:test';
 import type { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, it } from 'bun:test';
 import { defineEntity, defineOperations, field, op } from '../../src/index';
 import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
 
@@ -51,11 +51,7 @@ function memoryAdapter() {
 
 describe('dynamic builder — dotted-param paths', () => {
   it('omits dotted context params from generated OpenAPI paths', () => {
-    const router = buildBareEntityRoutes(
-      Note,
-      noteOps.operations,
-      memoryAdapter(),
-    ) as OpenAPIHono;
+    const router = buildBareEntityRoutes(Note, noteOps.operations, memoryAdapter()) as OpenAPIHono;
     const doc = router.getOpenAPIDocument({
       openapi: '3.0.0',
       info: { title: 'note-test', version: '0.0.0' },

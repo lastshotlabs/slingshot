@@ -7,7 +7,6 @@
 // `../resolver`. Those functions remain exported from the package's public
 // surface (so external callers like `slingshot-ssg` continue to work without
 // modification). New code should consume routes via this source.
-
 import {
   initRouteTree,
   invalidateRouteTree,
@@ -15,11 +14,7 @@ import {
   resolveRoute,
   resolveRouteChain,
 } from '../resolver';
-import type {
-  ResolveRouteChainOptions,
-  ResolveRouteOptions,
-  SsrRouteSource,
-} from './types';
+import type { ResolveRouteChainOptions, ResolveRouteOptions, SsrRouteSource } from './types';
 
 /**
  * Configuration for {@link createFileBasedRouteSource}.
@@ -55,9 +50,7 @@ export interface FileBasedRouteSourceConfig {
  * });
  * ```
  */
-export function createFileBasedRouteSource(
-  config: FileBasedRouteSourceConfig,
-): SsrRouteSource {
+export function createFileBasedRouteSource(config: FileBasedRouteSourceConfig): SsrRouteSource {
   const dir = config.serverRoutesDir;
 
   return {
@@ -76,12 +69,7 @@ export function createFileBasedRouteSource(
     },
 
     resolveChain(pathname, opts) {
-      return resolveRouteChain(
-        pathname,
-        dir,
-        opts?.fromPath,
-        normalizeRouteOptions(opts),
-      );
+      return resolveRouteChain(pathname, dir, opts?.fromPath, normalizeRouteOptions(opts));
     },
 
     resolveGlobalMiddleware(): string | null {
@@ -90,9 +78,9 @@ export function createFileBasedRouteSource(
   };
 }
 
-function normalizeRouteOptions(
-  opts: ResolveRouteOptions | ResolveRouteChainOptions | undefined,
-): { maxRouteParamBytes?: number } {
+function normalizeRouteOptions(opts: ResolveRouteOptions | ResolveRouteChainOptions | undefined): {
+  maxRouteParamBytes?: number;
+} {
   if (!opts) return {};
   return opts.maxRouteParamBytes !== undefined
     ? { maxRouteParamBytes: opts.maxRouteParamBytes }

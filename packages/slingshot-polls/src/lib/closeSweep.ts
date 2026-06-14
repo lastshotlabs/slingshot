@@ -10,8 +10,8 @@
  *
  * @internal
  */
-import type { PollAdapter } from '../types/adapters';
 import type { PollRecord } from '../types';
+import type { PollAdapter } from '../types/adapters';
 
 /** Event bus interface — minimal surface needed by the sweep. */
 interface SweepEventBus {

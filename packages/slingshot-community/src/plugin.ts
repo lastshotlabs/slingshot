@@ -14,6 +14,7 @@
  * factory's closure (Rule 3) — multiple package instances in the same
  * process do not share state.
  */
+import type { MiddlewareHandler } from 'hono';
 import type {
   NotificationRecord,
   PermissionsState,
@@ -38,7 +39,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
 import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
-import type { MiddlewareHandler } from 'hono';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { buildCommunityEntityModules } from './entities/modules';
 import type { CommunityAdapterRefs, RedeemPermissionsAdapter } from './entities/runtime';
 import { notifyMentions } from './lib/mentions';
@@ -62,7 +63,6 @@ import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignment
 import { createSolutionReplyGuardMiddleware } from './middleware/solutionReplyGuard';
 import { createThreadStateGuardMiddleware } from './middleware/threadStateGuard';
 import { probeEmbedsPeer } from './peers/embeds';
-import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
 import { CommunityInteractionsPeerCap } from './public';
 import type { CommunityInteractionsPeer } from './public';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
@@ -357,10 +357,10 @@ export function createCommunityPackage(
             // `communityPrincipal` slot lives in `CommunityEnv` and is not
             // merged into `AppVariables` (other plugins use the same trick).
             // Narrow back to the structural `set(key, value)` Hono exposes.
-            (c as unknown as { set(key: string, value: unknown): void }).set(
-              'communityPrincipal',
-              { subject: actor.id, roles },
-            );
+            (c as unknown as { set(key: string, value: unknown): void }).set('communityPrincipal', {
+              subject: actor.id,
+              roles,
+            });
           }
           await next();
         });
@@ -407,8 +407,7 @@ export function createCommunityPackage(
           return {
             role: typeof result.role === 'string' ? result.role : undefined,
             userId: typeof result.userId === 'string' ? result.userId : undefined,
-            containerId:
-              typeof result.containerId === 'string' ? result.containerId : undefined,
+            containerId: typeof result.containerId === 'string' ? result.containerId : undefined,
           };
         },
       });
@@ -738,8 +737,7 @@ function subscribeBusHandlers(args: {
   bus.on('community:thread.created', async payload => {
     if (!refs.thread) return;
     const threadId = typeof payload.id === 'string' ? payload.id : undefined;
-    const containerId =
-      typeof payload.containerId === 'string' ? payload.containerId : undefined;
+    const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
     if (!threadId || !containerId) return;
     const record = await refs.thread.getById(threadId);
     const urls = extractUrls(record?.body);
@@ -770,8 +768,7 @@ function subscribeBusHandlers(args: {
   bus.on('community:reply.created', async payload => {
     if (!refs.reply) return;
     const replyId = typeof payload.id === 'string' ? payload.id : undefined;
-    const containerId =
-      typeof payload.containerId === 'string' ? payload.containerId : undefined;
+    const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
     if (!replyId || !containerId) return;
     const record = await refs.reply.getById(replyId);
     const threadId = typeof record?.threadId === 'string' ? record.threadId : undefined;
@@ -802,4 +799,3 @@ function subscribeBusHandlers(args: {
     }
   });
 }
-

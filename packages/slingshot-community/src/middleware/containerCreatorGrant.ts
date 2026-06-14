@@ -53,9 +53,7 @@ export function createContainerCreatorGrantMiddleware(deps: {
     if (!userId) return;
 
     const cloned = c.res.clone();
-    const result = (await cloned.json()) as
-      | { id?: string; tenantId?: string | null }
-      | null;
+    const result = (await cloned.json()) as { id?: string; tenantId?: string | null } | null;
     const containerId = result?.id;
     if (!containerId) return;
 

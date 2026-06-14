@@ -20,11 +20,7 @@
  *
  * @internal
  */
-import type {
-  EventDefinitionRegistry,
-  StoreInfra,
-  StoreType,
-} from '@lastshotlabs/slingshot-core';
+import type { EventDefinitionRegistry, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -33,8 +29,6 @@ import type {
   EntityRouteExecutorBuilder,
   EntityRouteExecutorOverrides,
 } from '@lastshotlabs/slingshot-entity';
-import { WebhookDeliveryEntity, webhookDeliveryOperations } from './webhookDelivery';
-import { WebhookEndpointEntity } from './webhookEndpoint';
 import {
   type WebhookAdapterRefs,
   applyWebhookDeliveryRuntimeTransform,
@@ -45,6 +39,8 @@ import {
 } from './runtime';
 import type { WebhookSecretCipherOptions } from './runtime';
 import { createWebhookSecretCipher } from './runtime';
+import { WebhookDeliveryEntity, webhookDeliveryOperations } from './webhookDelivery';
+import { WebhookEndpointEntity } from './webhookEndpoint';
 
 type EntityFactoryCreator = typeof createEntityFactories;
 

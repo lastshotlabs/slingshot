@@ -4,13 +4,17 @@
  * threads seedInput / seedState through correctly.
  */
 import { describe, expect, test } from 'bun:test';
-import type { SlingshotPlugin, PluginSeedContext } from '@lastshotlabs/slingshot-core';
+import type { PluginSeedContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createTestApp } from '../setup';
 
 function recordingSeedPlugin(
   name: string,
   ownKey: string,
-  observed: { invocations: number; lastSeedInput?: Record<string, unknown>; lastState?: Map<string, unknown> },
+  observed: {
+    invocations: number;
+    lastSeedInput?: Record<string, unknown>;
+    lastState?: Map<string, unknown>;
+  },
 ): SlingshotPlugin {
   return {
     name,

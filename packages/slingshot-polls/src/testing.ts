@@ -30,14 +30,9 @@ import {
 import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { pollFactories, pollVoteFactories } from './entities/factories';
 import { createPollsPackage } from './plugin';
-import type { PollAdapter, PollVoteAdapter } from './types/adapters';
-import type {
-  PollRecord,
-  PollVoteRecord,
-  PollsPluginConfig,
-  PollsPluginState,
-} from './types';
+import type { PollRecord, PollVoteRecord, PollsPluginConfig, PollsPluginState } from './types';
 import { POLLS_RUNTIME_KEY } from './types';
+import type { PollAdapter, PollVoteAdapter } from './types/adapters';
 
 const memoryInfra = {} as unknown as StoreInfra;
 
@@ -302,7 +297,8 @@ export async function createPollsTestApp(
   await runPackageLifecycle(plugin, ctx as never);
 
   const state = readPluginState(pluginState, POLLS_RUNTIME_KEY);
-  if (!state) throw new Error('[slingshot-polls] Polls package did not register state — lifecycle failed');
+  if (!state)
+    throw new Error('[slingshot-polls] Polls package did not register state — lifecycle failed');
 
   return { app, state, bus };
 }

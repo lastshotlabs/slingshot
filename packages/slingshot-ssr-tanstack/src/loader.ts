@@ -19,7 +19,6 @@
 //
 // Routes with no companion file are CSR-only and not handled here — the
 // scanner filters them out before this module sees them.
-
 import type { SsrLoadContext, SsrLoadResult, SsrMeta } from '@lastshotlabs/slingshot-ssr';
 
 /** TanStack `createFileRoute(...)({ ... })` produces a Route object. */

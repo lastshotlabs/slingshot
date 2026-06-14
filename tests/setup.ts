@@ -189,7 +189,6 @@ export function authHeader(token: string): Record<string, string> {
   return { 'x-user-token': token };
 }
 
-
 export function notificationsPackage(): SlingshotPackageDefinition {
   return createNotificationsPackage({
     dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },

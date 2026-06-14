@@ -16,12 +16,12 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 ## Full setup
 
 ```typescript title="app.config.ts"
+import type { Context, Next } from 'hono';
 import { defineApp, getActor } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createCommunityPackage } from '@lastshotlabs/slingshot-community';
 import { createNotificationsPackage } from '@lastshotlabs/slingshot-notifications';
 import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
-import type { Context, Next } from 'hono';
 
 const communityAuthBridge = async (c: Context, next: Next) => {
   const actor = getActor(c);

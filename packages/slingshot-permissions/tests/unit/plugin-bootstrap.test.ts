@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  attachContext,
-  getAuthRuntimePeerOrNull,
-} from '@lastshotlabs/slingshot-core';
+import { attachContext, getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
 import { createAuthGroupResolver } from '../../src/lib/authGroupResolver';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';
@@ -147,7 +144,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       }),
     );
 
-    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as Record<string, unknown> | undefined;
+    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as
+      | Record<string, unknown>
+      | undefined;
     expect(pkg.name).toBe('slingshot-permissions');
     expect(state).toBeDefined();
     expect(Object.isFrozen(state)).toBe(true);
@@ -162,11 +161,17 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     // the plugin's idempotent check treats any well-formed permissions state as
     // already-seeded and skips republishing.
     const sentinel = Object.freeze({
-      evaluator: { async can() { return true; } },
+      evaluator: {
+        async can() {
+          return true;
+        },
+      },
       registry: {},
       adapter: { name: 'preseeded' },
     });
-    const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]) };
+    const ctx = {
+      pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]),
+    };
     attachContext(app, ctx as never);
 
     const pkg = createPermissionsPackage();
@@ -182,18 +187,26 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       }),
     );
 
-    expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(sentinel);
+    expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(
+      sentinel,
+    );
   });
 
   test('createPermissionsPackage preserves a pre-seeded slot unchanged', async () => {
     const app = new Hono();
     const adapter = { name: 'preseeded-adapter' };
     const sentinel = Object.freeze({
-      evaluator: { async can() { return true; } },
+      evaluator: {
+        async can() {
+          return true;
+        },
+      },
       registry: {},
       adapter,
     });
-    const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]) };
+    const ctx = {
+      pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', sentinel]]),
+    };
     attachContext(app, ctx as never);
 
     const pkg = createPermissionsPackage();
@@ -211,7 +224,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     // Externally-seeded slot is left untouched — the package's setupMiddleware
     // short-circuits when permissions state is already present.
-    expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(sentinel);
+    expect(ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions')).toBe(
+      sentinel,
+    );
   });
 
   test('createPermissionsPackage with no groupResolver disables group expansion', async () => {
@@ -245,7 +260,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       }),
     );
 
-    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = ctx.pluginState.get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     state.registry.register({
       resourceType: 'post',
       actions: ['read'],
@@ -298,7 +315,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     await pkg.setupPost?.(asNever({ app, bus }));
 
-    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = ctx.pluginState.get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     const deleteAllSpy = mock(async (_subject: unknown) => {});
     state.adapter.deleteAllGrantsForSubject = deleteAllSpy;
 
@@ -339,7 +358,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     await pkg.setupPost?.(asNever({ app, bus }));
 
-    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = ctx.pluginState.get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     state.adapter.deleteAllGrantsForSubject = mock(async () => {
       throw new Error('DB connection lost');
     });
@@ -374,7 +395,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
   test('setupPost: no-op when permissions state has no adapter', () => {
     const app = new Hono();
-    const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]) };
+    const ctx = {
+      pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]),
+    };
     attachContext(app, ctx as never);
 
     const pkg = createPermissionsPackage();
@@ -396,7 +419,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
   test('seed: returns without adapter state', async () => {
     const app = new Hono();
-    const ctx = { pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]) };
+    const ctx = {
+      pluginState: new Map([['slingshot:package:capabilities:slingshot-permissions', {}]]),
+    };
     attachContext(app, ctx as never);
 
     const pkg = createPermissionsPackage();
@@ -545,7 +570,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       }),
     );
 
-    const state = ctx.pluginState.get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = ctx.pluginState.get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     state.registry.register({
       resourceType: 'post',
       actions: ['read'],

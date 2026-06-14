@@ -4,11 +4,10 @@
  * Cross-package consumers (notably `slingshot-chat` for formatter registration) resolve
  * `PushRuntimeCap` through `ctx.capabilities.require(...)`.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { NotificationRecord } from '@lastshotlabs/slingshot-core';
-import type { PushPluginState } from './state';
 import type { PushProviderHealth } from './providers/provider';
+import type { PushPluginState } from './state';
 import type { PushMessage } from './types/models';
 
 /**
@@ -20,10 +19,7 @@ export interface PushFormatterRegistry {
   /** Register or replace a runtime formatter for one notification type. */
   registerFormatter(
     type: string,
-    formatter: (
-      notification: NotificationRecord,
-      defaults?: Partial<PushMessage>,
-    ) => PushMessage,
+    formatter: (notification: NotificationRecord, defaults?: Partial<PushMessage>) => PushMessage,
   ): void;
 }
 
@@ -79,5 +75,4 @@ export const PushHealthCap = Push.capability<() => PushPluginHealth>('health');
  * `ctx.capabilities.require(PushFormatterRegistryCap)` to install per-source
  * formatters without reaching into push's full runtime state.
  */
-export const PushFormatterRegistryCap =
-  Push.capability<PushFormatterRegistry>('formatterRegistry');
+export const PushFormatterRegistryCap = Push.capability<PushFormatterRegistry>('formatterRegistry');

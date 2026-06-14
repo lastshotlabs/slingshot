@@ -39,7 +39,6 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
   attachContext(app, ctx as never);
 }
 
-
 describe('createNotificationsPackage lifecycle', () => {
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
     const enabledBus = new InProcessAdapter();
@@ -111,7 +110,6 @@ describe('createNotificationsPackage lifecycle', () => {
         inAppEnabled: true,
       },
     });
-
 
     // Drive the package's lifecycle the way `compilePackages()` does — the
     // helper walks entity modules, builds adapters from their `wiring`,

@@ -76,9 +76,9 @@ describe('lookupMemory — param resolution', () => {
       returns: 'one',
     };
     const exec = mkExecutor(op, makeStore(records));
-    const result = (await exec({ slug: 'test-room', tenantId: 't-acme' })) as
-      | { id?: string }
-      | null;
+    const result = (await exec({ slug: 'test-room', tenantId: 't-acme' })) as {
+      id?: string;
+    } | null;
     expect(result?.id).toBe('c2');
   });
 
@@ -101,6 +101,6 @@ describe('lookupMemory — param resolution', () => {
     };
     const exec = mkExecutor(op, makeStore(records));
     const result = (await exec({ slug: 'test-room' })) as { items: { id: string }[] };
-    expect(result.items.map((r) => r.id).sort()).toEqual(['c1', 'c2']);
+    expect(result.items.map(r => r.id).sort()).toEqual(['c1', 'c2']);
   });
 });

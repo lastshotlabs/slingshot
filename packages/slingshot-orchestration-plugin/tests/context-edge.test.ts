@@ -18,7 +18,11 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_STATE_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
+import {
+  ORCHESTRATION_PLUGIN_STATE_KEY,
+  getOrchestration,
+  getOrchestrationOrNull,
+} from '../src/context';
 import * as pluginIndex from '../src/index';
 import { createOrchestrationPackage } from '../src/plugin';
 

@@ -8,8 +8,8 @@
 import type {
   EntityChannelConfig,
   PluginSetupContext,
-  ResolvedEntityConfig,
   RepoFactories,
+  ResolvedEntityConfig,
   SlingshotPackageDefinition,
   StoreInfra,
   StoreType,

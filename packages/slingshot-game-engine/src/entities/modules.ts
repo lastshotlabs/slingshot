@@ -13,11 +13,11 @@ import type { StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import { GamePlayer } from './gamePlayer';
-import { GameSession } from './gameSession';
 import { gamePlayerOperations } from '../operations/player';
 import { gameSessionOperations } from '../operations/session';
 import type { PlayerAdapterShape, SessionAdapterShape } from '../pluginRoutes';
+import { GamePlayer } from './gamePlayer';
+import { GameSession } from './gameSession';
 
 type EntityFactoryCreator = typeof createEntityFactories;
 

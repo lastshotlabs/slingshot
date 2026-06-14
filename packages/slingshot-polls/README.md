@@ -88,6 +88,7 @@ If you need to change behavior, start in:
     },
   });
   ```
+
 - The auto-close sweep is real runtime behavior. It is not a dev-only task.
 - The results route is mounted separately from entity-generated routes because it needs cross-entity
   access and explicit policy checks.

@@ -24,6 +24,7 @@ import {
   publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import {
@@ -38,11 +39,10 @@ import {
   createPresignUploadHandler,
   createServeImageHandler,
 } from '../entities/runtime';
-import { resolveImageConfig } from '../image/serve';
 import { createMemoryImageCache } from '../image/cache';
+import { resolveImageConfig } from '../image/serve';
 import type { ImageCacheAdapter } from '../image/types';
 import { createAssetsPackage } from '../plugin';
-import { noopLogger } from '@lastshotlabs/slingshot-core';
 import {
   type Asset,
   type AssetAdapter,

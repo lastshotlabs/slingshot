@@ -1,5 +1,6 @@
 import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+
 // Note: `OrganizationsOrgServiceCap` lives in ./public; the helpers below resolve through the
 // PACKAGE_CAPABILITIES_PREFIX slot directly to avoid a static cycle (public.ts
 // imports from this file).

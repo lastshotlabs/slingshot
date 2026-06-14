@@ -57,7 +57,9 @@ function channelOpen(harness: TestGameHarness, channelName: string): void {
 function score(harness: TestGameHarness, userId: string, expectedScore: number): void {
   const actual = harness.getScore(userId);
   if (actual !== expectedScore) {
-    throw new Error(`[slingshot-game-engine] Expected player '${userId}' score to be ${expectedScore}, got ${actual}`);
+    throw new Error(
+      `[slingshot-game-engine] Expected player '${userId}' score to be ${expectedScore}, got ${actual}`,
+    );
   }
 }
 
@@ -86,7 +88,9 @@ function leaderboardPosition(
  */
 function phase(harness: TestGameHarness, expectedPhase: string): void {
   if (harness.phase !== expectedPhase) {
-    throw new Error(`[slingshot-game-engine] Expected phase '${expectedPhase}', got '${harness.phase}'`);
+    throw new Error(
+      `[slingshot-game-engine] Expected phase '${expectedPhase}', got '${harness.phase}'`,
+    );
   }
 }
 
@@ -134,7 +138,9 @@ async function replayContains(
   });
 
   if (!found) {
-    throw new Error(`[slingshot-game-engine] Replay log does not contain event matching: ${JSON.stringify(match)}`);
+    throw new Error(
+      `[slingshot-game-engine] Replay log does not contain event matching: ${JSON.stringify(match)}`,
+    );
   }
 }
 

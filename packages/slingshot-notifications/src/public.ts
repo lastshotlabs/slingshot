@@ -10,7 +10,6 @@
  * Legacy state-key access (`getNotificationsStateOrNull`) remains supported for
  * backward compatibility, but new code should consume the contract.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { DeliveryAdapter, NotificationBuilder } from '@lastshotlabs/slingshot-core';
 import type { DispatcherHealth } from './dispatcher';
@@ -25,9 +24,8 @@ export const Notifications = definePackageContract('slingshot-notifications');
  * to get a builder bound to their plugin name. Each builder publishes notifications,
  * resolves preferences, and applies rate limits on behalf of the calling source.
  */
-export const NotificationsBuilderFactoryCap = Notifications.capability<
-  (opts: { source: string }) => NotificationBuilder
->('builderFactory');
+export const NotificationsBuilderFactoryCap =
+  Notifications.capability<(opts: { source: string }) => NotificationBuilder>('builderFactory');
 
 /**
  * Typed registry for delivery adapters published by sibling packages
@@ -73,5 +71,4 @@ export interface NotificationsHealth {
  * receive a frozen `NotificationsHealth` representing adapter, delivery, rate-limit,
  * and dispatcher state at call time.
  */
-export const NotificationsHealthCap =
-  Notifications.capability<() => NotificationsHealth>('health');
+export const NotificationsHealthCap = Notifications.capability<() => NotificationsHealth>('health');

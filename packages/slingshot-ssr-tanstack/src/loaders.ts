@@ -15,9 +15,11 @@
 // callable from inside any `.server.ts` `load()` function. The envelope
 // keys (`unauthorized`, `forbidden`) are mapped to HTTP statuses (401, 403)
 // by slingshot-ssr's middleware automatically.
-
-import { resolveCapabilityValue, type Actor } from '@lastshotlabs/slingshot-core';
-import { PermissionsEvaluatorCap, type PermissionEvaluator } from '@lastshotlabs/slingshot-permissions';
+import { type Actor, resolveCapabilityValue } from '@lastshotlabs/slingshot-core';
+import {
+  type PermissionEvaluator,
+  PermissionsEvaluatorCap,
+} from '@lastshotlabs/slingshot-permissions';
 import type { SsrLoadContext } from '@lastshotlabs/slingshot-ssr';
 
 /**
@@ -69,10 +71,7 @@ export async function loadActor(ctx: SsrLoadContext): Promise<Actor> {
  * misconfiguration, not a per-request error, so we surface it loudly.
  */
 export function getPolicyCtx(ctx: SsrLoadContext): PolicyCtx {
-  const permissions = resolveCapabilityValue(
-    ctx.bsCtx as never,
-    PermissionsEvaluatorCap,
-  );
+  const permissions = resolveCapabilityValue(ctx.bsCtx as never, PermissionsEvaluatorCap);
   if (!permissions) {
     throw new Error(
       'PermissionsEvaluatorCap unavailable — register slingshot-permissions in your app config.',
@@ -107,9 +106,10 @@ export async function requireActor(ctx: SsrLoadContext): Promise<{
  * }
  * ```
  */
-export async function requireUser(ctx: SsrLoadContext): Promise<
-  | { readonly unauthorized: true }
-  | { readonly actor: Actor; readonly policyCtx: PolicyCtx }
+export async function requireUser(
+  ctx: SsrLoadContext,
+): Promise<
+  { readonly unauthorized: true } | { readonly actor: Actor; readonly policyCtx: PolicyCtx }
 > {
   const { actor, policyCtx } = await requireActor(ctx);
   if (actor.kind === 'anonymous') return { unauthorized: true } as const;
@@ -144,8 +144,7 @@ export async function requirePolicy<TResource>(
   check: (actor: Actor, resource: TResource, policyCtx: PolicyCtx) => Promise<boolean>,
   resource: TResource,
 ): Promise<
-  | { readonly forbidden: true }
-  | { readonly actor: Actor; readonly policyCtx: PolicyCtx }
+  { readonly forbidden: true } | { readonly actor: Actor; readonly policyCtx: PolicyCtx }
 > {
   const { actor, policyCtx } = await requireActor(ctx);
   const allowed = await check(actor, resource, policyCtx);

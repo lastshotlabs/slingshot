@@ -12,12 +12,12 @@
 import { HTTPException } from 'hono/http-exception';
 import type { Logger, SlingshotEvents, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import { DEFAULT_ASSET_REGISTRY_TTL_SECONDS, withAssetTtl } from './factories';
 import { createServeImageResponse } from '../image/serve';
 import type { ResolvedImageConfig } from '../image/serve';
 import type { ImageCacheAdapter } from '../image/types';
 import { generateUploadKeyFromFilename } from '../lib/upload';
 import type { AssetAdapter, AssetsPluginConfig } from '../types';
+import { DEFAULT_ASSET_REGISTRY_TTL_SECONDS, withAssetTtl } from './factories';
 
 /**
  * MIME types refused at presign time AND forced to a generic content type at

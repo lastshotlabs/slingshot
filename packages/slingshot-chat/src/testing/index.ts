@@ -39,12 +39,12 @@ import {
   readPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
+import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import {
   NotificationsBuilderFactoryCap,
   NotificationsDeliveryRegistryCap,
 } from '@lastshotlabs/slingshot-notifications';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
 import { createMemoryPermissionsAdapter } from '@lastshotlabs/slingshot-permissions/testing';
@@ -402,7 +402,11 @@ export async function createChatTestApp(
       publishPluginState(pluginState, key, value);
     }
   }
-  publishPluginState(pluginState, 'slingshot:package:capabilities:slingshot-permissions', permsState);
+  publishPluginState(
+    pluginState,
+    'slingshot:package:capabilities:slingshot-permissions',
+    permsState,
+  );
   // Publish the slingshot-notifications contract capabilities directly into the
   // pluginState slot the framework reads from. This mirrors what
   // `registerPluginCapabilities` does at runtime, sized for test fixtures that don't
@@ -489,7 +493,8 @@ export async function createChatTestApp(
 
   // Read the plugin's resolved state
   const state = readPluginState(pluginState, CHAT_RUNTIME_KEY);
-  if (!state) throw new Error('[slingshot-chat] Chat package did not register state — lifecycle failed');
+  if (!state)
+    throw new Error('[slingshot-chat] Chat package did not register state — lifecycle failed');
 
   // Wire the lazy evaluator to the actual adapters
   wire(state.members, state.messages);

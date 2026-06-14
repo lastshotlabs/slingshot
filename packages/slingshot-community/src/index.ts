@@ -88,13 +88,21 @@ export type {
 } from './types/models';
 
 /** Container entity config and generated operations. */
-export { Container as ContainerEntity, containerOperations, containerModule } from './entities/container';
+export {
+  Container as ContainerEntity,
+  containerOperations,
+  containerModule,
+} from './entities/container';
 /** Thread entity config and generated operations. */
 export { Thread as ThreadEntity, threadOperations, threadModule } from './entities/thread';
 /** Reply entity config and generated operations. */
 export { Reply as ReplyEntity, replyOperations, replyModule } from './entities/reply';
 /** Reaction entity config and generated operations. */
-export { Reaction as ReactionEntity, reactionOperations, reactionModule } from './entities/reaction';
+export {
+  Reaction as ReactionEntity,
+  reactionOperations,
+  reactionModule,
+} from './entities/reaction';
 /** ContainerMember entity config and generated operations. */
 export {
   ContainerMember as ContainerMemberEntity,

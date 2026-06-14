@@ -83,20 +83,20 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 
 ## Key Files
 
-| Area               | File                                                       | What                                                                                                  |
-| ------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| App bootstrap      | `src/app.ts`                                               | `createApp()` flow, framework middleware, plugin lifecycle orchestration                              |
-| Server bootstrap   | `src/server.ts`                                            | `createServer()` wrapper around runtime and app assembly                                              |
-| Plugin contract    | `packages/slingshot-core/src/plugin.ts`                    | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                                              |
-| Package contract   | `packages/slingshot-core/src/packageAuthoring.ts`          | `definePackage()`, `definePackageContract()`, `SlingshotPackageDefinition`                            |
-| Package compiler   | `src/framework/packageAuthoring.ts`                        | `compilePackages()`, `publishPackageRuntimeState()`, entity↔package lifecycle interleave              |
-| Context state     | `packages/slingshot-core/src/context/index.ts`             | `SlingshotContext`, `getContext()`, instance-scoped state                                             |
-| Entity types       | `packages/slingshot-core/src/entityConfig.ts`              | Shared field and entity config types                                                                  |
-| Event bus          | `packages/slingshot-core/src/eventBus.ts`                  | Bus interface, in-process adapter, client-safe event rules                                            |
-| Entity plugin      | `packages/slingshot-entity/src/createEntityPlugin.ts`      | Root entity plugin factory — lower-level escape hatch that `compilePackages()` invokes internally     |
-| Code generation    | `packages/slingshot-entity/src/generate.ts`                | Pure entity code generation entry point                                                               |
-| App config helper  | `src/defineApp.ts`                                         | `defineApp()` typed identity helper for `app.config.ts`                                               |
-| CLI entry          | `src/cli/commands/start.ts`                                | `slingshot start` — discovers `app.config.ts` and boots                                               |
+| Area              | File                                                  | What                                                                                              |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| App bootstrap     | `src/app.ts`                                          | `createApp()` flow, framework middleware, plugin lifecycle orchestration                          |
+| Server bootstrap  | `src/server.ts`                                       | `createServer()` wrapper around runtime and app assembly                                          |
+| Plugin contract   | `packages/slingshot-core/src/plugin.ts`               | `SlingshotPlugin`, `PluginSetupContext`, lifecycle hooks                                          |
+| Package contract  | `packages/slingshot-core/src/packageAuthoring.ts`     | `definePackage()`, `definePackageContract()`, `SlingshotPackageDefinition`                        |
+| Package compiler  | `src/framework/packageAuthoring.ts`                   | `compilePackages()`, `publishPackageRuntimeState()`, entity↔package lifecycle interleave          |
+| Context state     | `packages/slingshot-core/src/context/index.ts`        | `SlingshotContext`, `getContext()`, instance-scoped state                                         |
+| Entity types      | `packages/slingshot-core/src/entityConfig.ts`         | Shared field and entity config types                                                              |
+| Event bus         | `packages/slingshot-core/src/eventBus.ts`             | Bus interface, in-process adapter, client-safe event rules                                        |
+| Entity plugin     | `packages/slingshot-entity/src/createEntityPlugin.ts` | Root entity plugin factory — lower-level escape hatch that `compilePackages()` invokes internally |
+| Code generation   | `packages/slingshot-entity/src/generate.ts`           | Pure entity code generation entry point                                                           |
+| App config helper | `src/defineApp.ts`                                    | `defineApp()` typed identity helper for `app.config.ts`                                           |
+| CLI entry         | `src/cli/commands/start.ts`                           | `slingshot start` — discovers `app.config.ts` and boots                                           |
 
 ## Bootstrap Flow
 
@@ -119,7 +119,7 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
    for compiled packages; plain plugins just call `setupRoutes`.
 8. `mountRoutes()` and `mountOpenApiDocs()` finalize HTTP surfaces.
 9. `runPluginPost()` runs `entityPlugin.setupPost → publishPackageRuntimeState (second pass)
-   → pkg.setupPost` for compiled packages; plain plugins just call `setupPost`.
+→ pkg.setupPost` for compiled packages; plain plugins just call `setupPost`.
 10. `runPluginSeed()` — only when `CreateAppConfig.seed: {…}` was provided — calls each
     plugin's/package's `seed()` hook in dependency order. Each consumer reads its slice
     of `seedInput` and writes cross-plugin references (e.g. created user IDs) into the

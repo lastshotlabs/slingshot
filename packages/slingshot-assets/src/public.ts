@@ -7,13 +7,8 @@
  *   - `AssetsHealthCap`  — aggregated health snapshot getter.
  *   - `AssetsOrphanedKeysCap` — recovery-API snapshot of orphaned storage keys.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
-import type {
-  AssetsHealth,
-  AssetsPluginState,
-  OrphanedKeyRecord,
-} from './types';
+import type { AssetsHealth, AssetsPluginState, OrphanedKeyRecord } from './types';
 
 /** Provider-owned package contract for `slingshot-assets`. */
 export const Assets = definePackageContract('slingshot-assets');
@@ -44,6 +39,5 @@ export const AssetsHealthCap = Assets.capability<() => AssetsHealth>('health');
  * list is bounded in memory; durable retention is the operator's responsibility
  * via `onOrphanedKey`.
  */
-export const AssetsOrphanedKeysCap = Assets.capability<
-  (since?: Date) => ReadonlyArray<OrphanedKeyRecord>
->('orphanedKeys');
+export const AssetsOrphanedKeysCap =
+  Assets.capability<(since?: Date) => ReadonlyArray<OrphanedKeyRecord>>('orphanedKeys');

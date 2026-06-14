@@ -54,9 +54,7 @@ import type { CommunityPrincipal } from '../types/env';
  * containerRouter.use('*', banCheck);
  * ```
  */
-export function createBanCheckMiddleware(deps: {
-  banAdapter: BanAdapter;
-}): MiddlewareHandler {
+export function createBanCheckMiddleware(deps: { banAdapter: BanAdapter }): MiddlewareHandler {
   return async (c, next) => {
     const principal = c.get('communityPrincipal') as CommunityPrincipal | undefined;
     if (!principal) return next(); // public route

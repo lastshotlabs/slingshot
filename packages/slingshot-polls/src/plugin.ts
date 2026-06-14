@@ -28,7 +28,6 @@ import {
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { PollsRuntimeCap } from './public';
 import {
   getEntityPolicyResolver,
   registerEntityPolicy,
@@ -46,7 +45,7 @@ import {
   createPollSourcePolicy,
   createPollVotePolicy,
 } from './policy';
-import type { PollAdapter, PollVoteAdapter } from './types/adapters';
+import { PollsRuntimeCap } from './public';
 import {
   POLLS_PLUGIN_STATE_KEY,
   POLLS_RUNTIME_KEY,
@@ -55,6 +54,7 @@ import {
   type PollsPluginConfig,
   type PollsPluginState,
 } from './types';
+import type { PollAdapter, PollVoteAdapter } from './types/adapters';
 import { PollsPluginConfigSchema } from './validation/config';
 import { buildPollSchemas } from './validation/polls';
 import { PollResultsParamsSchema } from './validation/results';
@@ -163,10 +163,7 @@ export function createPollsPackage(
       >,
     ),
   );
-  const voteHandlers = new Map<
-    string,
-    PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>
-  >(
+  const voteHandlers = new Map<string, PolicyResolver<PollVoteRecord, Partial<PollVoteRecord>>>(
     Object.entries(
       (config.voteHandlers ?? {}) as Record<
         string,
@@ -234,11 +231,7 @@ export function createPollsPackage(
       // setupMiddleware completes — middleware closures that reference the
       // refs (pollVoteGuard) are only invoked at request time, by which point
       // both refs are populated.
-      registerEntityPolicy(
-        ctx.app,
-        POLL_SOURCE_POLICY_KEY,
-        createPollSourcePolicy(sourceHandlers),
-      );
+      registerEntityPolicy(ctx.app, POLL_SOURCE_POLICY_KEY, createPollSourcePolicy(sourceHandlers));
       registerEntityPolicy(ctx.app, POLL_VOTE_POLICY_KEY, createPollVotePolicy(voteHandlers));
     },
 

@@ -186,9 +186,24 @@ Define as many endpoints as you need:
 export default defineApp({
   ws: {
     endpoints: {
-      '/ws/chat': { upgrade: chatUpgrade, on: { /* ... */ } },
-      '/ws/notifications': { upgrade: notifUpgrade, on: { /* ... */ } },
-      '/ws/collaboration': { upgrade: colabUpgrade, on: { /* ... */ } },
+      '/ws/chat': {
+        upgrade: chatUpgrade,
+        on: {
+          /* ... */
+        },
+      },
+      '/ws/notifications': {
+        upgrade: notifUpgrade,
+        on: {
+          /* ... */
+        },
+      },
+      '/ws/collaboration': {
+        upgrade: colabUpgrade,
+        on: {
+          /* ... */
+        },
+      },
     },
   },
 });

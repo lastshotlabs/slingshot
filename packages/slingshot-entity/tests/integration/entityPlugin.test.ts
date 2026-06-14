@@ -14,10 +14,7 @@ import type {
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
-import {
-  createEventDefinitionRegistry,
-  createEventPublisher,
-} from '@lastshotlabs/slingshot-core';
+import { createEventDefinitionRegistry, createEventPublisher } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityPlugin } from '../../src/createEntityPlugin';
 import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
@@ -520,4 +517,3 @@ describe('factories entry — onAdapter ref capture', () => {
     expect((record as Record<string, unknown>).id).toBeDefined();
   });
 });
-

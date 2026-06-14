@@ -20,11 +20,7 @@
  *
  * @internal
  */
-import type {
-  EntityChannelConfig,
-  StoreInfra,
-  StoreType,
-} from '@lastshotlabs/slingshot-core';
+import type { EntityChannelConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -247,9 +243,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
         );
         // Attach the `claimDueScheduledMessages` method so the
         // scheduled-delivery interval and tests can call it directly.
-        const wrapped = applyClaimDueScheduledMessagesMethod(
-          asAdapter<MessageAdapter>(withCipher),
-        );
+        const wrapped = applyClaimDueScheduledMessagesMethod(asAdapter<MessageAdapter>(withCipher));
         refs.messages = asAdapter(wrapped);
         return wrapped;
       },

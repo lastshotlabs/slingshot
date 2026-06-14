@@ -16,10 +16,7 @@
  *
  * @internal
  */
-import type {
-  StoreInfra,
-  StoreType,
-} from '@lastshotlabs/slingshot-core';
+import type { StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -28,6 +25,7 @@ import type {
   EntityRouteExecutorBuilder,
   EntityRouteExecutorOverrides,
 } from '@lastshotlabs/slingshot-entity';
+import type { AssetAdapter } from '../types';
 import { Asset, assetOperations } from './asset';
 import { DEFAULT_ASSET_REGISTRY_TTL_SECONDS } from './factories';
 import {
@@ -37,7 +35,6 @@ import {
   createPresignUploadHandler,
   createServeImageHandler,
 } from './runtime';
-import type { AssetAdapter } from '../types';
 
 type EntityFactoryCreator = typeof createEntityFactories;
 

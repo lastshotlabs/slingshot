@@ -8,7 +8,7 @@ export default class Seed extends Command {
     'Imports a TypeScript module that exports one or more ResolvedEntityConfig values ' +
     'from defineEntity(), generates fake records using @faker-js/faker, and either ' +
     'writes JSON fixtures or prints to stdout. ' +
-    'Note: distinct from `CreateAppConfig.seed`, which is the framework\'s idempotent ' +
+    "Note: distinct from `CreateAppConfig.seed`, which is the framework's idempotent " +
     'boot-time seed phase used by packages like slingshot-auth, slingshot-permissions, ' +
     'and slingshot-organizations.';
 

@@ -8,17 +8,17 @@ fields — there is no runtime registration API.
 
 ## Key Files
 
-| File                       | What                                                                   |
-| -------------------------- | ---------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for package, entities, operations, and policy hooks |
-| src/plugin.ts              | `createPollsPackage()` factory (`SlingshotPackageDefinition`)          |
-| src/entities/poll.ts       | Poll entity definition                                                 |
-| src/entities/pollVote.ts   | PollVote entity definition                                             |
-| src/entities/modules.ts    | `pollModule` and `pollVoteModule` for `definePackage` consumption      |
-| src/validation/config.ts   | Polls package config schema (including sourceHandlers / voteHandlers)  |
-| src/operations/index.ts    | Poll operations export surface                                         |
-| src/policy/index.ts        | Dispatched policy factories and policy keys                            |
-| docs/human/index.md        | Package guide synced into the docs site                                |
+| File                     | What                                                                   |
+| ------------------------ | ---------------------------------------------------------------------- |
+| src/index.ts             | Public API surface for package, entities, operations, and policy hooks |
+| src/plugin.ts            | `createPollsPackage()` factory (`SlingshotPackageDefinition`)          |
+| src/entities/poll.ts     | Poll entity definition                                                 |
+| src/entities/pollVote.ts | PollVote entity definition                                             |
+| src/entities/modules.ts  | `pollModule` and `pollVoteModule` for `definePackage` consumption      |
+| src/validation/config.ts | Polls package config schema (including sourceHandlers / voteHandlers)  |
+| src/operations/index.ts  | Poll operations export surface                                         |
+| src/policy/index.ts      | Dispatched policy factories and policy keys                            |
+| docs/human/index.md      | Package guide synced into the docs site                                |
 
 ## Connections
 

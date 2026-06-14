@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { describe, expect, it } from 'bun:test';
 import { buildLayoutChain, scanRoutesDirectory } from '../../src/scanner';
 
 function mkRoutes(files: Record<string, string>): string {
@@ -34,8 +34,7 @@ describe('scanRoutesDirectory', () => {
       '_guest/auth/login.tsx': ROUTE,
     });
 
-    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } =
-      scanRoutesDirectory(dir);
+    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } = scanRoutesDirectory(dir);
 
     expect(rootLayoutPath).toBe(path.join(dir, '__root.tsx'));
     expect(rootLayoutServerPath).toBeNull();
@@ -46,7 +45,7 @@ describe('scanRoutesDirectory', () => {
 
     // companion-aware leaves: 5 routes, 3 with companions, 2 without
     expect(leaves).toHaveLength(5);
-    const companionPairs = leaves.map((l) => ({
+    const companionPairs = leaves.map(l => ({
       url: l.translation.urlPattern,
       hasCompanion: l.serverFilePath !== null,
     }));
@@ -81,8 +80,8 @@ describe('scanRoutesDirectory', () => {
       'b.server.tsx': SERVER,
     });
     const { leaves } = scanRoutesDirectory(dir);
-    const a = leaves.find((l) => l.relativePath === 'a');
-    const b = leaves.find((l) => l.relativePath === 'b');
+    const a = leaves.find(l => l.relativePath === 'a');
+    const b = leaves.find(l => l.relativePath === 'b');
     expect(a?.serverFilePath?.endsWith('a.server.ts')).toBe(true);
     expect(b?.serverFilePath?.endsWith('b.server.tsx')).toBe(true);
   });
@@ -107,12 +106,11 @@ describe('buildLayoutChain', () => {
       '_app/_feed/index.tsx': ROUTE,
       '_app/_feed/index.server.ts': SERVER,
     });
-    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } =
-      scanRoutesDirectory(dir);
-    const leaf = leaves.find((l) => l.translation.urlPattern === '/');
+    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } = scanRoutesDirectory(dir);
+    const leaf = leaves.find(l => l.translation.urlPattern === '/');
     expect(leaf).toBeDefined();
     const chain = buildLayoutChain(leaf!, layouts, rootLayoutPath, rootLayoutServerPath);
-    expect(chain.map((l) => l.filePath)).toEqual([
+    expect(chain.map(l => l.filePath)).toEqual([
       path.join(dir, '__root.tsx'),
       path.join(dir, '_app.tsx'),
       path.join(dir, '_app/_feed.tsx'),
@@ -127,8 +125,7 @@ describe('buildLayoutChain', () => {
       '_app/index.tsx': ROUTE,
       '_app/index.server.ts': SERVER,
     });
-    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } =
-      scanRoutesDirectory(dir);
+    const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } = scanRoutesDirectory(dir);
     const leaf = leaves[0];
     expect(leaf).toBeDefined();
     const chain = buildLayoutChain(leaf!, layouts, rootLayoutPath, rootLayoutServerPath);

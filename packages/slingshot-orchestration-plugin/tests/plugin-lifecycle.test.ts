@@ -16,7 +16,11 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { ORCHESTRATION_PLUGIN_STATE_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
+import {
+  ORCHESTRATION_PLUGIN_STATE_KEY,
+  getOrchestration,
+  getOrchestrationOrNull,
+} from '../src/context';
 import { createOrchestrationPackage } from '../src/plugin';
 
 // ---------------------------------------------------------------------------
@@ -56,11 +60,7 @@ async function publishPackageCapabilities(
     pluginState: Map<unknown, unknown>;
     capabilityProviders?: Map<string, string>;
   };
-  await registerPluginCapabilities(
-    ctx as never,
-    plugin.name,
-    plugin.capabilities.provides,
-  );
+  await registerPluginCapabilities(ctx as never, plugin.name, plugin.capabilities.provides);
 }
 
 const noopTask = defineTask({
@@ -189,7 +189,9 @@ describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
     await plugin.setupRoutes?.(ctx);
     await publishPackageCapabilities(app, plugin);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(
+      true,
+    );
   });
 });
 
@@ -225,7 +227,9 @@ describe('createOrchestrationPackage — setupRoutes with routes: false', () => 
     await plugin.setupRoutes?.(ctx);
     await publishPackageCapabilities(app, plugin);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(true);
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration-plugin')).toBe(
+      true,
+    );
   });
 });
 

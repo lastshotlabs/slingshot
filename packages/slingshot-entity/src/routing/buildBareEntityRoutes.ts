@@ -1121,9 +1121,7 @@ export function buildBareEntityRoutes<
     const allow = input.allow ? [...input.allow].sort().join(',') : '';
     return `o:${variant}|${allow}`;
   }
-  function schemasForVariant(
-    input: InputControl,
-  ): ReturnType<typeof buildEntityZodSchemas> {
+  function schemasForVariant(input: InputControl): ReturnType<typeof buildEntityZodSchemas> {
     if (!input) return schemas;
     const key = inputCacheKey(input);
     if (key === '') return schemas;
@@ -1181,48 +1179,48 @@ export function buildBareEntityRoutes<
         routeDef,
         async c => {
           c.set('__routeKey' as never, route.routeKey as never);
-        const prep = await preparePlannedExecution(route, c, adapter, schemas, dataScopes);
-        if (prep instanceof Response) {
-          return prep;
-        }
+          const prep = await preparePlannedExecution(route, c, adapter, schemas, dataScopes);
+          if (prep instanceof Response) {
+            return prep;
+          }
 
-        const policyResponse = await applyPostFetchPolicyForPlannedRoute(
-          route,
-          c,
-          {
-            policyConfig,
-            policyResolver,
-            bus: policyBus,
-          },
-          prep,
-        );
-        if (policyResponse) {
-          return policyResponse;
-        }
+          const policyResponse = await applyPostFetchPolicyForPlannedRoute(
+            route,
+            c,
+            {
+              policyConfig,
+              policyResolver,
+              bus: policyBus,
+            },
+            prep,
+          );
+          if (policyResponse) {
+            return policyResponse;
+          }
 
-        const helpers = createResponseHelpers(c, route, config);
-        const execContext: EntityRouteExecutionContext = {
-          request: c,
-          actor: getActor(c),
-          entity: config,
-          routeKey: route.routeKey,
-          generatedRouteKey: route.generatedRouteKey,
-          entityAdapter: adapter,
-          params: prep.params,
-          query: prep.query,
-          body: prep.body,
-          input: prep.input,
-          requestContext: prep.requestContext,
-          filter: prep.filter,
-          dataScopeBindings: prep.dataScopeBindings,
-          existingRecord: prep.existingRecord,
-          getEntityAdapter,
-          respond: helpers,
-          setOpResult: helpers.setOpResult,
-        };
+          const helpers = createResponseHelpers(c, route, config);
+          const execContext: EntityRouteExecutionContext = {
+            request: c,
+            actor: getActor(c),
+            entity: config,
+            routeKey: route.routeKey,
+            generatedRouteKey: route.generatedRouteKey,
+            entityAdapter: adapter,
+            params: prep.params,
+            query: prep.query,
+            body: prep.body,
+            input: prep.input,
+            requestContext: prep.requestContext,
+            filter: prep.filter,
+            dataScopeBindings: prep.dataScopeBindings,
+            existingRecord: prep.existingRecord,
+            getEntityAdapter,
+            respond: helpers,
+            setOpResult: helpers.setOpResult,
+          };
 
-        return executor(execContext);
-      },
+          return executor(execContext);
+        },
         route.path,
       );
     }
@@ -1297,57 +1295,60 @@ export function buildBareEntityRoutes<
       ...(request ? { request } : {}),
       responses,
     });
-    registerRoute(router, opRoute, async c => {
-      // GET requests may carry no JSON body — fall back to empty object so
-      // the operation receives a defined (albeit empty) input.
-      let input: unknown = {};
-      try {
-        input = (await c.req.json()) as unknown;
-      } catch {
-        // no body
-      }
-      // Inject actor-derived context values so transaction param bindings (e.g.
-      // 'param:actor.id', 'param:actor.tenantId') resolve from request identity
-      // without requiring the client to supply them in the body.
-      // Merge priority: body < path params < context overrides.
-      // Context values always win — clients cannot spoof them.
-      const bodyRecord =
-        typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
-      // Path params (e.g. :id from op.custom http.path) come after body so URL-encoded
-      // values take precedence over body fields of the same name.
-      const pathParams = c.req.param() as Record<string, string>;
-      const queryParams = Object.fromEntries(new URL(c.req.url).searchParams.entries());
-      // Context values override both body and path params — clients cannot spoof them.
-      const actor = getActor(c);
-      const ctxOverrides: Record<string, unknown> = {};
-      if (actor.id != null) {
-        ctxOverrides['actor.id'] = actor.id;
-      }
-      if (actor.tenantId != null) {
-        ctxOverrides['actor.tenantId'] = actor.tenantId;
-      }
-      ctxOverrides['actor.kind'] = actor.kind;
-      if (actor.sessionId != null) {
-        ctxOverrides['actor.sessionId'] = actor.sessionId;
-      }
-      const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
+    registerRoute(
+      router,
+      opRoute,
+      async c => {
+        // GET requests may carry no JSON body — fall back to empty object so
+        // the operation receives a defined (albeit empty) input.
+        let input: unknown = {};
+        try {
+          input = (await c.req.json()) as unknown;
+        } catch {
+          // no body
+        }
+        // Inject actor-derived context values so transaction param bindings (e.g.
+        // 'param:actor.id', 'param:actor.tenantId') resolve from request identity
+        // without requiring the client to supply them in the body.
+        // Merge priority: body < path params < context overrides.
+        // Context values always win — clients cannot spoof them.
+        const bodyRecord =
+          typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+        // Path params (e.g. :id from op.custom http.path) come after body so URL-encoded
+        // values take precedence over body fields of the same name.
+        const pathParams = c.req.param() as Record<string, string>;
+        const queryParams = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+        // Context values override both body and path params — clients cannot spoof them.
+        const actor = getActor(c);
+        const ctxOverrides: Record<string, unknown> = {};
+        if (actor.id != null) {
+          ctxOverrides['actor.id'] = actor.id;
+        }
+        if (actor.tenantId != null) {
+          ctxOverrides['actor.tenantId'] = actor.tenantId;
+        }
+        ctxOverrides['actor.kind'] = actor.kind;
+        if (actor.sessionId != null) {
+          ctxOverrides['actor.sessionId'] = actor.sessionId;
+        }
+        const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 
-      const opFn = adapter[opName];
-      if (typeof opFn !== 'function') {
-        return c.json({ error: `Operation ${opName} not found` }, 404) as never;
-      }
-      const result = await invokeNamedOperation(opConfig, opFn as OperationFunction, params);
-      c.set('__opName' as never, opName as never);
-      c.set('__opResult' as never, result as never);
-      if (opConfig.kind === 'lookup' && opConfig.returns === 'one') {
-        if (!result) return c.json({ error: 'Not found' }, 404) as never;
+        const opFn = adapter[opName];
+        if (typeof opFn !== 'function') {
+          return c.json({ error: `Operation ${opName} not found` }, 404) as never;
+        }
+        const result = await invokeNamedOperation(opConfig, opFn as OperationFunction, params);
+        c.set('__opName' as never, opName as never);
+        c.set('__opResult' as never, result as never);
+        if (opConfig.kind === 'lookup' && opConfig.returns === 'one') {
+          if (!result) return c.json({ error: 'Not found' }, 404) as never;
+          return c.json(projectAndTransform(result), 200);
+        }
+        if (opConfig.kind === 'exists') {
+          return result ? c.body(null, 200) : c.body(null, 404);
+        }
         return c.json(projectAndTransform(result), 200);
-      }
-      if (opConfig.kind === 'exists') {
-        return result ? c.body(null, 200) : c.body(null, 404);
-      }
-      return c.json(projectAndTransform(result), 200);
-    },
+      },
       opPath,
     );
   }

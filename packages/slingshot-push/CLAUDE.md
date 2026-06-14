@@ -8,16 +8,16 @@ via `PushHealthCap`.
 
 ## Key Files
 
-| File                       | What                                                                              |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for package, entities, providers, and router helpers           |
-| src/plugin.ts              | `createPushPackage()` factory (`SlingshotPackageDefinition`)                      |
-| src/entities/modules.ts    | `buildPushEntityModules(...)` — entity modules with `factories`-mode adapter wiring |
-| src/types/config.ts        | Push package config schema and config types                                       |
-| src/router.ts              | Push router assembly                                                              |
-| src/formatter.ts           | Push formatter compilation                                                        |
-| src/providers/provider.ts  | Shared push provider contract                                                     |
-| docs/human/index.md        | Package guide synced into the docs site                                           |
+| File                      | What                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| src/index.ts              | Public API surface for package, entities, providers, and router helpers             |
+| src/plugin.ts             | `createPushPackage()` factory (`SlingshotPackageDefinition`)                        |
+| src/entities/modules.ts   | `buildPushEntityModules(...)` — entity modules with `factories`-mode adapter wiring |
+| src/types/config.ts       | Push package config schema and config types                                         |
+| src/router.ts             | Push router assembly                                                                |
+| src/formatter.ts          | Push formatter compilation                                                          |
+| src/providers/provider.ts | Shared push provider contract                                                       |
+| docs/human/index.md       | Package guide synced into the docs site                                             |
 
 ## Connections
 

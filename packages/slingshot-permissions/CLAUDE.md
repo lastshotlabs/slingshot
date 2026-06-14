@@ -6,16 +6,16 @@ Can also be used as a library — import the evaluator, registry, and adapter fa
 
 ## Key Files
 
-| File                   | What                                                                 |
-| ---------------------- | -------------------------------------------------------------------- |
-| src/index.ts           | Public API surface for evaluators, adapters, and package exports     |
-| src/plugin.ts          | `createPermissionsPackage()` factory (`SlingshotPackageDefinition`)  |
+| File                   | What                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| src/index.ts           | Public API surface for evaluators, adapters, and package exports                                        |
+| src/plugin.ts          | `createPermissionsPackage()` factory (`SlingshotPackageDefinition`)                                     |
 | src/public.ts          | `definePackageContract('slingshot-permissions')` + evaluator/registry/adapter/health capability handles |
-| src/lib/registry.ts    | Permission registry factory                                          |
-| src/lib/evaluator.ts   | Permission evaluator implementation                                  |
-| src/adapters/sqlite.ts | Representative adapter implementation                                |
-| src/factories.ts       | Adapter factory registry                                             |
-| docs/human/index.md    | Package guide synced into the docs site                              |
+| src/lib/registry.ts    | Permission registry factory                                                                             |
+| src/lib/evaluator.ts   | Permission evaluator implementation                                                                     |
+| src/adapters/sqlite.ts | Representative adapter implementation                                                                   |
+| src/factories.ts       | Adapter factory registry                                                                                |
+| docs/human/index.md    | Package guide synced into the docs site                                                                 |
 
 ## Connections
 

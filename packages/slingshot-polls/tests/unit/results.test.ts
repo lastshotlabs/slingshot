@@ -10,8 +10,8 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { createResultsHandler } from '../../src/operations/results';
-import type { PollAdapter, PollVoteAdapter } from '../../src/types/adapters';
 import type { PollRecord, PollVoteRecord } from '../../src/types';
+import type { PollAdapter, PollVoteAdapter } from '../../src/types/adapters';
 
 function makePoll(overrides: Partial<PollRecord> = {}): PollRecord {
   return {

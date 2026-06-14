@@ -4,7 +4,6 @@
  * Cross-package consumers resolve `WebhooksAdapterCap` through `ctx.capabilities.require(...)`
  * to send/manage outbound webhook deliveries through the unified adapter.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { WebhookAdapter } from './types/adapter';
 

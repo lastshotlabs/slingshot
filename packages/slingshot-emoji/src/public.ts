@@ -5,7 +5,6 @@
  * does not currently expose runtime capabilities; the contract is declared
  * here so future entity or capability publication has a stable home.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 
 /** Provider-owned package contract for `slingshot-emoji`. */

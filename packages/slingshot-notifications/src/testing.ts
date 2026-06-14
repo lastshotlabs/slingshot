@@ -12,11 +12,8 @@ import type { SlingshotEventBus, SlingshotEvents } from '@lastshotlabs/slingshot
 import { createNotificationBuilder } from './builder';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS } from './preferences';
+import { NotificationsBuilderFactoryCap, NotificationsDeliveryRegistryCap } from './public';
 import { createNoopRateLimitBackend } from './rateLimit';
-import {
-  NotificationsBuilderFactoryCap,
-  NotificationsDeliveryRegistryCap,
-} from './public';
 import type {
   NotificationAdapter,
   NotificationPreferenceAdapter,

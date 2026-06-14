@@ -18,9 +18,9 @@ import {
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { pollFactories, pollVoteFactories } from '../../src/entities/factories';
 import { Poll } from '../../src/entities/poll';
 import { PollVote } from '../../src/entities/pollVote';
-import { pollFactories, pollVoteFactories } from '../../src/entities/factories';
 import { pollOperations, pollVoteOperations } from '../../src/operations/index';
 import { createPollsPackage } from '../../src/plugin';
 

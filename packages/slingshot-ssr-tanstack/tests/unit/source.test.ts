@@ -1,7 +1,7 @@
-import { describe, expect, it, beforeEach } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { createTanStackRouteSource } from '../../src/source';
 
 function mkRoutes(files: Record<string, string>): string {

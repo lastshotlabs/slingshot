@@ -19,11 +19,7 @@
  *
  * @internal
  */
-import type {
-  EntityChannelConfig,
-  StoreInfra,
-  StoreType,
-} from '@lastshotlabs/slingshot-core';
+import type { EntityChannelConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -41,25 +37,22 @@ import { ContainerInvite, containerInviteOperations } from './containerInvite';
 import { ContainerMember, containerMemberOperations } from './containerMember';
 import { ContainerRule, containerRuleOperations } from './containerRule';
 import { ContainerSetting, containerSettingOperations } from './containerSetting';
-import {
-  ContainerSubscription,
-  containerSubscriptionOperations,
-} from './containerSubscription';
+import { ContainerSubscription, containerSubscriptionOperations } from './containerSubscription';
 import { Reaction, reactionOperations } from './reaction';
 import { Reply, replyOperations } from './reply';
 import { Report, reportOperations } from './report';
-import { Tag, tagOperations } from './tag';
-import { Thread, threadOperations } from './thread';
-import { ThreadSubscription, threadSubscriptionOperations } from './threadSubscription';
-import { ThreadTag, threadTagOperations } from './threadTag';
-import { UserMute, userMuteOperations } from './userMute';
-import { Warning, warningOperations } from './warning';
 import {
   type CommunityAdapterRefs,
   type RedeemPermissionsAdapter,
   asAdapter,
   createRedeemInviteHandler,
 } from './runtime';
+import { Tag, tagOperations } from './tag';
+import { Thread, threadOperations } from './thread';
+import { ThreadSubscription, threadSubscriptionOperations } from './threadSubscription';
+import { ThreadTag, threadTagOperations } from './threadTag';
+import { UserMute, userMuteOperations } from './userMute';
+import { Warning, warningOperations } from './warning';
 
 type EntityFactoryCreator = typeof createEntityFactories;
 

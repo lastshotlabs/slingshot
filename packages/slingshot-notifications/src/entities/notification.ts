@@ -144,13 +144,10 @@ function sqliteRowToNotification(row: Record<string, unknown>): NotificationReco
     data,
     read: row['read'] === 1 || row['read'] === true,
     readAt: typeof row['read_at'] === 'number' ? new Date(row['read_at'] as number) : null,
-    deliverAt:
-      typeof row['deliver_at'] === 'number' ? new Date(row['deliver_at'] as number) : null,
+    deliverAt: typeof row['deliver_at'] === 'number' ? new Date(row['deliver_at'] as number) : null,
     dispatched: row['dispatched'] === 1 || row['dispatched'] === true,
     dispatchedAt:
-      typeof row['dispatched_at'] === 'number'
-        ? new Date(row['dispatched_at'] as number)
-        : null,
+      typeof row['dispatched_at'] === 'number' ? new Date(row['dispatched_at'] as number) : null,
     scopeId: typeof row['scope_id'] === 'string' ? row['scope_id'] : null,
     priority: row['priority'] ?? 'normal',
     createdAt:
@@ -652,15 +649,15 @@ export const notificationOperations = defineOperations(Notification, {
         let rawRows: Record<string, unknown>[];
         if (cursor) {
           rawRows = database
-            .query<Record<string, unknown>>(
-              'SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? AND (deliver_at, id) > (SELECT deliver_at, id FROM notifications WHERE id = ?) ORDER BY deliver_at ASC, id ASC LIMIT ?',
-            )
+            .query<
+              Record<string, unknown>
+            >('SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? AND (deliver_at, id) > (SELECT deliver_at, id FROM notifications WHERE id = ?) ORDER BY deliver_at ASC, id ASC LIMIT ?')
             .all(now.getTime(), cursor, limit + 1);
         } else {
           rawRows = database
-            .query<Record<string, unknown>>(
-              'SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? ORDER BY deliver_at ASC, id ASC LIMIT ?',
-            )
+            .query<
+              Record<string, unknown>
+            >('SELECT * FROM notifications WHERE dispatched = 0 AND deliver_at IS NOT NULL AND deliver_at <= ? ORDER BY deliver_at ASC, id ASC LIMIT ?')
             .all(now.getTime(), limit + 1);
         }
         const hasMore = rawRows.length > limit;
@@ -668,7 +665,7 @@ export const notificationOperations = defineOperations(Notification, {
         const records = pageRows.map(sqliteRowToNotification);
         return Promise.resolve({
           records,
-          nextCursor: hasMore ? records[records.length - 1]?.id ?? null : null,
+          nextCursor: hasMore ? (records[records.length - 1]?.id ?? null) : null,
         });
       },
     postgres:
@@ -769,7 +766,9 @@ export const notificationOperations = defineOperations(Notification, {
           query<T>(sql: string): { get(...args: unknown[]): T | null };
         };
         const row = database
-          .query<{ count?: number }>(
+          .query<{
+            count?: number;
+          }>(
             'SELECT COUNT(*) AS count FROM notifications WHERE dispatched = 0 AND (deliver_at IS NULL OR deliver_at <= ?)',
           )
           .get(now.getTime());

@@ -47,5 +47,6 @@ export interface CommunityPluginState {
  * publishPluginState(pluginState, CommunityPluginStateRef, { ...state, evaluator });
  * ```
  */
-export const CommunityPluginStateRef =
-  definePluginStateKey<CommunityPluginState>(COMMUNITY_PLUGIN_STATE_KEY);
+export const CommunityPluginStateRef = definePluginStateKey<CommunityPluginState>(
+  COMMUNITY_PLUGIN_STATE_KEY,
+);

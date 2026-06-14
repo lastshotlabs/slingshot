@@ -5,7 +5,6 @@
  * `IsrInvalidatorsCap` through `ctx.capabilities.require(...)` to invalidate paths
  * and tags on the active ISR cache adapter.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { IsrInvalidators } from './isr/revalidate';
 

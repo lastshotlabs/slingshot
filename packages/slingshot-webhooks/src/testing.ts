@@ -263,8 +263,7 @@ export async function createWebhooksTestApp(
   for (const provider of pkg.capabilities.provides) {
     const value = await provider.resolve({ packageName: pkg.name });
     const slotKey = `slingshot:package:capabilities:${pkg.name}`;
-    const existing =
-      (pluginState.get(slotKey) as Record<string, unknown> | undefined) ?? {};
+    const existing = (pluginState.get(slotKey) as Record<string, unknown> | undefined) ?? {};
     publishPluginState(pluginState, slotKey, {
       ...existing,
       [provider.capability.name]: value,

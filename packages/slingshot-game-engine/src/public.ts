@@ -7,7 +7,6 @@
  * runtime is also published to `pluginState` under `GAME_ENGINE_PLUGIN_STATE_KEY`
  * — that path is preserved during the bridge period.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { GameEnginePluginState } from './types/state';
 
@@ -22,5 +21,4 @@ export const GameEngine = definePackageContract('slingshot-game-engine');
  * `GAME_ENGINE_PLUGIN_STATE_KEY` plugin-state slot is still published in
  * parallel during the bridge period; new consumers should prefer the cap.
  */
-export const GameEngineRuntimeCap =
-  GameEngine.capability<GameEnginePluginState>('runtime');
+export const GameEngineRuntimeCap = GameEngine.capability<GameEnginePluginState>('runtime');

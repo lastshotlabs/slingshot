@@ -72,11 +72,7 @@ async function publishPackageCapabilities(
     pluginState: Map<unknown, unknown>;
     capabilityProviders?: Map<string, string>;
   };
-  await registerPluginCapabilities(
-    ctx as never,
-    plugin.name,
-    plugin.capabilities.provides,
-  );
+  await registerPluginCapabilities(ctx as never, plugin.name, plugin.capabilities.provides);
 }
 
 describe('adminAuth — edge cases', () => {

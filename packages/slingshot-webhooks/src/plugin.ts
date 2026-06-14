@@ -514,9 +514,10 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
   const disabledRouteGroups = new Set(config.disableRoutes ?? []);
   const endpointsRouteGroupDisabled = disabledRouteGroups.has(WEBHOOK_ROUTES.ENDPOINTS);
   const useExternalAdapter = config.adapter !== undefined;
-  const entities = useExternalAdapter || endpointsRouteGroupDisabled
-    ? []
-    : [entityModules.webhookEndpointModule, entityModules.webhookDeliveryModule];
+  const entities =
+    useExternalAdapter || endpointsRouteGroupDisabled
+      ? []
+      : [entityModules.webhookEndpointModule, entityModules.webhookDeliveryModule];
 
   return definePackage({
     name: 'slingshot-webhooks',
@@ -691,9 +692,7 @@ export function createWebhooksPackage(rawConfig: WebhookPluginConfig): Slingshot
       // — skip entity-adapter resolution and governance init.
       if (!useExternalAdapter) {
         if (!refs.endpoint || !refs.delivery) {
-          throw new WebhookRuntimeError(
-            'webhook entity adapters were not captured during setup',
-          );
+          throw new WebhookRuntimeError('webhook entity adapters were not captured during setup');
         }
         const logger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
         const cipher = createWebhookSecretCipher({

@@ -101,10 +101,7 @@ export async function notifyMentions(
   //
   // Stored `mentions` is used only as a fallback for genuinely body-less
   // posts (image-only / attachment-only) where there's no text to parse.
-  const tokens =
-    body && body.length > 0
-      ? extractMentionsFromBody(body)
-      : (mentions ?? []);
+  const tokens = body && body.length > 0 ? extractMentionsFromBody(body) : (mentions ?? []);
 
   if (tokens.length === 0) return;
 

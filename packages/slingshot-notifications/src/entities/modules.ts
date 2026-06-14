@@ -13,12 +13,9 @@
  */
 import { entity } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { Notification, notificationOperations } from './notification';
-import {
-  NotificationPreference,
-  notificationPreferenceOperations,
-} from './preference';
 import { notificationFactories, notificationPreferenceFactories } from './factories';
+import { Notification, notificationOperations } from './notification';
+import { NotificationPreference, notificationPreferenceOperations } from './preference';
 
 /**
  * Build the two notification entity modules wired to share their resolved

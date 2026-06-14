@@ -11,7 +11,6 @@
  * Cross-package consumers resolve them via `ctx.capabilities.require(...)` instead of
  * reaching into `PERMISSIONS_RUNTIME_KEY` directly.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type {
   PermissionEvaluator,
@@ -74,5 +73,4 @@ export const PermissionsAdapterCap = Permissions.capability<PermissionsAdapter>(
  * receive a `PermissionsHealth` representing adapter, evaluator, and
  * adapter-level connectivity state at call time.
  */
-export const PermissionsHealthCap =
-  Permissions.capability<() => PermissionsHealth>('health');
+export const PermissionsHealthCap = Permissions.capability<() => PermissionsHealth>('health');

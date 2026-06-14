@@ -65,8 +65,8 @@ The package gives you both data and byte-storage plumbing:
   - `AssetsOrphanedKeysCap` — bounded orphan-key registry for recovery flows
 
 ```ts
-import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { AssetsHealthCap, AssetsOrphanedKeysCap } from '@lastshotlabs/slingshot-assets';
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 
 function readAssetsHealth(ctx: HookServices) {
   const health = ctx.capabilities.require(AssetsHealthCap)();

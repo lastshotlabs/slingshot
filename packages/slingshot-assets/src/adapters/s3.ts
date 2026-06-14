@@ -124,7 +124,9 @@ function requireS3Client(): S3ClientModule {
   try {
     return require('@aws-sdk/client-s3') as S3ClientModule;
   } catch {
-    throw new Error('[slingshot-assets] @aws-sdk/client-s3 is not installed. Run: bun add @aws-sdk/client-s3');
+    throw new Error(
+      '[slingshot-assets] @aws-sdk/client-s3 is not installed. Run: bun add @aws-sdk/client-s3',
+    );
   }
 }
 
@@ -142,7 +144,9 @@ function requireLibStorage(): LibStorageModule {
   try {
     return require('@aws-sdk/lib-storage') as LibStorageModule;
   } catch {
-    throw new Error('[slingshot-assets] @aws-sdk/lib-storage is not installed. Run: bun add @aws-sdk/lib-storage');
+    throw new Error(
+      '[slingshot-assets] @aws-sdk/lib-storage is not installed. Run: bun add @aws-sdk/lib-storage',
+    );
   }
 }
 

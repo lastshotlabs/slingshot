@@ -28,7 +28,6 @@
 //   ],
 // });
 // ```
-
 import type { Plugin } from 'vite';
 
 const SERVER_FILE_RE = /\.server\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)(\?[^?]*)?$/;

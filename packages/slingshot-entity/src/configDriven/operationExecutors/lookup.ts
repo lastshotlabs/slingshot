@@ -65,10 +65,7 @@ type ResolvedConstraint =
   | { kind: 'null' }
   | { kind: 'value'; value: string | number | boolean };
 
-function resolveParam(
-  params: Record<string, unknown>,
-  paramName: string,
-): ResolvedConstraint {
+function resolveParam(params: Record<string, unknown>, paramName: string): ResolvedConstraint {
   if (!(paramName in params)) return { kind: 'omit' };
   const v = params[paramName];
   if (v === undefined) return { kind: 'omit' };

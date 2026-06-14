@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  getOrganizationsOrgService,
-  getOrganizationsOrgServiceOrNull,
-} from '../../src/orgService';
+import { getOrganizationsOrgService, getOrganizationsOrgServiceOrNull } from '../../src/orgService';
 
 // The orgService helpers read the capability slot written by
 // `registerPluginCapabilities(..., 'slingshot-organizations', ...)`. Tests

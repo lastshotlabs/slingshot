@@ -33,14 +33,8 @@ import type {
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-import {
-  createEntityFactories,
-  createEntityPlugin,
-} from '@lastshotlabs/slingshot-entity';
-import type {
-  BareEntityAdapter,
-  EntityPluginEntry,
-} from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createCommunityPackage } from '../../src/plugin';
 
@@ -267,11 +261,7 @@ async function mountCommunityPackage(
           impl.config,
           impl.operations as Parameters<typeof createEntityFactories>[1],
         );
-        return resolveStandardRepo(
-          factories,
-          storeType,
-          infra,
-        ) as unknown as BareEntityAdapter;
+        return resolveStandardRepo(factories, storeType, infra) as unknown as BareEntityAdapter;
       };
     }
     if (!buildAdapter) {

@@ -519,12 +519,8 @@ export function applyInviteRuntimeTransform(
     inviteIdempotencyTtlMs: number;
   },
 ): BareEntityAdapter {
-  const {
-    invitationTtlSeconds,
-    resolveRole,
-    inviteIdempotencyAdapter,
-    inviteIdempotencyTtlMs,
-  } = args;
+  const { invitationTtlSeconds, resolveRole, inviteIdempotencyAdapter, inviteIdempotencyTtlMs } =
+    args;
   const inviteAdapter = requireMethod(adapter, 'create');
   const wrapped: InviteRuntimeAdapter = {
     ...adapter,
@@ -607,9 +603,7 @@ export function createListMineHandler(refs: OrganizationsAdapterRefs) {
     const memberAdapter = refs.members;
     const organizationAdapter = refs.organizations;
     if (!memberAdapter || !organizationAdapter) {
-      throw new Error(
-        '[slingshot-organizations] listMine executed before adapters were captured',
-      );
+      throw new Error('[slingshot-organizations] listMine executed before adapters were captured');
     }
     const requestedLimit = parsePositiveInt(params.limit) ?? LIST_MINE_DEFAULT_LIMIT;
     const limit = Math.min(LIST_MINE_MAX_LIMIT, Math.max(1, requestedLimit));
@@ -843,8 +837,7 @@ export function createRoleResolver(args: {
     );
   }
   return (input: unknown) => {
-    const role =
-      typeof input === 'string' && input.length > 0 ? input : args.defaultMemberRole;
+    const role = typeof input === 'string' && input.length > 0 ? input : args.defaultMemberRole;
     if (!knownRoleSet.has(role)) {
       throw new HTTPException(400, {
         message: `Invalid role '${role}'. Allowed: [${[...knownRoleSet].join(', ')}]`,
@@ -854,9 +847,10 @@ export function createRoleResolver(args: {
   };
 }
 
-export function createInviteIdempotencyDefaults(
-  custom?: OperationIdempotencyAdapter,
-): { adapter: OperationIdempotencyAdapter; ttlMs: number } {
+export function createInviteIdempotencyDefaults(custom?: OperationIdempotencyAdapter): {
+  adapter: OperationIdempotencyAdapter;
+  ttlMs: number;
+} {
   return {
     adapter: custom ?? createMemoryOperationIdempotencyAdapter(),
     ttlMs: 24 * 60 * 60 * 1000,

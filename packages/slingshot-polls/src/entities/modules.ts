@@ -14,10 +14,10 @@
  */
 import { entity } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { pollOperations, pollVoteOperations } from '../operations/index';
+import { pollFactories, pollVoteFactories } from './factories';
 import { Poll } from './poll';
 import { PollVote } from './pollVote';
-import { pollFactories, pollVoteFactories } from './factories';
-import { pollOperations, pollVoteOperations } from '../operations/index';
 
 /**
  * Build the Poll and PollVote entity modules wired to share their adapters

@@ -58,5 +58,4 @@ describe('migrate app.config discovery', () => {
     expect(discovered.entities.Note?._storageName).toBe('notes');
     expect(pickBackend(discovered)).toBe('sqlite');
   });
-
 });

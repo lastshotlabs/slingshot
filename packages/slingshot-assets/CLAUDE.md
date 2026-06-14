@@ -11,19 +11,19 @@ list via `AssetsOrphanedKeysCap`.
 
 ## Key Files
 
-| File                       | What                                                                              |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for package, adapters, and asset types                         |
-| src/plugin.ts              | `createAssetsPackage()` factory (`SlingshotPackageDefinition`)                    |
-| src/entities/modules.ts    | `buildAssetsEntityModules(...)` — entity module with `manual` adapter wiring      |
-| src/entities/runtime.ts    | Adapter TTL transform + custom-op handlers (presignUpload / presignDownload / serveImage) |
-| src/entities/asset.ts      | Asset entity definition                                                           |
-| src/entities/factories.ts  | Store-backed asset adapter factories with lazy TTL enforcement                    |
-| src/adapters/index.ts      | Storage adapter resolution (`s3` / `local` / `memory`)                            |
-| src/middleware/deleteStorageFile.ts | Delete-cascade middleware + bounded orphan registry                      |
-| src/config.schema.ts       | Assets package config schema                                                      |
-| src/types.ts               | Shared asset records, adapter contracts, and config types                         |
-| docs/human/index.md        | Package guide synced into the docs site                                           |
+| File                                | What                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| src/index.ts                        | Public API surface for package, adapters, and asset types                                 |
+| src/plugin.ts                       | `createAssetsPackage()` factory (`SlingshotPackageDefinition`)                            |
+| src/entities/modules.ts             | `buildAssetsEntityModules(...)` — entity module with `manual` adapter wiring              |
+| src/entities/runtime.ts             | Adapter TTL transform + custom-op handlers (presignUpload / presignDownload / serveImage) |
+| src/entities/asset.ts               | Asset entity definition                                                                   |
+| src/entities/factories.ts           | Store-backed asset adapter factories with lazy TTL enforcement                            |
+| src/adapters/index.ts               | Storage adapter resolution (`s3` / `local` / `memory`)                                    |
+| src/middleware/deleteStorageFile.ts | Delete-cascade middleware + bounded orphan registry                                       |
+| src/config.schema.ts                | Assets package config schema                                                              |
+| src/types.ts                        | Shared asset records, adapter contracts, and config types                                 |
+| docs/human/index.md                 | Package guide synced into the docs site                                                   |
 
 ## Connections
 

@@ -6,7 +6,6 @@
  * (poll/vote adapters, sweep handle). The legacy plugin-state slot at
  * `POLLS_RUNTIME_KEY` is still published in parallel during the bridge period.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { PollsPluginState } from './types';
 

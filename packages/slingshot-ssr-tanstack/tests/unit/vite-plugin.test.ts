@@ -61,9 +61,7 @@ describe('stripServerFiles plugin', () => {
     // A node_modules package legitimately shipping a `.server.*` file should
     // NOT be silently stubbed — if it imports server-only deps it should fail
     // loudly. The convention belongs to application route trees, not vendor.
-    expect(
-      callResolve('/abs/proj/node_modules/some-pkg/dist/foo.server.ts', false),
-    ).toBeNull();
+    expect(callResolve('/abs/proj/node_modules/some-pkg/dist/foo.server.ts', false)).toBeNull();
     expect(
       callResolve('/abs/proj/node_modules/.bun/pkg@1/node_modules/x.server.js', false),
     ).toBeNull();

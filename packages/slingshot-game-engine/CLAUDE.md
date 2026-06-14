@@ -10,19 +10,19 @@ closure-owned state, no singletons.
 
 ### Package and Entry
 
-| File              | What                                                       |
-| ----------------- | ---------------------------------------------------------- |
-| src/index.ts      | Public API surface (package, defineGame, entities, types)  |
-| src/plugin.ts     | `createGameEnginePackage()` factory                        |
-| src/defineGame.ts | `defineGame()` DSL + validation                            |
+| File              | What                                                      |
+| ----------------- | --------------------------------------------------------- |
+| src/index.ts      | Public API surface (package, defineGame, entities, types) |
+| src/plugin.ts     | `createGameEnginePackage()` factory                       |
+| src/defineGame.ts | `defineGame()` DSL + validation                           |
 
 ### Entities
 
-| File                        | What                                                       |
-| --------------------------- | ---------------------------------------------------------- |
-| src/entities/gameSession.ts | GameSession entity definition                              |
-| src/entities/gamePlayer.ts  | GamePlayer entity definition                               |
-| src/entities/factories.ts   | Entity repository factory wiring by StoreType              |
+| File                        | What                                                        |
+| --------------------------- | ----------------------------------------------------------- |
+| src/entities/gameSession.ts | GameSession entity definition                               |
+| src/entities/gamePlayer.ts  | GamePlayer entity definition                                |
+| src/entities/factories.ts   | Entity repository factory wiring by StoreType               |
 | src/entities/modules.ts     | `buildGameEngineEntityModules(...)` — manual adapter wiring |
 
 ### Operations

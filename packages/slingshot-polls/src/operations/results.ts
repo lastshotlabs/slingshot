@@ -8,8 +8,8 @@
  * @internal
  */
 import { HTTPException } from 'hono/http-exception';
-import type { PollAdapter, PollVoteAdapter } from '../types/adapters';
 import type { PollResult, PollResultsResponse } from '../types';
+import type { PollAdapter, PollVoteAdapter } from '../types/adapters';
 
 /**
  * Create the results handler.

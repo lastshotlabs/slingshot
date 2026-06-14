@@ -31,19 +31,19 @@ declared list to enforce order, but the consumed capabilities have to actually b
 register them in your app's `plugins` (for `slingshot-auth`) and `packages`
 (for `slingshot-permissions`, `slingshot-notifications`) arrays before chat.
 
-| Module                    | Tier    | How it's consumed                                                      |
-| ------------------------- | ------- | ---------------------------------------------------------------------- |
-| `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context            |
+| Module                    | Tier    | How it's consumed                                                                          |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `slingshot-auth`          | plugin  | required; routes resolve the actor through the auth context                                |
 | `slingshot-permissions`   | package | required; via `PermissionsEvaluatorCap`, `PermissionsRegistryCap`, `PermissionsAdapterCap` |
-| `slingshot-notifications` | package | required; via `NotificationsBuilderFactoryCap` for outbound notifications |
+| `slingshot-notifications` | package | required; via `NotificationsBuilderFactoryCap` for outbound notifications                  |
 
 Optional, opportunistically integrated when present:
 
-| Plugin                    | What it does                                                           |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `slingshot-push`          | chat registers push formatters for each notification type              |
-| `slingshot-embeds`        | URL unfurl on new messages → updates `embeds` and emits an event       |
-| `slingshot-interactions`  | resolves `ChatInteractionsPeerCap` for component dispatch              |
+| Plugin                   | What it does                                                     |
+| ------------------------ | ---------------------------------------------------------------- |
+| `slingshot-push`         | chat registers push formatters for each notification type        |
+| `slingshot-embeds`       | URL unfurl on new messages → updates `embeds` and emits an event |
+| `slingshot-interactions` | resolves `ChatInteractionsPeerCap` for component dispatch        |
 
 ## Public Contract
 
@@ -221,7 +221,7 @@ The encryption router is mounted at `${mountPath}/encryption` for client key-bun
 ### Register custom push formatters
 
 When `slingshot-push` is loaded, chat registers default push formatters for its own
-notification types. Override or extend by registering yours *after* chat runs `setupPost`:
+notification types. Override or extend by registering yours _after_ chat runs `setupPost`:
 
 ```ts
 // @skip-typecheck
@@ -285,27 +285,27 @@ after them.
 Chat augments `SlingshotEventMap` so every event below is fully typed when you call
 `bus.on(...)`.
 
-| Event                              | Notes                                                                |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| `chat:room.created`                | new room                                                             |
-| `chat:room.updated`                | room fields updated                                                  |
-| `chat:room.deleted`                | room deleted                                                         |
-| `chat:room.archived` / `.unarchived` | archive state changed                                                |
-| `chat:room.favorited` / `.unfavorited` | per-user favorite toggled                                            |
-| `chat:member.added` / `.updated` / `.removed` | room membership changes                                              |
-| `chat:message.created`             | new message; payload includes `type` and `authorId`                  |
-| `chat:message.updated`             | message edited                                                       |
-| `chat:message.deleted`             | message deleted; payload includes deletion metadata                  |
-| `chat:message.embeds.resolved`     | unfurl results applied to a message                                  |
-| `chat:message.scheduled.created`   | scheduled message queued                                             |
-| `chat:message.scheduled.delivered` | scheduler delivered a queued message                                 |
-| `chat:message.reaction.added` / `.removed` | reaction toggled on a message                                        |
-| `chat:message.pinned` / `.unpinned` | pin state changed                                                    |
-| `chat:read.created`                | read receipt created                                                 |
-| `chat:reminder.created`            | reminder scheduled                                                   |
-| `chat:reminder.triggered`          | reminder fired by the 30 s scheduler                                 |
-| `chat:invite.created`              | room invite created                                                  |
-| `chat:user.blocked` / `.unblocked` | block relationship toggled                                           |
+| Event                                         | Notes                                               |
+| --------------------------------------------- | --------------------------------------------------- |
+| `chat:room.created`                           | new room                                            |
+| `chat:room.updated`                           | room fields updated                                 |
+| `chat:room.deleted`                           | room deleted                                        |
+| `chat:room.archived` / `.unarchived`          | archive state changed                               |
+| `chat:room.favorited` / `.unfavorited`        | per-user favorite toggled                           |
+| `chat:member.added` / `.updated` / `.removed` | room membership changes                             |
+| `chat:message.created`                        | new message; payload includes `type` and `authorId` |
+| `chat:message.updated`                        | message edited                                      |
+| `chat:message.deleted`                        | message deleted; payload includes deletion metadata |
+| `chat:message.embeds.resolved`                | unfurl results applied to a message                 |
+| `chat:message.scheduled.created`              | scheduled message queued                            |
+| `chat:message.scheduled.delivered`            | scheduler delivered a queued message                |
+| `chat:message.reaction.added` / `.removed`    | reaction toggled on a message                       |
+| `chat:message.pinned` / `.unpinned`           | pin state changed                                   |
+| `chat:read.created`                           | read receipt created                                |
+| `chat:reminder.created`                       | reminder scheduled                                  |
+| `chat:reminder.triggered`                     | reminder fired by the 30 s scheduler                |
+| `chat:invite.created`                         | room invite created                                 |
+| `chat:user.blocked` / `.unblocked`            | block relationship toggled                          |
 
 `chat:message.embeds.resolved` is emitted by chat itself after the embed-aware peer
 (`slingshot-embeds`) returns unfurl results — chat owns the storage write and the event
@@ -317,10 +317,10 @@ Chat emits these notification types through `NotificationsBuilderFactoryCap`. Re
 formatters for them in `slingshot-push` (chat registers defaults automatically when push is
 present).
 
-| Type                | When                                                                    |
-| ------------------- | ----------------------------------------------------------------------- |
-| `chat:message`      | a new message in a room you are a member of                             |
-| `chat:invite`       | someone invited you to a room                                           |
+| Type           | When                                        |
+| -------------- | ------------------------------------------- |
+| `chat:message` | a new message in a room you are a member of |
+| `chat:invite`  | someone invited you to a room               |
 
 ## Operational Notes
 

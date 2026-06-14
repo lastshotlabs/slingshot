@@ -7,8 +7,8 @@
  * If anyone reverts a `path: '/users/{userId}'` literal back to colon form, this
  * test catches it before the spec ships.
  */
-import { describe, expect, it } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, it } from 'bun:test';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createAdminRouter } from '../../src/routes/admin';
 import { createMailRouter } from '../../src/routes/mail';

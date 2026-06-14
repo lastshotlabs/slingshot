@@ -16,7 +16,6 @@ import {
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { InteractionsRuntimeCap } from './public';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { interactionsPluginConfigSchema } from './config/schema';
 import type { InteractionsPluginConfig } from './config/types';
@@ -25,6 +24,7 @@ import { interactionEventModule } from './entities/interactionEvent';
 import { compileHandlers } from './handlers/compile';
 import { probeChatPeer } from './peers/chat';
 import { probeCommunityPeer } from './peers/community';
+import { InteractionsRuntimeCap } from './public';
 import { buildDispatchRoute } from './routes/dispatchRoute';
 import { INTERACTIONS_PLUGIN_STATE_KEY, type InteractionsPluginState } from './state';
 

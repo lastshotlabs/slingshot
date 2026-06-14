@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { assertMountPath, type NotificationRecord } from '@lastshotlabs/slingshot-core';
+import { type NotificationRecord, assertMountPath } from '@lastshotlabs/slingshot-core';
 import type { PushMessage, PushPlatform } from './models';
 
 function normalizeMountPath(value: string): string {

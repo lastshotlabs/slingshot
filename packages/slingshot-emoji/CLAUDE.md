@@ -6,14 +6,14 @@ consumed through `createApp({ packages: [...] })`.
 
 ## Key Files
 
-| File                                | What                                                  |
-| ----------------------------------- | ----------------------------------------------------- |
-| src/index.ts                        | Public API surface for package, entity, and types     |
-| src/plugin.ts                       | `createEmojiPackage()` factory                        |
-| src/entities/emoji.ts               | `EmojiEntity` definition + `emojiModule` entity wrap  |
-| src/middleware/shortcodeGuard.ts    | Shortcode format validation middleware                |
-| src/types.ts                        | Emoji config and record types                         |
-| docs/human/index.md                 | Package guide synced into the docs site               |
+| File                             | What                                                 |
+| -------------------------------- | ---------------------------------------------------- |
+| src/index.ts                     | Public API surface for package, entity, and types    |
+| src/plugin.ts                    | `createEmojiPackage()` factory                       |
+| src/entities/emoji.ts            | `EmojiEntity` definition + `emojiModule` entity wrap |
+| src/middleware/shortcodeGuard.ts | Shortcode format validation middleware               |
+| src/types.ts                     | Emoji config and record types                        |
+| docs/human/index.md              | Package guide synced into the docs site              |
 
 ## Connections
 

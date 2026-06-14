@@ -8,7 +8,7 @@
  * Usage: `bun run scripts/check-unsafe-full-adapter.ts [--max=N]`
  *   --max=N    exit non-zero when occurrences exceed N (for CI ratchet)
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 interface Hit {

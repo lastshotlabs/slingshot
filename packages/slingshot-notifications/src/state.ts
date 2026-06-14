@@ -1,7 +1,6 @@
 // Internal plugin state types kept for `getHealth()` and the dispatcher loop.
 // The legacy `NOTIFICATIONS_PLUGIN_STATE_KEY` peer-state publish was removed in favor
 // of the typed `Notifications` package contract — see `./public.ts`.
-
 import type { DispatcherAdapter } from './dispatcher';
 import type { NotificationAdapter, NotificationPreferenceAdapter } from './types';
 import type { NotificationsPluginConfig } from './types/config';

@@ -38,7 +38,9 @@ export function createPermissionRegistry(): PermissionRegistry {
       // (e.g. `admin:billing`), not re-registering an existing one with more actions. If you need
       // to extend another plugin's namespace, that plugin must own the registration.
       if (definitions.has(definition.resourceType)) {
-        throw new Error(`[slingshot-permissions] Resource type '${definition.resourceType}' is already registered`);
+        throw new Error(
+          `[slingshot-permissions] Resource type '${definition.resourceType}' is already registered`,
+        );
       }
       definitions.set(definition.resourceType, definition);
     },

@@ -76,9 +76,7 @@ export function translatePath(relativePath: string): TranslatedPath {
 
   // Split on `/` (directory boundaries) AND `.` (flat-format separators).
   // Preserve order; `.` and `/` produce the same segment-token sequence.
-  const rawSegments: string[] = relativePath
-    .split('/')
-    .flatMap((part) => part.split('.'));
+  const rawSegments: string[] = relativePath.split('/').flatMap(part => part.split('.'));
 
   const tokens: SegmentToken[] = rawSegments.map(parseSegment);
 

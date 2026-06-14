@@ -39,7 +39,7 @@ export function buildPollRequiredGuard(app: Hono<AppEnv>) {
         throw new HTTPException(503, {
           message:
             'slingshot-polls is required for poll features but is not registered. ' +
-            'Add createPollsPackage() to your app\'s `packages` array.',
+            "Add createPollsPackage() to your app's `packages` array.",
         });
       }
     }
@@ -70,7 +70,7 @@ export function buildAttachmentRequiredGuard(app: Hono<AppEnv>) {
         throw new HTTPException(503, {
           message:
             'slingshot-assets is required for attachment features but is not registered. ' +
-            'Add createAssetsPackage() to your app\'s `packages` array.',
+            "Add createAssetsPackage() to your app's `packages` array.",
         });
       }
     }

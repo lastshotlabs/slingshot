@@ -10,18 +10,17 @@
 // This test asserts each of the recently-fixed packages returns the *same*
 // reference from two successive `resolve()` calls. The provider closure is
 // the only piece under test — no app bootstrap is required.
-
 import { describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
+import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import { createGameEnginePackage, defineGame } from '@lastshotlabs/slingshot-game-engine';
 import { createInteractionsPackage } from '@lastshotlabs/slingshot-interactions';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
-import { createPollsPackage } from '../../packages/slingshot-polls/src/index';
-import { createPushPackage } from '@lastshotlabs/slingshot-push';
 import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
+import { createPushPackage } from '@lastshotlabs/slingshot-push';
 import { createSsrPackage } from '@lastshotlabs/slingshot-ssr';
+import { createPollsPackage } from '../../packages/slingshot-polls/src/index';
 import { createTestSsrConfig } from '../../packages/slingshot-ssr/src/testing';
-import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 
 async function assertStableIdentity(pkg: SlingshotPackageDefinition): Promise<void> {
   expect(pkg.capabilities.provides.length).toBeGreaterThan(0);

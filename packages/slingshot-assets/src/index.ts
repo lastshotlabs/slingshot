@@ -17,12 +17,7 @@ export type { AssetsPackageDeps } from './plugin';
 /**
  * Provider-owned package contract and capabilities for cross-package consumers.
  */
-export {
-  Assets,
-  AssetsHealthCap,
-  AssetsOrphanedKeysCap,
-  AssetsRuntimeCap,
-} from './public';
+export { Assets, AssetsHealthCap, AssetsOrphanedKeysCap, AssetsRuntimeCap } from './public';
 /**
  * Public asset records, adapter contracts, plugin config, and storage input types.
  */

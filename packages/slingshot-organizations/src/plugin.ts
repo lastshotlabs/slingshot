@@ -43,10 +43,7 @@ import {
   createMemoryOrganizationsRateLimitStore,
 } from './lib/rateLimit';
 import { DEFAULT_RESERVED_ORG_SLUGS, createOrgSlugSchema } from './lib/slugValidation';
-import {
-  type OrganizationsOrgService,
-  getOrganizationsOrgServiceOrNull,
-} from './orgService';
+import { type OrganizationsOrgService, getOrganizationsOrgServiceOrNull } from './orgService';
 import { OrganizationsOrgServiceCap } from './public';
 import { ORGANIZATIONS_RECONCILE_STATE_KEY, type OrganizationsReconcileService } from './reconcile';
 

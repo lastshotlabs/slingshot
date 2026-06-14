@@ -11,21 +11,21 @@
  */
 import { entity } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
-import { PushDelivery } from './pushDelivery';
-import { PushSubscription } from './pushSubscription';
-import { PushTopic } from './pushTopic';
-import { PushTopicMembership } from './pushTopicMembership';
+import type { PushRouterRepos } from '../router';
 import {
   pushDeliveryFactories,
   pushSubscriptionFactories,
   pushTopicFactories,
   pushTopicMembershipFactories,
 } from './factories';
+import { PushDelivery } from './pushDelivery';
 import { pushDeliveryOperations } from './pushDelivery';
+import { PushSubscription } from './pushSubscription';
 import { pushSubscriptionOperations } from './pushSubscription';
+import { PushTopic } from './pushTopic';
 import { pushTopicOperations } from './pushTopic';
+import { PushTopicMembership } from './pushTopicMembership';
 import { pushTopicMembershipOperations } from './pushTopicMembership';
-import type { PushRouterRepos } from '../router';
 
 /**
  * Wrap the PushSubscription adapter so the entity's POST create path performs

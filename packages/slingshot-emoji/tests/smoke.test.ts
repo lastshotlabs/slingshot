@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   PERMISSIONS_STATE_KEY,
+  type PluginSetupContext,
+  type SlingshotPlugin,
   getContext,
   provideCapability,
   registerPluginCapabilities,
-  type PluginSetupContext,
-  type SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
   PermissionsAdapterCap,

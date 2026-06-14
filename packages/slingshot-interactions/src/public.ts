@@ -7,7 +7,6 @@
  * `INTERACTIONS_PLUGIN_STATE_KEY` is still published in parallel during the
  * bridge period.
  */
-
 import { definePackageContract } from '@lastshotlabs/slingshot-core';
 import type { InteractionsPluginState } from './state';
 
@@ -22,5 +21,4 @@ export const Interactions = definePackageContract('slingshot-interactions');
  * `INTERACTIONS_PLUGIN_STATE_KEY` plugin-state slot is still published in
  * parallel during the bridge period; new consumers should prefer the cap.
  */
-export const InteractionsRuntimeCap =
-  Interactions.capability<InteractionsPluginState>('runtime');
+export const InteractionsRuntimeCap = Interactions.capability<InteractionsPluginState>('runtime');

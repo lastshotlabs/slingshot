@@ -8,12 +8,11 @@
 // renderer-facing helpers. The unit tests in source.test.ts call
 // `match.loadModule()` directly; this one routes through the actual
 // `executeRouteModule` consumer to catch shape mismatches.
-
-import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { executeRouteModule, type SsrLoadContext } from '@lastshotlabs/slingshot-ssr';
+import { describe, expect, it } from 'bun:test';
+import { type SsrLoadContext, executeRouteModule } from '@lastshotlabs/slingshot-ssr';
 import { createTanStackRouteSource } from '../../src/source';
 
 function mkFixture(files: Record<string, string>): string {

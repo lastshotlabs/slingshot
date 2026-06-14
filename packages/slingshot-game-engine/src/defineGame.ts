@@ -46,10 +46,14 @@ export function defineGame<
 >(input: GameDefinitionInput<TRules, TGameState, TContent>): GameDefinition {
   // Validate required fields
   if (!input.name || typeof input.name !== 'string') {
-    throw new Error('[slingshot-game-engine] defineGame: `name` is required and must be a non-empty string.');
+    throw new Error(
+      '[slingshot-game-engine] defineGame: `name` is required and must be a non-empty string.',
+    );
   }
   if (!input.display || typeof input.display !== 'string') {
-    throw new Error('[slingshot-game-engine] defineGame: `display` is required and must be a non-empty string.');
+    throw new Error(
+      '[slingshot-game-engine] defineGame: `display` is required and must be a non-empty string.',
+    );
   }
   if (typeof input.minPlayers !== 'number' || input.minPlayers < 1) {
     throw new Error('[slingshot-game-engine] defineGame: `minPlayers` must be at least 1.');

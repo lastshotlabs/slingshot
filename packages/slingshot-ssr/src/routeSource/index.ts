@@ -4,10 +4,6 @@
 // from `@lastshotlabs/slingshot-ssr/routeSource` (or via the package root,
 // where these symbols are also re-exported).
 
-export type {
-  ResolveRouteOptions,
-  ResolveRouteChainOptions,
-  SsrRouteSource,
-} from './types';
+export type { ResolveRouteOptions, ResolveRouteChainOptions, SsrRouteSource } from './types';
 export { createFileBasedRouteSource } from './fileBased';
 export type { FileBasedRouteSourceConfig } from './fileBased';

@@ -9,8 +9,8 @@
  * Both behaviors degrade silently if `toOpenApiPath` is dropped from a `createRoute({ path })`
  * site or if the runtime router accidentally receives the brace form. These tests pin both.
  */
-import { describe, expect, it } from 'bun:test';
 import type { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, it } from 'bun:test';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
 

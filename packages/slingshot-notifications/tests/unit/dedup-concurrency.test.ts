@@ -192,11 +192,12 @@ describe('dedupOrCreate concurrency — memory backend', () => {
 
 describe('dedupOrCreate concurrency — sqlite backend', () => {
   let db: Database;
-  type DedupOrCreateFn = NonNullable<
-    typeof notificationOperations.operations.dedupOrCreate.sqlite
-  > extends (db: never) => infer Fn
-    ? Fn
-    : never;
+  type DedupOrCreateFn =
+    NonNullable<typeof notificationOperations.operations.dedupOrCreate.sqlite> extends (
+      db: never,
+    ) => infer Fn
+      ? Fn
+      : never;
   let dedupOrCreate: DedupOrCreateFn;
 
   beforeEach(() => {

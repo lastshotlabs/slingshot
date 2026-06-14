@@ -9,18 +9,18 @@ interactions peer via `ChatInteractionsPeerCap`.
 
 ## Key Files
 
-| File                       | What                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| src/index.ts               | Public API surface for package, entities, peer contracts, and chat events       |
-| src/plugin.ts              | `createChatPackage()` factory (`SlingshotPackageDefinition`)                    |
-| src/entities/modules.ts    | `buildChatEntityModules(...)` — 10 entity modules with manual adapter wiring    |
-| src/entities/runtime.ts    | Adapter ref shapes, message adapter transforms, and lifted custom-op handlers   |
-| src/config.schema.ts       | Chat package config schema                                                      |
-| src/types.ts               | Shared chat records, config types, and event payloads                           |
-| src/encryption/provider.ts | Encryption provider contract and dispatch point                                 |
-| src/public.ts              | `Chat` contract and `ChatInteractionsPeerCap`                                   |
-| src/ws/incoming.ts         | Incoming WebSocket event handling                                               |
-| docs/human/index.md        | Package guide synced into the docs site                                         |
+| File                       | What                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| src/index.ts               | Public API surface for package, entities, peer contracts, and chat events     |
+| src/plugin.ts              | `createChatPackage()` factory (`SlingshotPackageDefinition`)                  |
+| src/entities/modules.ts    | `buildChatEntityModules(...)` — 10 entity modules with manual adapter wiring  |
+| src/entities/runtime.ts    | Adapter ref shapes, message adapter transforms, and lifted custom-op handlers |
+| src/config.schema.ts       | Chat package config schema                                                    |
+| src/types.ts               | Shared chat records, config types, and event payloads                         |
+| src/encryption/provider.ts | Encryption provider contract and dispatch point                               |
+| src/public.ts              | `Chat` contract and `ChatInteractionsPeerCap`                                 |
+| src/ws/incoming.ts         | Incoming WebSocket event handling                                             |
+| docs/human/index.md        | Package guide synced into the docs site                                       |
 
 ## Connections
 

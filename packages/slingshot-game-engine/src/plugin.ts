@@ -31,7 +31,6 @@ import {
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { GameEngineRuntimeCap } from './public';
 import { registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
 import { buildGameEngineEntityModules } from './entities/modules';
 import type { GameEngineAdapterRefs } from './entities/modules';
@@ -60,6 +59,7 @@ import {
 } from './pluginRoutes';
 import { wireWsEndpoint } from './pluginWs';
 import { GAME_SESSION_POLICY_KEY, createGameSessionPolicy } from './policy';
+import { GameEngineRuntimeCap } from './public';
 import type { GameEnginePluginConfig } from './types/config';
 import type { GameDefinition, GamePlayerState } from './types/models';
 import { GAME_ENGINE_PLUGIN_STATE_KEY } from './types/state';
@@ -442,4 +442,3 @@ export function createGameEnginePackage(
     },
   });
 }
-

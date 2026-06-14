@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { Actor } from '@lastshotlabs/slingshot-core';
-import {
-  definePackage,
-  domain,
-  getPluginState,
-  route,
-} from '@lastshotlabs/slingshot-core';
+import { definePackage, domain, getPluginState, route } from '@lastshotlabs/slingshot-core';
 import { createPermissionsPackage } from '../../src/plugin';
 
 const rootAppModulePath = '../../../../src/app';
@@ -128,7 +123,9 @@ describe('permissions route guard — HTTP level', () => {
     });
     createdContexts.push(result.ctx);
 
-    const state = getPluginState(result.app).get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = getPluginState(result.app).get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     setupPostRegistry(state);
 
     const res = await result.app.request('/posts/create', {
@@ -154,7 +151,9 @@ describe('permissions route guard — HTTP level', () => {
     });
     createdContexts.push(result.ctx);
 
-    const state = getPluginState(result.app).get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = getPluginState(result.app).get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     setupPostRegistry(state);
     await state.adapter.createGrant({
       subjectId: userId,
@@ -212,7 +211,9 @@ describe('permissions route guard — HTTP level', () => {
     });
     createdContexts.push(result.ctx);
 
-    const state = getPluginState(result.app).get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = getPluginState(result.app).get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     state.registry.register({
       resourceType: 'post',
       actions: ['post:delete', 'post:moderate'],
@@ -280,7 +281,9 @@ describe('permissions route guard — HTTP level', () => {
     });
     createdContexts.push(result.ctx);
 
-    const state = getPluginState(result.app).get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = getPluginState(result.app).get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     setupPostRegistry(state);
 
     await state.adapter.createGrant({
@@ -328,7 +331,9 @@ describe('permissions route guard — HTTP level', () => {
     });
     createdContexts.push(result.ctx);
 
-    const state = getPluginState(result.app).get('slingshot:package:capabilities:slingshot-permissions') as any;
+    const state = getPluginState(result.app).get(
+      'slingshot:package:capabilities:slingshot-permissions',
+    ) as any;
     setupPostRegistry(state);
     await state.adapter.createGrant({
       subjectId: userId,

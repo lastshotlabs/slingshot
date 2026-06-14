@@ -109,9 +109,7 @@ describe('createChatPackage', () => {
       {},
       {
         peersPluginState,
-        peersCapabilityProviders: [
-          ['slingshot-push:formatterRegistry', 'slingshot-push'],
-        ],
+        peersCapabilityProviders: [['slingshot-push:formatterRegistry', 'slingshot-push']],
       },
     );
 

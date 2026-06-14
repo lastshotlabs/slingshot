@@ -309,8 +309,10 @@ function dateOrUndef(v: PgParam | string[]): Date | undefined {
 function rowToGrant(row: PgRow): PermissionGrant {
   const subjectType = row.subject_type;
   const effect = row.effect;
-  if (!isSubjectType(subjectType)) throw new Error(`[slingshot-permissions] invalid subject_type: ${String(subjectType)}`);
-  if (!isGrantEffect(effect)) throw new Error(`[slingshot-permissions] invalid effect: ${String(effect)}`);
+  if (!isSubjectType(subjectType))
+    throw new Error(`[slingshot-permissions] invalid subject_type: ${String(subjectType)}`);
+  if (!isGrantEffect(effect))
+    throw new Error(`[slingshot-permissions] invalid effect: ${String(effect)}`);
   const roles = row.roles;
   if (!Array.isArray(roles)) throw new Error('[slingshot-permissions] roles must be an array');
   return {

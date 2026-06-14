@@ -9,18 +9,18 @@ service via the `ORGANIZATIONS_RECONCILE_STATE_KEY` plugin-state slot.
 
 ## Key Files
 
-| File                         | What                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| src/index.ts                 | Public API surface for package, entities, services, and reconcile hooks               |
-| src/plugin.ts                | `createOrganizationsPackage()` factory (`SlingshotPackageDefinition`)                 |
-| src/entities/modules.ts      | `buildOrganizationsEntityModules(...)` — entity modules with `manual` adapter wiring  |
-| src/entities/runtime.ts      | Adapter transforms + custom-op handlers (slug, invite, cascade, list-mine, redeem)    |
-| src/entities/organization.ts | Organization entity definition                                                        |
-| src/entities/group.ts        | Group entity definition                                                               |
-| src/orgService.ts            | OrganizationsOrgServiceCap-backed cross-package service contract                                   |
-| src/reconcile.ts             | Reconcile service contract and plugin-state accessors                                 |
-| src/lib/rateLimit.ts         | Invite-route rate-limit store contract + memory backend                               |
-| docs/human/index.md          | Package guide synced into the docs site                                               |
+| File                         | What                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| src/index.ts                 | Public API surface for package, entities, services, and reconcile hooks              |
+| src/plugin.ts                | `createOrganizationsPackage()` factory (`SlingshotPackageDefinition`)                |
+| src/entities/modules.ts      | `buildOrganizationsEntityModules(...)` — entity modules with `manual` adapter wiring |
+| src/entities/runtime.ts      | Adapter transforms + custom-op handlers (slug, invite, cascade, list-mine, redeem)   |
+| src/entities/organization.ts | Organization entity definition                                                       |
+| src/entities/group.ts        | Group entity definition                                                              |
+| src/orgService.ts            | OrganizationsOrgServiceCap-backed cross-package service contract                     |
+| src/reconcile.ts             | Reconcile service contract and plugin-state accessors                                |
+| src/lib/rateLimit.ts         | Invite-route rate-limit store contract + memory backend                              |
+| docs/human/index.md          | Package guide synced into the docs site                                              |
 
 ## Connections
 

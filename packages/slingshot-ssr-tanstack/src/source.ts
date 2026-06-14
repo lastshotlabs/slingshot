@@ -33,22 +33,17 @@
 // The `ssr` export is what marks a route as SSR-eligible. Files without it are
 // CSR-only and the route source returns `null` for those URLs (the caller
 // falls through to its SPA-fallback behavior).
-
-import type {
-  SsrRouteChain,
-  SsrRouteMatch,
-  SsrRouteSource,
-} from '@lastshotlabs/slingshot-ssr';
+import type { SsrRouteChain, SsrRouteMatch, SsrRouteSource } from '@lastshotlabs/slingshot-ssr';
 import {
   clearTanStackModuleCache,
   loadTanStackLayoutModule,
   loadTanStackRouteModule,
 } from './loader';
 import {
-  buildLayoutChain,
   type LayoutEntry,
-  scanRoutesDirectory,
   type ScannedRouteFile,
+  buildLayoutChain,
+  scanRoutesDirectory,
 } from './scanner';
 
 /**
@@ -87,9 +82,7 @@ export interface TanStackRouteSourceConfig {
  * });
  * ```
  */
-export function createTanStackRouteSource(
-  config: TanStackRouteSourceConfig,
-): SsrRouteSource {
+export function createTanStackRouteSource(config: TanStackRouteSourceConfig): SsrRouteSource {
   const dir = config.routesDirectory;
   const defaultMaxBytes = config.maxRouteParamBytes ?? 2048;
 
@@ -102,8 +95,7 @@ export function createTanStackRouteSource(
     id: 'tanstack',
 
     init(): void {
-      const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } =
-        scanRoutesDirectory(dir);
+      const { leaves, layouts, rootLayoutPath, rootLayoutServerPath } = scanRoutesDirectory(dir);
 
       // Filter to leaves with a `<route>.server.{ts,tsx}` companion. Leaves
       // without one are CSR-only; we return null for their URLs and the SPA
@@ -114,12 +106,7 @@ export function createTanStackRouteSource(
         built.push(
           Object.freeze({
             ...leaf,
-            layoutChain: buildLayoutChain(
-              leaf,
-              layouts,
-              rootLayoutPath,
-              rootLayoutServerPath,
-            ),
+            layoutChain: buildLayoutChain(leaf, layouts, rootLayoutPath, rootLayoutServerPath),
           }),
         );
       }
@@ -142,17 +129,11 @@ export function createTanStackRouteSource(
 
     resolveChain(pathname, opts) {
       if (!initialized) return null;
-      const match = matchEntry(
-        entries,
-        pathname,
-        opts?.maxRouteParamBytes ?? defaultMaxBytes,
-      );
+      const match = matchEntry(entries, pathname, opts?.maxRouteParamBytes ?? defaultMaxBytes);
       if (!match) return null;
 
       const page = buildMatch(match.entry, match.params, pathname);
-      const layouts = match.entry.layoutChain.map((layout) =>
-        buildLayoutShell(layout, pathname),
-      );
+      const layouts = match.entry.layoutChain.map(layout => buildLayoutShell(layout, pathname));
       const chain: SsrRouteChain = Object.freeze({
         layouts: Object.freeze(layouts),
         page,
@@ -261,8 +242,7 @@ function buildLayoutShell(layout: LayoutEntry, pathname: string): SsrRouteMatch 
     forbiddenFilePath: null,
     unauthorizedFilePath: null,
     templateFilePath: null,
-    loadModule: () =>
-      loadTanStackLayoutModule(layout.filePath, layout.serverFilePath),
+    loadModule: () => loadTanStackLayoutModule(layout.filePath, layout.serverFilePath),
   });
 }
 

@@ -21,14 +21,8 @@ import {
   createEventPublisher,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
-import {
-  createEntityFactories,
-  createEntityPlugin,
-} from '@lastshotlabs/slingshot-entity';
-import type {
-  BareEntityAdapter,
-  EntityPluginEntry,
-} from '@lastshotlabs/slingshot-entity';
+import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
 import { createMemoryPermissionsAdapter } from '@lastshotlabs/slingshot-permissions/testing';

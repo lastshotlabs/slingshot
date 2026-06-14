@@ -40,14 +40,8 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type {
-  BareEntityAdapter,
-  EntityPluginEntry,
-} from '@lastshotlabs/slingshot-entity';
-import {
-  type OrganizationsPluginConfig,
-  createOrganizationsPackage,
-} from '../../../src/plugin';
+import type { BareEntityAdapter, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
+import { type OrganizationsPluginConfig, createOrganizationsPackage } from '../../../src/plugin';
 
 function createFrameworkConfig(): SlingshotFrameworkConfig & {
   registeredEntities: ResolvedEntityConfig[];
@@ -451,10 +445,7 @@ export async function setupOrgPluginHarness(
     const value = await provider.resolve({ packageName: pkg.name });
     const slotKey = `slingshot:package:capabilities:${pkg.name}`;
     const existing = (pluginState.get(slotKey) as Record<string, unknown>) ?? {};
-    pluginState.set(
-      slotKey,
-      Object.freeze({ ...existing, [provider.capability.name]: value }),
-    );
+    pluginState.set(slotKey, Object.freeze({ ...existing, [provider.capability.name]: value }));
   }
 
   return {

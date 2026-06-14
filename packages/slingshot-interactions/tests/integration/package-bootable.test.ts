@@ -20,6 +20,7 @@ import {
   createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
+import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import type { ChatInteractionsPeer } from '../../src/peers/types';
 import { createInteractionsPackage } from '../../src/plugin';
 import type { InteractionsPluginState } from '../../src/state';
@@ -242,9 +243,10 @@ async function bootFromManifest(): Promise<Harness> {
   };
 
   const plugin = createInteractionsPackage(config);
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
-  await plugin.setupPost?.({ app, config: frameworkConfig as never, bus, events });
+  // Drive the full package lifecycle (including the entity-plugin path) so the
+  // InteractionEvent module's `onAdapter` fires and shares one adapter instance
+  // between the entity routes and the dispatch route's audit writes.
+  await runPackageLifecycle(plugin, { app, config: frameworkConfig as never, bus, events });
 
   return { app, bus };
 }
@@ -522,8 +524,7 @@ describe('Config validation from manifest', () => {
     };
 
     const plugin = createInteractionsPackage(minimalConfig);
-    await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
-    await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
+    await runPackageLifecycle(plugin, { app, config: frameworkConfig as never, bus, events });
 
     const ctx = getContext(app);
     const state = ctx.pluginState.get('slingshot-interactions') as {

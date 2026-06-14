@@ -1,8 +1,6 @@
 import type {
   PluginSetupContext,
   SlingshotPackageDefinition,
-  StoreInfra,
-  StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
@@ -13,14 +11,14 @@ import {
   getRateLimitAdapter,
   provideCapability,
   publishPluginState,
-  resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { entity } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { interactionsPluginConfigSchema } from './config/schema';
 import type { InteractionsPluginConfig } from './config/types';
 import { interactionEventFactories } from './entities/factories';
-import { interactionEventModule } from './entities/interactionEvent';
+import { InteractionEvent, interactionEventOperations } from './entities/interactionEvent';
 import { compileHandlers } from './handlers/compile';
 import { probeChatPeer } from './peers/chat';
 import { probeCommunityPeer } from './peers/community';
@@ -50,6 +48,25 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
 
   let interactionEventsAdapterRef: InteractionEventsAdapter | undefined;
   let stateRef: InteractionsPluginState | undefined;
+
+  // InteractionEvent entity module wired in `factories` mode. The framework
+  // resolves the adapter ONCE for the entity's CRUD/lookup routes and hands
+  // that same instance to `onAdapter`, which captures it into
+  // `interactionEventsAdapterRef`. The dispatch route reads the audit adapter
+  // from this ref, so writes and reads share a single store. (A second
+  // `resolveRepo` here would create a divergent store under memory backends.)
+  const interactionEventModule = entity({
+    config: InteractionEvent,
+    operations: interactionEventOperations,
+    path: 'interactionEvents',
+    wiring: {
+      mode: 'factories',
+      factories: interactionEventFactories,
+      onAdapter: adapter => {
+        interactionEventsAdapterRef = adapter as InteractionEventsAdapter;
+      },
+    },
+  });
 
   // Long-lived Proxy view published through `InteractionsRuntimeCap`.
   // Constructed once per package instance so consumers reading the cap at
@@ -105,21 +122,10 @@ export function createInteractionsPackage(rawConfig: unknown): SlingshotPackageD
       ],
     },
 
-    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
-      // Resolve the InteractionEvent adapter imperatively so the dispatch route
-      // (mounted in setupRoutes) has a stable ref. The entity module itself
-      // also goes through the framework's entity-plugin path, which resolves
-      // the same factory again for its CRUD routes — two cheap resolutions of
-      // the same factory are simpler than threading a ref through the entity
-      // plugin's onAdapter callback.
-      const storeType: StoreType = frameworkConfig.resolvedStores.authStore;
-      const infra: StoreInfra = frameworkConfig.storeInfra;
-      interactionEventsAdapterRef = resolveRepo(
-        interactionEventFactories,
-        storeType,
-        infra,
-      ) as unknown as BareEntityAdapter;
-
+    async setupMiddleware({ app, bus, events }: PluginSetupContext) {
+      // `interactionEventsAdapterRef` is populated by the entity module's
+      // `onAdapter` callback during the framework's single adapter resolution
+      // (which runs before this hook), so no imperative re-resolution is needed.
       const pluginState = getPluginState(app);
       const permissions = getPermissionsStateOrNull(pluginState);
       if (!permissions) {

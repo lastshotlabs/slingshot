@@ -353,6 +353,8 @@ export default defineApp({
     createAuthPlugin({
       db: { auth: 'postgres', sessions: 'redis', oauthState: 'redis' },
     }),
+  ],
+  packages: [
     createCommunityPackage({
       db: { threads: 'mongo', reactions: 'redis' },
     }),
@@ -360,7 +362,7 @@ export default defineApp({
 });
 ```
 
-Each plugin declares which adapter it uses for each concern. The connections are shared — the `postgres` connection opens once and serves all plugins that need it.
+Each plugin and package declares which adapter it uses for each concern. The connections are shared — the `postgres` connection opens once and serves everything that needs it.
 
 ---
 

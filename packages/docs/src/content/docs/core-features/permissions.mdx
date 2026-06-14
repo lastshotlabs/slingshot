@@ -37,7 +37,7 @@ admins can delete.
 ## Resource-level permissions
 
 When you need "users can only edit _their own_ posts" or "org members can access _their
-org's_ data," add the permissions plugin:
+org's_ data," add the permissions package:
 
 ```bash
 bun add @lastshotlabs/slingshot-permissions
@@ -56,15 +56,12 @@ import {
 export default defineApp({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
-  plugins: [
-    createAuthPlugin({ auth: { roles: ['user'] } }),
+  plugins: [createAuthPlugin({ auth: { roles: ['user'] } })],
+  packages: [
     createPermissionsPackage({
       groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     }),
-  ],
-  packages: [
-    /* your packages */
   ],
 });
 ```

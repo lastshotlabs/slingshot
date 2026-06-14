@@ -8,7 +8,7 @@ worth keeping near the package.
 
 ## Current Follow-Ups
 
-- Keep root-package docs aligned with `src/app.ts`, `src/server.ts`, and manifest bootstrap files.
+- Keep root-package docs aligned with `src/app.ts` and `src/server.ts`.
 - When a new cross-cutting surface emerges, add it to `slingshot-docs/documentation-impact-map.json`
   so docs review becomes enforceable instead of tribal.
 - If `bun run docs:generate` starts creating new source doc scaffolds, replace the starter copy with

@@ -741,7 +741,7 @@ rawPostCount: op.custom({
 hybridSearch: op.custom({ http: { method: 'post' } });
 ```
 
-**Cross-entity access:** A `custom` handler's factory only receives its own entity's backend driver (e.g. `pool` for Postgres, `store` for memory). To access other entities' adapters — for example, creating a Transaction record from within an Account operation — use `hooks.afterAdapters` in the manifest to capture adapters at startup:
+**Cross-entity access:** A `custom` handler's factory only receives its own entity's backend driver (e.g. `pool` for Postgres, `store` for memory). To access other entities' adapters — for example, creating a Transaction record from within an Account operation — capture adapters at startup with an `afterAdapters` hook:
 
 ```typescript title="app.config.ts"
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
@@ -754,14 +754,6 @@ export const hooks = {
     transactionAdapter = adapters.Transaction ?? null;
   },
 };
-```
-
-```json title="app.config.ts"
-{
-  "hooks": {
-    "afterAdapters": [{ "handler": "captureAdapters" }]
-  }
-}
 ```
 
 The captured adapter is then available inside any `custom` operation handler.

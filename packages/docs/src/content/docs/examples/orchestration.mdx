@@ -130,6 +130,9 @@ export function buildAppConfig() {
         auth: { roles: ['user', 'admin'], defaultRole: 'user' },
         db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
       }),
+      createBillingApiPlugin(),
+    ],
+    packages: [
       createOrchestrationPackage({
         adapter: createMemoryAdapter({ concurrency: 10 }),
         tasks: orchestrationTasks,
@@ -138,7 +141,6 @@ export function buildAppConfig() {
         routePrefix: '/orchestration',
         routeMiddleware: [requireOperationsKey],
       }),
-      createBillingApiPlugin(),
     ],
   };
 }

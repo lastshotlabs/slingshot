@@ -33,16 +33,18 @@ export default defineApp({
     createAuthPlugin({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
     }),
+  ],
+  packages: [
+    blogPackage,
     createPermissionsPackage({
       groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     }),
   ],
-  packages: [blogPackage],
 });
 ```
 
-The permissions plugin is standalone by default — group expansion is disabled unless you
+The permissions package is standalone by default — group expansion is disabled unless you
 wire it explicitly. Passing `groupResolver` with `createAuthGroupResolver` enables user →
 group membership resolution from `slingshot-auth`, which is how role-based grants apply to
 users. Omit `groupResolver` if you are not using auth groups or if you are wiring a custom

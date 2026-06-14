@@ -159,7 +159,7 @@ Defaults are deliberately strict: CORS denies all origins, CSRF disabled (apps t
 use cookies don't need it), rate limit at 100 req/60s, headers locked down. Loosen what
 you need.
 
-## Plugins
+## Plugins and packages
 
 ```typescript
 // @skip-typecheck
@@ -167,16 +167,15 @@ import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createPermissionsPackage } from '@lastshotlabs/slingshot-permissions';
 
 defineApp({
-  plugins: [
-    createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } }),
-    createPermissionsPackage({ adapter: 'postgres' }),
-  ],
+  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
+  packages: [createPermissionsPackage({ adapter: 'postgres' })],
 });
 ```
 
-Plugins are typed objects with `name` + lifecycle hooks. The framework topo-sorts them by
-declared `dependencies` and runs `setupMiddleware`, `setupRoutes`, and `setupPost` in that
-order. See [Plugin Interface](/slingshot/authoring/plugin-interface/).
+Plugin-tier factories go in `plugins:` and feature packages authored with `definePackage`
+go in `packages:`. Both are typed objects with `name` + lifecycle hooks. The framework
+topo-sorts them by declared `dependencies` and runs `setupMiddleware`, `setupRoutes`, and
+`setupPost` in that order. See [Plugin Interface](/slingshot/authoring/plugin-interface/).
 
 ## Event bus
 

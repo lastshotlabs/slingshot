@@ -13,9 +13,9 @@ function createMockBus() {
   const bus: SlingshotEventBus = {
     emit: emitFn,
     on: onFn,
-    off: offFn,
+    off: offFn as unknown as SlingshotEventBus['off'],
     onEnvelope: onEnvelopeFn,
-    offEnvelope: offEnvelopeFn,
+    offEnvelope: offEnvelopeFn as unknown as SlingshotEventBus['offEnvelope'],
     shutdown: shutdownFn,
   };
 

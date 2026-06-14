@@ -79,7 +79,7 @@ function createMockBus() {
       emitted.push({ key: event, payload });
     }) as unknown as SlingshotEventBus['emit'],
     on: mock(() => {}),
-    off: mock(() => {}),
+    off: mock(() => {}) as unknown as SlingshotEventBus['off'],
     onEnvelope: mock(() => {}) as unknown as SlingshotEventBus['onEnvelope'],
     offEnvelope: mock(() => {}) as unknown as SlingshotEventBus['offEnvelope'],
   };

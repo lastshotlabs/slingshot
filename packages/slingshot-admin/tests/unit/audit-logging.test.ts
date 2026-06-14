@@ -56,7 +56,7 @@ function buildAdminApp(auditLogger?: AdminAuditLogger) {
       bus: createInProcessAdapter(),
       evaluator: ALWAYS_ALLOW_EVALUATOR,
       auditLogger: memoryAudit,
-      logger: NULL_LOGGER as Parameters<typeof createAdminRouter>[0]['logger'],
+      logger: NULL_LOGGER as unknown as Parameters<typeof createAdminRouter>[0]['logger'],
     }),
   );
 
@@ -78,15 +78,15 @@ function buildPermissionsApp(opts: BuildPermissionsAppOptions = {}) {
     await next();
   });
 
-  const adapter: PermissionsAdapter = {
+  const adapter = {
     createGrant: mock(async input => 'grant-1'),
     revokeGrant: mock(async (_grantId, _by, _tenantId?) => true),
     getGrantsForSubject: mock(async () => []),
     listGrantsOnResource: mock(async () => []),
-  };
+  } as unknown as PermissionsAdapter;
 
-  const registry: PermissionRegistry = {
-    getDefinition: mock(async () => null),
+  const registry = {
+    getDefinition: mock(() => null),
     listResourceTypes: mock(() => [
       {
         resourceType: 'admin:user',
@@ -94,7 +94,7 @@ function buildPermissionsApp(opts: BuildPermissionsAppOptions = {}) {
         roles: { admin: ['read', 'write'] },
       },
     ]),
-  };
+  } as unknown as PermissionRegistry;
 
   app.route(
     '/permissions',
@@ -205,7 +205,7 @@ describe('AdminAuditLogger implementations', () => {
 
   test('createConsoleAuditLogger returns an object with log method', () => {
     const logger = createConsoleAuditLogger(
-      NULL_LOGGER as Parameters<typeof createConsoleAuditLogger>[0],
+      NULL_LOGGER as unknown as Parameters<typeof createConsoleAuditLogger>[0],
     );
     expect(logger).toHaveProperty('log');
     expect(typeof logger.log).toBe('function');
@@ -219,7 +219,7 @@ describe('AdminAuditLogger implementations', () => {
       error: mock(() => {}),
       debug: mock(() => {}),
       trace: mock(() => {}),
-    } as Parameters<typeof createConsoleAuditLogger>[0]);
+    } as unknown as Parameters<typeof createConsoleAuditLogger>[0]);
 
     const event: AdminAuditEvent = {
       timestamp: new Date().toISOString(),

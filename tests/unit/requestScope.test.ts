@@ -6,6 +6,7 @@
  *  - Different requests get different scope values
  */
 import { afterEach, describe, expect, test } from 'bun:test';
+import type { RequestScope } from '@lastshotlabs/slingshot-core';
 import { defineRequestScope, getRequestScoped, route } from '@lastshotlabs/slingshot-core';
 import { definePackage, domain } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
@@ -71,7 +72,7 @@ describe('defineRequestScope', () => {
 
     const result = await createApp({
       ...baseConfig,
-      requestScopes: [counter],
+      requestScopes: [counter] as RequestScope[],
       packages: [pkg],
     });
     teardowns.push(result.ctx);
@@ -118,7 +119,7 @@ describe('defineRequestScope', () => {
 
     const result = await createApp({
       ...baseConfig,
-      requestScopes: [counter],
+      requestScopes: [counter] as RequestScope[],
       packages: [pkg],
     });
     teardowns.push(result.ctx);
@@ -177,7 +178,7 @@ describe('defineRequestScope', () => {
 
     const result = await createApp({
       ...baseConfig,
-      requestScopes: [tx],
+      requestScopes: [tx] as RequestScope[],
       packages: [pkg],
     });
     teardowns.push(result.ctx);
@@ -239,7 +240,7 @@ describe('defineRequestScope', () => {
 
     const result = await createApp({
       ...baseConfig,
-      requestScopes: [a, b],
+      requestScopes: [a, b] as RequestScope[],
       packages: [pkg],
     });
     teardowns.push(result.ctx);

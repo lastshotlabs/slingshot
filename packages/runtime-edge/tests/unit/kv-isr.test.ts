@@ -237,7 +237,7 @@ describe('createKvIsrCache()', () => {
         },
       };
 
-      const consoleSpy = mock(() => {});
+      const consoleSpy = mock((_line: string) => {});
       const originalError = console.error;
       console.error = consoleSpy;
 

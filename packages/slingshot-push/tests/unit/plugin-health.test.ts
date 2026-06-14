@@ -10,7 +10,7 @@ import {
   registerPluginCapabilities,
   resolveCapabilityValue,
 } from '@lastshotlabs/slingshot-core';
-import type { SlingshotFrameworkConfig, StoreType } from '@lastshotlabs/slingshot-core';
+import type { SlingshotFrameworkConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
@@ -31,6 +31,9 @@ import { PushTopicMembership } from '../../src/entities/pushTopicMembership';
 import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembership';
 import { createPushPackage } from '../../src/plugin';
 import { PushHealthCap } from '../../src/public';
+
+/** The `buildAdapter` factory from the manual `EntityPluginEntry` variant. */
+type ManualBuildAdapter = Extract<EntityPluginEntry, { buildAdapter: unknown }>['buildAdapter'];
 
 describe('createPushPackage health capability', () => {
   test('PushHealthCap exposes a healthy snapshot after setupPost wires providers', async () => {
@@ -95,13 +98,13 @@ describe('createPushPackage health capability', () => {
     // Mount entity routes manually since this test bypasses createApp().
     // Delegate adapter construction to each entity module's own wiring so the
     // package's adapter-ref closures fire as they would under the framework path.
-    function buildAdapterForEntity(entityName: string): EntityPluginEntry['buildAdapter'] {
+    function buildAdapterForEntity(entityName: string): ManualBuildAdapter {
       const entityModule = pkg.entities.find(e => e.entityName === entityName);
       if (!entityModule) throw new Error(`entity ${entityName} not found on pkg`);
       const impl = (entityModule as { implementation: unknown }).implementation as {
         wiring: {
           mode: string;
-          buildAdapter?: EntityPluginEntry['buildAdapter'];
+          buildAdapter?: ManualBuildAdapter;
           factories?: unknown;
           onAdapter?: (a: BareEntityAdapter) => void;
         };
@@ -112,7 +115,7 @@ describe('createPushPackage health capability', () => {
       }
       if (wiring.mode === 'factories' && wiring.factories) {
         const factories = wiring.factories as Record<string, (infra: never) => BareEntityAdapter>;
-        return (storeType, infra) => {
+        return (storeType: StoreType, infra: StoreInfra) => {
           const adapter = factories[storeType](infra as never);
           wiring.onAdapter?.(adapter);
           return adapter;

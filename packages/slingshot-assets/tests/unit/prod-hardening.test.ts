@@ -18,6 +18,11 @@ import {
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger, SlingshotEvents, StorageAdapter } from '@lastshotlabs/slingshot-core';
+// Pull in the asset-domain `SlingshotEventMap` augmentation so the
+// `asset:storageDeleteFailed` event key is known to the type checker. This test
+// imports deep module paths rather than the package barrel (which side-effect
+// imports `./events`), so the augmentation must be loaded explicitly here.
+import '../../src/events';
 import { createMemoryImageCache } from '../../src/image/cache';
 import {
   createDeleteStorageFileMiddleware,

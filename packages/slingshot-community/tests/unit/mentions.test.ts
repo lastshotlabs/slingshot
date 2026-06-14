@@ -1,12 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
 import type { NotificationBuilder } from '@lastshotlabs/slingshot-notifications';
+import type { ReplyAdapter, ThreadAdapter } from '../../src/entities/runtime';
 import { notifyMentions } from '../../src/lib/mentions';
 import type { NotifyMentionsDeps } from '../../src/lib/mentions';
 import type { Reply, Thread } from '../../src/types/models';
-
-type ThreadAdapter = EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
-type ReplyAdapter = EntityAdapter<Reply, Record<string, unknown>, Record<string, unknown>>;
 
 function stubDeps(opts: { thread?: Partial<Thread> | null; reply?: Partial<Reply> | null }) {
   const notifications: Record<string, unknown>[] = [];

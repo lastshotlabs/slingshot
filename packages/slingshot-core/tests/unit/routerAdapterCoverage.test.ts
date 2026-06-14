@@ -6,9 +6,9 @@ function createMockBus(keys: string[] = []): SlingshotEventBus {
   return {
     emit: mock(() => {}),
     on: mock(() => {}),
-    off: mock(() => {}),
+    off: mock(() => {}) as unknown as SlingshotEventBus['off'],
     onEnvelope: mock(() => {}),
-    offEnvelope: mock(() => {}),
+    offEnvelope: mock(() => {}) as unknown as SlingshotEventBus['offEnvelope'],
     shutdown: mock(async () => {}),
   };
 }

@@ -27,6 +27,7 @@ describe('resolveNamedOperationRoute', () => {
   test('defaults transition operations to POST with plain path', () => {
     const opConfig: OperationConfig = {
       kind: 'transition',
+      field: 'status',
       from: 'draft',
       to: 'published',
       match: { id: 'id' },

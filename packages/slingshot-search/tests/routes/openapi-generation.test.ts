@@ -13,7 +13,7 @@
  */
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { describe, expect, it } from 'bun:test';
-import type { AppEnv, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, ResolvedEntityConfig, StoreInfra } from '@lastshotlabs/slingshot-core';
 import { createFederatedRouter } from '../../src/routes/federated';
 import { createSearchManager } from '../../src/searchManager';
 import { createSearchTransformRegistry } from '../../src/transformRegistry';
@@ -80,7 +80,7 @@ describe('search OpenAPI generation', () => {
     const app = new OpenAPIHono<AppEnv>();
     app.route('/search', createSearchRouter(manager, config, false));
     app.route('/search', createSuggestRouter(manager, config, false));
-    app.route('/', createAdminRouter(manager, config));
+    app.route('/', createAdminRouter(manager, config, {} as unknown as StoreInfra));
 
     const doc = app.getOpenAPIDocument({
       openapi: '3.0.0',

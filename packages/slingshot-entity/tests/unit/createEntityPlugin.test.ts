@@ -106,7 +106,7 @@ function createMockBus(): SlingshotEventBus & {
     off: mock((event: string) => {
       const idx = subscriptions.findIndex(s => s.event === event);
       if (idx !== -1) subscriptions.splice(idx, 1);
-    }),
+    }) as unknown as SlingshotEventBus['off'],
     onEnvelope: mock(
       (event: string, handler: (p: Record<string, unknown>) => void | Promise<void>) => {
         subscriptions.push({ event, handler });

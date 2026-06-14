@@ -32,6 +32,7 @@ import type {
   ResolvedEntityConfig,
   RouteAuthRegistry,
   SlingshotFrameworkConfig,
+  StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
@@ -55,6 +56,9 @@ import { pushTopicMembershipOperations } from '../../src/entities/pushTopicMembe
 import { createPushPackage } from '../../src/plugin';
 import { type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
+
+/** The `buildAdapter` factory from the manual `EntityPluginEntry` variant. */
+type ManualBuildAdapter = Extract<EntityPluginEntry, { buildAdapter: unknown }>['buildAdapter'];
 
 // ---------------------------------------------------------------------------
 // web-push mock (any provider import path)
@@ -191,13 +195,13 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
   // Delegate adapter construction to each entity module's own wiring so the
   // package's onAdapter / manual-wiring buildAdapter closures all fire and
   // the entity routes share state with the package's internal refs.
-  function buildAdapterForEntity(entityName: string): EntityPluginEntry['buildAdapter'] {
+  function buildAdapterForEntity(entityName: string): ManualBuildAdapter {
     const entityModule = plugin.entities.find(e => e.entityName === entityName);
     if (!entityModule) throw new Error(`entity ${entityName} not found on plugin`);
     const impl = (entityModule as { implementation: unknown }).implementation as {
       wiring: {
         mode: string;
-        buildAdapter?: EntityPluginEntry['buildAdapter'];
+        buildAdapter?: ManualBuildAdapter;
         factories?: unknown;
         onAdapter?: (a: BareEntityAdapter) => void;
       };
@@ -208,7 +212,7 @@ async function createHarness(userId = 'user-1'): Promise<DedupHarness> {
     }
     if (wiring.mode === 'factories' && wiring.factories) {
       const factories = wiring.factories as Record<string, (infra: never) => BareEntityAdapter>;
-      return (storeType, infra) => {
+      return (storeType: StoreType, infra: StoreInfra) => {
         const adapter = factories[storeType](infra as never);
         wiring.onAdapter?.(adapter);
         return adapter;

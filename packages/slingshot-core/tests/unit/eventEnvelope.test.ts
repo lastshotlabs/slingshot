@@ -102,7 +102,9 @@ describe('eventEnvelope', () => {
   test('envelope payload nested objects are frozen', () => {
     const envelope = createEventEnvelope({
       key: 'app:ready',
-      payload: { plugins: ['alpha'], nested: { deep: true } },
+      // Extra nested key exercises deep-freezing of arbitrary nested objects; the
+      // typed payload shape doesn't model it, so widen past the excess-property check.
+      payload: { plugins: ['alpha'], nested: { deep: true } } as { plugins: string[] },
       ownerPlugin: 'slingshot-framework',
       exposure: ['internal'],
       scope: null,

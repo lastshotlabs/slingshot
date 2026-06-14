@@ -358,11 +358,11 @@ describe('eventWiring', () => {
     const bus: SlingshotEventBus = {
       emit: () => {},
       on: (() => {}) as SlingshotEventBus['on'],
-      off: (() => {}) as SlingshotEventBus['off'],
+      off: (() => {}) as unknown as SlingshotEventBus['off'],
       onEnvelope: ((event: string, _listener: () => void, opts?: SubscriptionOpts) => {
         onCalls.push({ event, opts });
       }) as SlingshotEventBus['onEnvelope'],
-      offEnvelope: offEnvelopeMock as SlingshotEventBus['offEnvelope'],
+      offEnvelope: offEnvelopeMock as unknown as SlingshotEventBus['offEnvelope'],
     };
     const adapter = createAdapter([createEndpoint()]);
     const queue = createWebhookMemoryQueue();

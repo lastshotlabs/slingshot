@@ -7,14 +7,16 @@ import { describe, expect, test } from 'bun:test';
 import type { PluginSeedContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createTestApp } from '../setup';
 
+interface SeedObservation {
+  invocations: number;
+  lastSeedInput?: Record<string, unknown>;
+  lastState?: Map<string, unknown>;
+}
+
 function recordingSeedPlugin(
   name: string,
   ownKey: string,
-  observed: {
-    invocations: number;
-    lastSeedInput?: Record<string, unknown>;
-    lastState?: Map<string, unknown>;
-  },
+  observed: SeedObservation,
 ): SlingshotPlugin {
   return {
     name,
@@ -40,7 +42,7 @@ describe('createApp seed phase', () => {
   });
 
   test('seed() hooks are invoked exactly once when config.seed is provided', async () => {
-    const observed = { invocations: 0 };
+    const observed: SeedObservation = { invocations: 0 };
     await createTestApp({
       plugins: [recordingSeedPlugin('test-seeder', 'rows', observed)],
       seed: { rows: [{ id: 1 }, { id: 2 }] },
@@ -50,8 +52,8 @@ describe('createApp seed phase', () => {
   });
 
   test('seedState is shared across plugins and survives across hooks', async () => {
-    const aObserved = { invocations: 0 };
-    const bObserved = { invocations: 0 };
+    const aObserved: SeedObservation = { invocations: 0 };
+    const bObserved: SeedObservation = { invocations: 0 };
     const a = recordingSeedPlugin('seeder-a', 'foo', aObserved);
     const b: SlingshotPlugin = {
       name: 'seeder-b',

@@ -68,6 +68,7 @@ function setup(): {
     }
     registry.register({
       resourceType: `resource_${rt}`,
+      actions: [...new Set(Object.values(roles).flat())],
       roles,
     });
   }

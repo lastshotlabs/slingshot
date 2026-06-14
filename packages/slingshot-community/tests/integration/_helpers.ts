@@ -29,6 +29,7 @@ import type {
   RouteAuthRegistry,
   SlingshotFrameworkConfig,
   SlingshotPackageDefinition,
+  StoreInfra,
   StoreType,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
@@ -261,7 +262,11 @@ async function mountCommunityPackage(
           impl.config,
           impl.operations as Parameters<typeof createEntityFactories>[1],
         );
-        return resolveStandardRepo(factories, storeType, infra) as unknown as BareEntityAdapter;
+        return resolveStandardRepo(
+          factories,
+          storeType,
+          infra as StoreInfra,
+        ) as unknown as BareEntityAdapter;
       };
     }
     if (!buildAdapter) {

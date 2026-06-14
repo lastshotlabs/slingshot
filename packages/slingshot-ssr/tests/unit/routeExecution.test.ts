@@ -113,7 +113,9 @@ describe('executeRouteModule', () => {
     );
 
     const exec = await executeRouteModule(makeMatch(file), makeCtx());
-    expect(exec.loaderResult).toEqual({ redirect: '/login' });
+    // loaderResult is typed as SsrLoadResult but redirect signals pass through
+    // unchanged at runtime; widen to compare the raw redirect payload.
+    expect(exec.loaderResult as unknown).toEqual({ redirect: '/login' });
   });
 });
 

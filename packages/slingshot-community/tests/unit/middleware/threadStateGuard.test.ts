@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
+import type { ThreadAdapter } from '../../../src/entities/runtime';
 import { createThreadStateGuardMiddleware } from '../../../src/middleware/threadStateGuard';
 import type { Thread } from '../../../src/types/models';
-
-type ThreadAdapter = EntityAdapter<Thread, Record<string, unknown>, Record<string, unknown>>;
 
 function stubThreadAdapter(thread: Partial<Thread> | null): ThreadAdapter {
   return {

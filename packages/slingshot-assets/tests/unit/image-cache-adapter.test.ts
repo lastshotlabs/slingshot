@@ -55,8 +55,8 @@ describe('ImageCacheAdapter validation', () => {
     const arr: unknown = [];
     const isObj = typeof arr === 'object' && arr !== null;
     // Arrays have methods, but we need get/set specifically
-    const hasGet = typeof Reflect.get(arr, 'get') === 'function';
-    const hasSet = typeof Reflect.get(arr, 'set') === 'function';
+    const hasGet = typeof Reflect.get(arr as object, 'get') === 'function';
+    const hasSet = typeof Reflect.get(arr as object, 'set') === 'function';
     expect(isObj && hasGet && hasSet).toBe(false);
   });
 });

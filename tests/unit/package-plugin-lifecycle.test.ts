@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { z } from 'zod';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import {
   GAME_ENGINE_PLUGIN_STATE_KEY,
@@ -108,8 +109,10 @@ describe('package plugin lifecycle', () => {
     };
 
     try {
+      // Intentionally passing a package definition through the plugin slot to
+      // exercise the fail-fast runtime path when permissions state is absent.
       await createTestApp({
-        plugins: [plugin],
+        plugins: [plugin as unknown as SlingshotPlugin],
       });
       throw new Error('Expected createTestApp() to reject without permissions state.');
     } catch (error) {

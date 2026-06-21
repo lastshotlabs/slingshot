@@ -81,6 +81,9 @@ export default defineConfig({
     'mongodb',
   ],
   banner: {
-    js: '#!/usr/bin/env node',
+    // The CLI is Bun-native — `slingshot start` dynamically imports the app's
+    // `app.config.ts` (a TypeScript module), which Node cannot load. Use Bun so
+    // bare `slingshot ...` invocations (e.g. via package scripts) run correctly.
+    js: '#!/usr/bin/env bun',
   },
 });

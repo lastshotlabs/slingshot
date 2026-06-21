@@ -4,7 +4,7 @@
  * Validates config using Zod schema, resolves PK and storage name.
  */
 import type { EntityDtoConfig } from '@lastshotlabs/slingshot-core';
-import type { EntityConfig, FieldDef, ResolvedEntityConfig } from './types';
+import type { DefineEntityConfig, FieldDef, ResolvedEntityConfig } from './types';
 import { entityConfigSchema } from './validation';
 
 // Re-export types (consumers import from defineEntity or index)
@@ -21,6 +21,7 @@ export type {
   EntityStorageHints,
   EntityTtlConfig,
   EntityConfig,
+  DefineEntityConfig,
   ResolvedEntityConfig,
 } from './types';
 
@@ -73,7 +74,7 @@ export { index, relation } from './builders/entityHelpers';
 export function defineEntity<
   const F extends Record<string, FieldDef>,
   const D extends EntityDtoConfig = EntityDtoConfig,
->(name: string, config: Omit<EntityConfig<F, D>, 'name'>): ResolvedEntityConfig<F, D> {
+>(name: string, config: Omit<DefineEntityConfig<F, D>, 'name'>): ResolvedEntityConfig<F, D> {
   // Validate using Zod schema — provides structured error messages with paths
   const fullConfig = { name, ...config };
   const result = entityConfigSchema.safeParse(fullConfig);

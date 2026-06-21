@@ -263,11 +263,17 @@ export interface EntityConfig<
    */
   readonly dto?: D;
   /** Declarative route configuration. When set, route generation includes auth,
-   *  permissions, rate limits, events, and middleware. The DTO variant slot
-   *  on each operation is narrowed to the keys of `dto`, and the input variant
-   *  slot is narrowed to the union of `field.inputVariants` strings — picking
-   *  a typo is a compile error. */
-  readonly routes?: EntityRouteConfig<Extract<keyof D, string>, ExtractInputVariants<F>>;
+   *  permissions, rate limits, events, and middleware.
+   *
+   *  This structural slot is intentionally loose so that `EntityConfig` /
+   *  `ResolvedEntityConfig` stay covariant in `F` and `D` — a concrete config
+   *  produced by {@link defineEntity} must remain assignable to the default
+   *  `ResolvedEntityConfig` consumed by generators, the seeder, and the plugin.
+   *  The authoring-time narrowing — DTO variant slots restricted to the keys of
+   *  `dto`, input variant slots restricted to the union of `field.inputVariants`
+   *  strings, so a typo is a compile error — is applied on {@link defineEntity}'s
+   *  parameter type via {@link DefineEntityConfig}, not here. */
+  readonly routes?: EntityRouteConfig;
   /**
    * Consumer-configurable system field name overrides.
    *
@@ -296,6 +302,26 @@ export interface EntityConfig<
    */
   readonly conventions?: EntityStorageConventions;
 }
+
+/**
+ * Authoring-time entity config accepted by {@link defineEntity}.
+ *
+ * Identical to {@link EntityConfig} except the `routes` slot is narrowed against
+ * the entity's own fields and DTO variants: the DTO variant slot is restricted to
+ * the keys of `dto`, and the input variant slot to the union of declared
+ * `field.inputVariants` strings — so referencing a variant that no field declares
+ * is a compile error.
+ *
+ * This narrowing lives here, on the *input* type, rather than on the structural
+ * `EntityConfig` so that the resolved config stays covariant in `F` (see the
+ * `routes` note on {@link EntityConfig}).
+ */
+export type DefineEntityConfig<
+  F extends Record<string, FieldDef> = Record<string, FieldDef>,
+  D extends EntityDtoConfig = EntityDtoConfig,
+> = Omit<EntityConfig<F, D>, 'routes'> & {
+  readonly routes?: EntityRouteConfig<Extract<keyof D, string>, ExtractInputVariants<F>>;
+};
 
 /**
  * A fully resolved, immutable entity configuration.

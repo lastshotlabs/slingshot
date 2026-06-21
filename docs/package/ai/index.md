@@ -44,7 +44,7 @@ applications import first. The canonical authoring path is `app.config.ts` expor
 - For plugin lifecycle issues, read `src/app.ts` plus `packages/slingshot-core/src/plugin.ts`.
 - For runtime host behavior, read `src/server.ts` and the matching package under `packages/runtime-*`.
 - For docs drift, update JSDoc, impacted guides in `packages/docs/src/content/docs/`, and any mapped
-  surface in `slingshot-docs/documentation-impact-map.json`.
+  surface in `slingshot-specs/documentation-impact-map.json`.
 
 ## Minimal Context Recipe
 

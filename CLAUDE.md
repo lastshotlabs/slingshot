@@ -137,7 +137,7 @@ identity stability.
 ## Full Contributor Guide
 
 The complete contributor guide with engineering rules, documentation policy, specs process,
-and detailed agent context strategy lives in the companion `slingshot-docs/` directory.
+and detailed agent context strategy lives in the companion `slingshot-specs/` directory.
 
 ## Test Commands
 

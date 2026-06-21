@@ -208,7 +208,7 @@ bun run test:all          # composition: test → test:docker → test:e2e
 
 ## Contributing
 
-Internal docs in [`slingshot-docs/`](slingshot-docs/) cover the engineering rules,
+Internal docs in [`slingshot-specs/`](slingshot-specs/) cover the engineering rules,
 documentation policy, specs process, and detailed agent context strategy. The short
 version: keep the diff small, prefer editing existing files, don't add abstractions
 beyond what the task requires, write no comments unless the _why_ is non-obvious.

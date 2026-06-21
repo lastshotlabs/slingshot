@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { repoRoot } from './workspacePackages';
 
-const DEFAULT_MAP_PATH = resolve(repoRoot, '../slingshot-docs/documentation-impact-map.json');
+const DEFAULT_MAP_PATH = resolve(repoRoot, '../slingshot-specs/documentation-impact-map.json');
 
 export interface DocumentationSurface {
   id: string;

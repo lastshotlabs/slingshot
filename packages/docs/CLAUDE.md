@@ -25,7 +25,7 @@ sync pipeline and the API reference generator.
 ## Common Tasks
 
 - **Adding or fixing hand-written docs**: edit files under `src/content/docs/` and keep code blocks strict-compatible
-- **Changing agent guidance or top-level onboarding**: update `src/content/docs/start-here.mdx`, `src/content/docs/agent-flows/`, `astro.config.mjs`, root `CLAUDE.md`, and `slingshot-docs/documentation-policy.md` together
+- **Changing agent guidance or top-level onboarding**: update `src/content/docs/start-here.mdx`, `src/content/docs/agent-flows/`, `astro.config.mjs`, root `CLAUDE.md`, and `slingshot-specs/documentation-policy.md` together
 - **Changing API generation**: update `generate-api.ts`, then run `bun run docs:api`
 - **Changing sync behavior**: update `sync-workspace-docs.ts`, then verify the generated package pages still match the workspace
 

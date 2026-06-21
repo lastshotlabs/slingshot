@@ -9,7 +9,7 @@ worth keeping near the package.
 ## Current Follow-Ups
 
 - Keep root-package docs aligned with `src/app.ts` and `src/server.ts`.
-- When a new cross-cutting surface emerges, add it to `slingshot-docs/documentation-impact-map.json`
+- When a new cross-cutting surface emerges, add it to `slingshot-specs/documentation-impact-map.json`
   so docs review becomes enforceable instead of tribal.
 - If `bun run docs:generate` starts creating new source doc scaffolds, replace the starter copy with
   real package guidance instead of leaving template text in the repo.

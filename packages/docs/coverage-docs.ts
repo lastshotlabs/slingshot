@@ -25,7 +25,7 @@ const API_REFERENCE_ROOT = resolve(DOC_REFERENCE_ROOT, 'api');
 const TOP_LEVEL_SKIP_DIRS = new Set(['api', 'packages']);
 const DEFAULT_COVERAGE_POLICY_PATH = resolve(
   repoRoot,
-  '../slingshot-docs/documentation-coverage.json',
+  '../slingshot-specs/documentation-coverage.json',
 );
 const PRODUCTION_PATH_PACKAGE_SLUGS = [
   'slingshot-permissions',

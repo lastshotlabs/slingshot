@@ -586,8 +586,23 @@ type AdapterOf<TModule extends SlingshotPackageEntityModuleLike<unknown>> = Excl
   undefined
 >;
 
+/**
+ * Narrowed public view over the picked adapter methods.
+ *
+ * Function members are re-formed as fresh `(...args: A) => R` signatures rather than
+ * passed through verbatim. This forces TypeScript to resolve each method's deferred
+ * type (e.g. an entity operation's conditional `InferOperationMethod<...>`) down to a
+ * concrete signature over the entity record and framework-owned return types. Without
+ * the rewrite, declaration emit keeps the deferred conditional and reaches for the
+ * non-portable `slingshot-core/.../operations` declaration path, producing a TS2742
+ * "cannot be named" error at every contract author's first `publicEntities({...})`.
+ * Keeping the rewrite here means the precise public adapter type is preserved while the
+ * portability fix stays invisible to package authors.
+ */
 type ReadonlyAdapterView<TAdapter, TKey extends keyof TAdapter> = {
-  readonly [P in TKey]-?: TAdapter[P];
+  readonly [P in TKey]-?: TAdapter[P] extends (...args: infer TArgs) => infer TReturn
+    ? (...args: TArgs) => TReturn
+    : TAdapter[P];
 };
 
 type StrictSubsetCheck<TShape, TBase> = {

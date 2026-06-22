@@ -18,7 +18,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
-import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications';
+import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications/public';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
 import { buildPushEntityModules } from './entities/modules';
 import { compilePushFormatters } from './formatter';

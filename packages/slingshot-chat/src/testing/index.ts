@@ -44,7 +44,7 @@ import { runPackageLifecycle } from '@lastshotlabs/slingshot-entity/testing';
 import {
   NotificationsBuilderFactoryCap,
   NotificationsDeliveryRegistryCap,
-} from '@lastshotlabs/slingshot-notifications';
+} from '@lastshotlabs/slingshot-notifications/public';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
 import { createPermissionRegistry } from '@lastshotlabs/slingshot-permissions';
 import { createMemoryPermissionsAdapter } from '@lastshotlabs/slingshot-permissions/testing';

@@ -38,8 +38,8 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
-import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
-import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
+import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications/public';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push/public';
 import { chatPluginConfigSchema } from './config.schema';
 import { resolveChatEncryptionProvider } from './encryption/provider';
 import { buildEncryptionRouter } from './encryption/stub';

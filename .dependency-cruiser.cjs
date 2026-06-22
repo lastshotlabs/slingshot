@@ -20,15 +20,18 @@ module.exports = {
       name: 'no-cross-feature-imports',
       severity: 'error',
       comment:
-        'Feature plugins may depend on foundation packages (core, auth, entity, permissions, etc.) ' +
-        'but must not import other feature plugins directly. ' +
-        'Peer coordination belongs in ctx.pluginState with neutral contracts in core.',
+        'Feature packages may depend on foundation packages (core, auth, entity, permissions, etc.) ' +
+        'but must not import another feature package’s internals directly. The only sanctioned ' +
+        'cross-feature seam is the provider’s public capability contract (src/public.ts), imported ' +
+        'via its `/public` subpath and resolved at runtime through ctx.capabilities.require(...).',
       from: {
         path: FEATURE_PACKAGE_PATH,
       },
       to: {
         path: FEATURE_PACKAGE_PATH,
-        pathNot: '^packages/$1/',
+        // Allow self-imports, and allow importing another feature's public capability
+        // contract (src/public.ts) — but nothing else from another feature.
+        pathNot: ['^packages/$1/', '/src/public\\.ts$'],
       },
     },
     {

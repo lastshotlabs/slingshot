@@ -38,8 +38,8 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createLazyMiddleware } from '@lastshotlabs/slingshot-entity';
-import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications';
-import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push';
+import { NotificationsBuilderFactoryCap } from '@lastshotlabs/slingshot-notifications/public';
+import { PushFormatterRegistryCap } from '@lastshotlabs/slingshot-push/public';
 import { buildCommunityEntityModules } from './entities/modules';
 import type { CommunityAdapterRefs, RedeemPermissionsAdapter } from './entities/runtime';
 import { notifyMentions } from './lib/mentions';

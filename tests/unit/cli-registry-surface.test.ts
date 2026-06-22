@@ -56,7 +56,7 @@ describe('root cli registry/platform surface', () => {
         ? tsupConfig.banner({ format: 'esm' })
         : tsupConfig.banner;
     expect(entry?.['cli/index']).toBe('src/cli/index.ts');
-    expect(banner?.js).toContain('#!/usr/bin/env node');
+    expect(banner?.js).toContain('#!/usr/bin/env bun');
     expect(vitest.default.test?.environment).toBe('node');
     expect(vitest.default.test?.include).toEqual(['tests/node-runtime/**/*.test.ts']);
   });

@@ -1,7 +1,10 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
 import type { CacheAdapter, CacheStoreName } from './coreContracts';
 
-export type { CacheAdapter, CacheStoreName };
+/** Unified cache interface: implementations wrap a backing store (Redis, memory, SQLite, …) behind a consistent get/set/del API used by response caching and session storage. */
+export type { CacheAdapter };
+/** Identifier for a named cache store (`redis` | `mongo` | `sqlite` | `memory` | `postgres`). */
+export type { CacheStoreName };
 
 // ---------------------------------------------------------------------------
 // CacheAdapter -- unified cache interface for framework response caching.

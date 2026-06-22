@@ -130,6 +130,7 @@ export type ChannelMiddlewareHandler = (
 
 // WsPublishFn is defined in slingshot-core and re-exported here for consumers
 // that import it from slingshot-entity.
+/** Publishes a payload to a WebSocket room on a given endpoint; re-exported from slingshot-core. */
 export type { WsPublishFn };
 
 // ---------------------------------------------------------------------------

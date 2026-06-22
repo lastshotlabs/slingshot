@@ -2,6 +2,7 @@ import type { EventDefinition, EventKey } from './eventDefinition';
 import { defineEvent } from './eventDefinition';
 import type { EventSchemaRegistry } from './eventSchemaRegistry';
 
+/** Registry of {@link EventDefinition}s keyed by event name, freezable once all plugins have registered their events. */
 export interface EventDefinitionRegistry {
   register<K extends EventKey>(definition: EventDefinition<K>): void;
   get<K extends EventKey>(key: K): EventDefinition<K> | undefined;
@@ -11,10 +12,15 @@ export interface EventDefinitionRegistry {
   readonly frozen: boolean;
 }
 
+/** Options for {@link createEventDefinitionRegistry}, including an optional schema registry to mirror payload schemas into. */
 export interface EventDefinitionRegistryOptions {
   schemaRegistry?: EventSchemaRegistry;
 }
 
+/**
+ * Create an {@link EventDefinitionRegistry} with closure-owned state that validates
+ * and freezes each definition on registration and rejects duplicates or post-freeze writes.
+ */
 export function createEventDefinitionRegistry(
   options: EventDefinitionRegistryOptions = {},
 ): EventDefinitionRegistry {

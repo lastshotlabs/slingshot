@@ -6,6 +6,7 @@
  */
 import type { EmailTemplate } from '@lastshotlabs/slingshot-core';
 
+/** A renderable email template with `subject`, `html`, and `text` fields, re-exported from slingshot-core. */
 export type { EmailTemplate } from '@lastshotlabs/slingshot-core';
 
 /**

@@ -1,8 +1,10 @@
 import type { z } from 'zod';
 import type { SlingshotEventMap } from './eventMap';
 
+/** Union of all registered event names — the string keys of the {@link SlingshotEventMap}. */
 export type EventKey = Extract<keyof SlingshotEventMap, string>;
 
+/** Declares the delivery surfaces an event is allowed to reach, from `internal`-only to client and webhook exposure. */
 export type EventExposure =
   | 'internal'
   | 'client-safe'
@@ -11,6 +13,7 @@ export type EventExposure =
   | 'app-webhook'
   | 'connector';
 
+/** Ownership and resource context resolved from an event payload, used to authorize external subscribers. */
 export interface EventScope {
   tenantId?: string | null;
   userId?: string | null;
@@ -20,6 +23,7 @@ export interface EventScope {
   resourceId?: string;
 }
 
+/** Request- or job-scoped context passed at publish time so a definition can resolve scope and stamp envelope metadata. */
 export interface EventPublishContext {
   /**
    * Request-scoped tenant ID captured by tenant-resolution middleware
@@ -35,12 +39,14 @@ export interface EventPublishContext {
   source?: 'http' | 'system' | 'job' | 'connector';
 }
 
+/** Identifies the consumer an event would be delivered to when checking subscriber authorization. */
 export interface EventSubscriptionPrincipal {
   kind: 'system' | 'tenant' | 'user' | 'app' | 'connector';
   ownerId: string;
   tenantId?: string | null;
 }
 
+/** Delivery metadata stamped onto every published event envelope (identity, timing, owner, exposure, scope, and request correlation). */
 export interface EventEnvelopeMeta {
   eventId: string;
   occurredAt: string;
@@ -57,6 +63,7 @@ export interface EventEnvelopeMeta {
   requestTenantId: string | null;
 }
 
+/** A published event: its key, typed payload, and {@link EventEnvelopeMeta} delivery metadata. */
 export interface EventEnvelope<K extends EventKey = EventKey> {
   key: K;
   payload: SlingshotEventMap[K];
@@ -75,6 +82,7 @@ export interface CreateEventEnvelopeParams<K extends EventKey> {
   requestTenantId: string | null;
 }
 
+/** Declares a publishable event: its owner, exposure surfaces, payload schema, and scope/authorization/projection logic. */
 export interface EventDefinition<K extends EventKey = EventKey> {
   key: K;
   ownerPlugin: string;

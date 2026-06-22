@@ -10,6 +10,7 @@
  */
 import type { ResolvedEntityConfig } from './entityConfig';
 
+/** Runtime registry of resolved entity configs that plugins query to discover entities (search, schema, admin, migrations). */
 export interface EntityRegistry {
   /** Register an entity config. Called by framework-owned config-driven persistence wiring. */
   register(config: ResolvedEntityConfig): void;

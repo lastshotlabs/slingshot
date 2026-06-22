@@ -131,6 +131,7 @@ function mongooseType(fieldType: FieldType, mg: MongooseModule): unknown {
 
 const mongoAdapterLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
 
+/** Creates a MongoDB-backed {@link EntityAdapter} for the given entity config. */
 export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   conn: Connection,
   mongoosePkg: MongooseModule,

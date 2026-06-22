@@ -1,6 +1,7 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
 import type { EmailTemplate } from './coreContracts';
 
+/** A static email template (`subject`/`html`/`text`) registered by a plugin and consumed by the mail plugin. */
 export type { EmailTemplate };
 
 // ---------------------------------------------------------------------------

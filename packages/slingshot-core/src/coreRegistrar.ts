@@ -11,7 +11,10 @@ import type {
 } from './coreContracts';
 import type { IdentityResolver } from './identity';
 
-export type { CoreRegistrar, CoreRegistrarSnapshot };
+/** Mutable bootstrap registrar that collects auth-boundary dependencies (route auth, cache adapters, email templates, …) from plugins, then drains them into a frozen `CoreRegistrarSnapshot`. */
+export type { CoreRegistrar };
+/** A frozen snapshot of all auth-boundary dependencies collected by `CoreRegistrar`, produced after the plugin lifecycle completes. */
+export type { CoreRegistrarSnapshot };
 
 /**
  * Create a `CoreRegistrar` / drain pair for collecting auth-boundary dependencies

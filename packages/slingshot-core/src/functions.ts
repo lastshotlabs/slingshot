@@ -67,6 +67,7 @@ export interface FunctionsHooks {
   onShutdown?(ctx: SlingshotContext): void | Promise<void>;
 }
 
+/** Arguments passed to the `beforeInvoke` hook with the decoded input, handler meta, trigger name, cold-start flag, and context. */
 export interface BeforeInvokeArgs {
   input: unknown;
   meta: HandlerMeta;
@@ -75,12 +76,14 @@ export interface BeforeInvokeArgs {
   ctx: SlingshotContext;
 }
 
+/** Arguments passed to the `afterInvoke` hook, extending {@link BeforeInvokeArgs} with the handler's output, error, and latency. */
 export interface AfterInvokeArgs extends BeforeInvokeArgs {
   output?: unknown;
   error?: Error;
   latencyMs: number;
 }
 
+/** Classifies where in the invocation pipeline an error originated (validation, handler, timeout, infrastructure, etc.). */
 export type ErrorKind =
   | 'validation'
   | 'handler'
@@ -90,6 +93,7 @@ export type ErrorKind =
   | 'idempotency'
   | 'unknown';
 
+/** Arguments passed to the `onError` hook describing a failed invocation, including the error, its {@link ErrorKind}, and correlation metadata. */
 export interface OnErrorArgs {
   error: Error;
   kind: ErrorKind;
@@ -101,6 +105,7 @@ export interface OnErrorArgs {
   ctx: SlingshotContext | null;
 }
 
+/** Value returned from `onError` that overrides how an invocation failure is reported (replacement error, status, body, or suppression). */
 export interface ErrorDisposition {
   replaceWith?: Error;
   status?: number;
@@ -108,6 +113,7 @@ export interface ErrorDisposition {
   suppress?: boolean;
 }
 
+/** Arguments passed to the `onRecordError` hook when a single record within a batch trigger fails. */
 export interface RecordErrorArgs {
   record: TriggerRecord;
   error: Error;
@@ -115,11 +121,13 @@ export interface RecordErrorArgs {
   ctx: SlingshotContext;
 }
 
+/** Returned from `beforeInvoke` to short-circuit an invocation, optionally supplying the response to return instead. */
 export interface InvokeAbort {
   abort: true;
   response?: unknown;
 }
 
+/** Configuration for a functions runtime: the handler manifest, optional runtime, lifecycle hooks, and timeout budgets. */
 export interface FunctionsRuntimeConfig {
   manifest: string | Record<string, unknown>;
   runtime?: SlingshotRuntime;
@@ -152,6 +160,7 @@ export interface FunctionsRuntimeConfig {
   handlerTimeoutMs?: number;
 }
 
+/** Idempotency settings for a wrapped trigger: dedup TTL, key scope, custom key derivation, and payload fingerprinting. */
 export interface IdempotencyOpts {
   ttl?: number;
   scope?: 'global' | 'tenant' | 'user';
@@ -159,10 +168,12 @@ export interface IdempotencyOpts {
   fingerprint?: boolean;
 }
 
+/** Per-trigger wrapping options, such as enabling or configuring {@link IdempotencyOpts}. */
 export interface TriggerOpts {
   idempotency?: boolean | IdempotencyOpts;
 }
 
+/** A functions runtime that wraps handlers into trigger-platform entrypoints and exposes the context and shutdown lifecycle. */
 export interface FunctionsRuntime {
   wrap(
     handler: SlingshotHandler,

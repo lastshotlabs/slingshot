@@ -2,6 +2,7 @@ import type { NotificationRecord } from './notificationsPeer';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 import { getPluginStateOrNull } from './pluginState';
 
+/** Shape of a formatted push notification: title plus optional body, data, icon, badge, and URL. */
 export interface PushMessageLike {
   readonly title: string;
   readonly body?: string;
@@ -11,15 +12,18 @@ export interface PushMessageLike {
   readonly url?: string;
 }
 
+/** Converts a notification record into a {@link PushMessageLike}, optionally merging caller-supplied defaults. */
 export type PushFormatterPeerFn = (
   notification: NotificationRecord,
   defaults?: Partial<PushMessageLike>,
 ) => PushMessageLike;
 
+/** Cross-package handle for registering per-notification-type push message formatters with the push package. */
 export interface PushFormatterPeer {
   registerFormatter(type: string, formatter: PushFormatterPeerFn): void;
 }
 
+/** Resolve the {@link PushFormatterPeer} from plugin state, throwing if the push package is not registered. */
 export function getPushFormatterPeer(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PushFormatterPeer {
@@ -30,6 +34,7 @@ export function getPushFormatterPeer(
   return state;
 }
 
+/** Resolve the {@link PushFormatterPeer} from plugin state, returning `null` when the push package is unavailable. */
 export function getPushFormatterPeerOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PushFormatterPeer | null {

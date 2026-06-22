@@ -4,6 +4,7 @@ import { getActor } from '@lastshotlabs/slingshot-core';
 
 export type AuthenticatedUserActor = Actor & { kind: 'user'; id: string };
 
+/** Returns the current request's actor when it is an authenticated user (kind `'user'` with a non-null id), otherwise null. */
 export function getAuthenticatedUserActor(
   c: Parameters<typeof getActor>[0],
 ): AuthenticatedUserActor | null {

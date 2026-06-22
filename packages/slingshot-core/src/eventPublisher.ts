@@ -37,6 +37,7 @@ export interface SlingshotEvents {
   ): EventEnvelope<K>;
 }
 
+/** Dependencies for building the {@link SlingshotEvents} publisher: the definition registry and the event bus to emit through. */
 export interface CreateEventPublisherOptions {
   definitions: EventDefinitionRegistry;
   bus: SlingshotEventBus;

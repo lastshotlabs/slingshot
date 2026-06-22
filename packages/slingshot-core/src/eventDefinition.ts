@@ -31,6 +31,10 @@ function hasExternalExposure(exposure: readonly EventExposure[]): boolean {
   return exposure.some(value => EXTERNAL_EXPOSURES.has(value));
 }
 
+/**
+ * Validate an event definition, throwing if `ownerPlugin` is empty, no exposure
+ * is declared, exposures are duplicated, or `internal` is mixed with external exposures.
+ */
 export function validateEventDefinition<K extends EventKey>(definition: EventDefinition<K>): void {
   if (!definition.ownerPlugin.trim()) {
     throw new Error('[EventDefinitionRegistry] Event definitions require a non-empty ownerPlugin.');
@@ -59,6 +63,9 @@ export function validateEventDefinition<K extends EventKey>(definition: EventDef
   }
 }
 
+/**
+ * Build a validated, frozen {@link EventDefinition} from a key and its definition body.
+ */
 export function defineEvent<K extends EventKey>(
   key: K,
   definition: Omit<EventDefinition<K>, 'key'>,
@@ -72,6 +79,11 @@ export function defineEvent<K extends EventKey>(
   return Object.freeze(normalized);
 }
 
+/**
+ * Decide whether a subscription principal is entitled to an event given the
+ * envelope's scope and exposures (tenant/user/app webhooks match by owner ID,
+ * connectors match by exposure, system principals never match).
+ */
 export function matchSubscriberToScope(
   principal: EventSubscriptionPrincipal,
   scope: EventScope | null,
@@ -111,6 +123,11 @@ export function matchSubscriberToScope(
   }
 }
 
+/**
+ * Build the default `authorizeSubscriber` predicate for a definition, allowing
+ * delivery only when the event has external exposure and the subscriber matches
+ * the envelope's scope.
+ */
 export function createDefaultSubscriberAuthorizer<K extends EventKey>(
   definition: Pick<EventDefinition<K>, 'exposure'>,
 ): EventSubscriberAuthorizer<K> {
@@ -122,6 +139,10 @@ export function createDefaultSubscriberAuthorizer<K extends EventKey>(
   };
 }
 
+/**
+ * Return whether a definition declares any exposure that delivers events outside
+ * the framework (client-safe, tenant/user/app webhooks, or connectors).
+ */
 export function eventHasExternalExposure<K extends EventKey>(
   definition: Pick<EventDefinition<K>, 'exposure'>,
 ): boolean {

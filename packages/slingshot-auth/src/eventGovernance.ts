@@ -23,6 +23,7 @@ type AuthManagedEventKey =
   | 'auth:delivery.welcome'
   | 'auth:delivery.org_invitation';
 
+/** Registers the auth package's managed event definitions on the given event publisher, skipping any already registered. */
 export function registerAuthEventDefinitions(events: SlingshotEvents): void {
   const register = <K extends AuthManagedEventKey>(
     key: K,

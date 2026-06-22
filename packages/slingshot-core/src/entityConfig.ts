@@ -996,6 +996,12 @@ type OptionalInCreate<F extends Record<string, FieldDef>> = {
         : never;
 }[keyof F];
 
+/**
+ * Infer the CreateInput type from a fields record.
+ *
+ * Excludes auto-managed fields (auto-generated defaults and `onUpdate` fields); fields
+ * with a default or marked optional become optional, while the rest are required.
+ */
 export type InferCreateInput<F extends Record<string, FieldDef>> = {
   [K in RequiredInCreate<F> & string]: InferFieldType<F[K]>;
 } & {
@@ -1028,6 +1034,7 @@ type MutableFieldNames<F extends Record<string, FieldDef>> = {
       : K;
 }[keyof F];
 
+/** Infers an entity’s update-input shape from its field definitions — mutable fields only, each optional, and nullable when the field itself is optional. */
 export type InferUpdateInput<F extends Record<string, FieldDef>> = {
   [K in MutableFieldNames<F> & string]?: F[K]['optional'] extends true
     ? InferFieldType<F[K]> | null

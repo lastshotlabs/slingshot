@@ -309,10 +309,12 @@ type SetupRoutePlanEntry = {
 
 const ENTITY_PLUGIN_TOOLING_METADATA = Symbol.for('slingshot.entity.plugin.toolingMetadata');
 
+/** Tooling-facing metadata attached to a compiled entity plugin, exposing its registered entity entries. */
 export interface EntityPluginToolingMetadata {
   entries: readonly EntityPluginEntry[];
 }
 
+/** Reads the {@link EntityPluginToolingMetadata} attached to an entity plugin, or `null` if absent. */
 export function getEntityPluginToolingMetadata(
   plugin: unknown,
 ): EntityPluginToolingMetadata | null {

@@ -13,6 +13,7 @@ import { entityToPath } from '../generators/routeHelpers';
 import type { BareEntityAdapter } from './adapterTypes';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 
+/** Identifies a generated CRUD route (`create`/`list`/`get`/`update`/`delete`) or a named operation route (`operations.${name}`). */
 export type EntityGeneratedRouteKey =
   | 'create'
   | 'list'
@@ -42,6 +43,7 @@ export interface EntityRouteExecutionContext<
   setOpResult(opName: string, result: unknown): void;
 }
 
+/** Context passed to an {@link EntityRouteExecutorBuilder} when it constructs a route executor at plan time. */
 export interface EntityRouteExecutorBuilderContext {
   entity: ResolvedEntityConfig;
   routeKey: string;
@@ -50,14 +52,17 @@ export interface EntityRouteExecutorBuilderContext {
   getEntityAdapter(args: { plugin: string; entity: string }): BareEntityAdapter;
 }
 
+/** Handles a single entity route request, returning a `Response` from the given execution context. */
 export type EntityRouteExecutor<TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec> = (
   ctx: EntityRouteExecutionContext<TRequest>,
 ) => Response | Promise<Response>;
 
+/** Builds an {@link EntityRouteExecutor} from builder context at plan time, binding the entity, adapter, and route key. */
 export type EntityRouteExecutorBuilder<
   TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
 > = (ctx: EntityRouteExecutorBuilderContext) => EntityRouteExecutor<TRequest>;
 
+/** Full executor override for a generated route, pairing a builder with optional request/response schemas and OpenAPI metadata. */
 export interface EntityRouteExecutorDefinition<
   TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
 > {

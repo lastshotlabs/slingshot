@@ -37,6 +37,7 @@ type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) e
   ? TResult
   : never;
 
+/** Typed, named token a package publishes and consumers resolve to exchange a capability value across packages. */
 export interface PackageCapabilityHandle<TValue> {
   /** Internal discriminator used by the package capability registry. */
   readonly kind: 'capability';
@@ -1148,6 +1149,7 @@ type DomainDefinitionInput<
       readonly services: TServices;
     });
 
+/** Entrypoint for declaring package domain routes, with `withServices()` to bind a typed service bag for handler IntelliSense. */
 export const route = Object.freeze({
   ...createRouteBuilder(),
   /**

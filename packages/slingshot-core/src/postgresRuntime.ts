@@ -4,8 +4,10 @@ type PoolShape = {
   waitingCount?: number;
 };
 
+/** Whether the Postgres runtime applies migrations on startup or assumes the schema is already migrated. */
 export type PostgresMigrationMode = 'apply' | 'assume-ready';
 
+/** Immutable point-in-time view of a Postgres pool's connection counts and query/error statistics. */
 export interface PostgresPoolStatsSnapshot {
   readonly migrationMode: PostgresMigrationMode;
   readonly totalCount: number;
@@ -18,6 +20,7 @@ export interface PostgresPoolStatsSnapshot {
   readonly lastErrorAt: string | null;
 }
 
+/** Outcome of a Postgres connectivity probe: success flag, latency, timestamp, and any error message. */
 export interface PostgresHealthCheckResult {
   readonly ok: boolean;
   readonly latencyMs: number;
@@ -25,6 +28,7 @@ export interface PostgresHealthCheckResult {
   readonly error?: string;
 }
 
+/** Per-pool runtime that records query timings/failures and produces {@link PostgresPoolStatsSnapshot}s. */
 export interface PostgresPoolRuntime {
   readonly migrationMode: PostgresMigrationMode;
   readonly healthcheckTimeoutMs: number;
@@ -34,6 +38,7 @@ export interface PostgresPoolRuntime {
 
 const POOL_RUNTIME = new WeakMap<object, PostgresPoolRuntime>();
 
+/** Create a {@link PostgresPoolRuntime} that accumulates query-count, error, and duration metrics for a pool. */
 export function createPostgresPoolRuntime(opts?: {
   migrationMode?: PostgresMigrationMode;
   healthcheckTimeoutMs?: number;
@@ -78,10 +83,12 @@ export function createPostgresPoolRuntime(opts?: {
   };
 }
 
+/** Associate a {@link PostgresPoolRuntime} with a pool instance via a weak map for later lookup. */
 export function attachPostgresPoolRuntime(pool: object, runtime: PostgresPoolRuntime): void {
   POOL_RUNTIME.set(pool, runtime);
 }
 
+/** Retrieve the {@link PostgresPoolRuntime} previously attached to a pool, or `null` if none. */
 export function getPostgresPoolRuntime(pool: object): PostgresPoolRuntime | null {
   return POOL_RUNTIME.get(pool) ?? null;
 }

@@ -1,6 +1,7 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
 import type { RequestActorResolver } from './coreContracts';
 
+/** Resolves the connecting actor for framework WebSocket/SSE upgrades without depending on the auth plugin; registered by the auth plugin during setup. */
 export type { RequestActorResolver };
 
 // ---------------------------------------------------------------------------

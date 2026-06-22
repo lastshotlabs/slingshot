@@ -1,7 +1,12 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
 import type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry } from './coreContracts';
 
-export type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry };
+/** A guard that runs after authentication, in registration order; the first to return a `PostAuthGuardFailure` short-circuits the request. */
+export type { PostAuthGuard };
+/** Result returned by a post-auth guard when the request should be rejected. */
+export type { PostAuthGuardFailure };
+/** Auth middleware registry the auth plugin provides to the framework so framework-owned routes can apply auth and role guards without depending on the auth plugin. */
+export type { RouteAuthRegistry };
 
 /**
  * Retrieve the `RouteAuthRegistry` registered on a Slingshot app or context instance.

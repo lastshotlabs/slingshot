@@ -1,5 +1,6 @@
 const emittedWarnings = new Set<string>();
 
+/** Maturity label for a Slingshot package, driving the runtime warning emitted for non-`stable` packages. */
 export type PackageStability = 'stable' | 'rc' | 'beta' | 'alpha' | 'experimental' | 'unstable';
 
 function normalizePackageName(packageName: string): string {

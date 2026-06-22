@@ -125,6 +125,7 @@ const RecoveryConfigSchema = z.object({
     .describe('Message TTL in seconds. Default: 3600.'),
 });
 
+/** Zod schema validating the game engine package config: mount path, WS endpoint, cleanup, disconnect, rate-limit, heartbeat, recovery, and disabled routes. */
 export const GameEnginePluginConfigSchema = z.object({
   mountPath: z
     .string()

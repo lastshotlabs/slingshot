@@ -63,6 +63,7 @@ export interface RelationDef {
   readonly optional?: boolean;
 }
 
+/** Soft-delete configuration for an entity; when set, deletes update a field instead of removing the record. */
 export type { SoftDeleteConfig };
 
 /**
@@ -231,6 +232,10 @@ export type ExtractInputVariants<F extends Record<string, FieldDef>> = {
   [K in keyof F]: NonNullable<F[K]['inputVariants']>[number];
 }[keyof F];
 
+/**
+ * Full declarative configuration for a single entity: its fields, indexes,
+ * relations, storage conventions, soft-delete, TTL, search, and route settings.
+ */
 export interface EntityConfig<
   F extends Record<string, FieldDef> = Record<string, FieldDef>,
   D extends EntityDtoConfig = EntityDtoConfig,

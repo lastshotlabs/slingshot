@@ -21,6 +21,7 @@ function indexSpec(fields: readonly string[], direction: 'asc' | 'desc' | undefi
   return `{ ${entries.join(', ')} }`;
 }
 
+/** Generates the initial MongoDB migration script (index and unique-constraint creation) for an entity. */
 export function generateInitialMigrationMongo(config: ResolvedEntityConfig): string {
   const collName = storageName(config, 'mongo');
   const coll = `db.getCollection("${escapeJsString(collName)}")`;

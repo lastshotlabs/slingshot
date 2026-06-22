@@ -213,6 +213,7 @@ export function getAuthRuntimeFromRequestOrNull(c: {
   return direct;
 }
 
+/** Resolves the request's `AuthRuntimeContext`, throwing if the auth plugin has not been initialised. */
 export function getAuthRuntimeFromRequest(c: { get(key: string): unknown }): AuthRuntimeContext {
   const runtime = getAuthRuntimeFromRequestOrNull(c);
   if (!runtime) {

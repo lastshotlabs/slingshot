@@ -1,7 +1,10 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
 import type { FingerprintBuilder, RateLimitAdapter } from './coreContracts';
 
-export type { FingerprintBuilder, RateLimitAdapter };
+/** Builds a short fingerprint hash from stable HTTP request headers, used for unauthenticated bot detection and request fingerprinting. */
+export type { FingerprintBuilder };
+/** Rate-limit backend that tracks attempt counts within a rolling window; returns `true` when the limit is exceeded (caller responds 429). */
+export type { RateLimitAdapter };
 
 // ---------------------------------------------------------------------------
 // RateLimitAdapter + FingerprintBuilder -- rate limiting contracts.

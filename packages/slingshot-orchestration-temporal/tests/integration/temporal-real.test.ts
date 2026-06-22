@@ -16,7 +16,7 @@ import {
   defineTask,
   defineWorkflow,
   step,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 const REAL_TEMPORAL_ENABLED = process.env['TEMPORAL_TEST_ENV'] === '1';
 const itReal = REAL_TEMPORAL_ENABLED ? test : test.skip;

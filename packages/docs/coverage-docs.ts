@@ -30,10 +30,10 @@ const DEFAULT_COVERAGE_POLICY_PATH = resolve(
 const PRODUCTION_PATH_PACKAGE_SLUGS = [
   'slingshot-permissions',
   'slingshot-organizations',
-  'slingshot-orchestration',
+  'slingshot-orchestration-engine',
   'slingshot-orchestration-bullmq',
   'slingshot-orchestration-temporal',
-  'slingshot-orchestration-plugin',
+  'slingshot-orchestration',
   'slingshot-bullmq',
   'slingshot-assets',
   'slingshot-search',

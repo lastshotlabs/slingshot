@@ -5,7 +5,7 @@ import {
   WorkflowFailedError,
 } from '@temporalio/client';
 import { describe, expect, test } from 'bun:test';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 import { mapTemporalFailure, toRunError, wrapTemporalError } from '../src/errors';
 
 describe('mapTemporalFailure', () => {

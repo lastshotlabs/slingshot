@@ -1,0 +1,60 @@
+{
+  "name": "@lastshotlabs/slingshot-orchestration-engine",
+  "version": "0.0.3",
+  "description": "Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./errors": {
+      "bun": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
+    },
+    "./provider": {
+      "bun": "./dist/src/provider/index.js",
+      "types": "./dist/src/provider/index.d.ts",
+      "import": "./dist/src/provider/index.js"
+    },
+    "./testing": {
+      "bun": "./dist/src/testing.js",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-orchestration-engine"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "coverage": "bun test --coverage",
+    "test:unit": "bun test tests/ --ignore tests/concurrency-stress.test.ts",
+    "test:integration": "bun test tests/concurrency-stress.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*",
+    "better-sqlite3": "^12.8.0"
+  },
+  "peerDependencies": {
+    "zod": ">=4.0 <5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -7,8 +7,8 @@ import { type NativeConnection, Worker, type WorkerInterceptors } from '@tempora
 import {
   OrchestrationError,
   type OrchestrationEventSink,
-} from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration-engine/provider';
 import { createTemporalActivities } from './activities';
 import { discoverOrchestrationDefinitions, selectOrchestrationDefinitions } from './discovery';
 import { type TemporalOrchestrationWorkerOptions, temporalWorkerOptionsSchema } from './validation';

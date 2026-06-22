@@ -1,7 +1,7 @@
 {
   "name": "@lastshotlabs/slingshot-orchestration",
-  "version": "0.0.3",
-  "description": "Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot",
+  "version": "0.0.2",
+  "description": "Slingshot plugin, context helpers, and HTTP routes for the portable orchestration runtime",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -10,20 +10,15 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
-    "./errors": {
-      "bun": "./dist/src/errors.js",
-      "types": "./dist/src/errors.d.ts",
-      "import": "./dist/src/errors.js"
-    },
-    "./provider": {
-      "bun": "./dist/src/provider/index.js",
-      "types": "./dist/src/provider/index.d.ts",
-      "import": "./dist/src/provider/index.js"
-    },
     "./testing": {
       "bun": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
+    },
+    "./errors": {
+      "bun": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -42,16 +37,15 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "bun test",
     "coverage": "bun test --coverage",
-    "test:unit": "bun test tests/ --ignore tests/concurrency-stress.test.ts",
-    "test:integration": "bun test tests/concurrency-stress.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
-    "better-sqlite3": "^12.8.0"
+    "@lastshotlabs/slingshot-orchestration-engine": "workspace:*"
   },
   "peerDependencies": {
+    "hono": ">=4.12.14 <5",
     "zod": ">=4.0 <5"
   },
   "engines": {

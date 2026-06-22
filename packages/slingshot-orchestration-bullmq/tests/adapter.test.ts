@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
-import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   FakeJob,
   FakeQueue,

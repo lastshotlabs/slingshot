@@ -2,7 +2,7 @@ import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
   ResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 const taskRegistry = new Map<string, AnyResolvedTask>();
 const workflowRegistry = new Map<string, AnyResolvedWorkflow>();

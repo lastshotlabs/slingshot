@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
-import { defineWorkflow, parallel, sleep, step } from '@lastshotlabs/slingshot-orchestration';
-import type { ProviderTaskManifest } from '@lastshotlabs/slingshot-orchestration/provider';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
+import { defineWorkflow, parallel, sleep, step } from '@lastshotlabs/slingshot-orchestration-engine';
+import type { ProviderTaskManifest } from '@lastshotlabs/slingshot-orchestration-engine/provider';
 import type { ExecuteSlingshotTaskArgs } from '../src/activities';
 
 interface WorkflowHarness {

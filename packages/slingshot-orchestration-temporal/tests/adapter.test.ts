@@ -5,7 +5,7 @@ import {
   defineTask,
   defineWorkflow,
   sleep,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 // ---------------------------------------------------------------------------
 // Fake Temporal client

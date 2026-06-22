@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 // Mock infrastructure mirrors the pattern used in
 // tests/runid-cache-eviction.test.ts and tests/runid-scan-miss.test.ts.

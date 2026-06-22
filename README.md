@@ -95,10 +95,10 @@ experimental and deferred tiers unless you're actively contributing.
 | ------------------------------------------- | -------------------------------------------------------------------------------- |
 | `slingshot-permissions`                     | RBAC, grants, evaluators, adapter factories                                      |
 | `slingshot-organizations`                   | Multi-tenancy, org membership, scoping                                           |
-| `slingshot-orchestration`                   | Task and workflow runtime; in-process and durable engines                        |
+| `slingshot-orchestration-engine`                   | Task and workflow runtime; in-process and durable engines                        |
 | `slingshot-orchestration-bullmq`            | BullMQ-backed orchestration adapter (Redis)                                      |
 | `slingshot-orchestration-temporal`          | Temporal-backed orchestration adapter                                            |
-| `slingshot-orchestration-plugin`            | Mounts the orchestration runtime as a Slingshot plugin                           |
+| `slingshot-orchestration`            | Mounts the orchestration runtime as a Slingshot plugin                           |
 | `slingshot-bullmq`                          | Durable event-bus adapter (Redis)                                                |
 | `slingshot-assets`                          | File uploads, presigned URLs, storage adapters                                   |
 | `slingshot-search`                          | Search plugin with Meilisearch / Typesense / Elasticsearch / Algolia / DB-native |

@@ -6,7 +6,7 @@ import {
   parallel,
   sleep,
   step,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { discoverOrchestrationDefinitions, selectOrchestrationDefinitions } from '../src/discovery';
 
 describe('discoverOrchestrationDefinitions', () => {

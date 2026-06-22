@@ -2,7 +2,7 @@ import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
   OrchestrationError,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 export interface DiscoveredOrchestrationDefinitions {
   tasks: AnyResolvedTask[];

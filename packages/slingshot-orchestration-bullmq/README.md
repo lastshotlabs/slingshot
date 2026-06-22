@@ -3,7 +3,7 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration-bullmq
 ---
 
-This package provides a BullMQ-backed adapter for `@lastshotlabs/slingshot-orchestration`.
+This package provides a BullMQ-backed adapter for `@lastshotlabs/slingshot-orchestration-engine`.
 
 Use it when you want:
 
@@ -33,18 +33,18 @@ This package depends on the portable orchestration core but not on Slingshot plu
 
 Typical composition:
 
-1. Define tasks and workflows in `@lastshotlabs/slingshot-orchestration`
+1. Define tasks and workflows in `@lastshotlabs/slingshot-orchestration-engine`
 2. Create the BullMQ adapter in this package
 3. Pass that adapter into `createOrchestrationRuntime()` or `createOrchestrationPackage()`
 
 ## Minimal setup
 
 ```ts
-import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBullMQOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-bullmq';
 
-declare const tasks: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask[];
-declare const workflows: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow[];
+declare const tasks: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask[];
+declare const workflows: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedWorkflow[];
 
 const adapter = createBullMQOrchestrationAdapter({
   connection: { host: '127.0.0.1', port: 6379 },

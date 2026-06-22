@@ -22,7 +22,7 @@ A task is a named, retryable unit of work:
 
 ```typescript
 // @skip-typecheck
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const emailService: {
   send(opts: { to: string; subject: string; body: string }): Promise<void>;
@@ -74,7 +74,7 @@ When work has multiple steps that depend on each other:
 
 ```typescript
 // @skip-typecheck
-import { defineWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import { defineWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 
 const onboardUser = defineWorkflow({
   name: 'onboard-user',
@@ -102,7 +102,7 @@ Orchestration adapters control where and how tasks execute:
 
 ```typescript
 // @skip-typecheck
-import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 
 createOrchestrationPackage({
   adapter: 'sqlite', // swap to 'bullmq' when you need multi-instance
@@ -123,7 +123,7 @@ of the framework without capturing the `app` reference manually.
 
 ```typescript
 // @skip-typecheck
-import { defineTask, defineWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask, defineWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 
 interface UserAdapter {
   markOnboarded(id: string): Promise<void>;

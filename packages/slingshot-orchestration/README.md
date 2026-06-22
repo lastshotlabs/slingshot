@@ -3,134 +3,205 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration
 ---
 
-This package provides the portable orchestration contract for Slingshot.
+This package integrates the portable orchestration runtime into the Slingshot package model.
 
 It owns:
 
-- `defineTask()` and `defineWorkflow()` for application authoring
-- `step()`, `parallel()`, `sleep()`, and `stepResult()` for workflow composition
-- `createOrchestrationRuntime()` for framework-agnostic runtime composition
-- `createMemoryAdapter()` for in-process execution
-- `createSqliteAdapter()` for durable single-node execution
+- `createOrchestrationPackage()` for package lifecycle wiring
+- `getOrchestration()` and `getOrchestrationOrNull()` for runtime lookup via `ctx.pluginState`
+- `OrchestrationRuntimeCap` for capability-based runtime access
+- `createSlingshotEventSink()` for event bus bridging
+- optional HTTP routes under `/orchestration`
 
-It does not depend on Slingshot plugin lifecycle or Hono routing. Slingshot-specific integration
-lives in `@lastshotlabs/slingshot-orchestration-plugin`.
+## What this package does
 
-## Mental model
+- builds or accepts an `OrchestrationRuntime`
+- publishes that runtime under the `slingshot-orchestration-engine` plugin-state key and the
+  `OrchestrationRuntimeCap` capability
+- mounts orchestration HTTP endpoints when enabled
+- enforces route middleware when routes are enabled
+- starts and stops the concrete adapter when the package owns adapter lifecycle
 
-- A `task` is a named, retryable unit of work with Zod-validated input and output.
-- A `workflow` is an ordered array of entries that can run sequentially, in parallel, or pause with `sleep()`.
-- The runtime is portable. It can run in tests, workers, plain scripts, or inside Slingshot.
-- The adapter decides durability and infrastructure concerns. Task and workflow definitions stay the same.
-
-## Supported adapters in this package
-
-- `memory`: zero infrastructure, non-durable, best for tests and local development
-- `sqlite`: durable single-node execution, process-restart recovery, no external services
-
-## Current non-goals
-
-- No direct Slingshot plugin lifecycle in this package
-- No Hono HTTP router in this package
-- No Temporal or Trigger.dev support in this package
-
-Those concerns live in outer adapters or later phases.
-
-## Recommended usage
-
-For standalone runtime composition:
+## Basic setup
 
 ```ts
-import {
-  createMemoryAdapter,
-  createOrchestrationRuntime,
-  defineTask,
-} from '@lastshotlabs/slingshot-orchestration';
-```
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 
-For Slingshot integration, use `@lastshotlabs/slingshot-orchestration-plugin` and treat this
-package as the domain layer only.
+declare const resizeImage: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
+declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
+declare const onboardUser: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedWorkflow;
+declare const requireAdmin: import('hono').MiddlewareHandler;
+declare const resolveRequestContext: import('@lastshotlabs/slingshot-orchestration').OrchestrationRequestContextResolver;
 
-## Minimal example
-
-```ts
-import { z } from 'zod';
-import {
-  createMemoryAdapter,
-  createOrchestrationRuntime,
-  defineTask,
-  defineWorkflow,
-  step,
-  stepResult,
-} from '@lastshotlabs/slingshot-orchestration';
-
-const quoteCarrier = defineTask({
-  name: 'quote-carrier',
-  input: z.object({ quoteId: z.string(), carrier: z.string() }),
-  output: z.object({ carrier: z.string(), premiumCents: z.number().int() }),
-  async handler(input) {
-    return { carrier: input.carrier, premiumCents: 12500 };
-  },
-});
-
-const quoteWorkflow = defineWorkflow({
-  name: 'quote-policy',
-  input: z.object({ quoteId: z.string(), carrier: z.string() }),
-  output: z.object({ carrier: z.string(), premiumCents: z.number().int() }),
-  outputMapper(results) {
-    return stepResult(results, 'quote', quoteCarrier)!;
-  },
-  steps: [step('quote', quoteCarrier)],
-});
-
-const runtime = createOrchestrationRuntime({
+const orchestrationPackage = createOrchestrationPackage({
   adapter: createMemoryAdapter({ concurrency: 10 }),
-  tasks: [quoteCarrier],
-  workflows: [quoteWorkflow],
+  tasks: [resizeImage, sendWelcomeEmail],
+  workflows: [onboardUser],
+  routes: true,
+  routePrefix: '/orchestration',
+  routeMiddleware: [requireAdmin],
+  resolveRequestContext,
 });
-
-const handle = await runtime.runWorkflow(
-  quoteWorkflow,
-  { quoteId: 'q_123', carrier: 'acme' },
-  { tenantId: 'tenant-a', idempotencyKey: 'quote:q_123' },
-);
-
-const output = await handle.result();
-const run = await runtime.getRun(handle.id);
 ```
 
-## Adapter choice
+## What this package does not do
 
-- `memory`: fastest iteration path, in-process only, no durability, good for tests and local development.
-- `sqlite`: durable single-node execution, process restart recovery, good for one-node backoffice or embedded installs.
-- `bullmq` via `@lastshotlabs/slingshot-orchestration-bullmq`: Redis-backed multi-worker execution and scheduling.
-- `temporal` via `@lastshotlabs/slingshot-orchestration-temporal`: strongest fit for enterprise durability, signals, and distributed workflow control.
+- it does not define tasks or workflows
+- it does not implement orchestration engines
+- it does not make orchestration a first-class `SlingshotContext` property
 
-## Registration model
+That separation is intentional. The portable runtime stays reusable outside Slingshot.
 
-This package registers orchestration definitions, not application services.
+## Definition and service wiring
 
-- Register tasks and workflows by passing them into `createOrchestrationRuntime({ tasks, workflows, adapter })`.
-- In Slingshot apps, pass the same definitions into `createOrchestrationPackage()`.
-- Keep quote engines, carrier clients, rating services, ordering services, and document generators as normal application dependencies. Call them inside task handlers instead of trying to register them with the orchestration runtime.
+This package registers orchestration definitions and request hooks. It does not provide a service
+registry for arbitrary business services.
 
-## Runtime surface
+- Pass `tasks` and `workflows` directly to `createOrchestrationPackage()` in apps.
+- Use `resolveRequestContext()` and `authorizeRun()` to wire request-scoped identity and access rules without coupling the router to actor-resolution internals.
+- Keep domain services such as quoting engines, carrier APIs, pricing rules, and ordering clients in your normal application composition. Inject or import them inside task handlers.
 
-- `runTask()` and `runWorkflow()` start work and return a `RunHandle`.
-- `handle.result()` waits for the final output.
-- `getRun(id)` returns the current portable run snapshot.
-- `cancelRun(id)` requests cancellation.
-- `listRuns()` and `onProgress()` are adapter capabilities, so check `runtime.supports(...)` when you depend on them.
+## Route contract
 
-## Contract notes
+When `routes: true`, `routeMiddleware` must be non-empty. This is a hard configuration error.
 
-- task retry policies and task-level concurrency are validated when you call `defineTask()`
-- step retry and timeout overrides are validated when you call `step()`
-- dynamic `sleep()` durations are validated at workflow execution time, so invalid mapper output
-  fails the run consistently across adapters instead of silently turning into an immediate timer
-- adapter-level idempotency is scoped by run type, definition name, and `tenantId`, so the same
-  key can be reused safely across different tenants or different task/workflow definitions
-- reusing an idempotency key in the same scope returns the existing run handle; completed runs
-  replay the stored result instead of failing because the original promise is no longer active
-- `tenantId`, `tags`, and `metadata` are adapter-portable run options, so use them for auditability
-  and request correlation instead of baking routing concerns into task names
+Current endpoints:
+
+- `GET /tasks`
+- `GET /workflows`
+- `POST /tasks/:name/runs`
+- `POST /workflows/:name/runs`
+- `GET /runs/:id`
+- `DELETE /runs/:id`
+- `GET /runs`
+- `POST /runs/:id/signal/:signalName`
+
+Signal routes return `501` for adapters without signal support.
+
+Create-run requests accept idempotency in either place:
+
+- JSON body: `idempotencyKey`
+- HTTP header: `Idempotency-Key`
+
+Accepted create responses include the run identity plus a follow-up link:
+
+- `id`
+- `type`
+- `name`
+- `status`
+- `links.run`
+
+List-run query parameters:
+
+- `type=task|workflow`
+- `name=<definition-name>`
+- `status=pending|running|completed|failed|cancelled|skipped`
+- `limit=<1-1000>`
+- `offset=<0+>`
+
+When no custom `authorizeRun()` hook is supplied, tenant-scoped callers can see:
+
+- runs for their own `tenantId`
+- global runs with no `tenantId`
+
+## Request Context
+
+The orchestration router does not read actor or tenant identity from framework-local context keys.
+Pass explicit hooks when you want tenant scoping, actor metadata, or run-level authorization:
+
+```ts
+import type { Context } from 'hono';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
+import type { OrchestrationRunAuthorizationInput } from '@lastshotlabs/slingshot-orchestration';
+
+declare const adapter: import('@lastshotlabs/slingshot-orchestration-engine').OrchestrationAdapter;
+declare const tasks: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask[];
+declare const workflows: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedWorkflow[];
+declare const requireAdmin: import('hono').MiddlewareHandler;
+
+const orchestrationPackage = createOrchestrationPackage({
+  adapter,
+  tasks,
+  workflows,
+  routes: true,
+  routeMiddleware: [requireAdmin],
+  resolveRequestContext(c: Context) {
+    const tenantId = c.req.header('x-tenant-id');
+    if (!tenantId) {
+      throw new OrchestrationError('VALIDATION_FAILED', 'missing x-tenant-id');
+    }
+    return {
+      tenantId,
+      actorId: c.req.header('x-actor-id') ?? undefined,
+      metadata: { source: 'ops-api' },
+    };
+  },
+  authorizeRun({ context, run }: OrchestrationRunAuthorizationInput) {
+    return run.tenantId === undefined || run.tenantId === context.tenantId;
+  },
+});
+```
+
+`resolveRequestContext()` controls what request-scoped tenant and actor metadata gets stamped onto
+runs. `authorizeRun()` controls read/cancel/signal/list visibility without coupling the router to
+any specific auth package or actor model.
+
+`resolveRequestContext()` can also stamp:
+
+- `tags`, which merge into run tags
+- `metadata`, which merges into run metadata
+- `actorId`, which is written into run metadata automatically
+
+## HTTP examples
+
+Start a task run:
+
+```bash
+curl -X POST http://localhost:3000/orchestration/tasks/resize-image/runs \
+  -H 'content-type: application/json' \
+  -H 'x-tenant-id: tenant-a' \
+  -H 'x-actor-id: user-123' \
+  -H 'Idempotency-Key: resize:asset_42' \
+  -d '{ "input": { "assetId": "asset_42" } }'
+```
+
+Typical `202` response:
+
+```json
+{
+  "id": "run_01ABC...",
+  "type": "task",
+  "name": "resize-image",
+  "status": "pending",
+  "links": {
+    "run": "/orchestration/runs/run_01ABC..."
+  }
+}
+```
+
+List visible runs:
+
+```bash
+curl 'http://localhost:3000/orchestration/runs?status=running&limit=25' \
+  -H 'x-tenant-id: tenant-a' \
+  -H 'x-actor-id: user-123'
+```
+
+## Events
+
+This package also augments `SlingshotEventMap` with orchestration lifecycle events, so plugins can
+subscribe with full typing:
+
+```ts
+bus.on('orchestration.workflow.completed', async ({ runId, workflow, durationMs }) => {
+  console.log('workflow completed', runId, workflow, durationMs);
+});
+```
+
+## Handlers note
+
+Tasks and workflows are passed directly to `createOrchestrationPackage({ tasks, workflows })`.
+Route config (`routeMiddleware`, `resolveRequestContext`, `authorizeRun`) is supplied via the same
+package config and resolved at package construction time.

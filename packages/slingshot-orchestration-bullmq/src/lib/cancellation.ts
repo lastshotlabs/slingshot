@@ -13,7 +13,7 @@ import {
   type Run,
   type StepRun,
   type WorkflowRun,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { mapBullMQStatus } from '../statusMap';
 
 // ---------------------------------------------------------------------------

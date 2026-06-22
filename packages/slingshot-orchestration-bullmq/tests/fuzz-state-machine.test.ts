@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 // ---------------------------------------------------------------------------
 // BullMQ mock with controllable failure injection

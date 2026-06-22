@@ -22,7 +22,7 @@
         "@faker-js/faker": "^10.4.0",
         "@lastshotlabs/slingshot-orchestration": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-bullmq": "workspace:*",
-        "@lastshotlabs/slingshot-orchestration-plugin": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-temporal": "workspace:*",
         "@react-email/render": "^2.0.4",
         "@simplewebauthn/server": "^13.1.1",
@@ -80,7 +80,7 @@
         "@lastshotlabs/slingshot-notifications": "workspace:*",
         "@lastshotlabs/slingshot-orchestration": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-bullmq": "workspace:*",
-        "@lastshotlabs/slingshot-orchestration-plugin": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-temporal": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",
         "@lastshotlabs/slingshot-postgres": "workspace:*",
@@ -112,7 +112,7 @@
         "@lastshotlabs/slingshot-notifications",
         "@lastshotlabs/slingshot-orchestration",
         "@lastshotlabs/slingshot-orchestration-bullmq",
-        "@lastshotlabs/slingshot-orchestration-plugin",
+        "@lastshotlabs/slingshot-orchestration-engine",
         "@lastshotlabs/slingshot-orchestration-temporal",
         "@lastshotlabs/slingshot-permissions",
         "@lastshotlabs/slingshot-postgres",
@@ -202,13 +202,25 @@
       },
       "peerDependencies": {
         "@aws-sdk/client-s3": ">=3.0",
+        "@aws-sdk/lib-storage": "*",
         "@aws-sdk/s3-request-presigner": ">=3.0",
+        "better-sqlite3": "*",
         "hono": ">=4.12.14 <5",
+        "ioredis": "*",
+        "mongoose": "*",
+        "pg": "*",
+        "sharp": "*",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
         "@aws-sdk/client-s3",
+        "@aws-sdk/lib-storage",
         "@aws-sdk/s3-request-presigner",
+        "better-sqlite3",
+        "ioredis",
+        "mongoose",
+        "pg",
+        "sharp",
       ],
     },
     "packages/slingshot-auth": {
@@ -271,9 +283,19 @@
       },
       "peerDependencies": {
         "@lastshotlabs/slingshot-permissions": "workspace:*",
+        "better-sqlite3": "*",
         "hono": ">=4.12.14 <5",
+        "ioredis": "*",
+        "mongoose": "*",
+        "pg": "*",
         "zod": ">=4.0 <5",
       },
+      "optionalPeers": [
+        "better-sqlite3",
+        "ioredis",
+        "mongoose",
+        "pg",
+      ],
     },
     "packages/slingshot-community": {
       "name": "@lastshotlabs/slingshot-community",
@@ -472,9 +494,19 @@
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
       "peerDependencies": {
+        "@aws-sdk/client-ses": "*",
+        "@react-email/render": "*",
+        "bullmq": "*",
         "hono": ">=4.12.14 <5",
+        "ioredis": "*",
         "zod": ">=4.0 <5",
       },
+      "optionalPeers": [
+        "@aws-sdk/client-ses",
+        "@react-email/render",
+        "bullmq",
+        "ioredis",
+      ],
     },
     "packages/slingshot-notifications": {
       "name": "@lastshotlabs/slingshot-notifications",
@@ -516,6 +548,31 @@
     },
     "packages/slingshot-orchestration": {
       "name": "@lastshotlabs/slingshot-orchestration",
+      "version": "0.0.2",
+      "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
+      },
+      "peerDependencies": {
+        "hono": ">=4.12.14 <5",
+        "zod": ">=4.0 <5",
+      },
+    },
+    "packages/slingshot-orchestration-bullmq": {
+      "name": "@lastshotlabs/slingshot-orchestration-bullmq",
+      "version": "0.0.3",
+      "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
+      },
+      "peerDependencies": {
+        "bullmq": ">=5 <6",
+        "ioredis": ">=5 <6",
+        "zod": ">=4.0 <5",
+      },
+    },
+    "packages/slingshot-orchestration-engine": {
+      "name": "@lastshotlabs/slingshot-orchestration-engine",
       "version": "0.0.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
@@ -525,37 +582,12 @@
         "zod": ">=4.0 <5",
       },
     },
-    "packages/slingshot-orchestration-bullmq": {
-      "name": "@lastshotlabs/slingshot-orchestration-bullmq",
-      "version": "0.0.3",
-      "dependencies": {
-        "@lastshotlabs/slingshot-core": "workspace:*",
-        "@lastshotlabs/slingshot-orchestration": "workspace:*",
-      },
-      "peerDependencies": {
-        "bullmq": ">=5 <6",
-        "ioredis": ">=5 <6",
-        "zod": ">=4.0 <5",
-      },
-    },
-    "packages/slingshot-orchestration-plugin": {
-      "name": "@lastshotlabs/slingshot-orchestration-plugin",
-      "version": "0.0.2",
-      "dependencies": {
-        "@lastshotlabs/slingshot-core": "workspace:*",
-        "@lastshotlabs/slingshot-orchestration": "workspace:*",
-      },
-      "peerDependencies": {
-        "hono": ">=4.12.14 <5",
-        "zod": ">=4.0 <5",
-      },
-    },
     "packages/slingshot-orchestration-temporal": {
       "name": "@lastshotlabs/slingshot-orchestration-temporal",
       "version": "0.0.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
-        "@lastshotlabs/slingshot-orchestration": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
       },
       "devDependencies": {
         "@temporalio/testing": "^1.16.0",
@@ -727,13 +759,17 @@
       },
       "peerDependencies": {
         "@lastshotlabs/slingshot-entity": "workspace:*",
+        "bullmq": "*",
         "hono": ">=4.12.14 <5",
+        "ioredis": "*",
         "mongoose": ">=9.0 <10",
         "pg": "^8.20.0",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
         "@lastshotlabs/slingshot-entity",
+        "bullmq",
+        "ioredis",
         "mongoose",
         "pg",
       ],
@@ -1134,7 +1170,7 @@
 
     "@lastshotlabs/slingshot-orchestration-bullmq": ["@lastshotlabs/slingshot-orchestration-bullmq@workspace:packages/slingshot-orchestration-bullmq"],
 
-    "@lastshotlabs/slingshot-orchestration-plugin": ["@lastshotlabs/slingshot-orchestration-plugin@workspace:packages/slingshot-orchestration-plugin"],
+    "@lastshotlabs/slingshot-orchestration-engine": ["@lastshotlabs/slingshot-orchestration-engine@workspace:packages/slingshot-orchestration-engine"],
 
     "@lastshotlabs/slingshot-orchestration-temporal": ["@lastshotlabs/slingshot-orchestration-temporal@workspace:packages/slingshot-orchestration-temporal"],
 

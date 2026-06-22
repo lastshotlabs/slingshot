@@ -1,4 +1,4 @@
-import type { RunFilter, RunOptions } from '@lastshotlabs/slingshot-orchestration';
+import type { RunFilter, RunOptions } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export const SLINGSHOT_KIND_SEARCH_ATTRIBUTE = 'SlingshotKind';
 export const SLINGSHOT_NAME_SEARCH_ATTRIBUTE = 'SlingshotName';

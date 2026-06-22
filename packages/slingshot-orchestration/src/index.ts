@@ -1,84 +1,45 @@
+import './events';
+
 /**
- * Portable orchestration surface for tasks, workflows, and built-in adapters.
+ * Slingshot-specific integration surface for the portable orchestration runtime.
  */
-export {
-  OrchestrationError,
-  OrchestrationTimeoutError,
-  OrchestrationAdapterError,
-  OrchestrationRunNotFoundError,
-} from './errors';
+export { createOrchestrationPackage } from './plugin';
 /**
- * Error raised when a workflow lifecycle hook fails.
+ * Runtime lookup helpers used by Slingshot integrations.
  */
-export { WorkflowHookError } from './engine/workflowRunner';
+export { getOrchestration, getOrchestrationOrNull } from './context';
 /**
- * Define a portable orchestration task with typed input, output, and handler logic.
+ * Stable package name (`'slingshot-orchestration'`). Use this when
+ * declaring `dependencies: [...]` on a downstream plugin or package so the
+ * orchestration runtime is resolved before your hooks run. For runtime access
+ * to the orchestration handle itself, resolve `OrchestrationRuntimeCap` via
+ * `ctx.capabilities.require(...)`.
  */
-export { defineTask } from './defineTask';
+export { ORCHESTRATION_PLUGIN_STATE_KEY } from './context';
 /**
- * Define workflows and compose portable workflow steps, sleeps, and parallel branches.
+ * Provider-owned package contract for cross-package consumers.
  */
-export { defineWorkflow, parallel, sleep, step, stepResult } from './defineWorkflow';
+export { Orchestration, OrchestrationRuntimeCap } from './public';
 /**
- * Create the runtime wrapper that executes tasks and workflows against a selected adapter.
+ * Create the default Slingshot event sink used by orchestration adapters and workers.
  */
-export { createOrchestrationRuntime } from './runtime';
+export { createSlingshotEventSink } from './eventSink';
 /**
- * Create the in-memory orchestration adapter for local development and tests.
+ * Validate the declarative orchestration plugin options accepted by the package
+ * factory.
  */
-export { createMemoryAdapter } from './adapters/memory';
+export { orchestrationPluginConfigSchema } from './validation';
+/** Typed error classes thrown by the orchestration plugin integration layer. */
+export { InvalidResolverResultError } from './errors';
 /**
- * Create the SQLite-backed orchestration adapter for durable single-node execution.
- */
-export { createSqliteAdapter } from './adapters/sqlite';
-/**
- * Shared run-handle helpers for adapter implementations and consumers.
- */
-export { createCachedRunHandle, generateRunId } from './adapter';
-/**
- * Shared idempotency key scoping helper used by adapter implementations.
- */
-export { createIdempotencyScope } from './idempotency';
-/**
- * Public task, workflow, adapter, run, and capability types for the portable orchestration layer.
+ * Public plugin option types for Slingshot orchestration composition.
  */
 export type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-  CancelOutcome,
-  CoreOrchestrationAdapter,
-  ObservabilityCapability,
-  OrchestrationAdapter,
-  OrchestrationCapability,
-  OrchestrationErrorCode,
-  OrchestrationEventMap,
-  OrchestrationEventSink,
-  OrchestrationRuntime,
-  OrchestrationRuntimeOptions,
-  ParallelEntry,
-  ProgressCapability,
-  ResolvedTask,
-  ResolvedWorkflow,
-  RetryPolicy,
-  Run,
-  RunError,
-  RunFilter,
-  RunHandle,
-  RunOptions,
-  RunProgress,
-  RunStatus,
-  ScheduleCapability,
-  ScheduleHandle,
-  SignalCapability,
-  SleepEntry,
-  SlingshotLogger,
-  StepEntry,
-  StepInputContext,
-  StepOptions,
-  StepRun,
-  TaskContext,
-  TaskDefinition,
-  WorkflowDefinition,
-  WorkflowEntry,
-  WorkflowRun,
+  ConfigurableOrchestrationPluginOptions,
+  OrchestrationPluginOptions,
+  OrchestrationRequestContext,
+  OrchestrationRequestContextResolver,
+  OrchestrationRunAuthorizer,
+  OrchestrationRunAuthorizationInput,
+  ResolvedOrchestrationPluginOptions,
 } from './types';

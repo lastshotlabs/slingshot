@@ -12,7 +12,7 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
-- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration-plugin`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
+- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
 - **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
@@ -61,7 +61,7 @@ Shared base layer:
 
 Packages — 15 `definePackage(...)`-authored modules consumed through `packages:`:
 
-      |-- slingshot-emoji              slingshot-search             slingshot-orchestration-plugin
+      |-- slingshot-emoji              slingshot-search             slingshot-orchestration
       |-- slingshot-interactions       slingshot-notifications      slingshot-polls
       |-- slingshot-push               slingshot-organizations      slingshot-assets
       |-- slingshot-permissions        slingshot-ssr                slingshot-community
@@ -74,7 +74,7 @@ Plugins — 11 plugin-tier `SlingshotPlugin` factories consumed through `plugins
       `-- slingshot-deep-links  slingshot-embeds  slingshot-gifs
 
 Adapters and runtime backends (not authored as packages or plugins themselves):
-`slingshot-postgres`, `slingshot-bullmq`, `slingshot-kafka`, `slingshot-orchestration`,
+`slingshot-postgres`, `slingshot-bullmq`, `slingshot-kafka`, `slingshot-orchestration-engine`,
 `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-ssg`.
 
 Runtime packages: `packages/runtime-bun/`, `packages/runtime-node/`, `packages/runtime-edge/`

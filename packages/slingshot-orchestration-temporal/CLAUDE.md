@@ -27,7 +27,7 @@ run listing, and deterministic workflow execution via Temporal's durable executi
 
 ## Connections
 
-- **Imports from**: `@lastshotlabs/slingshot-orchestration` (adapter contract, types, errors, `createCachedRunHandle`, provider registry), `@lastshotlabs/slingshot-orchestration/provider` (provider registry types), `@lastshotlabs/slingshot-core` (`withTimeout`), `@temporalio/client`, `@temporalio/worker`, `@temporalio/common`, `zod`
+- **Imports from**: `@lastshotlabs/slingshot-orchestration-engine` (adapter contract, types, errors, `createCachedRunHandle`, provider registry), `@lastshotlabs/slingshot-orchestration-engine/provider` (provider registry types), `@lastshotlabs/slingshot-core` (`withTimeout`), `@temporalio/client`, `@temporalio/worker`, `@temporalio/common`, `zod`
 - **Imported by**: app `app.config.ts` files when configuring a Temporal-backed orchestration adapter
 
 ## Common Tasks

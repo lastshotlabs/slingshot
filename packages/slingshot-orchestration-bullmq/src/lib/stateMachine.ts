@@ -10,8 +10,8 @@ import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
   OrchestrationEventSink,
-} from '@lastshotlabs/slingshot-orchestration';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 import { bullmqBackoffStrategy } from '../taskRuntime';
 import { createBullMQTaskProcessor } from '../taskWorker';
 import { createBullMQWorkflowProcessor } from '../workflowWorker';

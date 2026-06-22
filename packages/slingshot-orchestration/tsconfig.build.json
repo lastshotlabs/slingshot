@@ -7,7 +7,11 @@
     "outDir": "dist",
     "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
     "rootDir": ".",
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-orchestration-engine": ["../slingshot-orchestration-engine/dist/src/index.d.ts"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

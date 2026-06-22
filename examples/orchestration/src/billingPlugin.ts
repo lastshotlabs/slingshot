@@ -2,7 +2,7 @@ import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
 import {
   ORCHESTRATION_PLUGIN_STATE_KEY,
   getOrchestration,
-} from '@lastshotlabs/slingshot-orchestration-plugin';
+} from '@lastshotlabs/slingshot-orchestration';
 import { processInvoiceWorkflow } from './orchestration.ts';
 
 export function createBillingApiPlugin(): SlingshotPlugin {

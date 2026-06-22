@@ -1,5 +1,5 @@
 /** Errors thrown by the BullMQ orchestration adapter. */
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export { classifyOrchestrationError, type ErrorClassification } from './errorClassification';
 export { OrchestrationAdapterDisposedError } from './adapter';

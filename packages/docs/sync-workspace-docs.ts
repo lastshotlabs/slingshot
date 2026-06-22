@@ -24,10 +24,10 @@ const corePathPackages = new Set(['slingshot', 'slingshot-core', 'slingshot-enti
 const productionPathPackages = new Set([
   'slingshot-permissions',
   'slingshot-organizations',
-  'slingshot-orchestration',
+  'slingshot-orchestration-engine',
   'slingshot-orchestration-bullmq',
   'slingshot-orchestration-temporal',
-  'slingshot-orchestration-plugin',
+  'slingshot-orchestration',
   'slingshot-bullmq',
   'slingshot-assets',
   'slingshot-search',

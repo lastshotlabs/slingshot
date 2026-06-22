@@ -3,9 +3,9 @@
 // orchestration adapter.
 // ---------------------------------------------------------------------------
 import type { Queue } from 'bullmq';
-import type { ScheduleHandle } from '@lastshotlabs/slingshot-orchestration';
-import { generateRunId } from '@lastshotlabs/slingshot-orchestration';
-import type { AnyResolvedTask } from '@lastshotlabs/slingshot-orchestration';
+import type { ScheduleHandle } from '@lastshotlabs/slingshot-orchestration-engine';
+import { generateRunId } from '@lastshotlabs/slingshot-orchestration-engine';
+import type { AnyResolvedTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 // ---------------------------------------------------------------------------
 // Scheduling state

@@ -12,8 +12,8 @@ import type {
   RunProgress,
   RunStatus,
   StepRun,
-} from '@lastshotlabs/slingshot-orchestration';
-import type { ProviderTaskManifest } from '@lastshotlabs/slingshot-orchestration/provider';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import type { ProviderTaskManifest } from '@lastshotlabs/slingshot-orchestration-engine/provider';
 import type {
   EmitOrchestrationEventArgs,
   ExecuteSlingshotTaskArgs,

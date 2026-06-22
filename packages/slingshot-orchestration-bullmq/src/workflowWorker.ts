@@ -1,14 +1,14 @@
 import type { Job, Queue, QueueEvents } from 'bullmq';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import { OrchestrationError, generateRunId } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError, generateRunId } from '@lastshotlabs/slingshot-orchestration-engine';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
   OrchestrationEventSink,
   RunError,
   StepEntry,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { createJobRetryOptions, resolveTaskRuntimeConfig } from './taskRuntime';
 
 function toRunError(error: unknown): RunError {

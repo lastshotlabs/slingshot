@@ -1,5 +1,5 @@
 import type { BackoffStrategy, JobsOptions } from 'bullmq';
-import type { AnyResolvedTask, RetryPolicy } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, RetryPolicy } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export interface TaskRuntimeConfig {
   retry: RetryPolicy;

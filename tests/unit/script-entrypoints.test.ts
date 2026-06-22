@@ -305,7 +305,7 @@ describe('script entrypoints', () => {
           writeFileSync(
             join(coverageDir, 'lcov.info'),
             [
-              'SF:packages/slingshot-orchestration/src/adapters/sqlite.ts',
+              'SF:packages/slingshot-orchestration-engine/src/adapters/sqlite.ts',
               'LF:1',
               'LH:1',
               'end_of_record',
@@ -326,7 +326,7 @@ describe('script entrypoints', () => {
       'run',
     ]);
     expect(readFileSync(join(tempDir, 'orchestration-coverage', 'lcov.info'), 'utf8')).toContain(
-      'SF:packages/slingshot-orchestration/src/adapters/sqlite.ts',
+      'SF:packages/slingshot-orchestration-engine/src/adapters/sqlite.ts',
     );
 
     const suiteRoot = join('.tmp', 'run-coverage-script-test');

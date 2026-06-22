@@ -20,7 +20,7 @@ import { Queue } from 'bullmq';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Redis } from 'ioredis';
 import { z } from 'zod';
-import { defineTask, defineWorkflow, step } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask, defineWorkflow, step } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBullMQOrchestrationAdapter } from '../../packages/slingshot-orchestration-bullmq/src/adapter';
 
 // ─────────────────────────────────────────────────────────────────────────────

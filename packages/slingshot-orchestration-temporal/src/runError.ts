@@ -1,4 +1,4 @@
-import type { RunError } from '@lastshotlabs/slingshot-orchestration';
+import type { RunError } from '@lastshotlabs/slingshot-orchestration-engine';
 
 /**
  * Convert an unknown thrown value into the portable orchestration `RunError` shape.

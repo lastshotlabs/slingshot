@@ -6,11 +6,11 @@ import {
   parallel,
   sleep,
   step,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBullMQWorkflowProcessor } from '../src/workflowWorker';
 
 /**

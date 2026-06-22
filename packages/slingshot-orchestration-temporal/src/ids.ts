@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { generateRunId } from '@lastshotlabs/slingshot-orchestration';
+import { generateRunId } from '@lastshotlabs/slingshot-orchestration-engine';
 
 /**
  * Derive the Temporal workflow ID used for a portable run.

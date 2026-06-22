@@ -19,8 +19,8 @@ memory, SQLite, or BullMQ. You define the work once, then swap adapters as infra
 
 | Package                                          | Role                                                                        |
 | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| `@lastshotlabs/slingshot-orchestration`          | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
-| `@lastshotlabs/slingshot-orchestration-plugin`   | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
+| `@lastshotlabs/slingshot-orchestration-engine`          | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
+| `@lastshotlabs/slingshot-orchestration`   | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
 | `@lastshotlabs/slingshot-orchestration-bullmq`   | BullMQ-backed adapter for Redis deployments                                 |
 | `@lastshotlabs/slingshot-orchestration-temporal` | Temporal-backed adapter and worker supervisor for distributed orchestration |
 
@@ -51,7 +51,7 @@ import {
   createMemoryAdapter,
   createOrchestrationRuntime,
   defineTask,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 const resizeImage = defineTask({
   name: 'resize-image',
@@ -73,8 +73,8 @@ For Slingshot integration:
 ```typescript
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 
 const resizeImage = defineTask({
   name: 'resize-image',
@@ -110,7 +110,7 @@ Manifest-driven orchestration is now supported.
 - You can still define tasks and workflows directly in TypeScript and pass them into the runtime.
 - `createServer()` loads `ResolvedTask` and `ResolvedWorkflow`
   exports from the handlers file or handlers directory.
-- The built-in `slingshot-orchestration` plugin resolves task and workflow names from that registry
+- The built-in `slingshot-orchestration-engine` plugin resolves task and workflow names from that registry
   before the plugin is instantiated.
 
 That means orchestration definitions stay in code alongside the rest of the app config.

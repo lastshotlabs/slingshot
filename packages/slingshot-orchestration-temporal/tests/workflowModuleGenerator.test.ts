@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
-import type { OrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
+import type { OrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration-engine/provider';
 import {
   generateDirectoryDefinitionsModule,
   generateTemporalWorkflowModule,

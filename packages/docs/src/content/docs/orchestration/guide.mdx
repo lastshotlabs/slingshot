@@ -20,7 +20,7 @@ an adapter, and then use the runtime either directly or through the
 
 ```typescript
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export const capturePayment = defineTask({
   name: 'capture-payment',
@@ -54,7 +54,7 @@ import {
   parallel,
   step,
   stepResult,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -103,7 +103,7 @@ import {
   type AnyResolvedWorkflow,
   createMemoryAdapter,
   createOrchestrationRuntime,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -137,9 +137,9 @@ optionally, exposed over protected HTTP routes.
 
 ```typescript
 import type { MiddlewareHandler } from 'hono';
-import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
-import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -172,11 +172,11 @@ without going through the HTTP API:
 
 ```typescript
 import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   ORCHESTRATION_PLUGIN_STATE_KEY,
   getOrchestration,
-} from '@lastshotlabs/slingshot-orchestration-plugin';
+} from '@lastshotlabs/slingshot-orchestration';
 
 declare const processInvoiceWorkflow: AnyResolvedWorkflow;
 

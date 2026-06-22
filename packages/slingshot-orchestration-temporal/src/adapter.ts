@@ -18,8 +18,8 @@ import type {
   RunOptions,
   ScheduleHandle,
   WorkflowRun,
-} from '@lastshotlabs/slingshot-orchestration';
-import { OrchestrationError, createCachedRunHandle } from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { OrchestrationError, createCachedRunHandle } from '@lastshotlabs/slingshot-orchestration-engine';
 import { toRunError, wrapTemporalError } from './errors';
 import { deriveTemporalRunId } from './ids';
 import {

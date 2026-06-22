@@ -21,7 +21,7 @@ execution, timers, retries, schedules, visibility, and worker coordination to Te
 - A Temporal service or Temporal Cloud namespace
 - `@temporalio/client` on the server side
 - `@temporalio/worker` on the worker side
-- `@lastshotlabs/slingshot-orchestration` for the portable task/workflow definitions
+- `@lastshotlabs/slingshot-orchestration-engine` for the portable task/workflow definitions
 
 ```ts
 import { Client, Connection } from '@temporalio/client';
@@ -31,7 +31,7 @@ import {
   defineWorkflow,
   step,
   stepResult,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   createTemporalOrchestrationAdapter,
   createTemporalOrchestrationWorker,
@@ -92,7 +92,7 @@ void worker.run();
 
 - Choose Temporal when workflow state is a system of record, not just a job queue.
 - Choose Temporal when long-running quoting, underwriting, ordering, approval, or fulfillment flows need durable timers, signals, and queryable execution history.
-- Keep domain services outside the adapter. Temporal still runs the same portable task and workflow definitions from `@lastshotlabs/slingshot-orchestration`; your worker loads those definitions and task handlers call your real service layer.
+- Keep domain services outside the adapter. Temporal still runs the same portable task and workflow definitions from `@lastshotlabs/slingshot-orchestration-engine`; your worker loads those definitions and task handlers call your real service layer.
 
 ## Common Customization
 

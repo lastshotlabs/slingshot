@@ -4,8 +4,8 @@ import {
   TimeoutFailure,
   WorkflowFailedError,
 } from '@temporalio/client';
-import type { OrchestrationErrorCode } from '@lastshotlabs/slingshot-orchestration';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import type { OrchestrationErrorCode } from '@lastshotlabs/slingshot-orchestration-engine';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export { toRunError } from './runError';
 

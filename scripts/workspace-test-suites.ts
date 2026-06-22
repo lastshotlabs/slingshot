@@ -107,9 +107,9 @@ export const productionReadinessPackageNames = new Set([
   'slingshot-kafka',
   'slingshot-mail',
   'slingshot-notifications',
-  'slingshot-orchestration',
+  'slingshot-orchestration-engine',
   'slingshot-orchestration-bullmq',
-  'slingshot-orchestration-plugin',
+  'slingshot-orchestration',
   'slingshot-orchestration-temporal',
   'slingshot-organizations',
   'slingshot-permissions',
@@ -145,10 +145,10 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
   'slingshot-orchestration-temporal': {
     coverageTestFiles: ['tests/isolated/temporal-activities-hook-errors.test.ts'],
   },
-  'slingshot-orchestration': {
+  'slingshot-orchestration-engine': {
     coverageTestFiles: [],
     coverageCommand: ['scripts/run-orchestration-coverage.ts'],
-    coverageIgnoredGlobs: ['packages/slingshot-orchestration/src/adapters/sqlite.ts'],
+    coverageIgnoredGlobs: ['packages/slingshot-orchestration-engine/src/adapters/sqlite.ts'],
   },
   'slingshot-webhooks': {
     coverageTestFiles: [

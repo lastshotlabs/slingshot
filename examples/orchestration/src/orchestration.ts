@@ -7,7 +7,7 @@ import {
   parallel,
   step,
   stepResult,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 type ProcessInvoiceWorkflowInput = {
   invoiceId: string;

@@ -1,11 +1,11 @@
 import type { Job } from 'bullmq';
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBullMQTaskProcessor } from '../src/taskWorker';
 
 /**

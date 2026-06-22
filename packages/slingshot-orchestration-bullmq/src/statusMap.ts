@@ -1,5 +1,5 @@
 import type { JobState } from 'bullmq';
-import type { RunStatus } from '@lastshotlabs/slingshot-orchestration';
+import type { RunStatus } from '@lastshotlabs/slingshot-orchestration-engine';
 
 /**
  * Map BullMQ job states onto the portable orchestration run status enum.

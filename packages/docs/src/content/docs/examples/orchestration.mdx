@@ -30,7 +30,7 @@ import {
   parallel,
   step,
   stepResult,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const generateInvoice: AnyResolvedTask;
 declare const recordLedgerEntry: AnyResolvedTask;
@@ -109,8 +109,8 @@ import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
   createMemoryAdapter,
-} from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 
 declare const orchestrationTasks: AnyResolvedTask[];
 declare const orchestrationWorkflows: AnyResolvedWorkflow[];
@@ -150,11 +150,11 @@ export function buildAppConfig() {
 
 ```typescript title="src/billingPlugin.ts"
 import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   ORCHESTRATION_PLUGIN_STATE_KEY,
   getOrchestration,
-} from '@lastshotlabs/slingshot-orchestration-plugin';
+} from '@lastshotlabs/slingshot-orchestration';
 
 declare const processInvoiceWorkflow: AnyResolvedWorkflow;
 

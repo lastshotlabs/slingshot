@@ -1,131 +1,182 @@
 import { z } from 'zod';
 
-/**
- * Validation schema for portable retry policies shared by tasks and workflow steps.
- */
-export const retryPolicySchema = z
+const manifestHandlerRefSchema = z
   .object({
-    maxAttempts: z
-      .number()
-      .int()
-      .positive()
-      .describe('Maximum attempts including the initial attempt.'),
-    backoff: z
-      .enum(['fixed', 'exponential'])
+    handler: z
+      .string()
+      .min(1)
+      .describe('Named handler reference resolved by an external registry.'),
+    params: z
+      .record(z.string(), z.unknown())
       .optional()
-      .describe('Delay strategy used between retry attempts.'),
-    delayMs: z
-      .number()
-      .int()
-      .nonnegative()
-      .optional()
-      .describe('Base retry delay in milliseconds.'),
-    maxDelayMs: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Upper bound applied to exponential retry backoff.'),
+      .describe('Static parameters forwarded to the handler at registration time.'),
   })
-  .refine(
-    data =>
-      data.maxDelayMs === undefined ||
-      data.delayMs === undefined ||
-      data.maxDelayMs >= data.delayMs,
-    { message: 'maxDelayMs must be >= delayMs when both are specified.' },
-  );
+  .strict()
+  .describe('Reference to a named handler export with optional static parameters.');
+
+const temporalAdapterManifestConfigSchema = z
+  .object({
+    address: z.string().min(1).describe('Temporal server gRPC address (e.g. "localhost:7233").'),
+    namespace: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Temporal namespace. Defaults to the server default namespace when omitted.'),
+    workflowTaskQueue: z
+      .string()
+      .min(1)
+      .describe('Task queue name used for workflow task polling.'),
+    defaultActivityTaskQueue: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Default task queue for activity tasks when not specified per-activity.'),
+    worker: z
+      .object({
+        buildId: z
+          .string()
+          .min(1)
+          .describe('Worker versioning build identifier for deterministic replay.'),
+        identity: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Human-readable worker identity reported to the Temporal server.'),
+        maxConcurrentWorkflowTaskExecutions: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Maximum concurrent workflow task executions for this worker.'),
+        maxConcurrentActivityTaskExecutions: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Maximum concurrent activity task executions for this worker.'),
+      })
+      .strict()
+      .optional()
+      .describe('Temporal worker configuration options.'),
+    tls: z
+      .object({
+        serverNameOverride: z
+          .string()
+          .optional()
+          .describe('Override the expected TLS server name for certificate verification.'),
+        serverRootCACertificate: z
+          .string()
+          .optional()
+          .describe('PEM-encoded root CA certificate for the Temporal server.'),
+        clientCertPair: z
+          .object({
+            crt: z.string().describe('PEM-encoded client certificate.'),
+            key: z.string().describe('PEM-encoded client private key.'),
+          })
+          .strict()
+          .optional()
+          .describe('mTLS client certificate pair for authenticating with the Temporal server.'),
+      })
+      .strict()
+      .optional()
+      .describe('TLS configuration for connecting to a Temporal server over mTLS.'),
+  })
+  .strict()
+  .describe('Configuration schema for the Temporal orchestration adapter.');
 
 /**
- * Validation schema for portable run options understood by every adapter.
+ * Manifest schema for the Slingshot orchestration plugin configuration.
  */
-export const runOptionsSchema = z.object({
-  idempotencyKey: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Optional idempotency key for deduping runs.'),
-  delay: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe('Optional delay before execution in milliseconds.'),
-  tenantId: z.string().min(1).optional().describe('Optional tenant ID associated with the run.'),
-  priority: z
-    .number()
-    .int()
-    .min(-1_000_000)
-    .max(1_000_000)
-    .optional()
-    .describe('Higher priority runs are dequeued first. Bounded to [-1000000, 1000000].'),
-  tags: z
-    .record(z.string().max(256), z.string().max(1024))
-    .optional()
-    .refine(tags => !tags || Object.keys(tags).length <= 50, {
-      message: 'Maximum 50 tags per run.',
-    })
-    .describe(
-      'Filterable string tags attached to the run. Max 50 tags, keys <=256 chars, values <=1024 chars.',
-    ),
-  metadata: z
-    .record(z.string(), z.unknown())
-    .optional()
-    .describe('Arbitrary metadata stored with the run.'),
-  adapterHints: z
-    .record(z.string(), z.unknown())
-    .optional()
-    .describe('Adapter-specific escape hatch options validated by the adapter itself.'),
-});
+export const orchestrationPluginConfigSchema = z
+  .object({
+    adapter: z
+      .object({
+        type: z
+          .enum(['memory', 'sqlite', 'bullmq', 'temporal'])
+          .describe("Orchestration backend type. Use 'memory' or 'sqlite' for development."),
+        config: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            'Adapter-specific configuration. Shape depends on the chosen adapter type ' +
+              "(e.g. Temporal address/namespace for 'temporal', Redis connection for 'bullmq').",
+          ),
+      })
+      .strict()
+      .describe('Adapter selection and its backend-specific configuration.'),
+    tasks: z
+      .array(z.string().min(1))
+      .describe('Handler names of tasks to register with the orchestration runtime.'),
+    workflows: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Handler names of workflows to register. Omit when only tasks are used.'),
+    routes: z
+      .boolean()
+      .optional()
+      .describe('Mount the orchestration HTTP API routes. Defaults to false.'),
+    routePrefix: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("URL prefix for orchestration routes (e.g. '/orchestration')."),
+    routeTimeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Per-request timeout in milliseconds for orchestration HTTP route adapter calls.'),
+    startMaxAttempts: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Maximum number of attempts for adapter.start() in setupPost. Default: 1 (no retry).',
+      ),
+    startBackoffMs: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Base backoff delay (ms) for adapter.start() retries. Each retry doubles. Default: 1000.',
+      ),
+    routeMiddleware: z
+      .array(manifestHandlerRefSchema)
+      .optional()
+      .describe(
+        'Middleware handler references applied to every orchestration route. ' +
+          'At least one guard is required when routes are enabled.',
+      ),
+    resolveRequestContext: manifestHandlerRefSchema
+      .optional()
+      .describe(
+        'Handler that extracts tenant/actor metadata from an HTTP request for orchestration runs.',
+      ),
+    authorizeRun: manifestHandlerRefSchema
+      .optional()
+      .describe(
+        'Handler that authorizes read, cancel, signal, and list operations on individual runs.',
+      ),
+  })
+  .superRefine((value, ctx) => {
+    if (value.adapter.type === 'temporal') {
+      const parsed = temporalAdapterManifestConfigSchema.safeParse(value.adapter.config ?? {});
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          ctx.addIssue({
+            ...issue,
+            path: ['adapter', 'config', ...issue.path],
+          });
+        }
+      }
+    }
+  });
 
 /**
- * Validation schema for the in-memory adapter factory options.
+ * Typed declarative config accepted by the built-in orchestration plugin resolver.
+ * Kept under its historical `OrchestrationPluginManifestConfig` name for backward
+ * compatibility; the shape itself is the current `definePackage`-era config.
  */
-export const memoryAdapterOptionsSchema = z.object({
-  concurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum concurrent task executions in the in-memory adapter.'),
-  maxPayloadBytes: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      'Maximum serialized JSON payload size in bytes for task/workflow input and task output. Defaults to 1 MiB.',
-    ),
-});
-
-/**
- * Validation schema for the SQLite adapter factory options.
- */
-export const sqliteAdapterOptionsSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .describe('Path to the SQLite database file, or :memory: for an in-memory database.'),
-  concurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum concurrent task executions in the SQLite adapter.'),
-  maxPayloadBytes: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      'Maximum serialized JSON payload size in bytes for task/workflow input and task output. Defaults to 1 MiB.',
-    ),
-});
-
-/**
- * Typed options accepted by `createMemoryAdapter()`.
- */
-export type MemoryAdapterOptions = z.infer<typeof memoryAdapterOptionsSchema>;
-/**
- * Typed options accepted by `createSqliteAdapter()`.
- */
-export type SqliteAdapterOptions = z.infer<typeof sqliteAdapterOptionsSchema>;
+export type OrchestrationPluginManifestConfig = z.infer<typeof orchestrationPluginConfigSchema>;

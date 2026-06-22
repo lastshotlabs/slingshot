@@ -1,4 +1,4 @@
-import type { RunStatus } from '@lastshotlabs/slingshot-orchestration';
+import type { RunStatus } from '@lastshotlabs/slingshot-orchestration-engine';
 
 /**
  * Map Temporal workflow execution states onto the portable orchestration run status enum.

@@ -15,7 +15,7 @@ import { z } from 'zod';
 import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import { createGameEnginePackage, defineGame } from '@lastshotlabs/slingshot-game-engine';
 import { createInteractionsPackage } from '@lastshotlabs/slingshot-interactions';
-import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 import { createOrganizationsPackage } from '@lastshotlabs/slingshot-organizations';
 import { createPushPackage } from '@lastshotlabs/slingshot-push';
 import { createSsrPackage } from '@lastshotlabs/slingshot-ssr';
@@ -53,7 +53,7 @@ describe('capability identity stability across eager publishes', () => {
     await assertStableIdentity(pkg);
   });
 
-  test('slingshot-orchestration-plugin providers return the same reference per resolve', async () => {
+  test('slingshot-orchestration providers return the same reference per resolve', async () => {
     const adapter = {
       registerTask: mock(() => {}),
       registerWorkflow: mock(() => {}),

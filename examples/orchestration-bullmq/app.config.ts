@@ -2,13 +2,13 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { createAuthPlugin } from '../../packages/slingshot-auth/src/index.ts';
 import { createBullMQOrchestrationAdapter } from '../../packages/slingshot-orchestration-bullmq/src/index.ts';
-import { createOrchestrationPackage } from '../../packages/slingshot-orchestration-plugin/src/index.ts';
+import { createOrchestrationPackage } from '../../packages/slingshot-orchestration/src/index.ts';
 import {
   OrchestrationError,
   defineTask,
   defineWorkflow,
   step,
-} from '../../packages/slingshot-orchestration/src/index.ts';
+} from '../../packages/slingshot-orchestration-engine/src/index.ts';
 import { defineApp } from '../../src/index.ts';
 
 /**

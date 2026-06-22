@@ -9,7 +9,7 @@ description: AI-assisted starting point for @lastshotlabs/slingshot-orchestratio
 
 @lastshotlabs/slingshot-orchestration is the feature package in the Slingshot workspace.
 
-Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot
+Slingshot plugin, context helpers, and HTTP routes for the portable orchestration runtime
 
 ## Quick Map
 

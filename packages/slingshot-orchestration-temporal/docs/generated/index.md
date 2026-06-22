@@ -40,7 +40,7 @@ bun add @lastshotlabs/slingshot-orchestration-temporal
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `@lastshotlabs/slingshot-orchestration`: `workspace:*`
+- `@lastshotlabs/slingshot-orchestration-engine`: `workspace:*`
 
 ## Peer Dependencies
 

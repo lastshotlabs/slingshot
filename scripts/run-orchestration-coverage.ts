@@ -28,9 +28,9 @@ async function runCommand(
 
 export async function runOrchestrationCoverage(
   spawnFn: typeof Bun.spawn = Bun.spawn,
-  coverageDir = 'coverage/slingshot-orchestration',
+  coverageDir = 'coverage/slingshot-orchestration-engine',
 ): Promise<number> {
-  const runsDir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-coverage-'));
+  const runsDir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-engine-coverage-'));
   const bunCoverageDir = join(runsDir, 'bun');
   const vitestCoverageDir = join(runsDir, 'vitest');
   const artifacts = [join(bunCoverageDir, 'lcov.info')];
@@ -39,15 +39,15 @@ export async function runOrchestrationCoverage(
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
 
-  const packageTests = await collectFiles('packages/slingshot-orchestration/tests/**/*.test.ts');
+  const packageTests = await collectFiles('packages/slingshot-orchestration-engine/tests/**/*.test.ts');
   if (packageTests.length > 0) {
     const code = await runCommand(
-      'slingshot-orchestration:bun',
+      'slingshot-orchestration-engine:bun',
       [
         process.execPath,
         'scripts/run-coverage-files.ts',
         '--label',
-        'slingshot-orchestration',
+        'slingshot-orchestration-engine',
         '--coverage-dir',
         bunCoverageDir,
         ...packageTests,
@@ -64,7 +64,7 @@ export async function runOrchestrationCoverage(
   );
   if (nodeTests.length > 0) {
     const code = await runCommand(
-      'slingshot-orchestration:vitest-sqlite',
+      'slingshot-orchestration-engine:vitest-sqlite',
       [
         process.execPath,
         'x',
@@ -82,7 +82,7 @@ export async function runOrchestrationCoverage(
         '--coverage.reportsDirectory',
         vitestCoverageDir,
         '--coverage.include',
-        'packages/slingshot-orchestration/src/**/*.ts',
+        'packages/slingshot-orchestration-engine/src/**/*.ts',
         ...nodeTests,
       ],
       spawnFn,

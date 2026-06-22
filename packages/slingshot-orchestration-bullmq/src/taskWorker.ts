@@ -6,8 +6,8 @@ import type {
   OrchestrationEventSink,
   RunError,
   TaskContext,
-} from '@lastshotlabs/slingshot-orchestration';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 import { classifyOrchestrationError } from './errorClassification';
 import { readTaskRuntimeConfig, resolveTaskRuntimeConfig } from './taskRuntime';
 

@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 import type {
   OrchestrationProviderRegistry,
   ProviderTaskManifest,
-} from '@lastshotlabs/slingshot-orchestration/provider';
+} from '@lastshotlabs/slingshot-orchestration-engine/provider';
 
 function toImportPath(fromDir: string, targetPath: string): string {
   const rel = relative(fromDir, targetPath).replace(/\\/g, '/');

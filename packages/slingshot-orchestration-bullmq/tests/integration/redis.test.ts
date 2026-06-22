@@ -12,7 +12,7 @@
  */
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 const REDIS_URL = process.env.REDIS_URL;
 const skipIfRedis = (cond: boolean) => (cond ? test.skip : test);

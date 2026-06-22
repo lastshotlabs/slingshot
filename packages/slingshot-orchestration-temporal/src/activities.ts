@@ -8,7 +8,7 @@ import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
   TaskContext,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import { withTaskConcurrency } from './concurrency';
 import { toRunError } from './errors';
 import { getRegisteredTask, getRegisteredWorkflowHooks } from './workerRegistry';

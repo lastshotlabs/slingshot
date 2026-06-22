@@ -1,0 +1,127 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { z } from 'zod';
+import { defineTask } from '../src/defineTask';
+import { createOrchestrationRuntime } from '../src/runtime';
+
+const sqliteModule = await import('../src/adapters/sqlite').catch(() => null);
+let sqliteRuntimeSupported = false;
+if (sqliteModule) {
+  const probeDir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-engine-probe-'));
+  try {
+    // Bun cannot load better-sqlite3 today, so probe actual adapter construction
+    // instead of assuming support from the current platform name.
+    const adapter = sqliteModule.createSqliteAdapter({
+      path: join(probeDir, 'probe.sqlite'),
+      concurrency: 1,
+    });
+    await adapter.shutdown();
+    sqliteRuntimeSupported = true;
+  } catch {
+    sqliteRuntimeSupported = false;
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true });
+  }
+}
+const sqliteTest = sqliteRuntimeSupported ? test : test.skip;
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
+
+describe('sqlite orchestration adapter', () => {
+  sqliteTest('runs tasks and lists persisted runs when better-sqlite3 is available', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-engine-'));
+    tempDirs.push(dir);
+
+    const dbPath = join(dir, 'orchestration.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    const task = defineTask({
+      name: 'sqlite-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input, ctx) {
+        ctx.reportProgress({ percent: 100, message: 'done' });
+        return { echoed: input.value };
+      },
+    });
+
+    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    const runtime = createOrchestrationRuntime({
+      adapter,
+      tasks: [task],
+    });
+
+    await adapter.start();
+    const handle = await runtime.runTask(
+      'sqlite-task',
+      { value: 'sqlite' },
+      { tenantId: 'tenant-sqlite' },
+    );
+    await expect(handle.result()).resolves.toEqual({ echoed: 'sqlite' });
+
+    const run = await runtime.getRun(handle.id);
+    expect(run?.status).toBe('completed');
+    expect(run?.tenantId).toBe('tenant-sqlite');
+    expect(run?.progress).toEqual({ percent: 100, message: 'done' });
+
+    const listed = await runtime.listRuns({ tenantId: 'tenant-sqlite' });
+    expect(listed.total).toBe(1);
+    expect(listed.runs[0]?.id).toBe(handle.id);
+
+    await adapter.shutdown();
+  });
+
+  sqliteTest('runTask works when destructured from the sqlite adapter', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-engine-'));
+    tempDirs.push(dir);
+
+    const dbPath = join(dir, 'orchestration.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    const task = defineTask({
+      name: 'sqlite-task-destructured',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        return { echoed: input.value };
+      },
+    });
+
+    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    const runtime = createOrchestrationRuntime({
+      adapter,
+      tasks: [task],
+    });
+
+    const { runTask } = adapter;
+    const handle = await runTask('sqlite-task-destructured', { value: 'sqlite' });
+    await expect(handle.result()).resolves.toEqual({ echoed: 'sqlite' });
+    expect((await runtime.getRun(handle.id))?.status).toBe('completed');
+
+    await adapter.shutdown();
+  });
+
+  sqliteTest('shutdown closes the database connection (P-ORCH-4)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-engine-close-'));
+    tempDirs.push(dir);
+
+    const dbPath = join(dir, 'orchestration.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    await adapter.start();
+    await adapter.shutdown();
+
+    // Second shutdown is idempotent: closeDb is guarded against double-close.
+    await adapter.shutdown();
+
+    // After shutdown, attempts to use the runtime should fail because the
+    // underlying database is closed. listRuns goes through better-sqlite3 which
+    // throws once the handle is closed.
+    expect(() => adapter.listRuns({})).toThrow();
+  });
+});

@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-orchestr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-orchestration`
-- Version: `0.0.3`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
-- Description: Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot
+- Description: Slingshot plugin, context helpers, and HTTP routes for the portable orchestration runtime
 - Workspace path: `packages/slingshot-orchestration`
 - Entry point: `packages/slingshot-orchestration/src/index.ts`
 
@@ -25,7 +25,6 @@ bun add @lastshotlabs/slingshot-orchestration
 
 - `.`
 - `./errors`
-- `./provider`
 - `./testing`
 
 ## Package Scripts
@@ -34,17 +33,16 @@ bun add @lastshotlabs/slingshot-orchestration
 - `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
 - `test`: `bun test`
-- `test:integration`: `bun test tests/concurrency-stress.test.ts`
-- `test:unit`: `bun test tests/ --ignore tests/concurrency-stress.test.ts`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `better-sqlite3`: `^12.8.0`
+- `@lastshotlabs/slingshot-orchestration-engine`: `workspace:*`
 
 ## Peer Dependencies
 
+- `hono`: `>=4.12.14 <5`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

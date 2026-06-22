@@ -20,7 +20,7 @@ import {
   createCachedRunHandle,
   createIdempotencyScope,
   generateRunId,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   type CancellationState,
   createCancellationFns,
@@ -472,16 +472,16 @@ export function createBullMQOrchestrationAdapter(
         }
       }
       const filtered: Array<
-        | import('@lastshotlabs/slingshot-orchestration').Run
-        | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
+        | import('@lastshotlabs/slingshot-orchestration-engine').Run
+        | import('@lastshotlabs/slingshot-orchestration-engine').WorkflowRun
       > = (
         [...visibleRuns.values()] as Array<
-          | import('@lastshotlabs/slingshot-orchestration').Run
-          | import('@lastshotlabs/slingshot-orchestration').WorkflowRun
+          | import('@lastshotlabs/slingshot-orchestration-engine').Run
+          | import('@lastshotlabs/slingshot-orchestration-engine').WorkflowRun
         >
       )
         .filter(run => {
-          const r = run as import('@lastshotlabs/slingshot-orchestration').Run;
+          const r = run as import('@lastshotlabs/slingshot-orchestration-engine').Run;
           if (filter?.name && r.name !== filter.name) return false;
           if (filter?.tenantId && r.tenantId !== filter.tenantId) return false;
           if (filter?.status) {
@@ -495,8 +495,8 @@ export function createBullMQOrchestrationAdapter(
         })
         .sort(
           (a, b) =>
-            (b as import('@lastshotlabs/slingshot-orchestration').Run).createdAt.getTime() -
-            (a as import('@lastshotlabs/slingshot-orchestration').Run).createdAt.getTime(),
+            (b as import('@lastshotlabs/slingshot-orchestration-engine').Run).createdAt.getTime() -
+            (a as import('@lastshotlabs/slingshot-orchestration-engine').Run).createdAt.getTime(),
         );
       const offset = filter?.offset ?? 0;
       const limit = filter?.limit ?? 50;

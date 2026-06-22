@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { defineTask } from '../../../packages/slingshot-orchestration/src/defineTask';
+import { defineTask } from '../../../packages/slingshot-orchestration-engine/src/defineTask';
 import {
   defineWorkflow,
   sleep,
   step,
-} from '../../../packages/slingshot-orchestration/src/defineWorkflow';
+} from '../../../packages/slingshot-orchestration-engine/src/defineWorkflow';
 
 const HOOK_LOG_KEY = '__slingshotTemporalHookLog';
 

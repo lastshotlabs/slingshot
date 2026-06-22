@@ -35,12 +35,12 @@ export default defineConfig({
         replacement: `${resolve(rootDir, 'src/scripts')}/$1`,
       },
       {
-        find: /^@lastshotlabs\/slingshot-orchestration\/provider$/,
-        replacement: resolve(rootDir, 'packages/slingshot-orchestration/src/provider/index.ts'),
+        find: /^@lastshotlabs\/slingshot-orchestration-engine\/provider$/,
+        replacement: resolve(rootDir, 'packages/slingshot-orchestration-engine/src/provider/index.ts'),
       },
       {
-        find: /^@lastshotlabs\/slingshot-orchestration\/errors$/,
-        replacement: resolve(rootDir, 'packages/slingshot-orchestration/src/errors.ts'),
+        find: /^@lastshotlabs\/slingshot-orchestration-engine\/errors$/,
+        replacement: resolve(rootDir, 'packages/slingshot-orchestration-engine/src/errors.ts'),
       },
       {
         find: /^@lastshotlabs\/slingshot$/,
@@ -63,12 +63,12 @@ export default defineConfig({
         replacement: resolve(rootDir, 'packages/slingshot-entity/src/index.ts'),
       },
       {
-        find: /^@lastshotlabs\/slingshot-orchestration$/,
-        replacement: resolve(rootDir, 'packages/slingshot-orchestration/src/index.ts'),
+        find: /^@lastshotlabs\/slingshot-orchestration-engine$/,
+        replacement: resolve(rootDir, 'packages/slingshot-orchestration-engine/src/index.ts'),
       },
       {
-        find: /^@lastshotlabs\/slingshot-orchestration-plugin$/,
-        replacement: resolve(rootDir, 'packages/slingshot-orchestration-plugin/src/index.ts'),
+        find: /^@lastshotlabs\/slingshot-orchestration$/,
+        replacement: resolve(rootDir, 'packages/slingshot-orchestration/src/index.ts'),
       },
       {
         find: /^@lastshotlabs\/slingshot-orchestration-bullmq$/,

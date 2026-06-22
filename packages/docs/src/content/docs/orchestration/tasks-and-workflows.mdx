@@ -16,7 +16,7 @@ A task is a named unit of work with:
 
 ```typescript
 import { z } from 'zod';
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export const sendWelcomeEmail = defineTask({
   name: 'send-welcome-email',
@@ -43,7 +43,7 @@ Workflows execute in array order. Parallelism is explicit. There is no DAG autho
 
 ```typescript
 import { z } from 'zod';
-import { defineWorkflow, parallel, step } from '@lastshotlabs/slingshot-orchestration';
+import { defineWorkflow, parallel, step } from '@lastshotlabs/slingshot-orchestration-engine';
 
 export const onboardUser = defineWorkflow({
   name: 'onboard-user',
@@ -101,12 +101,12 @@ After definitions exist, register them with a runtime:
 import {
   createMemoryAdapter,
   createOrchestrationRuntime,
-} from '@lastshotlabs/slingshot-orchestration';
+} from '@lastshotlabs/slingshot-orchestration-engine';
 
-declare const createAccountTask: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
-declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
-declare const provisionPlanTask: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
-declare const onboardUser: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow;
+declare const createAccountTask: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
+declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
+declare const provisionPlanTask: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
+declare const onboardUser: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedWorkflow;
 
 const runtime = createOrchestrationRuntime({
   adapter: createMemoryAdapter({ concurrency: 10 }),

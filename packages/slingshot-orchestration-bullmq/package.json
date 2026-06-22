@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
-    "@lastshotlabs/slingshot-orchestration": "workspace:*"
+    "@lastshotlabs/slingshot-orchestration-engine": "workspace:*"
   },
   "peerDependencies": {
     "bullmq": ">=5 <6",

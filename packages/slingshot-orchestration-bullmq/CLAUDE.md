@@ -20,7 +20,7 @@ and worker-based task execution without changing task or workflow definitions.
 
 ## Connections
 
-- **Imports from**: `@lastshotlabs/slingshot-orchestration` (adapter contract, types, errors, `generateRunId`, `createCachedRunHandle`, `createIdempotencyScope`), `@lastshotlabs/slingshot-core` (`Logger`, `noopLogger`, `withTimeout`), `bullmq`, `zod`
+- **Imports from**: `@lastshotlabs/slingshot-orchestration-engine` (adapter contract, types, errors, `generateRunId`, `createCachedRunHandle`, `createIdempotencyScope`), `@lastshotlabs/slingshot-core` (`Logger`, `noopLogger`, `withTimeout`), `bullmq`, `zod`
 - **Imported by**: app `app.config.ts` files when `adapter.type === 'bullmq'`
 
 ## Common Tasks

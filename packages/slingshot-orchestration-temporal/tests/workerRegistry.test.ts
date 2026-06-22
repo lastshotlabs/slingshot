@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
-import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   clearWorkerRegistries,
   getRegisteredTask,

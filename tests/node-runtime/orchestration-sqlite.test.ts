@@ -10,12 +10,12 @@ import {
   defineTask,
   defineWorkflow,
   step,
-} from '../../packages/slingshot-orchestration/src/index';
+} from '../../packages/slingshot-orchestration-engine/src/index';
 
 let tempDir = '';
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), 'slingshot-orchestration-node-'));
+  tempDir = await mkdtemp(join(tmpdir(), 'slingshot-orchestration-engine-node-'));
 });
 
 afterEach(async () => {

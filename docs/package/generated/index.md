@@ -110,9 +110,9 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-kafka`: `workspace:*`
 - `@lastshotlabs/slingshot-mail`: `workspace:*`
 - `@lastshotlabs/slingshot-notifications`: `workspace:*`
-- `@lastshotlabs/slingshot-orchestration-engine`: `workspace:*`
-- `@lastshotlabs/slingshot-orchestration-bullmq`: `workspace:*`
 - `@lastshotlabs/slingshot-orchestration`: `workspace:*`
+- `@lastshotlabs/slingshot-orchestration-bullmq`: `workspace:*`
+- `@lastshotlabs/slingshot-orchestration-engine`: `workspace:*`
 - `@lastshotlabs/slingshot-orchestration-temporal`: `workspace:*`
 - `@lastshotlabs/slingshot-permissions`: `workspace:*`
 - `@lastshotlabs/slingshot-postgres`: `workspace:*`

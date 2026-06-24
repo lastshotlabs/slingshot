@@ -50,14 +50,3 @@ jobs:
         run: bun scripts/publish.ts --target=github --publish --skip-existing
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure npm for npmjs
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > $HOME/.npmrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npm
-        run: bun scripts/publish.ts --target=npm --publish --skip-existing
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

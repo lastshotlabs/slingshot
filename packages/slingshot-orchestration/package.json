@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-orchestration",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Slingshot plugin, context helpers, and HTTP routes for the portable orchestration runtime",
   "license": "MIT",
   "type": "module",

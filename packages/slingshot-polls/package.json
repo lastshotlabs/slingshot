@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-polls",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Multiple-choice polls attachable to any user content for slingshot",
   "license": "MIT",
   "type": "module",

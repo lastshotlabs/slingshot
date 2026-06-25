@@ -202,7 +202,9 @@ export type { CsrfConfig } from './csrf';
 export {
   SlingshotError,
   HttpError,
+  isHttpError,
   ValidationError,
+  isValidationError,
   UnsupportedAdapterFeatureError,
 } from './errors';
 export { errorResponse } from './errorResponse';

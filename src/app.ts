@@ -57,8 +57,8 @@ import type {
 } from '@lastshotlabs/slingshot-auth';
 import type { AuthConfig, OAuthConfig } from '@lastshotlabs/slingshot-auth';
 import {
-  HttpError,
-  ValidationError,
+  isHttpError,
+  isValidationError,
   attachContext,
   createCoreRegistrar,
   createEventDefinitionRegistry,
@@ -838,8 +838,11 @@ async function mountAppRoutes<T extends object>(
 
   app.onError((err, c) => {
     const reqId = c.get('requestId');
-    // ValidationError extends HttpError — must check first or the details payload is lost
-    if (err instanceof ValidationError) {
+    // Use brand-based guards, not `instanceof`: under Node an HttpError thrown by a
+    // duplicate module instance (ESM/CJS dual-load) is not `instanceof` the class
+    // imported here, which would silently downgrade a 401/404 to a generic 500.
+    // ValidationError extends HttpError — must check first or the details payload is lost.
+    if (isValidationError(err)) {
       const fmt = c.get('validationErrorFormatter');
       try {
         return c.json(fmt(err.issues, reqId), 400);
@@ -847,7 +850,7 @@ async function mountAppRoutes<T extends object>(
         return c.json(defaultValidationErrorFormatter(err.issues, reqId), 400);
       }
     }
-    if (err instanceof HttpError) {
+    if (isHttpError(err)) {
       const body: Record<string, unknown> = { error: err.message, requestId: reqId };
       if (err.code !== undefined) body.code = err.code;
       return c.json(body, err.status as ContentfulStatusCode);

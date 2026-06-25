@@ -40,7 +40,20 @@ export class SlingshotError extends Error {
  * throw new HttpError(404, 'Post not found', 'POST_NOT_FOUND');
  * ```
  */
+/**
+ * Cross-module brand for {@link HttpError}, keyed via the global symbol registry
+ * (`Symbol.for`) so it is identical across every copy of this module. `instanceof`
+ * is unreliable when the same package is loaded more than once in a process —
+ * notably Node's ESM/CJS dual-instance hazard, where an `HttpError` thrown by one
+ * copy is not an `instanceof` the `HttpError` class imported by another. The brand
+ * survives that; see {@link isHttpError}.
+ */
+const HTTP_ERROR_BRAND: unique symbol = Symbol.for('@lastshotlabs/slingshot.HttpError');
+
 export class HttpError extends Error {
+  /** @internal Cross-module brand — see {@link isHttpError}. */
+  readonly [HTTP_ERROR_BRAND] = true;
+
   /**
    * @param status - HTTP status code (e.g. 400, 403, 404, 500).
    * @param message - Human-readable error message sent to the client.
@@ -53,6 +66,21 @@ export class HttpError extends Error {
   ) {
     super(message);
   }
+}
+
+/**
+ * Recognize an {@link HttpError} regardless of which copy of this module created
+ * it. Prefer this over `instanceof HttpError` anywhere an error may cross a module
+ * boundary (framework error handlers, runtime adapters) — under Node, `instanceof`
+ * silently returns `false` for a genuine `HttpError` from a duplicate module
+ * instance, which would otherwise surface a 401/404 as a generic 500.
+ */
+export function isHttpError(err: unknown): err is HttpError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as Record<symbol, unknown>)[HTTP_ERROR_BRAND] === true
+  );
 }
 
 /**
@@ -70,7 +98,15 @@ export class HttpError extends Error {
  * if (!result.success) throw new ValidationError(result.error.issues);
  * ```
  */
+/** Cross-module brand for {@link ValidationError}; see {@link HttpError}'s brand. */
+const VALIDATION_ERROR_BRAND: unique symbol = Symbol.for(
+  '@lastshotlabs/slingshot.ValidationError',
+);
+
 export class ValidationError extends HttpError {
+  /** @internal Cross-module brand — see {@link isValidationError}. */
+  readonly [VALIDATION_ERROR_BRAND] = true;
+
   /** The raw Zod issues that caused validation to fail. */
   public readonly issues: z.core.$ZodIssue[];
   /**
@@ -80,6 +116,18 @@ export class ValidationError extends HttpError {
     super(400, 'Validation failed');
     this.issues = issues;
   }
+}
+
+/**
+ * Recognize a {@link ValidationError} across module boundaries — the duplicate-copy
+ * counterpart to {@link isHttpError}. Check this before {@link isHttpError} so the
+ * structured Zod `issues` payload is not lost (`ValidationError` is also an `HttpError`).
+ */
+export function isValidationError(err: unknown): err is ValidationError {
+  return (
+    isHttpError(err) &&
+    (err as unknown as Record<symbol, unknown>)[VALIDATION_ERROR_BRAND] === true
+  );
 }
 
 /**

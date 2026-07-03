@@ -137,9 +137,11 @@ describe('auth RequestActorResolver upgrade security', () => {
       ).id,
     ).toBe(userId);
 
+    // Browsers cannot set headers on WebSocket connects, so the resolver (which
+    // only runs for WS/SSE upgrade requests) accepts the `token` query param.
     expect(
       (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
-    ).toBeNull();
+    ).toBe(userId);
 
     await runtime.adapter.setSuspended?.(userId, true, 'security hold');
 
@@ -151,6 +153,11 @@ describe('auth RequestActorResolver upgrade security', () => {
           }),
         )
       ).id,
+    ).toBeNull();
+
+    // Suspension applies to query-param tokens too.
+    expect(
+      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
     ).toBeNull();
   });
 

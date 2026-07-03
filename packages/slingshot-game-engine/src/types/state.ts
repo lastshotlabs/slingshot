@@ -141,6 +141,24 @@ export interface GameEngineSessionControls {
   ): Promise<GameEngineActiveSessionSnapshot | null>;
 
   /**
+   * Pause a live session: freeze all timers (preserving remaining time) and
+   * make the input pipeline reject submissions with code `SESSION_PAUSED`.
+   *
+   * Idempotent. Returns the updated snapshot, or `null` when the session is not
+   * currently active.
+   */
+  pauseSession(sessionId: string): GameEngineActiveSessionSnapshot | null;
+
+  /**
+   * Resume a paused session: re-arm all timers with their remaining time and
+   * re-open the input pipeline.
+   *
+   * Idempotent. Returns the updated snapshot, or `null` when the session is not
+   * currently active.
+   */
+  resumeSession(sessionId: string): GameEngineActiveSessionSnapshot | null;
+
+  /**
    * Submit validated input to an active session as if it arrived over the
    * realtime protocol.
    *

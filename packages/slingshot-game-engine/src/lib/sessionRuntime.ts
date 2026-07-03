@@ -35,7 +35,6 @@ import {
   recordPlayerActivity,
   resolveDisconnectConfig,
   resolveTurnBehavior,
-  selectNewHost,
   setGraceTimer,
 } from './disconnect';
 import { getPlayerRooms, resolveRelayTargetsFull, sessionRoom } from './display';
@@ -132,6 +131,20 @@ export interface SessionRuntime {
   players: Map<string, MutablePlayer>;
   channels: Map<string, MutableChannelState>;
   currentRound: number;
+
+  /**
+   * When true the session is paused: all timers are frozen and the input
+   * pipeline rejects submissions with code `SESSION_PAUSED`. Toggled by the
+   * engine's `pauseSession` / `resumeSession` controls.
+   */
+  paused: boolean;
+
+  /**
+   * Reentrancy guard for {@link advancePhase}. Prevents a phase-timeout firing
+   * concurrently with a host-driven advance from double-advancing (both
+   * capturing the same current phase).
+   */
+  advancing: boolean;
 
   readonly publish: (
     room: string,
@@ -249,6 +262,27 @@ export function refreshHandlerContext(runtime: SessionRuntime): SessionRuntime['
 
 function appendReplay(runtime: SessionRuntime, entry: ReplayEntry): void {
   runtime.pendingReplayEntries.push(entry);
+}
+
+/** Stable key for a player's input-sequence dedup cache. */
+function sequenceCacheKey(sessionId: string, userId: string): string {
+  return `${sessionId}:${userId}`;
+}
+
+/**
+ * Reset a player's input-sequence dedup cache (#1).
+ *
+ * The `game:input` sequence contract is "monotonic PER CONNECTION": the client
+ * restarts its counter at 1 on every reconnect / page refresh. The dedup cache
+ * therefore must be bound to the connection, not the session lifetime —
+ * otherwise a fresh seq 1..N collides with acks cached from the previous
+ * socket and inputs are silently dropped (the server returns the stale
+ * accepted:true). Clearing the cache whenever a (re)subscribe establishes a new
+ * connection makes a fresh seq 1 process normally, while genuine in-connection
+ * replays (same socket resending the same seq) are still deduped.
+ */
+function resetSequenceCache(runtime: SessionRuntime, userId: string): void {
+  runtime.sequenceCache.delete(sequenceCacheKey(runtime.sessionId, userId));
 }
 
 function playerIds(runtime: SessionRuntime): string[] {
@@ -417,6 +451,8 @@ export async function createSessionRuntime(
     players,
     channels,
     currentRound,
+    paused: false,
+    advancing: false,
     publish: deps.publish,
     replayStore: deps.replayStore,
     log: deps.log,
@@ -616,6 +652,23 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
 // ── §5.10.4 Phase Advance Flow ───────────────────────────────────
 
 export async function advancePhase(runtime: SessionRuntime): Promise<void> {
+  // Reentrancy guard (#7): if an advance is already in flight, drop this call.
+  // A phase-timeout can fire while a host action / handler-driven advance is
+  // mid-flight; without this both would read the same `currentPhase` and
+  // double-advance (running exit/enter hooks twice, skipping a phase). Dropping
+  // the stale call is safe: the in-flight advance already leaves the current
+  // phase, which is exactly what the second caller wanted. It never awaits
+  // another advance, so handler-driven advances cannot deadlock.
+  if (runtime.advancing) return;
+  runtime.advancing = true;
+  try {
+    await doAdvancePhase(runtime);
+  } finally {
+    runtime.advancing = false;
+  }
+}
+
+async function doAdvancePhase(runtime: SessionRuntime): Promise<void> {
   const { gameDef, phaseState, timerState, replaySeq, sessionId } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
   const currentPhase = phaseState.currentPhase;
@@ -711,14 +764,22 @@ export async function processInputPipeline(
   const { sessionId, gameDef, replaySeq } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
 
+  // Step 0: Reject while paused (#3). Not cached against the sequence — the
+  // client should retry the same sequence once the session resumes.
+  if (runtime.paused) {
+    return rejectInput('SESSION_PAUSED', 'Session is paused.', sequence);
+  }
+
   // Step 1: Get channel state
   const channel = runtime.channels.get(channelName);
   if (!channel || !channel.open) {
     return rejectInput('CHANNEL_NOT_OPEN', `Channel '${channelName}' is not open.`, sequence);
   }
 
-  // Step 2: Sequence dedup
-  const playerKey = `${sessionId}:${userId}`;
+  // Step 2: Sequence dedup (per connection — see resetSequenceCache). The cache
+  // is cleared on every (re)subscribe so a reconnecting client's fresh seq 1 is
+  // processed instead of colliding with acks from its previous socket.
+  const playerKey = sequenceCacheKey(sessionId, userId);
   let playerSeqCache = runtime.sequenceCache.get(playerKey);
   if (!playerSeqCache) {
     playerSeqCache = new Map();
@@ -775,8 +836,25 @@ export async function processInputPipeline(
     return ack;
   }
 
-  // Step 7: Record submission
-  const eligiblePlayerIds = playerIds(runtime);
+  // Step 7: Record submission. Completion eligibility must mirror the
+  // channel's `from` authorization — counting every session player would keep
+  // single-responder collect channels (e.g. one contestant answering) from
+  // ever completing in multi-player sessions.
+  const eligiblePlayerIds = playerIds(runtime).filter(candidateId => {
+    const candidate = runtime.players.get(candidateId);
+    if (!candidate) return false;
+    try {
+      return isAuthorizedForChannel(
+        channel.definition.from,
+        candidateId,
+        toGamePlayerState(candidate),
+        runtime.turnState.activePlayer,
+        readonlyCtx,
+      );
+    } catch {
+      return false;
+    }
+  });
   const result = recordSubmission(channel, userId, data, eligiblePlayerIds);
   if (!result.accepted) {
     return rejectInput(result.code ?? 'INPUT_REJECTED', 'Submission rejected.', sequence);
@@ -1010,23 +1088,13 @@ export async function handleDisconnect(runtime: SessionRuntime, userId: string):
   );
   setGraceTimer(disconnectState, userId, graceTimerHandle);
 
-  // Step 9: Host transfer
-  if (player.isHost) {
-    const newHostId = selectNewHost(allPlayers, userId);
-    if (newHostId) {
-      player.isHost = false;
-      const newHost = runtime.players.get(newHostId);
-      if (newHost) {
-        newHost.isHost = true;
-        runtime.publish(sessionRoom(sessionId), {
-          type: 'game:host.transferred',
-          sessionId,
-          previousHost: userId,
-          newHost: newHostId,
-        });
-      }
-    }
-  }
+  // Step 9: Host role is intentionally NOT auto-transferred on a mere socket
+  // close (#5). Previously any host disconnect handed isHost to the
+  // lowest-joinOrder contestant with no restore path, which corrupted the
+  // roster (a contestant left permanently flagged host and unable to play).
+  // The host keeps their role across a transient disconnect and reclaims their
+  // socket via the (re)subscribe reconnect flow. An intentional handoff still
+  // goes through the explicit REST leave/transfer path (playerLeaveGuard).
 }
 
 function onGraceExpiry(runtime: SessionRuntime, userId: string): void {
@@ -1049,10 +1117,15 @@ export async function handleReconnectFlow(
   const player = runtime.players.get(userId);
   if (!player) return;
 
+  const wasDisconnected = !player.connected || player.disconnectedAt !== null;
   const disconnectedForMs = player.disconnectedAt
     ? Date.now() - player.disconnectedAt.getTime()
     : 0;
   player.connected = true;
+  player.disconnectedAt = null;
+
+  // A reconnect means a new socket, whose input sequence restarts at 1 (#1).
+  resetSequenceCache(runtime, userId);
 
   // Step 2: Cancel grace period
   const graceTimerId = getGraceTimerId(disconnectState, userId);
@@ -1106,7 +1179,83 @@ export async function handleReconnectFlow(
   // Step 5: Send snapshot
   ack({ type: 'game:state.snapshot', ...snapshot });
 
-  // Step 6: Invoke onPlayerReconnected hook
+  // Steps 6 & 7: Fire the reconnected hook + broadcast only when the player was
+  // actually disconnected. A first-time subscribe (never disconnected) still
+  // receives a fresh snapshot above but must not emit a spurious "reconnected"
+  // event to the rest of the table.
+  if (wasDisconnected) {
+    // Step 6: Invoke onPlayerReconnected hook
+    rebuildHandlerContext(runtime);
+    await invokeOnPlayerReconnected(
+      gameDef.hooks,
+      runtime.handlerContext,
+      toGamePlayerState(player),
+      hookError,
+    );
+
+    // Step 7: Broadcast
+    publish(sessionRoom(sessionId), {
+      type: 'game:player.reconnected',
+      sessionId,
+      userId,
+    });
+    appendReplay(
+      runtime,
+      logPlayerReconnected(sessionId, replaySeq, {
+        userId,
+        disconnectedForMs,
+      }),
+    );
+  }
+
+  // Step 8: Record activity
+  recordPlayerActivity(afkState, userId);
+}
+
+/**
+ * Restore a player's live connection when they (re)subscribe to an active
+ * session (#4).
+ *
+ * The jeopardy client (and others) only ever send `game:subscribe`, never
+ * `game:reconnect`, so without this every socket close would leave
+ * `connected=false` forever. This reuses the reconnect bookkeeping —
+ * restore `connected`, clear `disconnectedAt`, cancel the grace timer, drop the
+ * disconnect snapshot, reset the per-connection input sequence cache (#1), and
+ * broadcast `game:player.reconnected` — but does NOT send a state snapshot: the
+ * `game:subscribe` handler already delivers one.
+ *
+ * Returns `true` when an active runtime handled the (re)subscribe (so the caller
+ * knows a live session exists). Broadcast/hook only fire when the player was
+ * actually disconnected, keeping a first-time subscribe side-effect free.
+ */
+export async function handleSubscribeConnection(
+  runtime: SessionRuntime,
+  userId: string,
+  publish: (room: string, data: unknown) => void,
+): Promise<boolean> {
+  const { sessionId, gameDef, disconnectState, timerState, afkState, replaySeq } = runtime;
+  const player = runtime.players.get(userId);
+  if (!player) return false;
+
+  // A (re)subscribe is a new socket whose input sequence restarts at 1 (#1).
+  resetSequenceCache(runtime, userId);
+
+  const wasDisconnected = !player.connected || player.disconnectedAt !== null;
+  if (!wasDisconnected) return true;
+
+  player.connected = true;
+  const disconnectedForMs = player.disconnectedAt
+    ? Date.now() - player.disconnectedAt.getTime()
+    : 0;
+  player.disconnectedAt = null;
+
+  const graceTimerId = getGraceTimerId(disconnectState, userId);
+  if (graceTimerId) {
+    cancelTimer(timerState, graceTimerId);
+  }
+  clearDisconnect(disconnectState, userId);
+
+  const hookError = createHookErrorHandler(sessionId, runtime.log);
   rebuildHandlerContext(runtime);
   await invokeOnPlayerReconnected(
     gameDef.hooks,
@@ -1115,7 +1264,6 @@ export async function handleReconnectFlow(
     hookError,
   );
 
-  // Step 7: Broadcast
   publish(sessionRoom(sessionId), {
     type: 'game:player.reconnected',
     sessionId,
@@ -1128,9 +1276,8 @@ export async function handleReconnectFlow(
       disconnectedForMs,
     }),
   );
-
-  // Step 8: Record activity
   recordPlayerActivity(afkState, userId);
+  return true;
 }
 
 // ── §5.10.8 Game End Flow ────────────────────────────────────────

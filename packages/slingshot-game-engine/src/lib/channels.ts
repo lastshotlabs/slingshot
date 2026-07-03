@@ -49,6 +49,14 @@ export interface MutableChannelState {
   complete: boolean;
   timerId: string | null;
 
+  /**
+   * Resolved maximum number of claims for `race` channels. Resolved once at
+   * channel creation against the handler context so that a `count` supplied as
+   * a function (e.g. "number of contestants") yields its real value instead of
+   * collapsing to 1. Always at least 1. Unused (1) for non-race modes.
+   */
+  resolvedCount: number;
+
   // ── Stream mode extensions ──
   /** Per-player input buffers for `buffer: true` stream channels. */
   streamBuffers: Map<string, BufferedInput[]> | null;
@@ -74,6 +82,17 @@ export function createChannelState(
 ): MutableChannelState {
   const timeout =
     typeof definition.timeout === 'function' ? definition.timeout(ctx) : definition.timeout;
+
+  // Resolve race `count` against the live context up front. When it is a
+  // function it must be evaluated (e.g. count = number of contestants); a
+  // non-positive or non-finite result falls back to 1. Only meaningful for
+  // race channels, so we skip evaluation for other modes.
+  let resolvedCount = 1;
+  if (definition.mode === 'race') {
+    const rawCount =
+      typeof definition.count === 'function' ? definition.count(ctx) : (definition.count ?? 1);
+    resolvedCount = Number.isFinite(rawCount) && rawCount >= 1 ? Math.floor(rawCount as number) : 1;
+  }
 
   const now = Date.now();
 
@@ -119,6 +138,7 @@ export function createChannelState(
     claimedBy: [],
     complete: false,
     timerId: null,
+    resolvedCount,
     streamBuffers,
     persistBuffer,
     persistMaxCount,
@@ -204,8 +224,10 @@ function recordRace(
   userId: string,
   _input: unknown,
 ): ReturnType<typeof recordSubmission> {
-  const maxClaimed =
-    typeof state.definition.count === 'function' ? 1 : (state.definition.count ?? 1);
+  // `resolvedCount` was evaluated against the handler context at channel
+  // creation, so a function-valued `count` (e.g. number of contestants) keeps
+  // its real value here instead of collapsing to 1.
+  const maxClaimed = state.resolvedCount;
 
   if (state.claimedBy.length >= maxClaimed) {
     return {
@@ -317,11 +339,15 @@ function recordVote(
   state.submissions.set(userId, { input, submittedAt: Date.now() });
 
   const allVoted = eligiblePlayerIds.every(id => state.submissions.has(id));
+  // Mirror collect-channel semantics: while `allowChange` permits revisions the
+  // channel must stay open even after everyone has voted, so voters can change
+  // their pick until the phase advances or a timeout closes it.
+  const shouldComplete = allVoted && !allowChange;
 
   const revealMode = state.definition.revealMode ?? 'after-close';
   const shouldRelay = revealMode === 'immediate';
 
-  return { accepted: true, shouldRelay, shouldComplete: allVoted };
+  return { accepted: true, shouldRelay, shouldComplete };
 }
 
 function recordFree(

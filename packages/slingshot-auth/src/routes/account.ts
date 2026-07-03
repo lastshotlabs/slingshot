@@ -186,6 +186,9 @@ export const createAccountRouter = (
                     .boolean()
                     .optional()
                     .describe('Whether a Google OAuth account is linked.'),
+                  displayName: z.string().optional().describe("User's display name."),
+                  firstName: z.string().optional().describe("User's first name."),
+                  lastName: z.string().optional().describe("User's last name."),
                   userMetadata: z
                     .record(z.string(), z.unknown())
                     .optional()
@@ -216,6 +219,9 @@ export const createAccountRouter = (
           email: user?.email,
           emailVerified: user?.emailVerified,
           googleLinked,
+          displayName: user?.displayName,
+          firstName: user?.firstName,
+          lastName: user?.lastName,
           userMetadata: user?.userMetadata ?? {},
         },
         200,

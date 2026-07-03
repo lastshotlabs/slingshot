@@ -10,7 +10,12 @@ import type { SlingshotEventBus, WsPluginEndpoint } from '@lastshotlabs/slingsho
 import { listAdapterRecords } from './lib/adapterQuery';
 import { rejectInput } from './lib/input';
 import type { SessionRuntime } from './lib/sessionRuntime';
-import { handleDisconnect, handleReconnectFlow, processInputPipeline } from './lib/sessionRuntime';
+import {
+  handleDisconnect,
+  handleReconnectFlow,
+  handleSubscribeConnection,
+  processInputPipeline,
+} from './lib/sessionRuntime';
 import type { PlayerAdapterShape, SessionAdapterShape } from './pluginRoutes';
 import type { GameDefinition } from './types/models';
 import { type IncomingHandlerContext, buildIncomingDispatch } from './ws/incoming';
@@ -101,10 +106,22 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     return handleReconnectFlow(runtime, userId, subscribe, ack, publish);
   };
 
+  // Wire restoreConnection callback (#4) — subscribe treated as reconnect.
+  const restoreConnection = async (
+    sessionId: string,
+    userId: string,
+    publish: (room: string, data: unknown) => void,
+  ): Promise<boolean> => {
+    const runtime = activeRuntimes.get(sessionId);
+    if (!runtime) return false;
+    return handleSubscribeConnection(runtime, userId, publish);
+  };
+
   const incomingHandlers = buildIncomingDispatch({
     resolveSession,
     processInput,
     handleReconnect,
+    restoreConnection,
     bus,
   });
 

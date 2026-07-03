@@ -27,6 +27,12 @@ export interface MutableTimer {
   callback: string;
   data?: unknown;
   handle: ReturnType<typeof setTimeout> | null;
+  /**
+   * The concrete fire callback captured at creation time. Stored so
+   * pause/resume (and any re-arm) can restore the *original* per-timer
+   * behavior instead of forcing every timer through a single shared callback.
+   */
+  onFire: TimerCallback;
 }
 
 /** Callback invoked when a timer fires. */
@@ -69,6 +75,7 @@ export function createTimer(
     callback,
     data,
     handle: null,
+    onFire,
   };
 
   timer.handle = setTimeout(() => {
@@ -105,8 +112,15 @@ export function pauseAllTimers(state: MutableTimerState): void {
   }
 }
 
-/** Resume all paused timers with their remaining time. */
-export function resumeAllTimers(state: MutableTimerState, onFire: TimerCallback): void {
+/**
+ * Resume all paused timers with their remaining time.
+ *
+ * Each timer is re-armed with its own captured `onFire` callback so that
+ * distinct timers (e.g. a phase timeout vs. a per-player grace expiry) keep
+ * their original behavior after a pause/resume cycle. Deadlines are recomputed
+ * from the remaining-at-pause duration, preserving the time left when paused.
+ */
+export function resumeAllTimers(state: MutableTimerState): void {
   const now = Date.now();
   for (const timer of state.timers.values()) {
     if (timer.pausedAt !== null && timer.remainingAtPause !== null) {
@@ -116,6 +130,7 @@ export function resumeAllTimers(state: MutableTimerState, onFire: TimerCallback)
       const remaining = timer.remainingAtPause;
       timer.remainingAtPause = null;
 
+      const onFire = timer.onFire;
       timer.handle = setTimeout(() => {
         state.timers.delete(timer.id);
         void onFire(freezeTimer(timer));
@@ -133,6 +148,9 @@ export function extendTimer(
 ): boolean {
   const timer = state.timers.get(timerId);
   if (!timer) return false;
+
+  // Keep the stored callback current so a later pause/resume re-arms correctly.
+  timer.onFire = onFire;
 
   if (timer.pausedAt !== null) {
     // Timer is paused — just extend remaining
@@ -160,6 +178,9 @@ export function resetTimer(
 ): boolean {
   const timer = state.timers.get(timerId);
   if (!timer) return false;
+
+  // Keep the stored callback current so a later pause/resume re-arms correctly.
+  timer.onFire = onFire;
 
   if (timer.handle) clearTimeout(timer.handle);
   timer.pausedAt = null;

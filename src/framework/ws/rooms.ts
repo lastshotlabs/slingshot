@@ -32,6 +32,34 @@ function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Safe default room-subscribe authorization, applied when an endpoint provides
+ * no explicit `onRoomSubscribe` guard.
+ *
+ * Raw `{action:'subscribe', room}` messages are handled before per-event auth,
+ * so without a guard any socket — including an anonymous one — could subscribe
+ * to another user's private room (e.g. `sessions:<sid>:player:<victimUserId>`)
+ * and receive their private state. This default denies subscription to any
+ * per-user room (a room containing a `:player:<userId>` segment) unless the
+ * socket's authenticated actor IS that user. The target userId is embedded in
+ * the room name, so this self-authorization needs no external session lookup.
+ *
+ * All other rooms remain allowed by default so existing consumers and
+ * legitimate session-room subscriptions keep working. Endpoints that need
+ * stricter or namespace-specific rules set their own `onRoomSubscribe`, which
+ * fully replaces this default.
+ */
+export function defaultRoomSubscribeGuard<T extends WithRooms>(
+  ws: ServerWebSocket<T>,
+  room: string,
+): boolean {
+  const match = /(?:^|:)player:(.+)$/.exec(room);
+  if (!match) return true;
+  const targetUserId = match[1];
+  const actorId = (ws.data as { actor?: { id?: string | null } }).actor?.id ?? null;
+  return actorId !== null && actorId === targetUserId;
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
@@ -218,18 +246,19 @@ export const handleRoomActions = async <T extends WithSocketId>(
 
   if (data.action === 'subscribe') {
     if (!isValidRoomName(data.room)) return true;
-    if (onSubscribe) {
-      let allowed: boolean;
-      try {
-        allowed = await onSubscribe(ws, data.room);
-      } catch (error: unknown) {
-        console.error(`[ws] onRoomSubscribe guard error for room "${data.room}":`, error);
-        allowed = false;
-      }
-      if (!allowed) {
-        ws.send(JSON.stringify({ event: 'subscribe_denied', room: data.room }));
-        return true;
-      }
+    // Fall back to the safe default guard when the endpoint sets none, so
+    // private per-user rooms are never allow-all by default (see #9).
+    const guard = onSubscribe ?? defaultRoomSubscribeGuard;
+    let allowed: boolean;
+    try {
+      allowed = await guard(ws, data.room);
+    } catch (error: unknown) {
+      console.error(`[ws] onRoomSubscribe guard error for room "${data.room}":`, error);
+      allowed = false;
+    }
+    if (!allowed) {
+      ws.send(JSON.stringify({ event: 'subscribe_denied', room: data.room }));
+      return true;
     }
     subscribe(state, ws, data.room, { trackDelivery });
     ws.send(JSON.stringify({ event: 'subscribed', room: data.room }));

@@ -352,8 +352,18 @@ describe('Mario Party-style scenario', () => {
       expect(received).toEqual({ channel: 'roll', userId: 'p1', data: { value: 6 } });
     });
 
-    test('onAllPlayersDisconnected defaults to abandon', async () => {
+    test('onAllPlayersDisconnected defaults to NOT abandon (transient all-disconnected)', async () => {
       const hooks: GameLifecycleHooks = {};
+      const result = await invokeOnAllPlayersDisconnected(hooks, makeMockCtx(), () => {});
+      // Default is non-abandoning (#6): an all-disconnected state is usually
+      // transient (everyone refreshing). Abandonment is opt-in via the hook.
+      expect(result.abandon).toBe(false);
+    });
+
+    test('onAllPlayersDisconnected honors an explicit abandon:true from the hook', async () => {
+      const hooks = {
+        onAllPlayersDisconnected: async () => ({ abandon: true }),
+      } as unknown as GameLifecycleHooks;
       const result = await invokeOnAllPlayersDisconnected(hooks, makeMockCtx(), () => {});
       expect(result.abandon).toBe(true);
     });

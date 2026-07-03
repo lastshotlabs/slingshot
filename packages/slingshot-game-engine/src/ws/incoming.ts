@@ -84,6 +84,22 @@ export interface IncomingDispatchDeps {
     publish: (room: string, data: unknown) => void,
   ): Promise<void>;
 
+  /**
+   * Restore a seated player's live connection on `game:subscribe` (#4).
+   *
+   * Clients only ever send `game:subscribe` (never `game:reconnect`), so a
+   * subscribe from an already-seated player must be treated as a reconnect:
+   * restore `connected`, cancel the grace timer, reset the per-connection input
+   * sequence, and broadcast `game:player.reconnected`. Optional so callers /
+   * tests without an active runtime can omit it — the subscribe handler still
+   * sends its own snapshot.
+   */
+  restoreConnection?(
+    sessionId: string,
+    userId: string,
+    publish: (room: string, data: unknown) => void,
+  ): Promise<boolean>;
+
   /** Event bus for emitting game events. */
   bus: {
     emit(event: string, data: unknown): void;
@@ -143,6 +159,14 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
         for (const room of rooms) {
           ctx.subscribe(room);
         }
+
+        // Treat a subscribe from a seated player as a reconnect (#4): restore
+        // their live connection state and broadcast `game:player.reconnected`
+        // when a runtime is active. Snapshot delivery stays below so behavior is
+        // identical whether or not a runtime is live.
+        await deps.restoreConnection?.(sessionId, ctx.actorId, (room, data) =>
+          ctx.publish(room, data),
+        );
 
         // Send state snapshot
         ctx.ack({

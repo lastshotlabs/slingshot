@@ -224,24 +224,28 @@ export interface AllDisconnectedResult {
 /**
  * Invoke `onAllPlayersDisconnected` hook.
  *
- * By default the session is abandoned. The hook can return
- * `{ abandon: false }` to keep the session alive.
+ * The default (no hook defined) is NON-abandoning: an all-disconnected state is
+ * frequently transient (e.g. every client refreshing at once), so the engine
+ * must not force-end a live match. Abandonment is therefore opt-in — a game
+ * decides by returning `{ abandon: true }` from the hook. The hook's real value
+ * is honored (previously it was inverted and the default abandoned the game).
+ * On a hook error we fail safe and keep the session alive.
  */
 export async function invokeOnAllPlayersDisconnected(
   hooks: Readonly<GameLifecycleHooks>,
   ctx: ProcessHandlerContext,
   onError: (hook: string, err: unknown) => void,
 ): Promise<AllDisconnectedResult> {
-  if (!hooks.onAllPlayersDisconnected) return { abandon: true };
+  if (!hooks.onAllPlayersDisconnected) return { abandon: false };
   try {
     const result = await hooks.onAllPlayersDisconnected(ctx);
     if (result && typeof result === 'object' && 'abandon' in result) {
-      return { abandon: false };
+      return { abandon: (result as { abandon?: unknown }).abandon === true };
     }
-    return { abandon: true };
+    return { abandon: false };
   } catch (err) {
     onError('onAllPlayersDisconnected', err);
-    return { abandon: true };
+    return { abandon: false };
   }
 }
 

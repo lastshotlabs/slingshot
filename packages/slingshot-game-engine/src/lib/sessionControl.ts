@@ -12,6 +12,7 @@ import {
   processInputPipeline,
   refreshHandlerContext,
 } from './sessionRuntime';
+import { pauseAllTimers, resumeAllTimers } from './timers';
 
 function snapshotPlayer(
   runtimePlayer: SessionRuntime['players'] extends Map<string, infer T> ? T : never,
@@ -115,6 +116,37 @@ export function createSessionControls(
       }
 
       await advancePhase(runtime);
+      return toSnapshot(runtime);
+    },
+
+    pauseSession(sessionId: string) {
+      const runtime = activeRuntimes.get(sessionId);
+      if (!runtime) return null;
+
+      if (!runtime.paused) {
+        runtime.paused = true;
+        pauseAllTimers(runtime.timerState);
+        runtime.publish(sessionRoom(runtime.sessionId), {
+          type: 'game:session.paused',
+          sessionId: runtime.sessionId,
+        });
+      }
+      return toSnapshot(runtime);
+    },
+
+    resumeSession(sessionId: string) {
+      const runtime = activeRuntimes.get(sessionId);
+      if (!runtime) return null;
+
+      if (runtime.paused) {
+        runtime.paused = false;
+        // Re-arm each timer with its own captured callback and remaining time.
+        resumeAllTimers(runtime.timerState);
+        runtime.publish(sessionRoom(runtime.sessionId), {
+          type: 'game:session.resumed',
+          sessionId: runtime.sessionId,
+        });
+      }
       return toSnapshot(runtime);
     },
 

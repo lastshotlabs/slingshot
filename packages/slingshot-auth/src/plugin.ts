@@ -552,10 +552,13 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
           try {
             const production = isProd();
             const cookieHeader = req.headers.get('cookie');
+            // The `token` query param is accepted here because this resolver only
+            // runs for WS/SSE upgrade requests, where browsers cannot set headers.
             const token =
               readAuthCookieHeaderValue(cookieHeader, COOKIE_TOKEN, production, runtime.config) ??
               req.headers.get(HEADER_USER_TOKEN) ??
-              readBearerToken(req.headers.get('authorization'));
+              readBearerToken(req.headers.get('authorization')) ??
+              new URL(req.url).searchParams.get('token');
             if (!token) return ANONYMOUS_ACTOR;
             const payload = await verifyToken(token, runtime.config, runtime.signing);
             const sessionId = payload.sid as string | undefined;

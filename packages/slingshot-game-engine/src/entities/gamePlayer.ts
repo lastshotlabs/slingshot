@@ -23,6 +23,9 @@ export const GamePlayer = defineEntity('GamePlayer', {
     sessionId: field.string({ immutable: true }),
     userId: field.string({ immutable: true }),
     displayName: field.string(),
+    // Optional player avatar (e.g. a profile-picture URL or data URI) so
+    // scoreboards/rosters can show a face, not just initials.
+    avatarUrl: field.string({ optional: true }),
     role: field.string({ optional: true }),
     team: field.string({ optional: true }),
     playerState: field.string({ optional: true }),

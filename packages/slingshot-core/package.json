@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Core plugin contract, context, event bus, and shared types for Slingshot",
   "license": "MIT",
   "type": "module",

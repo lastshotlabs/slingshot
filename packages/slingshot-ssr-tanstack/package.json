@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-ssr-tanstack",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps",
   "license": "MIT",
   "type": "module",

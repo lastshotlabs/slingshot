@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-gifs",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "GIF search proxy for slingshot — swappable providers (Giphy, Tenor), server-side API key",
   "license": "MIT",
   "type": "module",

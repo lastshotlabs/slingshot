@@ -368,6 +368,7 @@ export function createGameEnginePackage(
           replayStore,
           log,
           activeRuntimes,
+          initialGameState: (session.gameState ?? null) as Record<string, unknown> | null,
         });
 
         if (!runtime) {

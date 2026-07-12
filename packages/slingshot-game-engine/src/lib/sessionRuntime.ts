@@ -178,6 +178,12 @@ export interface SessionRuntimeDeps {
   replayStore: ReplayStore;
   log: SessionRuntime['log'];
   activeRuntimes: Map<string, SessionRuntime>;
+  /**
+   * Persisted session gameState to hydrate into the runtime (e.g. state
+   * written at session creation, or surviving a restart). Cloned on use;
+   * `onGameStart` hooks run after hydration and may still reset it.
+   */
+  initialGameState?: Record<string, unknown> | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -312,7 +318,9 @@ export async function createSessionRuntime(
   const rng = createSeededRng(rngSeed);
   const privateStateManager = createPrivateStateManager();
   const rateLimiter = createInMemoryRateLimiter();
-  const gameState: Record<string, unknown> = {};
+  const gameState: Record<string, unknown> = deps.initialGameState
+    ? structuredClone(deps.initialGameState)
+    : {};
   const channels = new Map<string, MutableChannelState>();
   const players = new Map<string, MutablePlayer>(
     playerRecords.map(p => [

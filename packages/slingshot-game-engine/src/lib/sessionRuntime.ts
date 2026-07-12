@@ -158,6 +158,7 @@ export interface SessionRuntime {
     warn(message: string, data?: unknown): void;
     error(message: string, data?: unknown): void;
   };
+  readonly onCompleted?: (winResult: WinResult, leaderboard: unknown) => Promise<void> | void;
 
   handlerContext: ReturnType<typeof buildProcessHandlerContext>;
 
@@ -184,6 +185,13 @@ export interface SessionRuntimeDeps {
    * `onGameStart` hooks run after hydration and may still reset it.
    */
   initialGameState?: Record<string, unknown> | null;
+  /**
+   * Invoked after natural game completion is broadcast, so the owning plugin
+   * can persist the terminal session state and emit the app-bus
+   * `game:session.completed` event. Without this, natural completion is only
+   * observable over the WS room — server-side listeners never hear it.
+   */
+  onCompleted?: SessionRuntime['onCompleted'];
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -464,6 +472,7 @@ export async function createSessionRuntime(
     publish: deps.publish,
     replayStore: deps.replayStore,
     log: deps.log,
+    onCompleted: deps.onCompleted,
     handlerContext,
     sequenceCache: new Map(),
     pendingReplayEntries: [],
@@ -1345,6 +1354,16 @@ export async function endGameFlow(runtime: SessionRuntime, winResult: WinResult)
     winResult,
     leaderboard,
   });
+
+  // Step 8.5: Notify the owning plugin (persist terminal state, app bus).
+  // Error-isolated: completion must finish even if the callback fails.
+  if (runtime.onCompleted) {
+    try {
+      await runtime.onCompleted(winResult, leaderboard);
+    } catch (e: unknown) {
+      runtime.log.error('onCompleted callback failed', e);
+    }
+  }
 
   // Step 9: Clean up — remove from active runtimes
   // The plugin closure's activeRuntimes map holds the reference.

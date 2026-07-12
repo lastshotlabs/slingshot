@@ -369,6 +369,22 @@ export function createGameEnginePackage(
           log,
           activeRuntimes,
           initialGameState: (session.gameState ?? null) as Record<string, unknown> | null,
+          // Natural completion: persist terminal session state and surface the
+          // app-bus event so server-side listeners (e.g. an owning "match"
+          // record) hear about it — the WS broadcast alone only reaches clients.
+          onCompleted: async (winResult, leaderboard) => {
+            const completedAt = new Date().toISOString();
+            await capturedSessionAdapter.update(sessionId, {
+              status: 'completed',
+              completedAt,
+            });
+            bus.emit('game:session.completed', {
+              id: sessionId,
+              gameType: session.gameType as string,
+              winResult,
+              leaderboard,
+            });
+          },
         });
 
         if (!runtime) {

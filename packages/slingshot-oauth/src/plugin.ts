@@ -3,6 +3,8 @@ import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import { createConnectionsRouter } from './connections';
+import type { ConnectionsOptions } from './connections';
 import { createOAuthRouter } from './routes/oauth';
 
 /**
@@ -36,6 +38,13 @@ export type OAuthPluginOptions = {
    * `AuthRateLimitConfig` shape.
    */
   rateLimit?: AuthRateLimitConfig;
+  /**
+   * Optional per-user third-party provider connections (token linking with
+   * arbitrary scopes — e.g. Spotify playback, Google Drive). Mounts
+   * `/auth/connections/*` routes and enables `getConnectionAccessToken()`.
+   * Fully additive: omitting this changes nothing.
+   */
+  connections?: ConnectionsOptions;
 };
 
 const absoluteHttpUrlSchema = z
@@ -65,6 +74,9 @@ export const oauthPluginConfigSchema = z
     postRedirect: redirectTargetSchema.optional(),
     allowedRedirectUrls: z.array(absoluteHttpUrlSchema).optional(),
     rateLimit: z.custom<AuthRateLimitConfig>(v => v == null || typeof v === 'object').optional(),
+    connections: z
+      .custom<ConnectionsOptions>(v => v == null || (typeof v === 'object' && v !== null))
+      .optional(),
   })
   .loose();
 
@@ -162,21 +174,27 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
     setupRoutes({ app }: PluginSetupContext) {
       const runtime = getAuthRuntimeContext(getPluginStateOrNull(app));
       const providers = Object.keys(runtime.oauth.providers);
-      if (providers.length === 0) return;
+      const connections = resolvedOptions.connections;
+      if (providers.length === 0 && !connections) return;
 
       const postRedirect = resolvedOptions.postRedirect ?? runtime.config.oauthPostRedirect ?? '/';
       const allowedRedirectUrls =
         resolvedOptions.allowedRedirectUrls ?? runtime.config.oauthAllowedRedirectUrls;
       validatePostRedirect(postRedirect, allowedRedirectUrls);
-      app.route(
-        '/',
-        createOAuthRouter(
-          providers,
-          postRedirect,
-          runtime,
-          resolvedOptions.rateLimit ?? runtime.config.rateLimit,
-        ),
-      );
+      if (providers.length > 0) {
+        app.route(
+          '/',
+          createOAuthRouter(
+            providers,
+            postRedirect,
+            runtime,
+            resolvedOptions.rateLimit ?? runtime.config.rateLimit,
+          ),
+        );
+      }
+      if (connections && Object.keys(connections.providers ?? {}).length > 0) {
+        app.route('/', createConnectionsRouter(app, connections, runtime, postRedirect));
+      }
     },
   };
 }

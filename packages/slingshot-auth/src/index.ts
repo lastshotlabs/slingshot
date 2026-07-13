@@ -118,6 +118,19 @@ export { ErrorResponse } from './schemas/error';
 /** Generate PKCE and OAuth state values for custom OAuth flows outside the built-in routes. */
 export { generateCodeVerifier, generateState } from './lib/oauth';
 
+// Provider connections (per-user third-party OAuth token storage; consumed by
+// slingshot-oauth's `connections` feature)
+export {
+  createMemoryProviderConnectionStore,
+  createSqliteProviderConnectionStore,
+  providerConnectionFactories,
+} from './lib/providerConnections';
+export type {
+  ProviderConnection,
+  ProviderConnectionStore,
+  ProviderConnectionUpsert,
+} from './lib/providerConnections';
+
 // Admin providers (moved from framework root)
 /** Admin integration adapters backed by Slingshot auth runtime state. */
 export { createSlingshotAuthAccessProvider } from './admin/slingshotAccess';

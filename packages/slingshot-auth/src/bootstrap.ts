@@ -601,6 +601,17 @@ export async function bootstrapAuth(
   };
 
   const oauthStateStore = resolveRepo(oauthStateFactories, stores.oauthState, storeInfra);
+  const { providerConnectionFactories } = await import('./lib/providerConnections');
+  // Provider connections support memory/sqlite backends today. Unsupported
+  // backends must NOT fail the whole auth bootstrap — the store stays
+  // undefined and slingshot-oauth's `connections` feature (the only consumer)
+  // throws a targeted error at mount time if actually configured.
+  let providerConnectionStore: import('./lib/providerConnections').ProviderConnectionStore | undefined;
+  try {
+    providerConnectionStore = resolveRepo(providerConnectionFactories, stores.oauthState, storeInfra);
+  } catch {
+    providerConnectionStore = undefined;
+  }
   const oauthCodeRepo = resolveRepo(oauthCodeFactories, stores.oauthState, storeInfra);
   const oauthReauthRepo = resolveRepo(oauthReauthFactories, stores.oauthState, storeInfra);
   const magicLinkRepo = resolveRepo(magicLinkFactories, stores.sessions, storeInfra);
@@ -743,6 +754,7 @@ export async function bootstrapAuth(
       oauth: {
         providers: resolvedOAuthProviders,
         stateStore: oauthStateStore,
+        connectionStore: providerConnectionStore,
       },
       lockout: lockoutService,
       rateLimit: rateLimitService,

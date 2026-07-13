@@ -28,6 +28,7 @@ import type { AuthLogger } from './lib/logger';
 import type { MagicLinkRepository } from './lib/magicLink';
 import type { MfaChallengeRepository } from './lib/mfaChallenge';
 import type { OAuthProviders, OAuthStateStore } from './lib/oauth';
+import type { ProviderConnectionStore } from './lib/providerConnections';
 import type { OAuthCodeRepository } from './lib/oauthCode';
 import type { OAuthReauthRepository } from './lib/oauthReauth';
 import type { ResetTokenRepository } from './lib/resetPassword';
@@ -74,6 +75,12 @@ export interface AuthRuntimeContext {
   readonly oauth: {
     readonly providers: OAuthProviders;
     readonly stateStore: OAuthStateStore;
+    /**
+     * Per-user third-party token storage for slingshot-oauth's `connections`
+     * feature. Optional so hand-built test runtimes stay valid; the real
+     * bootstrap always provides it.
+     */
+    readonly connectionStore?: ProviderConnectionStore;
   };
   readonly lockout: LockoutService | null;
   readonly rateLimit: AuthRateLimitService;

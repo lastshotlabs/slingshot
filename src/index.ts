@@ -2,6 +2,10 @@
 export { createApp } from './app';
 export type { CreateAppResult, PermissionsConfig } from './app';
 export { createServer } from './server';
+// The server-handle counterpart to `getContext(app)`: resolves the
+// SlingshotContext from a running server (e.g. one returned by
+// `createTestFullServer`). Consumers reach a live app's context this way.
+export { getServerContext } from './server';
 export { defineApp } from './defineApp';
 export type { AppConfig } from './defineApp';
 export {
@@ -203,6 +207,10 @@ export { createWsUpgradeHandler } from './framework/ws/index.js';
 export type { SocketData } from './framework/ws/index.js';
 export { publish, getSubscriptions, getRooms, getRoomSubscribers } from './framework/ws/rooms.js';
 export type { PublishOptions } from './framework/ws/rooms.js';
+// Builds the endpoint-scoped composite room key used by the room maps and
+// transports above — the key-builder that pairs with `getRooms` /
+// `getSubscriptions` when inspecting or targeting a specific endpoint's room.
+export { wsEndpointKey } from './framework/ws/namespace.js';
 export type {
   WsEventContext,
   WsEventHandler,

@@ -48,6 +48,9 @@
       "path": "./packages/slingshot-embeds/tsconfig.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-ai/tsconfig.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-emoji/tsconfig.typecheck.json"
     },
     {

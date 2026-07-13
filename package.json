@@ -127,6 +127,7 @@
     "@scalar/hono-api-reference": "0.10.0"
   },
   "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.30",
     "arctic": "^3.7.0",
     "hono": ">=4.12.14 <5",
     "jose": "6.2.0",
@@ -159,6 +160,9 @@
     "@lastshotlabs/slingshot-webhooks": "workspace:*"
   },
   "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
     "arctic": {
       "optional": true
     },

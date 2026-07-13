@@ -171,12 +171,13 @@ export class AiContentBlockedError extends AiError {
 export class AiSpendLimitError extends AiError {
   readonly spentUsd: number;
   readonly limitUsd: number;
-  readonly estimatedUsd: number;
+  /** `null` when the call could not be priced — we blocked on the known spend alone. */
+  readonly estimatedUsd: number | null;
   readonly period: string;
 
   constructor(
     message: string,
-    options: { spentUsd: number; limitUsd: number; estimatedUsd: number; period: string },
+    options: { spentUsd: number; limitUsd: number; estimatedUsd: number | null; period: string },
   ) {
     super('ai_spend_limit', message);
     this.spentUsd = options.spentUsd;

@@ -16,6 +16,8 @@
       "@queues/*": ["./src/queues/*"],
       "@scripts/*": ["./src/scripts/*"],
       "@lastshotlabs/slingshot": ["./src/index.ts"],
+      "@lastshotlabs/slingshot-ai": ["./packages/slingshot-ai/src/index.ts"],
+      "@lastshotlabs/slingshot-ai/testing": ["./packages/slingshot-ai/src/testing.ts"],
       "@lastshotlabs/slingshot-core": ["./packages/slingshot-core/src/index.ts"],
       "@lastshotlabs/slingshot-core/content": ["./packages/slingshot-core/src/content.public.ts"],
       "@lastshotlabs/slingshot-core/faker": ["./packages/slingshot-core/src/faker/index.ts"],

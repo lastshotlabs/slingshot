@@ -34,6 +34,26 @@ export function toOpenApiPath(path: string): string {
     .join('/');
 }
 
+/**
+ * Convert an OpenAPI-style path (`/posts/{id}`) into the hono form (`/posts/:id`)
+ * that the live router matches against.
+ *
+ * `createRoute(...)` accepts brace paths and converts them internally, but bare
+ * `router.use(path, mw)` does NOT — hono matches `{id}` as a *literal* segment, so
+ * middleware registered with a brace path silently never runs for real requests.
+ * Any path handed directly to the router (middleware registration) must go through
+ * this first. Idempotent on paths that already use the colon form.
+ */
+export function toHonoPath(path: string): string {
+  return path
+    .split('/')
+    .map(segment => {
+      const match = /^\{([^}]+)\}$/.exec(segment);
+      return match ? `:${match[1]}` : segment;
+    })
+    .join('/');
+}
+
 export interface RouteOpts {
   method: RouteMethod;
   path: string;

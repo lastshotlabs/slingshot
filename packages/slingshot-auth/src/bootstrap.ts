@@ -606,9 +606,15 @@ export async function bootstrapAuth(
   // backends must NOT fail the whole auth bootstrap — the store stays
   // undefined and slingshot-oauth's `connections` feature (the only consumer)
   // throws a targeted error at mount time if actually configured.
-  let providerConnectionStore: import('./lib/providerConnections').ProviderConnectionStore | undefined;
+  let providerConnectionStore:
+    | import('./lib/providerConnections').ProviderConnectionStore
+    | undefined;
   try {
-    providerConnectionStore = resolveRepo(providerConnectionFactories, stores.oauthState, storeInfra);
+    providerConnectionStore = resolveRepo(
+      providerConnectionFactories,
+      stores.oauthState,
+      storeInfra,
+    );
   } catch {
     providerConnectionStore = undefined;
   }

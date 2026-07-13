@@ -99,9 +99,7 @@ export function isHttpError(err: unknown): err is HttpError {
  * ```
  */
 /** Cross-module brand for {@link ValidationError}; see {@link HttpError}'s brand. */
-const VALIDATION_ERROR_BRAND: unique symbol = Symbol.for(
-  '@lastshotlabs/slingshot.ValidationError',
-);
+const VALIDATION_ERROR_BRAND: unique symbol = Symbol.for('@lastshotlabs/slingshot.ValidationError');
 
 export class ValidationError extends HttpError {
   /** @internal Cross-module brand — see {@link isValidationError}. */
@@ -125,8 +123,7 @@ export class ValidationError extends HttpError {
  */
 export function isValidationError(err: unknown): err is ValidationError {
   return (
-    isHttpError(err) &&
-    (err as unknown as Record<symbol, unknown>)[VALIDATION_ERROR_BRAND] === true
+    isHttpError(err) && (err as unknown as Record<symbol, unknown>)[VALIDATION_ERROR_BRAND] === true
   );
 }
 

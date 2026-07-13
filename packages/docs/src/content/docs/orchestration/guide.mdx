@@ -137,9 +137,12 @@ optionally, exposed over protected HTTP routes.
 
 ```typescript
 import type { MiddlewareHandler } from 'hono';
-import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
-import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
+import type {
+  AnyResolvedTask,
+  AnyResolvedWorkflow,
+} from '@lastshotlabs/slingshot-orchestration-engine';
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -172,11 +175,11 @@ without going through the HTTP API:
 
 ```typescript
 import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
   ORCHESTRATION_PLUGIN_STATE_KEY,
   getOrchestration,
 } from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const processInvoiceWorkflow: AnyResolvedWorkflow;
 

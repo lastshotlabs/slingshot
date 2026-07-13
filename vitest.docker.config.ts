@@ -36,7 +36,10 @@ export default defineConfig({
       },
       {
         find: /^@lastshotlabs\/slingshot-orchestration-engine\/provider$/,
-        replacement: resolve(rootDir, 'packages/slingshot-orchestration-engine/src/provider/index.ts'),
+        replacement: resolve(
+          rootDir,
+          'packages/slingshot-orchestration-engine/src/provider/index.ts',
+        ),
       },
       {
         find: /^@lastshotlabs\/slingshot-orchestration-engine\/errors$/,

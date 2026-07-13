@@ -39,7 +39,9 @@ export async function runOrchestrationCoverage(
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
 
-  const packageTests = await collectFiles('packages/slingshot-orchestration-engine/tests/**/*.test.ts');
+  const packageTests = await collectFiles(
+    'packages/slingshot-orchestration-engine/tests/**/*.test.ts',
+  );
   if (packageTests.length > 0) {
     const code = await runCommand(
       'slingshot-orchestration-engine:bun',

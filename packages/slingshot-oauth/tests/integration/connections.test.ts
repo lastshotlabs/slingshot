@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { OAuth2Tokens } from 'arctic';
-import { COOKIE_TOKEN } from '@lastshotlabs/slingshot-core';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { createMemoryProviderConnectionStore } from '@lastshotlabs/slingshot-auth';
+import { COOKIE_TOKEN } from '@lastshotlabs/slingshot-core';
 import { signToken } from '../../../slingshot-auth/src/lib/jwt';
 import { createIdentifyMiddleware } from '../../../slingshot-auth/src/middleware/identify';
 import { createConnectionsRouter } from '../../src/connections';

@@ -57,8 +57,6 @@ import type {
 } from '@lastshotlabs/slingshot-auth';
 import type { AuthConfig, OAuthConfig } from '@lastshotlabs/slingshot-auth';
 import {
-  isHttpError,
-  isValidationError,
   attachContext,
   createCoreRegistrar,
   createEventDefinitionRegistry,
@@ -66,6 +64,8 @@ import {
   createEventSchemaRegistry,
   defaultValidationErrorFormatter,
   defineEvent,
+  isHttpError,
+  isValidationError,
   publishPluginState,
   sealPluginState,
 } from '@lastshotlabs/slingshot-core';

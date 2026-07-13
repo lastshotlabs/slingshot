@@ -1145,4 +1145,98 @@ describe('contract runtime enforcement', () => {
       await expect(response.json()).resolves.toEqual({ hasList: true, hasCreate: true });
     });
   });
+
+  // Regression: hono matches `{id}` as a LITERAL segment, so middleware registered
+  // with the brace path never ran for real requests — auth (and rate limits, and
+  // idempotency) were silently skipped on every parameterized package route, while
+  // static-path routes were guarded correctly. See toHonoPath() in slingshot-core.
+  test('applies route auth to parameterized paths, not just static ones', async () => {
+    const guardedPackage = definePackage({
+      name: 'guarded',
+      mountPath: '/guarded',
+      domains: [
+        domain({
+          name: 'things',
+          basePath: '/things',
+          routes: [
+            route.get({
+              path: '',
+              summary: 'List things (static path)',
+              auth: 'userAuth',
+              responses: { 200: { description: 'ok' } },
+              handler: ctx => ctx.respond.json({ ok: true }),
+            }),
+            route.get({
+              path: '/{id}',
+              summary: 'Get thing (parameterized path)',
+              auth: 'userAuth',
+              responses: { 200: { description: 'ok' } },
+              handler: ctx => ctx.respond.json({ ok: true }),
+            }),
+            route.get({
+              path: '/{id}/nested/{childId}',
+              summary: 'Nested params',
+              auth: 'userAuth',
+              responses: { 200: { description: 'ok' } },
+              handler: ctx => ctx.respond.json({ ok: true }),
+            }),
+            route.get({
+              path: '/open/{id}',
+              summary: 'No auth declared',
+              responses: { 200: { description: 'ok' } },
+              handler: ctx => ctx.respond.json({ ok: true }),
+            }),
+          ],
+        }),
+      ],
+    });
+
+    // Minimal route-auth registry: 401 unless a token header is present. This
+    // isolates path MATCHING (the bug) from the auth plugin's own logic.
+    const stubAuthPlugin: SlingshotPlugin = {
+      name: 'stub-auth',
+      setupMiddleware({ config }: PluginSetupContext) {
+        (config as { registrar: { setRouteAuth: (r: unknown) => void } }).registrar.setRouteAuth({
+          userAuth: async (
+            c: { req: { header: (n: string) => string | undefined } },
+            next: () => Promise<void>,
+          ) => {
+            if (!c.req.header('x-user-token')) {
+              return (c as unknown as { json: (b: unknown, s: number) => Response }).json(
+                { error: 'Unauthorized' },
+                401,
+              );
+            }
+            await next();
+            return undefined;
+          },
+          requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
+            await next();
+          },
+          postGuards: Object.freeze([]),
+        });
+      },
+    } as unknown as SlingshotPlugin;
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [stubAuthPlugin],
+      packages: [guardedPackage],
+    });
+    createdContexts.push(result.ctx);
+
+    // The static route was always guarded — the parameterized ones were not.
+    const staticRoute = await result.app.request('/guarded/things');
+    expect(staticRoute.status).toBe(401);
+
+    const paramRoute = await result.app.request('/guarded/things/abc-123');
+    expect(paramRoute.status).toBe(401);
+
+    const nestedRoute = await result.app.request('/guarded/things/abc-123/nested/xyz-789');
+    expect(nestedRoute.status).toBe(401);
+
+    // Routes that declare no auth stay open — the fix must not over-guard.
+    const openRoute = await result.app.request('/guarded/things/open/abc-123');
+    expect(openRoute.status).toBe(200);
+  });
 });

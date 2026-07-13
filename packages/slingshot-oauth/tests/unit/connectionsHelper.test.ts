@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { OAuth2Tokens } from 'arctic';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { createMemoryProviderConnectionStore } from '@lastshotlabs/slingshot-auth';
 import {
   createConnectionsRouter,

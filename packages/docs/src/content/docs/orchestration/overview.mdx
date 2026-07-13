@@ -19,8 +19,8 @@ memory, SQLite, or BullMQ. You define the work once, then swap adapters as infra
 
 | Package                                          | Role                                                                        |
 | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| `@lastshotlabs/slingshot-orchestration-engine`          | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
-| `@lastshotlabs/slingshot-orchestration`   | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
+| `@lastshotlabs/slingshot-orchestration-engine`   | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
+| `@lastshotlabs/slingshot-orchestration`          | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
 | `@lastshotlabs/slingshot-orchestration-bullmq`   | BullMQ-backed adapter for Redis deployments                                 |
 | `@lastshotlabs/slingshot-orchestration-temporal` | Temporal-backed adapter and worker supervisor for distributed orchestration |
 
@@ -73,8 +73,8 @@ For Slingshot integration:
 ```typescript
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
+import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 const resizeImage = defineTask({
   name: 'resize-image',

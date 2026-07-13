@@ -9,7 +9,9 @@
     "rootDir": ".",
     "composite": true,
     "paths": {
-      "@lastshotlabs/slingshot-orchestration-engine": ["../slingshot-orchestration-engine/dist/src/index.d.ts"]
+      "@lastshotlabs/slingshot-orchestration-engine": [
+        "../slingshot-orchestration-engine/dist/src/index.d.ts"
+      ]
     }
   },
   "include": ["src"],

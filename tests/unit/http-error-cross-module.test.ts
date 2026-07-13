@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { HttpError, ValidationError, isHttpError, isValidationError } from '../../packages/slingshot-core/src/index.ts';
+import {
+  HttpError,
+  ValidationError,
+  isHttpError,
+  isValidationError,
+} from '../../packages/slingshot-core/src/index.ts';
 import { createApp } from '../../src/app';
 
 // Regression for the "401/404 renders as 500 under Node" bug.

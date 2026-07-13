@@ -6,7 +6,9 @@
     "target": "ESNext",
     "types": ["bun"],
     "paths": {
-      "@lastshotlabs/slingshot-orchestration-engine": ["../slingshot-orchestration-engine/src/index.ts"]
+      "@lastshotlabs/slingshot-orchestration-engine": [
+        "../slingshot-orchestration-engine/src/index.ts"
+      ]
     },
     "skipLibCheck": true
   },

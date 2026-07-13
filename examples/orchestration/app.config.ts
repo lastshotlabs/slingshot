@@ -1,7 +1,7 @@
 import { defineApp } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBillingApiPlugin } from './src/billingPlugin.ts';
 import {
   orchestrationTasks,

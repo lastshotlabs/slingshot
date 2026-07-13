@@ -32,6 +32,7 @@ import {
   requireEntityAdapter,
   resolveRepo,
   sha256,
+  toHonoPath,
   toOpenApiPath,
 } from '@lastshotlabs/slingshot-core';
 import type {
@@ -841,6 +842,12 @@ function createPackagePlugin(
             normalizePath(pkg.mountPath, domain.basePath),
             routeDefinition.path,
           );
+          // `createRoute()` converts brace params itself, but bare `router.use()`
+          // does not — hono matches `{id}` as a literal segment, so middleware
+          // registered with the brace form silently never runs on a real request
+          // (auth, rate limits, and idempotency would all be skipped on every
+          // parameterized route). Every direct router registration uses this form.
+          const routerPath = toHonoPath(routePath);
           const routeKey = `${pkg.name}:${domain.name}:${routeDefinition.method}:${routePath}`;
           const opConfig = {
             auth: routeDefinition.auth,
@@ -867,7 +874,7 @@ function createPackagePlugin(
 
           if (routeDefinition.rateLimit) {
             router.use(
-              routePath,
+              routerPath,
               methodGuard(routeDefinition.method, rateLimit(routeDefinition.rateLimit)),
             );
           }
@@ -875,7 +882,7 @@ function createPackagePlugin(
           const idempotency = normalizeIdempotencyConfig(routeDefinition.idempotency);
           if (idempotency) {
             router.use(
-              routePath,
+              routerPath,
               methodGuard(
                 routeDefinition.method,
                 createPackageRouteIdempotencyMiddleware(routeKey, idempotency),
@@ -885,7 +892,7 @@ function createPackagePlugin(
 
           if (routeDefinition.auth || routeDefinition.permission || policyConfig) {
             router.use(
-              routePath,
+              routerPath,
               methodGuard(routeDefinition.method, async (c, next) => {
                 const authResult = await evaluateRouteAuth(c, opConfig, {
                   routeAuth: getSlingshotCtx(c).routeAuth,
@@ -947,7 +954,7 @@ function createPackagePlugin(
             for (const middlewareName of routeDefinition.middleware) {
               const handler = pkg.middleware[middlewareName];
               if (handler) {
-                router.use(routePath, methodGuard(routeDefinition.method, handler));
+                router.use(routerPath, methodGuard(routeDefinition.method, handler));
               }
             }
           }

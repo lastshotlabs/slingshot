@@ -25,8 +25,8 @@ It owns:
 ## Basic setup
 
 ```ts
-import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const resizeImage: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
 declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask;
@@ -112,9 +112,9 @@ Pass explicit hooks when you want tenant scoping, actor metadata, or run-level a
 
 ```ts
 import type { Context } from 'hono';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationPackage } from '@lastshotlabs/slingshot-orchestration';
 import type { OrchestrationRunAuthorizationInput } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const adapter: import('@lastshotlabs/slingshot-orchestration-engine').OrchestrationAdapter;
 declare const tasks: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask[];

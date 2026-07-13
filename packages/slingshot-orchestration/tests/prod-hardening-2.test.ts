@@ -295,9 +295,9 @@ describe('plugin — event sink integration with bus', () => {
 
     // After setupRoutes + declarative capability publication, the runtime is in the
     // PACKAGE_CAPABILITIES_PREFIX slot for slingshot-orchestration.
-    const slot = pluginState.get(
-      'slingshot:package:capabilities:slingshot-orchestration',
-    ) as Record<string, unknown> | undefined;
+    const slot = pluginState.get('slingshot:package:capabilities:slingshot-orchestration') as
+      | Record<string, unknown>
+      | undefined;
     expect(slot).toBeDefined();
     const runtime = slot?.runtime as Record<string, unknown> | undefined;
     expect(runtime).toBeDefined();

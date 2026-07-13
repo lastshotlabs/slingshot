@@ -43,10 +43,7 @@ describe('getOrchestrationOrNull — missing plugin state', () => {
     // capability name is returned as-is.
     const ctx = {
       pluginState: new Map([
-        [
-          'slingshot:package:capabilities:slingshot-orchestration',
-          { runtime: 'not-a-runtime' },
-        ],
+        ['slingshot:package:capabilities:slingshot-orchestration', { runtime: 'not-a-runtime' }],
       ]),
       capabilityProviders: new Map([
         ['slingshot-orchestration:runtime', 'slingshot-orchestration'],

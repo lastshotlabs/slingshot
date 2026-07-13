@@ -30,16 +30,16 @@
       "@lastshotlabs/slingshot-auth": ["./packages/slingshot-auth/src/index.ts"],
       "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/src/testing.ts"],
       "@lastshotlabs/slingshot-admin": ["./packages/slingshot-admin/src/index.ts"],
-      "@lastshotlabs/slingshot-orchestration-engine": ["./packages/slingshot-orchestration-engine/src/index.ts"],
+      "@lastshotlabs/slingshot-orchestration-engine": [
+        "./packages/slingshot-orchestration-engine/src/index.ts"
+      ],
       "@lastshotlabs/slingshot-orchestration-engine/errors": [
         "./packages/slingshot-orchestration-engine/src/errors.ts"
       ],
       "@lastshotlabs/slingshot-orchestration-engine/provider": [
         "./packages/slingshot-orchestration-engine/src/provider/index.ts"
       ],
-      "@lastshotlabs/slingshot-orchestration": [
-        "./packages/slingshot-orchestration/src/index.ts"
-      ],
+      "@lastshotlabs/slingshot-orchestration": ["./packages/slingshot-orchestration/src/index.ts"],
       "@lastshotlabs/slingshot-orchestration-bullmq": [
         "./packages/slingshot-orchestration-bullmq/src/index.ts"
       ],
@@ -66,7 +66,9 @@
         "./packages/slingshot-interactions/src/testing.ts"
       ],
       "@lastshotlabs/slingshot-notifications": ["./packages/slingshot-notifications/src/index.ts"],
-      "@lastshotlabs/slingshot-notifications/public": ["./packages/slingshot-notifications/src/public.ts"],
+      "@lastshotlabs/slingshot-notifications/public": [
+        "./packages/slingshot-notifications/src/public.ts"
+      ],
       "@lastshotlabs/slingshot-organizations": ["./packages/slingshot-organizations/src/index.ts"],
       "@lastshotlabs/slingshot-m2m": ["./packages/slingshot-m2m/src/index.ts"],
       "@lastshotlabs/slingshot-scim": ["./packages/slingshot-scim/src/index.ts"],

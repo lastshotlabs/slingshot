@@ -40,8 +40,8 @@ Typical composition:
 ## Minimal setup
 
 ```ts
-import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createBullMQOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-bullmq';
+import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration-engine';
 
 declare const tasks: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedTask[];
 declare const workflows: import('@lastshotlabs/slingshot-orchestration-engine').AnyResolvedWorkflow[];

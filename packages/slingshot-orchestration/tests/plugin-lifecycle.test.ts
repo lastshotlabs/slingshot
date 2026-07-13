@@ -189,9 +189,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: true', () => {
     await plugin.setupRoutes?.(ctx);
     await publishPackageCapabilities(app, plugin);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(
-      true,
-    );
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
   });
 });
 
@@ -227,9 +225,7 @@ describe('createOrchestrationPackage — setupRoutes with routes: false', () => 
     await plugin.setupRoutes?.(ctx);
     await publishPackageCapabilities(app, plugin);
 
-    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(
-      true,
-    );
+    expect(pluginState.has('slingshot:package:capabilities:slingshot-orchestration')).toBe(true);
   });
 });
 

@@ -133,7 +133,7 @@ export {
   registerSchemas,
   maybeAutoRegister,
 } from './createRoute';
-export { toOpenApiPath } from './mount';
+export { toHonoPath, toOpenApiPath } from './mount';
 /** Package-first authoring contracts for capabilities, domains, and typed route builders. */
 export {
   applyPublicEntityExposure,

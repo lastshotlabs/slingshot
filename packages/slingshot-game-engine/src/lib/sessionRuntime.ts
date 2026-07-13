@@ -9,6 +9,7 @@
  *
  * @internal — not exported from the package public API.
  */
+import { GameError, GameErrorCode } from '../errors';
 import type { RateLimitBackend, ReplayStore } from '../types/adapters';
 import type {
   GameDefinition,
@@ -146,6 +147,29 @@ export interface SessionRuntime {
    */
   advancing: boolean;
 
+  /**
+   * True only while a phase's `onEnter` handler (and the `onPhaseEnter` hook)
+   * is being invoked. Together with the `'handler'` advance source this is what
+   * lets {@link advancePhase} tell a *self-advance* — the entering phase asking
+   * to move straight on, which must be honored — apart from an unrelated
+   * external advance that merely raced with the transition, which must still be
+   * dropped by the reentrancy guard.
+   */
+  inOnEnter: boolean;
+
+  /**
+   * Set when a phase self-advances from its own `onEnter`. The advance cannot
+   * run inline (we are already inside `doAdvancePhase`), so it is recorded here
+   * and replayed by `drainSelfAdvances` once the in-flight transition settles.
+   */
+  pendingSelfAdvance: boolean;
+
+  /**
+   * Phases traversed by the current chain of self-advances, used to bound the
+   * chain and to name the offending phases if it turns out to be a cycle.
+   */
+  readonly selfAdvanceChain: string[];
+
   readonly publish: (
     room: string,
     message: unknown,
@@ -233,7 +257,9 @@ function buildHandlerDeps(runtime: SessionRuntime): HandlerContextDeps {
     rng: runtime.rng,
     publish: runtime.publish,
     requestAdvancePhase: () => {
-      advancePhase(runtime).catch((e: unknown) => runtime.log.error('advancePhase error', e));
+      advancePhase(runtime, 'handler').catch((e: unknown) =>
+        runtime.log.error('advancePhase error', e),
+      );
     },
     requestEndGame: (result: WinResult) => {
       endGameFlow(runtime, result).catch((e: unknown) => runtime.log.error('endGameFlow error', e));
@@ -417,7 +443,9 @@ export async function createSessionRuntime(
     requestAdvancePhase: () => {
       const runtime = runtimeRef.current;
       if (!runtime) return;
-      advancePhase(runtime).catch((e: unknown) => deps.log.error('advancePhase error', e));
+      advancePhase(runtime, 'handler').catch((e: unknown) =>
+        deps.log.error('advancePhase error', e),
+      );
     },
     requestEndGame: (result: WinResult) => {
       const runtime = runtimeRef.current;
@@ -473,6 +501,9 @@ export async function createSessionRuntime(
     currentRound,
     paused: false,
     advancing: false,
+    inOnEnter: false,
+    pendingSelfAdvance: false,
+    selfAdvanceChain: [],
     publish: deps.publish,
     replayStore: deps.replayStore,
     log: deps.log,
@@ -506,7 +537,7 @@ export async function createSessionRuntime(
 
   // Step 9: Enter first phase
   if (firstPhaseForLog) {
-    await enterPhaseFlow(runtime, firstPhaseForLog);
+    await enterInitialPhase(runtime, firstPhaseForLog);
   }
 
   // Step 10: Store runtime
@@ -517,6 +548,29 @@ export async function createSessionRuntime(
 }
 
 // ── §5.10.3 Enter Phase Flow ─────────────────────────────────────
+
+/**
+ * Enter the session's first phase under the same transition guard `advancePhase`
+ * uses.
+ *
+ * Without the guard, `advancing` is false here, so a first phase that
+ * self-advances from its own `onEnter` would recurse into `doAdvancePhase` from
+ * *inside* the enter that has not finished — and the outer `enterPhaseFlow`
+ * would then go on to publish `game:phase.entered` for a phase the session had
+ * already left. Holding the guard turns that into the same deferred replay every
+ * other self-advance gets.
+ */
+async function enterInitialPhase(runtime: SessionRuntime, phaseName: string): Promise<void> {
+  runtime.advancing = true;
+  try {
+    await enterPhaseFlow(runtime, phaseName);
+    await drainSelfAdvances(runtime);
+  } finally {
+    runtime.advancing = false;
+    runtime.pendingSelfAdvance = false;
+    runtime.selfAdvanceChain.length = 0;
+  }
+}
 
 export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string): Promise<void> {
   const { gameDef, phaseState, timerState, replaySeq, sessionId } = runtime;
@@ -641,12 +695,23 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
   }
 
   // Step 9: Invoke onPhaseEnter hook
+  //
+  // `inOnEnter` marks the window in which a `ctx.advancePhase()` call means "this
+  // phase is a computation, not a wait" — see `advancePhase`. The phase is still
+  // fully entered (timer armed, channels open, `game:phase.entered` published)
+  // even when it self-advances: it genuinely was entered, just briefly, and the
+  // replayed advance cancels its timer on the way out.
   rebuildHandlerContext(runtime);
-  if (phaseDef.onEnter && Object.hasOwn(gameDef.handlers, phaseDef.onEnter)) {
-    const handler = gameDef.handlers[phaseDef.onEnter];
-    await handler(runtime.handlerContext);
+  runtime.inOnEnter = true;
+  try {
+    if (phaseDef.onEnter && Object.hasOwn(gameDef.handlers, phaseDef.onEnter)) {
+      const handler = gameDef.handlers[phaseDef.onEnter];
+      await handler(runtime.handlerContext);
+    }
+    await invokeOnPhaseEnter(gameDef.hooks, runtime.handlerContext, phaseName, hookError);
+  } finally {
+    runtime.inOnEnter = false;
   }
-  await invokeOnPhaseEnter(gameDef.hooks, runtime.handlerContext, phaseName, hookError);
 
   const channelNames = [...phaseState.activeChannels];
   appendReplay(
@@ -672,7 +737,63 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
 
 // ── §5.10.4 Phase Advance Flow ───────────────────────────────────
 
-export async function advancePhase(runtime: SessionRuntime): Promise<void> {
+/**
+ * Where an advance request came from.
+ *
+ * - `'handler'` — a game handler called `ctx.advancePhase()`.
+ * - `'external'` — a phase timeout, a host control, or channel completion.
+ *
+ * The distinction only matters while a transition is already in flight; see
+ * {@link advancePhase}.
+ */
+export type AdvanceSource = 'handler' | 'external';
+
+/**
+ * Maximum number of phases that may self-advance from their own `onEnter` in a
+ * single transition before the engine declares a cycle and fails loudly.
+ *
+ * A legitimate chain is short (a computed phase falling through a skip into a
+ * terminal check). Anything past this is a `A.onEnter → B, B.onEnter → A` loop,
+ * which would otherwise spin forever and take the event loop with it.
+ */
+export const MAX_SELF_ADVANCE_CHAIN = 16;
+
+/**
+ * Replay any advance a phase requested from its own `onEnter`.
+ *
+ * Must only be called by the owner of the `advancing` flag, once the in-flight
+ * transition has fully settled.
+ */
+async function drainSelfAdvances(runtime: SessionRuntime): Promise<void> {
+  while (runtime.pendingSelfAdvance) {
+    runtime.pendingSelfAdvance = false;
+
+    const from = runtime.phaseState.currentPhase;
+    // The game ended during the transition — there is nothing left to leave.
+    if (!from) return;
+
+    runtime.selfAdvanceChain.push(from);
+    if (runtime.selfAdvanceChain.length > MAX_SELF_ADVANCE_CHAIN) {
+      const chain = runtime.selfAdvanceChain.join(' → ');
+      runtime.selfAdvanceChain.length = 0;
+      throw new GameError(
+        GameErrorCode.INTERNAL_ERROR,
+        `[slingshot-game-engine] Phase self-advance cycle in game '${runtime.gameType}': more than ` +
+          `${MAX_SELF_ADVANCE_CHAIN} phases advanced from their own onEnter handler without the ` +
+          `session settling. Chain: ${chain}. A phase whose onEnter calls ctx.advancePhase() must ` +
+          `eventually reach a phase that does not.`,
+      );
+    }
+
+    const ended = await doAdvancePhase(runtime);
+    if (ended) return;
+  }
+}
+
+export async function advancePhase(
+  runtime: SessionRuntime,
+  source: AdvanceSource = 'external',
+): Promise<void> {
   // Reentrancy guard (#7): if an advance is already in flight, drop this call.
   // A phase-timeout can fire while a host action / handler-driven advance is
   // mid-flight; without this both would read the same `currentPhase` and
@@ -680,21 +801,49 @@ export async function advancePhase(runtime: SessionRuntime): Promise<void> {
   // the stale call is safe: the in-flight advance already leaves the current
   // phase, which is exactly what the second caller wanted. It never awaits
   // another advance, so handler-driven advances cannot deadlock.
-  if (runtime.advancing) return;
+  //
+  // The one call that must NOT be dropped is a phase self-advancing from its own
+  // `onEnter` — "this phase is a computation, not a wait" (deck prep, skip-if-
+  // not-applicable, terminal-condition checks). `onEnter` runs *inside*
+  // `doAdvancePhase`, so `advancing` is necessarily still true and the guard used
+  // to swallow it silently: no throw, no log, the phase just sat there until its
+  // timeout fired. Record it and replay it once this transition settles.
+  //
+  // Only a `'handler'`-sourced request inside the `onEnter` window is replayed.
+  // An external advance (host control, phase timeout, channel completion) that
+  // merely lands in the same window is still dropped, exactly as before — it is
+  // aimed at the phase we are already leaving, and honoring it would skip the
+  // phase being entered. That is the double-advance the guard exists to prevent.
+  if (runtime.advancing) {
+    if (source === 'handler' && runtime.inOnEnter) {
+      runtime.pendingSelfAdvance = true;
+    }
+    return;
+  }
+
   runtime.advancing = true;
   try {
-    await doAdvancePhase(runtime);
+    const ended = await doAdvancePhase(runtime);
+    if (!ended) await drainSelfAdvances(runtime);
   } finally {
     runtime.advancing = false;
+    runtime.pendingSelfAdvance = false;
+    runtime.selfAdvanceChain.length = 0;
   }
 }
 
-async function doAdvancePhase(runtime: SessionRuntime): Promise<void> {
+/**
+ * Run one phase transition.
+ *
+ * @returns `true` when the session ended (or had no phase to leave), meaning no
+ *   further advance should be attempted.
+ */
+async function doAdvancePhase(runtime: SessionRuntime): Promise<boolean> {
   const { gameDef, phaseState, timerState, replaySeq, sessionId } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
   const currentPhase = phaseState.currentPhase;
 
-  if (!currentPhase) return;
+  if (!currentPhase) return true;
 
   // Step 1: Cancel phase timer
   if (phaseState.phaseTimerId) {
@@ -757,7 +906,7 @@ async function doAdvancePhase(runtime: SessionRuntime): Promise<void> {
   // Step 6: If no next phase → game over
   if (!nextPhase) {
     await endGameFlow(runtime, { reason: 'All phases completed' });
-    return;
+    return true;
   }
 
   // Step 7: Clear channel map
@@ -765,6 +914,7 @@ async function doAdvancePhase(runtime: SessionRuntime): Promise<void> {
 
   // Step 8: Enter next phase
   await enterPhaseFlow(runtime, nextPhase);
+  return false;
 }
 
 // ── Phase timeout handler ────────────────────────────────────────

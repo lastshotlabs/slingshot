@@ -152,6 +152,7 @@ closure-owned state, no singletons.
 
 - **Adding a channel mode**: add case in `src/lib/channels.ts` `recordSubmission()`, add to `ChannelMode` type in `src/types/models.ts`
 - **Adding a phase advance trigger**: update `PhaseAdvanceTrigger` type, handle in `src/lib/phases.ts`
+- **A phase that is a computation, not a wait** (deck prep, skip-if-not-applicable, terminal checks): call `ctx.advancePhase()` from the phase's `onEnter`, optionally after `ctx.setNextPhase(...)`. The advance cannot run inline — `onEnter` executes inside the transition — so the runtime records it and replays it once the transition settles. Chains resolve in a single transition; a cycle throws after `MAX_SELF_ADVANCE_CHAIN` (16) hops. An *external* advance (host control, phase timeout) that lands mid-transition is still dropped by the reentrancy guard.
 - **Adding a handler context method**: add to `ProcessHandlerContext` interface in `src/types/models.ts`, implement in `src/lib/handlers.ts`
 - **Extending app-facing runtime controls**: update `src/types/state.ts`, implement in `src/lib/sessionControl.ts`, and wire through `src/plugin.ts`
 - **Adding a recipe**: create file in `src/recipes/`, export from `src/recipes/index.ts`

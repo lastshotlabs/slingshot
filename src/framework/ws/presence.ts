@@ -10,6 +10,25 @@ export const untrackSocket = (state: WsState, socketId: string): void => {
   state.socketUsers.delete(socketId);
 };
 
+/**
+ * True when the user holds at least one live socket in the room.
+ *
+ * Presence is the only reliable liveness signal for a room member: the engine's
+ * per-player `connected` flag exists only while a game runtime is active, so a
+ * lobby (no runtime yet) has no other way to tell whether the host is still
+ * there. Apps use this to detect an absent host and offer recovery.
+ */
+export const isUserPresent = (
+  state: WsState,
+  endpoint: string,
+  room: string,
+  userId: string,
+): boolean => {
+  const roomMap = state.roomPresence.get(wsEndpointKey(endpoint, room));
+  const sockets = roomMap?.get(userId);
+  return Boolean(sockets && sockets.size > 0);
+};
+
 export const addPresence = (
   state: WsState,
   socketId: string,

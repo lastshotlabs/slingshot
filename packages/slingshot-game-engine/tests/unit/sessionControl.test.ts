@@ -246,3 +246,125 @@ describe('createSessionControls', () => {
     expect(result?.snapshot.currentRound).toBe(3);
   });
 });
+
+describe('transferHost', () => {
+  /** Fake persistence: rows mirror the two players the harness creates. */
+  function makeAdapters(initial?: Array<Record<string, unknown>>) {
+    const rows: Array<Record<string, unknown>> = initial ?? [
+      {
+        id: 'row-1',
+        sessionId: 'session-1',
+        userId: 'host-user',
+        isHost: true,
+        isSpectator: false,
+      },
+      {
+        id: 'row-2',
+        sessionId: 'session-1',
+        userId: 'player-2',
+        isHost: false,
+        isSpectator: false,
+      },
+    ];
+    const session: Record<string, unknown> = { id: 'session-1', hostUserId: 'host-user' };
+    return {
+      rows,
+      session,
+      adapters: {
+        sessionAdapter: {
+          update(_id: string, patch: Record<string, unknown>) {
+            Object.assign(session, patch);
+          },
+        },
+        playerAdapter: {
+          async find() {
+            return rows;
+          },
+          update(id: string, patch: Record<string, unknown>) {
+            const row = rows.find(candidate => candidate.id === id);
+            if (row) Object.assign(row, patch);
+          },
+        },
+      },
+    };
+  }
+
+  test('moves the host role across rows, session, and runtime, and broadcasts', async () => {
+    const { activeRuntimes, runtime } = await createHarness();
+    const published: Array<Record<string, unknown>> = [];
+    runtime.publish = (_room: string, message: unknown) => {
+      published.push(message as Record<string, unknown>);
+    };
+    const { rows, session, adapters } = makeAdapters();
+    const controls = createSessionControls(activeRuntimes, adapters as never);
+
+    const snapshot = await controls.transferHost('session-1', 'player-2');
+
+    // Persisted rows: exactly one host, and it is the new one.
+    expect(rows.filter(row => row.isHost === true).map(row => row.userId)).toEqual(['player-2']);
+    expect(session.hostUserId).toBe('player-2');
+
+    // Runtime mirrors it.
+    expect(snapshot?.players.find(p => p.userId === 'player-2')?.isHost).toBe(true);
+    expect(snapshot?.players.find(p => p.userId === 'host-user')?.isHost).toBe(false);
+
+    const event = published.find(message => message.type === 'game:host.transferred');
+    expect(event).toMatchObject({
+      type: 'game:host.transferred',
+      sessionId: 'session-1',
+      newHostUserId: 'player-2',
+      previousHostUserId: 'host-user',
+    });
+  });
+
+  test('repairs a roster that already has a stale second host', async () => {
+    // The regression this replaces: the old auto-transfer left `isHost` set on
+    // a contestant with no restore path, so two rows claimed the host role.
+    const { activeRuntimes } = await createHarness();
+    const { rows, adapters } = makeAdapters([
+      {
+        id: 'row-1',
+        sessionId: 'session-1',
+        userId: 'host-user',
+        isHost: true,
+        isSpectator: false,
+      },
+      { id: 'row-2', sessionId: 'session-1', userId: 'player-2', isHost: true, isSpectator: false },
+    ]);
+    const controls = createSessionControls(activeRuntimes, adapters as never);
+
+    await controls.transferHost('session-1', 'player-2');
+
+    expect(rows.filter(row => row.isHost === true).map(row => row.userId)).toEqual(['player-2']);
+  });
+
+  test('rejects a non-member and a spectator', async () => {
+    const { activeRuntimes } = await createHarness();
+    const { adapters } = makeAdapters([
+      {
+        id: 'row-1',
+        sessionId: 'session-1',
+        userId: 'host-user',
+        isHost: true,
+        isSpectator: false,
+      },
+      { id: 'row-3', sessionId: 'session-1', userId: 'watcher', isHost: false, isSpectator: true },
+    ]);
+    const controls = createSessionControls(activeRuntimes, adapters as never);
+
+    await expect(controls.transferHost('session-1', 'nobody')).rejects.toThrow(/not in session/);
+    await expect(controls.transferHost('session-1', 'watcher')).rejects.toThrow(/spectator/);
+  });
+
+  test('persists without a live runtime (lobby has no runtime)', async () => {
+    const activeRuntimes = new Map<string, SessionRuntime>();
+    const { rows, session, adapters } = makeAdapters();
+    const controls = createSessionControls(activeRuntimes, adapters as never);
+
+    const snapshot = await controls.transferHost('session-1', 'player-2');
+
+    expect(snapshot).toBeNull();
+    expect(session.hostUserId).toBe('player-2');
+    expect(rows.filter(row => row.isHost === true).map(row => row.userId)).toEqual(['player-2']);
+  });
+});

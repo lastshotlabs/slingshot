@@ -177,6 +177,28 @@ export interface GameEngineSessionControls {
     sessionId: string,
     mutator: (context: GameEngineSessionMutationContext) => TResult | Promise<TResult>,
   ): Promise<GameEngineSessionMutationResult<TResult> | null>;
+
+  /**
+   * Move the host role to another player in the session.
+   *
+   * Persists `isHost` on the player rows and `hostUserId` on the session (so it
+   * survives with or without a live runtime — a lobby has no runtime), enforces
+   * the "exactly one host" invariant, and broadcasts `game:host.transferred`
+   * when a runtime is active.
+   *
+   * The engine deliberately does NOT auto-transfer on a socket close: a
+   * transient disconnect must not cost the host their role. Apps call this for
+   * an explicit handoff, or to let players reclaim a match whose host is gone
+   * for good (use room presence to decide "gone").
+   *
+   * Returns the updated snapshot, or `null` when no runtime is active (the
+   * transfer is still persisted). Throws if the target is not a session member
+   * or is a spectator.
+   */
+  transferHost(
+    sessionId: string,
+    newHostUserId: string,
+  ): Promise<GameEngineActiveSessionSnapshot | null>;
 }
 
 /**

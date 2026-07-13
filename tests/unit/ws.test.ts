@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 import {
+  addPresence,
+  getRoomPresence,
+  isUserPresent,
+  removePresence,
+} from '../../src/framework/ws/presence';
+import {
   cleanupSocket,
   getRoomSubscribers,
   getRooms,
@@ -164,5 +170,39 @@ describe('ws room management', () => {
       expect(published).not.toBeNull();
       expect(JSON.parse(published!.data)).toEqual({ hello: 'world' });
     });
+  });
+});
+
+describe('room presence by user', () => {
+  it('lists users present in a room and reports per-user presence', () => {
+    const state = createWsState({ presenceEnabled: true });
+    state.socketUsers.set('sock-a', 'host-user');
+    state.socketUsers.set('sock-b', 'player-2');
+    // Same user on two devices — must appear once, and stay present until the
+    // last socket goes (this is what makes it a reliable liveness signal).
+    state.socketUsers.set('sock-c', 'player-2');
+
+    for (const socketId of ['sock-a', 'sock-b', 'sock-c']) {
+      addPresence(state, socketId, ENDPOINT, 'sessions:s1:session');
+    }
+
+    expect(getRoomPresence(state, ENDPOINT, 'sessions:s1:session').sort()).toEqual([
+      'host-user',
+      'player-2',
+    ]);
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'host-user')).toBe(true);
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'ghost')).toBe(false);
+
+    // The host's only socket drops: absent. player-2 still holds one.
+    removePresence(state, 'sock-a', ENDPOINT, 'sessions:s1:session');
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'host-user')).toBe(false);
+
+    removePresence(state, 'sock-b', ENDPOINT, 'sessions:s1:session');
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'player-2')).toBe(true);
+    removePresence(state, 'sock-c', ENDPOINT, 'sessions:s1:session');
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'player-2')).toBe(false);
+
+    expect(getRoomPresence(state, ENDPOINT, 'sessions:s1:session')).toEqual([]);
+    expect(getRoomPresence(state, ENDPOINT, 'no-such-room')).toEqual([]);
   });
 });

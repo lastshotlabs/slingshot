@@ -39,8 +39,21 @@ function snapshotPlayer(
  * exposes read-only snapshots and explicit control methods instead of leaking
  * mutable `SessionRuntime` references to app code.
  */
+/** Persistence handles so a host transfer survives the runtime (see `transferHost`). */
+export interface SessionControlAdapters {
+  sessionAdapter?: { update?: (id: string, patch: Record<string, unknown>) => unknown };
+  playerAdapter?: {
+    update?: (id: string, patch: Record<string, unknown>) => unknown;
+    find?: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+    list?: (opts: {
+      filter?: Record<string, unknown>;
+    }) => Promise<{ items: Array<Record<string, unknown>> }>;
+  };
+}
+
 export function createSessionControls(
   activeRuntimes: Map<string, SessionRuntime>,
+  adapters: SessionControlAdapters = {},
 ): GameEngineSessionControls {
   function toSnapshot(runtime: SessionRuntime): GameEngineActiveSessionSnapshot {
     const phaseTimerId = runtime.phaseState.phaseTimerId;
@@ -191,5 +204,72 @@ export function createSessionControls(
         snapshot: toSnapshot(runtime),
       };
     },
+
+    async transferHost(sessionId: string, newHostUserId: string) {
+      const runtime = activeRuntimes.get(sessionId) ?? null;
+
+      // Persisted rows are the source of truth for `isHost` (the runtime is a
+      // cache and may not exist yet — a lobby has no runtime). Update both.
+      const rows = await listPlayerRows(adapters.playerAdapter, sessionId);
+      const incoming =
+        rows.find(row => String(row.userId ?? '') === newHostUserId) ??
+        (runtime?.players.has(newHostUserId) ? { userId: newHostUserId } : null);
+      if (!incoming) {
+        throw new Error(`Player ${newHostUserId} is not in session ${sessionId}.`);
+      }
+      if (incoming.isSpectator === true) {
+        throw new Error('A spectator cannot be made host.');
+      }
+
+      const previousHostUserId =
+        rows.find(row => row.isHost === true && String(row.userId ?? '') !== newHostUserId)
+          ?.userId ?? null;
+
+      // Demote every other row before promoting: the historical bug this
+      // replaces left a stale `isHost` on a contestant with no restore path,
+      // corrupting the roster. Clearing first makes the invariant "exactly one
+      // host" hold even if a previous transfer half-applied.
+      for (const row of rows) {
+        const isTarget = String(row.userId ?? '') === newHostUserId;
+        if (row.isHost === true && !isTarget) {
+          await adapters.playerAdapter?.update?.(String(row.id), { isHost: false });
+        }
+        if (isTarget && row.isHost !== true) {
+          await adapters.playerAdapter?.update?.(String(row.id), { isHost: true });
+        }
+      }
+      await adapters.sessionAdapter?.update?.(sessionId, { hostUserId: newHostUserId });
+
+      if (runtime) {
+        for (const player of runtime.players.values()) {
+          player.isHost = player.userId === newHostUserId;
+        }
+        refreshHandlerContext(runtime);
+        runtime.publish(sessionRoom(sessionId), {
+          type: 'game:host.transferred',
+          sessionId,
+          newHostUserId,
+          previousHostUserId: previousHostUserId ? String(previousHostUserId) : null,
+        });
+      }
+
+      return runtime ? toSnapshot(runtime) : null;
+    },
   };
+}
+
+/** Player rows for a session, tolerating adapters that expose `find` or `list`. */
+async function listPlayerRows(
+  playerAdapter: SessionControlAdapters['playerAdapter'],
+  sessionId: string,
+): Promise<Array<Record<string, unknown>>> {
+  if (!playerAdapter) return [];
+  if (typeof playerAdapter.find === 'function') {
+    return (await playerAdapter.find({ sessionId })) ?? [];
+  }
+  if (typeof playerAdapter.list === 'function') {
+    const result = await playerAdapter.list({ filter: { sessionId } });
+    return result?.items ?? [];
+  }
+  return [];
 }

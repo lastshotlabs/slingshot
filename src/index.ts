@@ -229,7 +229,10 @@ export type { RedisTransportOptions } from './framework/ws/redisTransport.js';
 export type { HeartbeatConfig } from './framework/ws/heartbeat.js';
 
 // WebSocket — Presence (consumer API)
-export { getRoomPresence, getUserPresence } from './framework/ws/presence.js';
+// Presence is keyed by USER (getRoomSubscribers returns socket ids). It is the
+// only liveness signal available before a game runtime exists — which is how an
+// app detects an absent host in a lobby and offers recovery.
+export { getRoomPresence, getUserPresence, isUserPresent } from './framework/ws/presence.js';
 
 // Tenancy
 export { createTenantService } from './framework/tenancy/service.js';

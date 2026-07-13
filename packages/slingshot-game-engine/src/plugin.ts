@@ -438,7 +438,10 @@ export function createGameEnginePackage(
         sessionAdapter: capturedSessionAdapter,
         playerAdapter: capturedPlayerAdapter,
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
-        sessionControls: createSessionControls(activeRuntimes),
+        sessionControls: createSessionControls(activeRuntimes, {
+          sessionAdapter: capturedSessionAdapter as never,
+          playerAdapter: capturedPlayerAdapter as never,
+        }),
       });
       // Legacy plugin-state slot — preserved for back-compat with consumers
       // that read the runtime via `getPluginState(app).get(GAME_ENGINE_PLUGIN_STATE_KEY)`.

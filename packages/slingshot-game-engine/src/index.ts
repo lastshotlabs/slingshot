@@ -173,3 +173,20 @@ export { buildRulesValidationGuard } from './middleware/rulesValidationGuard';
 
 /** Build the content validation guard middleware (validates content provider and input). */
 export { buildContentValidationGuard } from './middleware/contentValidationGuard';
+
+// ── Room Names ──────────────────────────────────────────────────
+// The WS room-name builders. Apps need these to publish into a session's rooms
+// from OUTSIDE a runtime handler — e.g. broadcasting a lobby roster change over
+// `ctx.wsPublish(...)` before the game has started and a runtime exists. Without
+// them a consumer has to hard-code the engine's room-naming convention, which
+// then silently breaks whenever the convention changes.
+
+export {
+  sessionRoom,
+  hostRoom,
+  playerRoom,
+  teamRoom,
+  roleRoom,
+  spectatorRoom,
+  streamRoom,
+} from './lib/display';

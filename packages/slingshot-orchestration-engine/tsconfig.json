@@ -1,4 +1,16 @@
 {
+  // Extends the root config so the workspace path aliases (`@lastshotlabs/*`)
+  // resolve from inside this package's source.
+  //
+  // This package imports `noopLogger` from `@lastshotlabs/slingshot-core` — a
+  // real value import, not just a type. Without the root `paths`, any consumer
+  // that reaches this package through the source (which is how the whole repo's
+  // dev loop and test suite work) fails to resolve `slingshot-core` the moment
+  // resolution descends into `src/engine/taskRunner.ts`. That made the engine
+  // effectively unimportable from any other package's tests.
+  //
+  // `tsconfig.build.json` is separate and unaffected, so emit is unchanged.
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "strict": true,
     "moduleResolution": "bundler",
@@ -7,5 +19,8 @@
     "types": ["bun"],
     "skipLibCheck": true
   },
+  // Explicit, because extending the root would otherwise inherit its `include`
+  // and drag the root's own src/tests into this package's typecheck.
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
   "exclude": ["dist", "node_modules"]
 }

@@ -11,14 +11,14 @@ moderation, degradation) lives in the orchestrator (`src/lib/client.ts`).
 ## Invariants — do not break these
 
 1. **`ProviderResult.structured` is ADVISORY.** The orchestrator re-validates
-   with `schema.safeParse()` for *every* provider, including "native" ones.
+   with `schema.safeParse()` for _every_ provider, including "native" ones.
    Anthropic can return `parsed_output: null`; an OpenAI-compatible endpoint can
    claim schema enforcement it doesn't have. One validation point is the whole
    reason provider-swapping works. Never trust `structured` and skip the parse.
 
 2. **Every retry and every repair attempt re-enters the spend guard.** A retry
    storm and a repair loop are the two shapes an accidental bill takes. The
-   guard is pre-flight (`spend.check()` *before* the HTTP call), because a
+   guard is pre-flight (`spend.check()` _before_ the HTTP call), because a
    post-hoc check only tells you about the runaway loop after it has finished
    spending.
 
@@ -30,13 +30,42 @@ moderation, degradation) lives in the orchestrator (`src/lib/client.ts`).
 4. **`costUsd: null` ≠ `costUsd: 0`.** Unknown is not free. This distinction has
    to survive aggregation (`AiUsageSummary.unpricedCalls`).
 
-5. **Moderation fails closed.** No moderator + a requested policy = throw. A
+5. **Moderation fails closed.** An undefined policy throws; a judge that errors
+   BLOCKS; an item the judge silently dropped is BLOCKED, not waved through. A
    safety control that quietly allows everything is worse than none, because the
-   app believes it has one.
+   app believes it has one. `onError: 'allow'` exists, and is an explicit,
+   named choice — never a default.
 
 6. **Never read `process.env`.** API keys come from
    `getContext(app).secrets.get(apiKeySecret)` in `setupMiddleware`, and a
-   provider that declares a key it can't get fails the *boot*.
+   provider that declares a key it can't get fails the _boot_.
+
+7. **The usage entity has NO `routes` key, and that is load-bearing.** Omitting
+   it is what makes the framework mount no router (`createEntityPlugin.ts:682`).
+   Adding one would publish a per-tag, per-model breakdown of what the app spends
+   and what it prompts with, to anyone who asks. Reads go through `AiUsageCap`.
+   The boot test asserts `GET /ai-usage → 404` so this can never regress quietly.
+
+8. **The response cache and in-flight coalescing are independent.** The cache is
+   OFF by default (a party game wants variety, not an identical deck every time);
+   coalescing is ON by default (five guests tapping the same button at once is
+   one intent, and should be one call). Do NOT gate coalescing behind
+   `responseCache.enabled` — that silently disables it in the default
+   configuration, which is the one everybody runs. This was a real bug.
+
+## Background generation
+
+A zod schema **cannot ride a queue** — `JSON.stringify` turns it into `{}`. So
+the queued job carries the schema NAME, and the worker looks the real schema up
+in the registry the app passed to `createAiGenerationTask({ schemas })`
+(`src/orchestration.ts`, a separate entry point so the main entry never pulls in
+the orchestration engine).
+
+`generateStructuredInBackground` therefore returns a **discriminated union**:
+`{ mode: 'queued', runId }` when a queue exists AND the schema is registered,
+`{ mode: 'sync', result }` otherwise. A caller physically cannot mistake an
+inline run for a durable one — which `{ runId?: string }` would have allowed,
+and which you would discover when a restart lost someone's deck.
 
 ## The framework trap this package already stepped in
 
@@ -44,7 +73,7 @@ Capability publication must be **declarative** — `definePackage({ capabilities
 { provides: [...] } })`. Two things make this non-obvious:
 
 - The framework resolves those values **eagerly**, during
-  `publishPackageRuntimeState`, which runs *before* this package's
+  `publishPackageRuntimeState`, which runs _before_ this package's
   `setupMiddleware` — so the real client does not exist yet.
 - Publishing imperatively instead does not work: the framework re-runs its
   declarative pass at the top of `setupPost` and **wipes** the slot.

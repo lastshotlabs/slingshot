@@ -52,6 +52,7 @@ import { createModerator } from './moderation';
 import { computeUsage, estimateMaxCost, resolvePricing } from './pricing';
 import { createResponseCache, responseCacheKey } from './responseCache';
 import { withRetry } from './retry';
+import type { AiCacheAdapter, AiEventBus, AiUsageStore } from './seams';
 import { createSpendGuard } from './spend';
 import {
   chooseStructuredMode,
@@ -75,11 +76,37 @@ export interface AiRuntime {
   readonly usage: UsageRecorder;
 }
 
+/**
+ * How a background generation actually gets queued.
+ *
+ * Injected rather than imported, so the main entry point never pulls in
+ * `slingshot-orchestration`. When it is absent, `generateStructuredInBackground`
+ * runs INLINE and says so via the discriminated handle — a caller physically
+ * cannot mistake a synchronous run for a durable queued one.
+ */
+export interface AiBackgroundRunner {
+  /** Enqueue and return the run id. */
+  enqueue(req: {
+    schemaName: string;
+    request: Omit<AiStructuredRequest<unknown>, 'schema' | 'signal'>;
+  }): Promise<string>;
+  /** Whether this schema is registered with the background task. */
+  supports(schemaName: string): boolean;
+}
+
 export interface CreateAiClientOptions {
   readonly config: AiPackageConfig;
   readonly providers: ReadonlyMap<string, AiProvider>;
   readonly logger: AiLogger;
   readonly metrics?: AiMetrics;
+  /** Framework event bus. Used for `ai:spend.soft_limit`. */
+  readonly bus?: AiEventBus;
+  /** Persistence for the usage ledger. Absent → in-memory only. */
+  readonly store?: AiUsageStore | null;
+  /** Backing store for the response cache. Absent → in-process Map. */
+  readonly cache?: AiCacheAdapter | null;
+  /** Durable background generation. Absent → inline, and honestly reported. */
+  readonly background?: AiBackgroundRunner | null;
 }
 
 interface Resolved {
@@ -92,10 +119,19 @@ interface Resolved {
 export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   const { config, providers, logger, metrics } = options;
 
-  const spend = createSpendGuard(config, logger);
-  const usage = createUsageRecorder(config, spend);
-  const moderator = createModerator(config);
-  const responseCache = createResponseCache(config);
+  const spend = createSpendGuard(config, logger, options.bus);
+  const usage = createUsageRecorder(config, spend, options.store, logger);
+  // `generateStructured` is a hoisted function declaration below, so the judge
+  // runs through the SAME orchestrator path as any other call — spend guard,
+  // retry layer, single validation point. A judge with its own private path to
+  // the provider would be the one call here that could run away with the budget.
+  const moderator = createModerator({
+    config,
+    logger,
+    metrics,
+    generateStructured: <T>(req: AiStructuredRequest<T>) => generateStructured(req),
+  });
+  const responseCache = createResponseCache(config, options.cache, logger);
   const promptMonitor = new PromptCacheMonitor(
     logger,
     config.promptCache.devWarnings,
@@ -302,7 +338,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     if (computed.costUsd !== null) {
       metrics?.counter('ai.cost_usd', computed.costUsd, labels);
     } else {
-      metrics?.counter('ai.cost_unknown', 1, labels);
+      // The blind spot, made visible. If this counter is climbing, `ai.cost_usd`
+      // is not the whole bill — and a dashboard that showed only the latter
+      // would be quietly wrong.
+      metrics?.counter('ai.cost.unpriced', 1, labels);
     }
     return computed;
   }
@@ -390,7 +429,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       });
 
     if (cacheEnabled) {
-      const hit = responseCache.get<AiResult<string>>(cacheKey);
+      const hit = await responseCache.get<AiResult<string>>(cacheKey);
       if (hit) {
         metrics?.counter('ai.response_cache.hit', 1, { provider: resolved.name });
         return { ...hit, cached: 'response' };
@@ -426,9 +465,15 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       };
     };
 
-    const output = cacheEnabled ? await responseCache.inFlight(cacheKey, run) : await run();
+    // Coalescing runs ALWAYS, not only when the response cache is on — the two
+    // are independent by design. The response cache is off by default (a party
+    // game wants variety); coalescing is on by default (five guests tapping the
+    // same button at the same instant is one intent, and should be one call).
+    // Gating coalescing behind the cache would have quietly disabled it in the
+    // default configuration, which is exactly the configuration everyone runs.
+    const output = await responseCache.inFlight(cacheKey, run);
     if (cacheEnabled) {
-      responseCache.set(
+      await responseCache.set(
         cacheKey,
         output,
         cacheOptions?.ttlSeconds ?? config.responseCache.ttlSeconds,
@@ -568,6 +613,26 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const resolved = resolve(req);
     const { request, degradations, rendered } = prepare(req, resolved);
 
+    // Streaming and moderation are fundamentally at odds: the deltas reach the
+    // user's screen BEFORE there is a complete text to judge. Moderation here
+    // can only ever be post-hoc — it can tell you the thing you already showed
+    // someone was against policy. Under `strict` that is not an acceptable
+    // half-measure, so we refuse rather than imply a protection we don't have.
+    if (req.moderation && config.moderation.enabled) {
+      degrade(
+        degradations,
+        {
+          feature: 'moderation',
+          requested: 'pre-delivery',
+          applied: 'post-hoc',
+          reason:
+            'a streamed response is shown to the user before it is complete, so moderation runs ' +
+            'only on finalResult() — after the text has already been read. You cannot un-show it',
+        },
+        resolved.name,
+      );
+    }
+
     let finalPromise: Promise<AiResult<string>> | undefined;
 
     const toResult = async (result: ProviderResult): Promise<AiResult<string>> => {
@@ -662,10 +727,37 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   async function generateStructuredInBackground<T>(
     req: AiStructuredRequest<T>,
   ): Promise<AiBackgroundHandle<AiResult<T>>> {
-    // `slingshot-orchestration` integration (durable, retried, survives a
-    // restart) is F4. Until then this runs inline — and SAYS SO, via the
-    // discriminated handle. A caller cannot mistake a synchronous run for a
-    // queued one, which is the entire reason the handle is a union.
+    const runner = options.background;
+    const schemaName = req.schemaName ?? 'result';
+
+    // Queue it when there is a queue AND the schema is registered with the
+    // background task. Both halves matter: a zod schema cannot be serialized
+    // onto a queue, so the job carries the schema NAME and the worker looks the
+    // real schema up in the registry the app supplied at task-creation time. A
+    // name the worker doesn't know would be a job that can only ever fail.
+    if (runner && runner.supports(schemaName)) {
+      const { schema: _schema, signal: _signal, ...serializable } = req;
+      void _schema;
+      void _signal;
+
+      const runId = await runner.enqueue({ schemaName, request: serializable });
+      metrics?.counter('ai.background.queued', 1, { schema: schemaName });
+      return { mode: 'queued', runId };
+    }
+
+    if (runner) {
+      logger.warn(
+        `ai: generateStructuredInBackground('${schemaName}') ran INLINE — the schema is not ` +
+          `registered with the background task. Add it to createAiGenerationTask({ schemas }) ` +
+          `to make it durable.`,
+        { schema: schemaName },
+      );
+    }
+
+    // No queue: run inline, and SAY SO via the discriminated handle. A caller
+    // physically cannot mistake a synchronous run for a durable queued one,
+    // which is the entire reason the handle is a union rather than `{runId?}`.
+    metrics?.counter('ai.background.inline', 1, { schema: schemaName });
     const result = await generateStructured(req);
     return { mode: 'sync', result };
   }

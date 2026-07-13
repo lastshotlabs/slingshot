@@ -277,13 +277,14 @@ describe('moderation', () => {
     ).rejects.toThrow(/blocked/i);
   });
 
-  test('fails CLOSED when moderation is requested but no moderator exists', async () => {
-    // The alternative — quietly allowing everything — is the worst possible
-    // outcome for a safety control, because the app believes it has one.
+  test('fails CLOSED when a requested policy is not defined', async () => {
+    // The alternative — quietly allowing everything because the policy name was
+    // a typo — is the worst possible outcome for a safety control, because the
+    // app believes it has one.
     const { client } = build(createFakeAiProvider({ responses: ['anything'] }));
 
     await expect(client.generate({ ...ask, moderation: { policy: 'default' } })).rejects.toThrow(
-      /no moderator is available/,
+      /policy 'default' is not defined/,
     );
   });
 

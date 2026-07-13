@@ -171,6 +171,22 @@ export const aiPackageConfigSchema = z.object({
     })
     .prefault({}),
 
+  /**
+   * Durable background generation via `slingshot-orchestration`.
+   *
+   * Off by default, and OPT-IN rather than auto-detected: an app that installs
+   * orchestration for unrelated reasons should not silently have its AI calls
+   * start going through a queue. When enabled, the app must also register the
+   * task from `@lastshotlabs/slingshot-ai/orchestration` — see that module.
+   */
+  orchestration: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** Must match the name given to `createAiGenerationTask()`. */
+      taskName: z.string().default('slingshot-ai-generate-structured'),
+    })
+    .prefault({}),
+
   logger: z.custom<AiLogger>(v => typeof v === 'object' && v !== null).optional(),
 });
 

@@ -6,14 +6,15 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 - **Entity** - `@lastshotlabs/slingshot-entity`: config-driven entity CRUD, code generation, search, transitions
 - **Auth** - `@lastshotlabs/slingshot-auth`: auth providers, sessions, MFA, OAuth, WebAuthn, passkeys
 - **Community** - `@lastshotlabs/slingshot-community`: messaging, channels, reactions, notifications
-- **Packages** - 15 in-tree `definePackage(...)`-authored modules consumed via `createApp({ packages: [createXxxPackage(...)] })`
+- **AI** - `@lastshotlabs/slingshot-ai`: provider-neutral LLM generation, structured output, moderation, spend/cost accounting
+- **Packages** - 16 in-tree `definePackage(...)`-authored modules consumed via `createApp({ packages: [createXxxPackage(...)] })`
 - **CLI** - `slingshot init`, `slingshot migrate generate|apply|status|dev`, `slingshot deploy`
 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
 - **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
-- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
+- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`, `slingshot-ai`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
 ## Canonical Authoring Path
@@ -59,13 +60,14 @@ Shared base layer:
       `-- slingshot-entity   (entity definitions, generators, config-driven runtime factories,
                               compilePackages entry point, runPackageLifecycle test helper)
 
-Packages — 15 `definePackage(...)`-authored modules consumed through `packages:`:
+Packages — 16 `definePackage(...)`-authored modules consumed through `packages:`:
 
       |-- slingshot-emoji              slingshot-search             slingshot-orchestration
       |-- slingshot-interactions       slingshot-notifications      slingshot-polls
       |-- slingshot-push               slingshot-organizations      slingshot-assets
       |-- slingshot-permissions        slingshot-ssr                slingshot-community
-      `-- slingshot-webhooks           slingshot-chat               slingshot-game-engine
+      |-- slingshot-webhooks           slingshot-chat               slingshot-game-engine
+      `-- slingshot-ai
 
 Plugins — 11 plugin-tier `SlingshotPlugin` factories consumed through `plugins:`:
 

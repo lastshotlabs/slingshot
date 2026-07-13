@@ -4,13 +4,21 @@
 import type { PluginSetupContext, SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import {
   createConsoleLogger,
+  getCacheAdapterOrNull,
   getContext,
+  maybeEntityAdapter,
   provideCapability,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { entity } from '@lastshotlabs/slingshot-entity';
 import { type AiPackageConfig, type AiPackageConfigInput, aiPackageConfigSchema } from './config';
+import { AiUsageRecord } from './entities/aiUsage';
 import { AiConfigError } from './errors';
-import { type AiRuntime, createAiClient } from './lib/client';
+// Side-effect import: declares `ai:spend.soft_limit` on the SlingshotEventMap.
+import './events';
+import { backgroundSchemasFor } from './lib/backgroundRegistry';
+import { type AiBackgroundRunner, type AiRuntime, createAiClient } from './lib/client';
+import type { AiUsageRow, AiUsageStore } from './lib/seams';
 // Side-effect import: registers the built-in adapters ('anthropic',
 // 'openai-compatible', 'openai') in the provider registry. Neither adapter pulls
 // an SDK at import time — the Anthropic one loads its SDK lazily in its factory.
@@ -143,9 +151,89 @@ export function createAiPackage(rawConfig: AiPackageConfigInput): SlingshotPacka
     records: (filter?: AiUsageFilter) => live().usage.records(filter),
   };
 
+  // The usage entity's adapter and the orchestration runtime only exist from
+  // `setupPost` onward, but the client is built in `setupMiddleware`. Rather
+  // than defer the client (which would leave `AiClientCap` dead during other
+  // packages' `setupPost`), the client is handed LATE-BOUND views that no-op
+  // until the real thing lands. Same shape as the capability facades above, and
+  // for the same reason.
+  let usageAdapter: {
+    create?(input: Record<string, unknown>): Promise<unknown>;
+    find?(filter: Record<string, unknown>): Promise<unknown>;
+  } | null = null;
+
+  const lateStore: AiUsageStore = {
+    async write(row: AiUsageRow): Promise<void> {
+      if (!usageAdapter?.create) return;
+      await usageAdapter.create({
+        provider: row.provider,
+        model: row.model,
+        operation: row.operation,
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheReadTokens: row.cacheReadTokens,
+        cacheWriteTokens: row.cacheWriteTokens,
+        costUsd: row.costUsd,
+        latencyMs: row.latencyMs,
+        tags: row.tags,
+        createdAt: row.createdAt,
+      });
+    },
+
+    async since(since: Date): Promise<readonly AiUsageRow[]> {
+      if (!usageAdapter?.find) return [];
+      const found = await usageAdapter.find({ createdAt: { $gte: since } });
+      const rows = (
+        Array.isArray(found) ? found : ((found as { items?: unknown[] })?.items ?? [])
+      ) as Record<string, unknown>[];
+
+      return rows.map(row => ({
+        provider: String(row.provider ?? ''),
+        model: String(row.model ?? ''),
+        operation: String(row.operation ?? ''),
+        inputTokens: Number(row.inputTokens ?? 0),
+        outputTokens: Number(row.outputTokens ?? 0),
+        cacheReadTokens: Number(row.cacheReadTokens ?? 0),
+        cacheWriteTokens: Number(row.cacheWriteTokens ?? 0),
+        // The nullability is the whole point — `?? 0` here would turn every
+        // unpriced call into a free one and quietly under-count the budget the
+        // spend guard is about to enforce.
+        costUsd: row.costUsd === null || row.costUsd === undefined ? null : Number(row.costUsd),
+        latencyMs: Number(row.latencyMs ?? 0),
+        tags: (row.tags as Record<string, string> | null) ?? null,
+        createdAt: new Date(row.createdAt as string | number | Date),
+      }));
+    },
+  };
+
+  let orchestration: {
+    runTask(name: string, input: unknown): Promise<{ id: string }>;
+  } | null = null;
+
+  const lateBackground: AiBackgroundRunner = {
+    // False until orchestration is both enabled AND resolved AND the schema is
+    // registered with the task. Any of those missing → the client runs inline
+    // and reports `{ mode: 'sync' }` rather than enqueueing a job that could
+    // only fail on pickup.
+    supports: (schemaName: string) =>
+      orchestration !== null && backgroundSchemasFor(config.orchestration.taskName).has(schemaName),
+
+    async enqueue(req): Promise<string> {
+      if (!orchestration) {
+        throw new AiConfigError(
+          'Background generation was requested before orchestration resolved.',
+        );
+      }
+      const handle = await orchestration.runTask(config.orchestration.taskName, req);
+      return handle.id;
+    },
+  };
+
   return Ai.definePackage({
     dependencies: [],
-    entities: [],
+    // The ledger. It declares NO `routes`, which is what makes its HTTP surface
+    // empty — see `src/entities/aiUsage.ts`, and the boot test that pins it.
+    entities: [entity({ config: AiUsageRecord })],
 
     capabilities: {
       provides: [
@@ -155,7 +243,7 @@ export function createAiPackage(rawConfig: AiPackageConfigInput): SlingshotPacka
       ],
     },
 
-    async setupMiddleware({ app }: PluginSetupContext) {
+    async setupMiddleware({ app, bus }: PluginSetupContext) {
       const ctx = getContext(app);
       const providers = new Map<string, AiProvider>();
 
@@ -176,11 +264,64 @@ export function createAiPackage(rawConfig: AiPackageConfigInput): SlingshotPacka
         providers.set(name, await buildProvider(name, providerConfig, { apiKey, logger }));
       }
 
-      runtime = createAiClient({ config, providers, logger, metrics: ctx.metricsEmitter });
+      runtime = createAiClient({
+        config,
+        providers,
+        logger,
+        metrics: ctx.metricsEmitter,
+        bus,
+        store: config.usage.persist ? lateStore : null,
+        cache: getCacheAdapterOrNull(app, config.responseCache.store),
+        background: config.orchestration.enabled ? lateBackground : null,
+      });
+    },
+
+    async setupPost({ app }: PluginSetupContext) {
+      // Entity adapters are published during `setupRoutes`, so this is the
+      // earliest phase in which the ledger is readable.
+      usageAdapter = maybeEntityAdapter(app, {
+        plugin: AI_PACKAGE_NAME,
+        entity: 'AiUsageRecord',
+      });
+
+      if (config.orchestration.enabled) {
+        // Lazy + guarded: `@lastshotlabs/slingshot-orchestration` is an optional
+        // peer, and an app that never asked for background generation must not
+        // be forced to install it.
+        try {
+          const [{ OrchestrationRuntimeCap }, { resolveCapabilityValue }] = await Promise.all([
+            import('@lastshotlabs/slingshot-orchestration'),
+            import('@lastshotlabs/slingshot-core'),
+          ]);
+          const resolved = resolveCapabilityValue(getContext(app), OrchestrationRuntimeCap);
+          orchestration = (resolved as typeof orchestration) ?? null;
+        } catch {
+          orchestration = null;
+        }
+
+        if (!orchestration) {
+          // Loud, because the app explicitly asked for durable background
+          // generation and is not getting it. Silently running inline would look
+          // identical right up until a restart lost someone's deck.
+          logger.warn(
+            `ai: orchestration.enabled is true, but no orchestration runtime is available. ` +
+              `Background generation will run INLINE (and report { mode: 'sync' }). Install ` +
+              `@lastshotlabs/slingshot-orchestration and register the task from ` +
+              `@lastshotlabs/slingshot-ai/orchestration.`,
+          );
+        }
+      }
+
+      // Rebuild the spend window from the ledger. Without this a crash-loop
+      // would hand the app a fresh budget on every boot — the exact failure a
+      // hard limit exists to prevent.
+      await runtime?.usage.hydrateSpend();
     },
 
     async teardown() {
       runtime = undefined;
+      usageAdapter = null;
+      orchestration = null;
     },
   });
 }

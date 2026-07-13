@@ -15,7 +15,7 @@ LLM and you want:
 - to swap providers (Anthropic, an OpenAI-compatible endpoint, a local model) in
   config rather than in code;
 - structured output that is actually validated, on every provider;
-- a spend limit that stops a runaway loop *before* it spends the money;
+- a spend limit that stops a runaway loop _before_ it spends the money;
 - to know, per call, whether you got what you asked for.
 
 ## The Rules That Matter

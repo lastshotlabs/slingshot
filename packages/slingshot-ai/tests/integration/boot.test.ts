@@ -111,4 +111,62 @@ describe('slingshot-ai boot', () => {
       }),
     ).toThrow(/nope/);
   });
+
+  test('the usage ledger has NO HTTP surface', async () => {
+    // This is a leak guard, not a routing detail.
+    //
+    // The AiUsageRecord entity omits its `routes` key, which is what makes the
+    // framework mount no router for it at all. If someone adds `routes: {...}`
+    // — or the framework's default ever flips — this package would start
+    // serving a per-tag, per-model breakdown of what the app spends and what it
+    // prompts with, to anyone who asks, having done nothing to opt in.
+    //
+    // Reads go through AiUsageCap instead, so the APP decides who may see them.
+    const app = await createTestApp({
+      packages: [
+        createAiPackage({
+          providers: { test: { provider: createFakeAiProvider({ responses: ['hi'] }) } },
+          defaultProvider: 'test',
+        }),
+      ],
+    });
+    track(app);
+
+    const hono = app as unknown as { request(path: string, init?: RequestInit): Promise<Response> };
+
+    for (const path of ['/ai-usage', '/ai-usage-records', '/aiusagerecords', '/AiUsageRecord']) {
+      const response = await hono.request(path);
+      expect(response.status).toBe(404);
+    }
+
+    // Belt and braces: no registered route mentions the entity at all.
+    const routes = (app as unknown as { routes?: { path: string }[] }).routes ?? [];
+    const leaked = routes.filter(route => /usage/i.test(route.path));
+    expect(leaked).toEqual([]);
+  });
+
+  test('usage is readable through the capability, which is the sanctioned path', async () => {
+    const app = await createTestApp({
+      packages: [
+        createAiPackage({
+          providers: { test: { provider: createFakeAiProvider({ responses: ['hi'] }) } },
+          defaultProvider: 'test',
+        }),
+      ],
+    });
+    track(app);
+
+    const caps = publishedCaps(app);
+    const client = caps?.client as AiClient;
+    const usage = caps?.usage as AiUsageReader;
+
+    await client.generate({ messages: [{ role: 'user', content: 'hello' }] });
+
+    const summary = await usage.summary();
+    expect(summary.calls).toBe(1);
+    // The fake provider has no cost accounting, so this call is UNPRICED — not
+    // free. The distinction has to survive all the way to the summary.
+    expect(summary.unpricedCalls).toBe(1);
+    expect(summary.costUsd).toBe(0);
+  });
 });

@@ -19,6 +19,16 @@
     },
     {
       "path": "../slingshot-entity/tsconfig.typecheck.json"
+    },
+    // Optional peers, used only by the `./orchestration` entry point. They are
+    // referenced so the project-references build can typecheck that file; they
+    // are NOT runtime dependencies of the main entry, which is exactly why
+    // `src/orchestration.ts` is a separate export.
+    {
+      "path": "../slingshot-orchestration/tsconfig.typecheck.json"
+    },
+    {
+      "path": "../slingshot-orchestration-engine/tsconfig.typecheck.json"
     }
   ]
 }

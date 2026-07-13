@@ -1,3 +1,6 @@
+// Declares `ai:spend.soft_limit` on the SlingshotEventMap.
+import './events';
+
 /**
  * `@lastshotlabs/slingshot-ai`
  *
@@ -16,6 +19,12 @@
  */
 export { createAiPackage, AI_PACKAGE_NAME } from './plugin';
 export { Ai, AiClientCap, AiModerationCap, AiUsageCap } from './public';
+
+// The usage ledger entity. Exported so an app can mount its OWN admin route
+// over it — the package deliberately publishes none (see entities/aiUsage.ts).
+export { AiUsageRecord } from './entities/aiUsage';
+
+export type { AiCacheAdapter, AiEventBus, AiUsageRow, AiUsageStore } from './lib/seams';
 
 export {
   aiPackageConfigSchema,

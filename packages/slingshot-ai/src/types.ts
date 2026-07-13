@@ -113,7 +113,8 @@ export type AiDegradableFeature =
   | 'effort'
   | 'streaming'
   | 'costAccounting'
-  | 'refusalSignal';
+  | 'refusalSignal'
+  | 'moderation';
 
 /**
  * A record that you got less than you asked for.
@@ -274,6 +275,8 @@ export interface AiUsageRecordView {
   readonly operation: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  /** `null` = the call could not be priced. NOT zero. */
   readonly costUsd: number | null;
   readonly latencyMs: number;
   readonly tags: AiTags | null;

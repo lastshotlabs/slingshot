@@ -18,13 +18,13 @@
  * it cannot honor becomes an `AiDegradation` on the result (and, under
  * `degradation: 'strict'`, an `AiUnsupportedFeatureError` instead).
  */
+import type { AiPackageConfig } from '../config';
 import {
   AiConfigError,
   AiRefusalError,
   AiStructuredOutputError,
   AiUnsupportedFeatureError,
 } from '../errors';
-import type { AiPackageConfig } from '../config';
 import type {
   AiLogger,
   AiProvider,
@@ -60,8 +60,8 @@ import {
   repairInstruction,
   toJsonSchema,
 } from './structured';
-import { PromptCacheMonitor, renderSystem, type RenderedSystem } from './systemPrompt';
-import { createUsageRecorder, type UsageRecorder } from './usage';
+import { PromptCacheMonitor, type RenderedSystem, renderSystem } from './systemPrompt';
+import { type UsageRecorder, createUsageRecorder } from './usage';
 
 /** Structural — matches the framework's MetricsEmitter without importing it. */
 export interface AiMetrics {
@@ -107,11 +107,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   const strict = config.degradation === 'strict';
 
   /** Record a degradation — or, under `strict`, refuse to degrade at all. */
-  function degrade(
-    into: AiDegradation[],
-    degradation: AiDegradation,
-    providerName: string,
-  ): void {
+  function degrade(into: AiDegradation[], degradation: AiDegradation, providerName: string): void {
     if (strict) {
       throw new AiUnsupportedFeatureError(
         `Provider '${providerName}' cannot honor '${degradation.feature}' ` +
@@ -235,8 +231,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       maxTokens,
       effort: wantsEffort && caps.effort ? wantsEffort : undefined,
       thinking: wantsThinking && caps.thinking !== 'none' ? true : undefined,
-      timeoutMs:
-        req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
+      timeoutMs: req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
     };
 
     return { request, degradations, rendered };
@@ -297,11 +292,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       latencyMs,
       tags,
     });
-    promptMonitor.recordCacheRead(
-      promptCacheKey,
-      result.usage.cacheReadTokens,
-      breakpointEmitted,
-    );
+    promptMonitor.recordCacheRead(promptCacheKey, result.usage.cacheReadTokens, breakpointEmitted);
 
     const labels = { provider: resolved.name, model: resolved.model, operation };
     metrics?.counter('ai.calls', 1, labels);
@@ -386,7 +377,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     // `cache: false` opts out explicitly; an object opts IN even when the
     // response cache is globally off; omitting it follows the config default.
     const cacheOptions = req.cache === false ? undefined : req.cache;
-    const cacheEnabled = req.cache !== false && (responseCache.enabled || cacheOptions !== undefined);
+    const cacheEnabled =
+      req.cache !== false && (responseCache.enabled || cacheOptions !== undefined);
     const cacheKey =
       cacheOptions?.key ??
       responseCacheKey({

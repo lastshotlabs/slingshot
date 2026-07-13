@@ -13,6 +13,7 @@
  *    quietly differ between them.
  */
 import { describe, expect, test } from 'bun:test';
+import { CONSERVATIVE_CAPABILITIES } from './provider/capabilities';
 import type {
   AiProvider,
   NormalizedRequest,
@@ -21,7 +22,6 @@ import type {
   ProviderStream,
   ProviderStreamEvent,
 } from './provider/types';
-import { CONSERVATIVE_CAPABILITIES } from './provider/capabilities';
 import type { AiModerator, AiVerdict } from './types';
 
 // ---------------------------------------------------------------------------
@@ -66,11 +66,17 @@ export interface FakeAiProvider extends AiProvider {
   reset(): void;
 }
 
-function normalize(response: FakeResponse): Required<Omit<FakeResponse & object, 'error'>> & {
-  error?: Error;
-} {
+interface NormalizedFakeResponse {
+  readonly text: string;
+  readonly structured: unknown;
+  readonly stopReason: ProviderResult['stopReason'];
+  readonly usage: ProviderResult['usage'];
+  readonly error?: Error;
+}
+
+function normalize(response: FakeResponse): NormalizedFakeResponse {
   const source = typeof response === 'string' ? { text: response } : response;
-  return {
+  const normalized: NormalizedFakeResponse = {
     text: source.text ?? '',
     structured: source.structured,
     stopReason: source.stopReason ?? 'end',
@@ -82,7 +88,8 @@ function normalize(response: FakeResponse): Required<Omit<FakeResponse & object,
       ...source.usage,
     },
     error: source.error,
-  } as never;
+  };
+  return normalized;
 }
 
 export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeAiProvider {
@@ -119,7 +126,7 @@ export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeA
       text: chosen.text,
       structured: chosen.structured,
       stopReason: chosen.stopReason,
-      usage: chosen.usage as ProviderResult['usage'],
+      usage: chosen.usage,
       raw: { fake: true },
     };
   }

@@ -22,8 +22,7 @@ export interface RetryOptions {
   readonly sleep?: (ms: number) => Promise<void>;
 }
 
-const defaultSleep = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms));
+const defaultSleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 function backoffMs(attempt: number, base: number, max: number): number {
   const exponential = Math.min(max, base * 2 ** (attempt - 1));

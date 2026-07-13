@@ -11,9 +11,9 @@
  * as zero. A dashboard that quietly reports $0.00 because it couldn't price
  * half the calls is worse than one that says "I don't know".
  */
-import type { AiUsage, ModelPricing } from '../types';
 import type { AiProviderConfig } from '../config';
 import type { ProviderCapabilities, ProviderUsage } from '../provider/types';
+import type { AiUsage, ModelPricing } from '../types';
 
 /**
  * Built-in price table, per million tokens.

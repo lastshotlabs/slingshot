@@ -15,7 +15,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { aiPackageConfigSchema, type AiPackageConfigInput } from '../../src/config';
+import { type AiPackageConfigInput, aiPackageConfigSchema } from '../../src/config';
 import { AiConfigError, AiStructuredOutputError } from '../../src/errors';
 import { createAiClient } from '../../src/lib/client';
 import {
@@ -26,7 +26,7 @@ import {
   toJsonSchema,
 } from '../../src/lib/structured';
 import { CONSERVATIVE_CAPABILITIES } from '../../src/provider/capabilities';
-import { createFakeAiProvider, type FakeResponse } from '../../src/testing';
+import { type FakeResponse, createFakeAiProvider } from '../../src/testing';
 import type { AiClient } from '../../src/types';
 
 const silentLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };

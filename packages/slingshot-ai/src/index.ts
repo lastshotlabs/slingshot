@@ -93,11 +93,16 @@ export {
   resolveCapabilities,
 } from './provider/capabilities';
 
+export { buildProvider, builtinProviderKinds, registerBuiltinProvider } from './provider/registry';
+
+// Built-in adapters. Importing this module registers the 'anthropic',
+// 'openai-compatible', and 'openai' kinds; neither adapter pulls an SDK at
+// import time, so this is free for an app that uses only one of them.
 export {
-  buildProvider,
-  builtinProviderKinds,
-  registerBuiltinProvider,
-} from './provider/registry';
+  createAnthropicProvider,
+  createOpenAiCompatibleProvider,
+  createOpenAiProvider,
+} from './provider/builtin';
 
 export { DEFAULT_PRICING } from './lib/pricing';
 

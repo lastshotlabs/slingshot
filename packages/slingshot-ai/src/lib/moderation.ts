@@ -11,8 +11,8 @@
  * asks for a policy and no moderator can apply it, we throw. An app that never
  * requests moderation is entirely unaffected.
  */
-import { AiConfigError } from '../errors';
 import type { AiPackageConfig } from '../config';
+import { AiConfigError } from '../errors';
 import type { AiModerator, AiTags, AiVerdict } from '../types';
 
 export function createModerator(config: AiPackageConfig): AiModerator {

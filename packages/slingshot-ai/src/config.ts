@@ -8,8 +8,8 @@
  * imperative throws — which also produces better error messages.
  */
 import { z } from 'zod';
-import type { AiModerator } from './types';
 import type { AiLogger, AiProvider, ModelPricing, ProviderCapabilities } from './provider/types';
+import type { AiModerator } from './types';
 
 /** A factory for a custom provider — the escape hatch for anything not built in. */
 export type ProviderFactory = (

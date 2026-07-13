@@ -12,8 +12,8 @@
  * persisted, cross-process one behind this same interface — nothing in the
  * orchestrator changes.
  */
-import { AiSpendLimitError } from '../errors';
 import type { AiPackageConfig } from '../config';
+import { AiSpendLimitError } from '../errors';
 import type { AiLogger } from '../provider/types';
 import type { SpendStatus } from '../types';
 

@@ -6,8 +6,8 @@
  * `createProvider` escape hatch, plus an "unknown kind" error that lists what
  * IS available. Same problem, same solved shape.
  */
-import { AiConfigError } from '../errors';
 import type { AiProviderConfig, ProviderFactory } from '../config';
+import { AiConfigError } from '../errors';
 import type { AiLogger, AiProvider } from './types';
 
 /**

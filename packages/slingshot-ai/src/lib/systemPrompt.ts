@@ -6,8 +6,8 @@
  * quietly pay full price forever. Everything in this file exists to turn that
  * silent failure into a loud one.
  */
-import type { AiDegradation, CachedSystem, SystemPrompt } from '../types';
 import type { AiLogger, ProviderCapabilities, RenderedSystemBlock } from '../provider/types';
+import type { AiDegradation, CachedSystem, SystemPrompt } from '../types';
 
 /** Rough token estimate when the provider can't count for us. Chars/4 is close enough. */
 function estimateTokens(text: string): number {
@@ -131,7 +131,8 @@ export function renderSystem(options: {
   const stableText = cached.stable.map(s => s.text).join('\n\n');
   const stableTokens = stableText ? count(stableText) : 0;
   const promptCacheKey =
-    options.promptCacheKey ?? (cached.stable.length > 0 ? hashText(cached.stable.map(s => s.id).join('|')) : 'none');
+    options.promptCacheKey ??
+    (cached.stable.length > 0 ? hashText(cached.stable.map(s => s.id).join('|')) : 'none');
 
   if (cached.stable.length > 0 && monitor) {
     monitor.checkDrift(promptCacheKey, cached.stable);

@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { aiPackageConfigSchema, type AiPackageConfigInput } from '../../src/config';
+import { type AiPackageConfigInput, aiPackageConfigSchema } from '../../src/config';
 import {
   AiRefusalError,
   AiSpendLimitError,
@@ -189,7 +189,7 @@ describe('spend guard', () => {
 describe('structured output', () => {
   const Deck = z.object({ cards: z.array(z.string()) });
 
-  test('validates the provider\'s advisory object rather than trusting it', async () => {
+  test("validates the provider's advisory object rather than trusting it", async () => {
     // A "native" provider that returns the WRONG SHAPE. Trusting `structured`
     // would hand the app a `{ cards: "not an array" }` and let it explode later,
     // far from here.
@@ -282,9 +282,9 @@ describe('moderation', () => {
     // outcome for a safety control, because the app believes it has one.
     const { client } = build(createFakeAiProvider({ responses: ['anything'] }));
 
-    await expect(
-      client.generate({ ...ask, moderation: { policy: 'default' } }),
-    ).rejects.toThrow(/no moderator is available/);
+    await expect(client.generate({ ...ask, moderation: { policy: 'default' } })).rejects.toThrow(
+      /no moderator is available/,
+    );
   });
 
   test('is skipped entirely when the request does not ask for it', async () => {

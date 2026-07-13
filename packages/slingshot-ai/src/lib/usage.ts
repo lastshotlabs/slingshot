@@ -10,7 +10,6 @@
  * `costUsd`, and every caller has to decide what to do about it.
  */
 import type { AiPackageConfig } from '../config';
-import type { SpendGuard } from './spend';
 import type {
   AiTags,
   AiUsage,
@@ -20,6 +19,7 @@ import type {
   AiUsageSummary,
   SpendStatus,
 } from '../types';
+import type { SpendGuard } from './spend';
 
 export interface UsageRecorder extends AiUsageReader {
   record(entry: {
@@ -34,10 +34,7 @@ export interface UsageRecorder extends AiUsageReader {
 
 const MAX_RECORDS = 5_000;
 
-export function createUsageRecorder(
-  config: AiPackageConfig,
-  spend: SpendGuard,
-): UsageRecorder {
+export function createUsageRecorder(config: AiPackageConfig, spend: SpendGuard): UsageRecorder {
   const records: AiUsageRecordView[] = [];
   let sequence = 0;
 

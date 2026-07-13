@@ -10,8 +10,13 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { type AiPackageConfig, type AiPackageConfigInput, aiPackageConfigSchema } from './config';
 import { AiConfigError } from './errors';
-import { createAiClient, type AiRuntime } from './lib/client';
+import { type AiRuntime, createAiClient } from './lib/client';
+// Side-effect import: registers the built-in adapters ('anthropic',
+// 'openai-compatible', 'openai') in the provider registry. Neither adapter pulls
+// an SDK at import time — the Anthropic one loads its SDK lazily in its factory.
+import './provider/builtin';
 import { buildProvider } from './provider/registry';
+import type { AiLogger, AiProvider } from './provider/types';
 import { Ai, AiClientCap, AiModerationCap, AiUsageCap } from './public';
 import type {
   AiBackgroundHandle,
@@ -28,7 +33,6 @@ import type {
   ProviderCapabilities,
   SpendStatus,
 } from './types';
-import type { AiLogger, AiProvider } from './provider/types';
 
 export const AI_PACKAGE_NAME = 'slingshot-ai';
 

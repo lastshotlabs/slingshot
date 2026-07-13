@@ -100,3 +100,13 @@ export {
 } from './provider/registry';
 
 export { DEFAULT_PRICING } from './lib/pricing';
+
+// Structured-output internals — exported because an adapter (F3) needs them to
+// build its native payload, and because they are independently testable.
+export {
+  chooseStructuredMode,
+  extractJson,
+  parseStructured,
+  sanitizeJsonSchema,
+  toJsonSchema,
+} from './lib/structured';

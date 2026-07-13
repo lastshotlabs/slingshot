@@ -4,26 +4,20 @@
  * Every call, on every provider, walks the same path:
  *
  *   negotiate capabilities → render system (prompt cache) → spend guard
- *     → response cache → provider call → refusal check → **validate**
- *     → moderation → usage + metrics → AiResult
+ *     → response cache → provider call (with retry) → refusal check
+ *     → **validate** → moderation → usage + metrics → AiResult
  *
  * The load-bearing word is *validate*. `ProviderResult.structured` is ADVISORY:
- * Anthropic can hand back `parsed_output: null` on a refusal, and a "native"
- * OpenAI-compatible endpoint can simply be lying about its schema enforcement.
- * So the orchestrator re-validates with `schema.safeParse()` for EVERY provider.
- * That is the only reason an app can swap providers in config and not in code.
+ * Anthropic can hand back `parsed_output: null` on a refusal, a "native"
+ * OpenAI-compatible endpoint can be lying about its schema enforcement, and a
+ * local model can hand back a fenced code block with a trailing comma. All three
+ * converge on one `schema.safeParse()` in `parseStructured()`. That is the only
+ * reason an app can swap providers in config and not in code.
  *
  * The other rule: the package never silently does less than you asked. Anything
  * it cannot honor becomes an `AiDegradation` on the result (and, under
  * `degradation: 'strict'`, an `AiUnsupportedFeatureError` instead).
- *
- * Scope note (F1): a provider that reports `structuredOutput: 'none'` is
- * REFUSED here rather than served badly. The prompt-injected schema path, the
- * bounded JSON repair loop, and the retry layer land in F2 — at which point
- * `callProvider` and `generateStructured` grow those layers and nothing else in
- * this file changes.
  */
-import { z } from 'zod';
 import {
   AiConfigError,
   AiRefusalError,
@@ -37,11 +31,13 @@ import type {
   NormalizedRequest,
   ProviderCapabilities,
   ProviderResult,
+  RenderedSystemBlock,
 } from '../provider/types';
 import type {
   AiBackgroundHandle,
   AiClient,
   AiDegradation,
+  AiMessage,
   AiModerator,
   AiProviderInfo,
   AiRequestBase,
@@ -55,7 +51,15 @@ import type {
 import { createModerator } from './moderation';
 import { computeUsage, estimateMaxCost, resolvePricing } from './pricing';
 import { createResponseCache, responseCacheKey } from './responseCache';
+import { withRetry } from './retry';
 import { createSpendGuard } from './spend';
+import {
+  chooseStructuredMode,
+  jsonInstruction,
+  parseStructured,
+  repairInstruction,
+  toJsonSchema,
+} from './structured';
 import { PromptCacheMonitor, renderSystem, type RenderedSystem } from './systemPrompt';
 import { createUsageRecorder, type UsageRecorder } from './usage';
 
@@ -103,7 +107,11 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   const strict = config.degradation === 'strict';
 
   /** Record a degradation — or, under `strict`, refuse to degrade at all. */
-  function degrade(into: AiDegradation[], degradation: AiDegradation, providerName: string): void {
+  function degrade(
+    into: AiDegradation[],
+    degradation: AiDegradation,
+    providerName: string,
+  ): void {
     if (strict) {
       throw new AiUnsupportedFeatureError(
         `Provider '${providerName}' cannot honor '${degradation.feature}' ` +
@@ -150,13 +158,18 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   }
 
   /**
-   * Everything common to every operation: capability negotiation, system
-   * rendering, and the normalized request.
+   * Everything common to `generate` and `generateStructured`: capability
+   * negotiation, system rendering, and the base request.
    */
   function prepare(
     req: AiRequestBase,
     resolved: Resolved,
-  ): { request: NormalizedRequest; degradations: AiDegradation[]; rendered: RenderedSystem } {
+    extraSystem?: string,
+  ): {
+    request: NormalizedRequest;
+    degradations: AiDegradation[];
+    rendered: RenderedSystem;
+  } {
     const degradations: AiDegradation[] = [];
     const { capabilities: caps, name } = resolved;
 
@@ -168,6 +181,12 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       monitor: promptMonitor,
     });
     for (const degradation of rendered.degradations) degrade(degradations, degradation, name);
+
+    const blocks: RenderedSystemBlock[] = [...rendered.blocks];
+    if (extraSystem) {
+      // Always AFTER the cache breakpoint: schema instructions are per-call.
+      blocks.push({ text: extraSystem, cache: false });
+    }
 
     const wantsThinking = req.thinking ?? config.defaults.thinking ?? false;
     if (wantsThinking && caps.thinking === 'none') {
@@ -198,10 +217,6 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     }
 
     if (!caps.costAccounting) {
-      // Deliberately NOT routed through `degrade()`: an unpriced provider is a
-      // fact about the deployment, not a request the caller made. Throwing here
-      // under `strict` would make a local model unusable for anyone who wants
-      // strict FEATURE negotiation. It is still recorded, and `costUsd` is null.
       degradations.push({
         feature: 'costAccounting',
         requested: 'usd',
@@ -210,45 +225,50 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       });
     }
 
+    const requestedMax = req.maxTokens ?? config.defaults.maxTokens;
+    const maxTokens = Math.min(requestedMax, caps.maxOutputTokens);
+
     const request: NormalizedRequest = {
       model: resolved.model,
-      system: rendered.blocks,
+      system: blocks,
       messages: req.messages,
-      maxTokens: Math.min(req.maxTokens ?? config.defaults.maxTokens, caps.maxOutputTokens),
+      maxTokens,
       effort: wantsEffort && caps.effort ? wantsEffort : undefined,
       thinking: wantsThinking && caps.thinking !== 'none' ? true : undefined,
-      timeoutMs: req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
+      timeoutMs:
+        req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
     };
 
     return { request, degradations, rendered };
   }
 
-  /** The worst case this call could cost — what the pre-flight guard checks. */
-  function maxCostOf(resolved: Resolved, request: NormalizedRequest): number | null {
-    const inputChars =
-      request.system.reduce((sum, block) => sum + block.text.length, 0) +
-      request.messages.reduce((sum, message) => sum + message.content.length, 0);
-    return estimateMaxCost({
-      inputTokens: Math.ceil(inputChars / 4),
-      maxTokens: request.maxTokens,
-      pricing: priceFor(resolved),
-    });
-  }
-
-  /**
-   * Call the provider, checking spend FIRST.
-   *
-   * Pre-flight, not post-hoc: a post-hoc check tells you about the runaway loop
-   * only once it has finished spending the money. F2 wraps this call in the
-   * retry layer, and the guard re-enters on every attempt.
-   */
+  /** Call the provider, re-checking spend before every attempt (retries included). */
   async function callProvider(
     resolved: Resolved,
     request: NormalizedRequest,
     signal: AbortSignal | undefined,
   ): Promise<ProviderResult> {
-    spend.check(maxCostOf(resolved, request));
-    return resolved.provider.generate(request, signal);
+    // The messages count too — and they GROW on every repair turn, since each
+    // one appends the model's bad answer plus the validation errors. Estimating
+    // from the system prompt alone would under-count exactly the loop we most
+    // need to catch.
+    const inputChars =
+      request.system.reduce((sum, block) => sum + block.text.length, 0) +
+      request.messages.reduce((sum, message) => sum + message.content.length, 0);
+    const estimate = estimateMaxCost({
+      inputTokens: Math.ceil(inputChars / 4),
+      maxTokens: request.maxTokens,
+      pricing: priceFor(resolved),
+    });
+
+    return withRetry(() => resolved.provider.generate(request, signal), {
+      maxAttempts: (config.providers[resolved.name]?.maxRetries ?? 2) + 1,
+      logger,
+      // THE invariant: every attempt re-enters the spend guard. A retry storm
+      // and a repair loop both spend real money, and neither is covered by a
+      // single check at the top of the call.
+      onAttempt: () => spend.check(estimate),
+    });
   }
 
   function finishUsage(
@@ -257,11 +277,13 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     startedAt: number,
     operation: string,
     tags: Record<string, string> | undefined,
-    rendered: RenderedSystem,
+    breakpointEmitted: boolean,
+    promptCacheKey: string,
   ): AiUsage {
+    const pricing = priceFor(resolved);
     const computed = computeUsage({
       usage: result.usage,
-      pricing: priceFor(resolved),
+      pricing,
       capabilities: resolved.capabilities,
     });
     const latencyMs = Date.now() - startedAt;
@@ -276,9 +298,9 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       tags,
     });
     promptMonitor.recordCacheRead(
-      rendered.promptCacheKey,
+      promptCacheKey,
       result.usage.cacheReadTokens,
-      rendered.breakpointEmitted,
+      breakpointEmitted,
     );
 
     const labels = { provider: resolved.name, model: resolved.model, operation };
@@ -286,9 +308,11 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     metrics?.counter('ai.tokens.input', computed.inputTokens, labels);
     metrics?.counter('ai.tokens.output', computed.outputTokens, labels);
     metrics?.timing('ai.latency', latencyMs, labels);
-    if (computed.costUsd !== null) metrics?.counter('ai.cost_usd', computed.costUsd, labels);
-    else metrics?.counter('ai.cost_unknown', 1, labels);
-
+    if (computed.costUsd !== null) {
+      metrics?.counter('ai.cost_usd', computed.costUsd, labels);
+    } else {
+      metrics?.counter('ai.cost_unknown', 1, labels);
+    }
     return computed;
   }
 
@@ -308,8 +332,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       return;
     }
     if (result.stopReason === 'refusal') {
-      // On Anthropic a refusal is HTTP 200 with an empty body. Treating that as
-      // a successful empty generation is how you ship a blank card to a table of
+      // A refusal is HTTP 200 with an empty body on Anthropic. Treating it as a
+      // successful empty generation is how you ship a blank card to a table of
       // guests.
       throw new AiRefusalError(
         `The model refused to generate this content (provider: ${resolved.name}).`,
@@ -326,8 +350,9 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const request = req.moderation;
     if (!request || !config.moderation.enabled) return null;
 
+    const extracted = request.extract ? request.extract(value) : [text];
     const verdict = await moderator.moderate({
-      content: request.extract ? request.extract(value) : [text],
+      content: extracted,
       policy: request.policy,
       tags: req.tags,
     });
@@ -341,7 +366,11 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       const { AiContentBlockedError } = await import('../errors');
       throw new AiContentBlockedError(
         `Generated content was blocked by moderation policy '${request.policy}': ${verdict.reason}`,
-        { categories: verdict.categories, severity: verdict.severity, reason: verdict.reason },
+        {
+          categories: verdict.categories,
+          severity: verdict.severity,
+          reason: verdict.reason,
+        },
       );
     }
     return verdict;
@@ -357,8 +386,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     // `cache: false` opts out explicitly; an object opts IN even when the
     // response cache is globally off; omitting it follows the config default.
     const cacheOptions = req.cache === false ? undefined : req.cache;
-    const cacheEnabled =
-      req.cache !== false && (responseCache.enabled || cacheOptions !== undefined);
+    const cacheEnabled = req.cache !== false && (responseCache.enabled || cacheOptions !== undefined);
     const cacheKey =
       cacheOptions?.key ??
       responseCacheKey({
@@ -380,7 +408,16 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const run = async (): Promise<AiResult<string>> => {
       const result = await callProvider(resolved, request, req.signal);
       checkRefusal(result, resolved, degradations);
-      const computed = finishUsage(resolved, result, startedAt, 'generate', req.tags, rendered);
+
+      const computed = finishUsage(
+        resolved,
+        result,
+        startedAt,
+        'generate',
+        req.tags,
+        rendered.breakpointEmitted,
+        rendered.promptCacheKey,
+      );
       const moderation = await runModeration(req, result.text, result.text);
 
       return {
@@ -416,87 +453,120 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const { capabilities: caps } = resolved;
     const schemaName = req.schemaName ?? 'result';
 
-    if (caps.structuredOutput === 'none') {
-      // An honest refusal beats a bad guess. F2 adds the prompt-injected schema
-      // path and the bounded repair loop, which is what actually makes this work
-      // on a provider with no structured-output support.
-      throw new AiUnsupportedFeatureError(
-        `Provider '${resolved.name}' declares no structured-output support, and the ` +
-          `prompt-instructed fallback is not available in this build.`,
-        { feature: 'structuredOutput', provider: resolved.name },
-      );
+    const jsonSchema = toJsonSchema(req.schema, { logger, strict, name: schemaName });
+    const mode = chooseStructuredMode(caps);
+
+    // Build degradations BEFORE `prepare`, so `strict` throws on the structured
+    // shortfall rather than on something incidental.
+    const structuredDegradations: AiDegradation[] = [];
+    if (mode !== 'native') {
+      const degradation: AiDegradation = {
+        feature: 'structuredOutput',
+        requested: 'native',
+        applied: mode,
+        reason:
+          mode === 'json-mode'
+            ? 'the provider guarantees valid JSON but does not enforce the schema; the result is validated locally and repaired if needed'
+            : 'the provider has no structured-output support; the schema is injected into the prompt, and the result is validated locally and repaired if needed',
+      };
+      degrade(structuredDegradations, degradation, resolved.name);
     }
 
-    const { request, degradations, rendered } = prepare(req, resolved);
+    const instruction = mode === 'native' ? undefined : jsonInstruction(schemaName, jsonSchema);
+    const { request, degradations, rendered } = prepare(req, resolved, instruction);
+    degradations.push(...structuredDegradations);
 
-    if (caps.structuredOutput === 'json-mode') {
-      degrade(
-        degradations,
-        {
-          feature: 'structuredOutput',
-          requested: 'native',
-          applied: 'json-mode',
-          reason:
-            'the provider guarantees valid JSON but does not enforce the schema; the result is ' +
-            'validated locally',
-        },
-        resolved.name,
-      );
-    }
-
-    const result = await callProvider(
-      resolved,
-      {
-        ...request,
-        structured: {
-          name: schemaName,
-          zod: req.schema,
-          jsonSchema: z.toJSONSchema(req.schema, { io: 'output' }) as Record<string, unknown>,
-          mode: caps.structuredOutput === 'native' ? 'native' : 'json-mode',
-        },
-      },
-      req.signal,
-    );
-    checkRefusal(result, resolved, degradations);
-    const computed = finishUsage(
-      resolved,
-      result,
-      startedAt,
-      'generateStructured',
-      req.tags,
-      rendered,
-    );
-
-    // THE single validation point. The provider's own parsed object is a HINT:
-    // a "native" provider that got the shape wrong, and one that returned
-    // `parsed_output: null`, both land here and both get caught.
-    const advisory = result.structured;
-    const candidate =
-      advisory !== undefined && advisory !== null ? advisory : safeJsonParse(result.text);
-    const parsed = req.schema.safeParse(candidate);
-
-    if (!parsed.success) {
-      metrics?.counter('ai.structured.failed', 1, { provider: resolved.name });
-      throw new AiStructuredOutputError(
-        `The model did not produce output matching schema '${schemaName}' on provider ` +
-          `'${resolved.name}'. The raw text and the validation error are attached.`,
-        { rawText: result.text, zodError: parsed.error, attempts: 1 },
-      );
-    }
-
-    const moderation = await runModeration(req, parsed.data, result.text);
-    return {
-      value: parsed.data,
-      stopReason: result.stopReason,
-      usage: computed,
-      moderation,
-      degradations,
-      provider: resolved.name,
-      model: resolved.model,
-      cached: 'none',
-      latencyMs: Date.now() - startedAt,
-      raw: result.raw,
+    const baseRequest: NormalizedRequest = {
+      ...request,
+      structured:
+        mode === 'native' || mode === 'json-mode'
+          ? { name: schemaName, zod: req.schema as never, jsonSchema, mode }
+          : undefined,
     };
+
+    const maxAttempts = 1 + config.structuredFallback.maxRepairAttempts;
+    let messages: AiMessage[] = [...req.messages];
+    let lastError: unknown;
+    let lastRaw = '';
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const attemptRequest: NormalizedRequest = { ...baseRequest, messages };
+      // Each repair attempt is a fresh provider call — and `callProvider`
+      // re-enters the spend guard on every one of them, including its retries.
+      const result = await callProvider(resolved, attemptRequest, req.signal);
+      checkRefusal(result, resolved, degradations);
+
+      const computed = finishUsage(
+        resolved,
+        result,
+        startedAt,
+        'generateStructured',
+        req.tags,
+        rendered.breakpointEmitted,
+        rendered.promptCacheKey,
+      );
+
+      // THE single validation point. Every provider, every mode, lands here —
+      // and `result.structured` is only ever a hint.
+      const parsed = parseStructured<T>({
+        schema: req.schema,
+        advisory: result.structured,
+        text: result.text,
+      });
+
+      if (parsed.ok) {
+        if (attempt > 1) {
+          metrics?.counter('ai.structured.repaired', 1, {
+            provider: resolved.name,
+            attempts: String(attempt),
+          });
+        }
+        const moderation = await runModeration(req, parsed.value, result.text);
+        return {
+          value: parsed.value as T,
+          stopReason: result.stopReason,
+          usage: computed,
+          moderation,
+          degradations,
+          provider: resolved.name,
+          model: resolved.model,
+          cached: 'none',
+          latencyMs: Date.now() - startedAt,
+          raw: result.raw,
+        };
+      }
+
+      lastError = parsed.error;
+      lastRaw = parsed.rawText;
+      metrics?.counter('ai.structured.invalid', 1, {
+        provider: resolved.name,
+        attempt: String(attempt),
+      });
+
+      if (attempt === maxAttempts) break;
+
+      // The repair turn: show the model its own output and the validation
+      // errors. This converges far more often than any regex, and — crucially —
+      // it is BOUNDED. An unbounded repair loop against a model that simply
+      // cannot produce the shape is an infinite bill.
+      logger.debug(
+        `ai: structured output failed validation, repairing (attempt ${attempt}/${maxAttempts})`,
+        { provider: resolved.name, schema: schemaName },
+      );
+      messages = [
+        ...messages,
+        { role: 'assistant', content: result.text },
+        { role: 'user', content: repairInstruction(parsed.rawText, parsed.error) },
+      ];
+    }
+
+    metrics?.counter('ai.structured.failed', 1, { provider: resolved.name });
+    throw new AiStructuredOutputError(
+      `The model did not produce output matching schema '${schemaName}' after ${maxAttempts} ` +
+        `attempt(s) on provider '${resolved.name}' (mode: ${mode}). The raw text and the ` +
+        `validation error are attached.`,
+      { rawText: lastRaw, zodError: lastError, attempts: maxAttempts },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -510,7 +580,15 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
 
     const toResult = async (result: ProviderResult): Promise<AiResult<string>> => {
       checkRefusal(result, resolved, degradations);
-      const computed = finishUsage(resolved, result, startedAt, 'stream', req.tags, rendered);
+      const computed = finishUsage(
+        resolved,
+        result,
+        startedAt,
+        'stream',
+        req.tags,
+        rendered.breakpointEmitted,
+        rendered.promptCacheKey,
+      );
       const moderation = await runModeration(req, result.text, result.text);
       return {
         value: result.text,
@@ -526,10 +604,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       };
     };
 
-    // A non-streaming provider still honors the AsyncIterable contract: the
-    // whole answer arrives as a single delta. The caller gets a correct stream
-    // that simply isn't incremental — plus a degradation saying exactly that,
-    // rather than a silent lie about interactivity.
+    // Non-streaming provider: we still honor the AsyncIterable contract by
+    // emitting the whole answer as a single delta. The caller gets a correct
+    // stream that simply doesn't arrive incrementally — and a degradation
+    // saying exactly that, rather than a silent lie about interactivity.
     if (!resolved.capabilities.streaming) {
       degrade(
         degradations,
@@ -542,8 +620,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         resolved.name,
       );
 
-      const once = async (): Promise<AiResult<string>> =>
-        toResult(await callProvider(resolved, request, req.signal));
+      const once = async (): Promise<AiResult<string>> => {
+        const result = await callProvider(resolved, request, req.signal);
+        return toResult(result);
+      };
 
       return {
         async *[Symbol.asyncIterator](): AsyncIterator<AiStreamEvent> {
@@ -559,16 +639,26 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       };
     }
 
-    spend.check(maxCostOf(resolved, request));
+    spend.check(
+      estimateMaxCost({
+        inputTokens: Math.ceil(
+          request.system.reduce((sum, block) => sum + block.text.length, 0) / 4,
+        ),
+        maxTokens: request.maxTokens,
+        pricing: priceFor(resolved),
+      }),
+    );
     const providerStream = resolved.provider.stream(request, req.signal);
 
     return {
       async *[Symbol.asyncIterator](): AsyncIterator<AiStreamEvent> {
-        for await (const event of providerStream) yield event;
+        for await (const event of providerStream) {
+          yield event;
+        }
         const final = await providerStream.finalResult();
         yield { type: 'done', stopReason: final.stopReason };
       },
-      finalResult(): Promise<AiResult<string>> {
+      async finalResult(): Promise<AiResult<string>> {
         finalPromise ??= providerStream.finalResult().then(toResult);
         return finalPromise;
       },
@@ -584,7 +674,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     // restart) is F4. Until then this runs inline — and SAYS SO, via the
     // discriminated handle. A caller cannot mistake a synchronous run for a
     // queued one, which is the entire reason the handle is a union.
-    return { mode: 'sync', result: await generateStructured(req) };
+    const result = await generateStructured(req);
+    return { mode: 'sync', result };
   }
 
   const client: AiClient = {
@@ -610,18 +701,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     async countTokens(req): Promise<number | null> {
       const resolved = resolve(req);
       if (!resolved.provider.countTokens) return null;
-      const { request } = prepare(req, resolved);
+      const { request } = prepare({ ...req, messages: req.messages }, resolved);
       return resolved.provider.countTokens(request);
     },
   };
 
   return { client, moderator, usage };
-}
-
-function safeJsonParse(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
 }

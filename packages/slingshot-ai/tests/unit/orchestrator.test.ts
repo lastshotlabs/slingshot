@@ -186,7 +186,7 @@ describe('spend guard', () => {
   });
 });
 
-describe('structured output (F1: native + json-mode)', () => {
+describe('structured output', () => {
   const Deck = z.object({ cards: z.array(z.string()) });
 
   test('validates the provider\'s advisory object rather than trusting it', async () => {
@@ -229,8 +229,27 @@ describe('structured output (F1: native + json-mode)', () => {
     expect(result.degradations.map(d => d.feature)).toContain('structuredOutput');
   });
 
-  test('a provider with no structured support is refused, not served badly (F2 adds the fallback)', async () => {
-    const { client } = build(createFakeAiProvider({ responses: ['{"cards":[]}'] }));
+  test('a provider with NO structured support still works, via the prompt path', async () => {
+    // The whole point: this is the local-model / small-model case. The schema is
+    // injected into the prompt, the text is extracted and validated, and the
+    // shortfall is reported rather than hidden.
+    const provider = createFakeAiProvider({ responses: ['{"cards":["a"]}'] });
+    const { client } = build(provider);
+
+    const result = await client.generateStructured({ ...ask, schema: Deck });
+
+    expect(result.value.cards).toEqual(['a']);
+    expect(result.degradations.map(d => d.feature)).toContain('structuredOutput');
+
+    // The schema went into the prompt, since the provider can't take it any other way.
+    const systemText = provider.calls[0]?.system.map(block => block.text).join('\n') ?? '';
+    expect(systemText).toContain('JSON Schema');
+  });
+
+  test("degradation: 'strict' refuses the prompt fallback rather than doing less", async () => {
+    const { client } = build(createFakeAiProvider({ responses: ['{"cards":[]}'] }), {
+      degradation: 'strict',
+    });
 
     await expect(client.generateStructured({ ...ask, schema: Deck })).rejects.toThrow(
       AiUnsupportedFeatureError,

@@ -466,10 +466,14 @@ export const createServer = async <T extends object = object>(
           );
         }
         if (ep.heartbeat) deregisterSocket(wsState, socket.data.id);
-        if (ep.presence) untrackSocket(wsState, socket.data.id);
+        // cleanupSocket() resolves this socket's userId FROM `socketUsers` to
+        // drop its room-presence entries and fire `presence_leave`. Untracking
+        // first deleted that mapping, so cleanup silently found nothing and the
+        // user stayed "present" forever — a ghost in every room they had joined.
         cleanupSocket(wsState, socket, {
           trackDelivery: ep.recovery ? true : undefined,
         });
+        if (ep.presence) untrackSocket(wsState, socket.data.id);
         wsState.socketRegistry.delete(socket.data.id);
         // Clean up per-room lastEventIds entries for this socket
         for (const room of socket.data.rooms) {

@@ -5,6 +5,7 @@ import {
   getRoomPresence,
   isUserPresent,
   removePresence,
+  untrackSocket,
 } from '../../src/framework/ws/presence';
 import {
   cleanupSocket,
@@ -204,5 +205,42 @@ describe('room presence by user', () => {
 
     expect(getRoomPresence(state, ENDPOINT, 'sessions:s1:session')).toEqual([]);
     expect(getRoomPresence(state, ENDPOINT, 'no-such-room')).toEqual([]);
+  });
+});
+
+describe('presence cleanup on socket close', () => {
+  it("drops the user's presence when their last socket goes (order matters)", () => {
+    // Regression: the close handler called untrackSocket() BEFORE cleanupSocket().
+    // cleanupPresence() resolves the userId from `socketUsers`, so once that
+    // mapping was deleted it found nothing and left the presence entry behind —
+    // the user read as present forever and `presence_leave` never fired.
+    const state = createWsState({ presenceEnabled: true });
+    const ws = createMockWs('sock-a') as never;
+    state.socketUsers.set('sock-a', 'host-user');
+
+    subscribe(state, ws, 'sessions:s1:session');
+    addPresence(state, 'sock-a', ENDPOINT, 'sessions:s1:session');
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'host-user')).toBe(true);
+
+    // The real close path: clean up the socket first, THEN untrack it.
+    cleanupSocket(state, ws);
+    untrackSocket(state, 'sock-a');
+
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'host-user')).toBe(false);
+    expect(getRoomPresence(state, ENDPOINT, 'sessions:s1:session')).toEqual([]);
+  });
+
+  it('leaves a ghost if untracked before cleanup — the bug this order prevents', () => {
+    const state = createWsState({ presenceEnabled: true });
+    const ws = createMockWs('sock-a') as never;
+    state.socketUsers.set('sock-a', 'host-user');
+    subscribe(state, ws, 'sessions:s1:session');
+    addPresence(state, 'sock-a', ENDPOINT, 'sessions:s1:session');
+
+    // The old (broken) order: cleanupPresence can no longer resolve the userId.
+    untrackSocket(state, 'sock-a');
+    cleanupSocket(state, ws);
+
+    expect(isUserPresent(state, ENDPOINT, 'sessions:s1:session', 'host-user')).toBe(true);
   });
 });

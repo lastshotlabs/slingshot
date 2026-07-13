@@ -158,7 +158,11 @@ export interface SessionRuntime {
     warn(message: string, data?: unknown): void;
     error(message: string, data?: unknown): void;
   };
-  readonly onCompleted?: (winResult: WinResult, leaderboard: unknown) => Promise<void> | void;
+  readonly onCompleted?: (
+    winResult: WinResult,
+    leaderboard: unknown,
+    finalGameState?: Record<string, unknown>,
+  ) => Promise<void> | void;
 
   handlerContext: ReturnType<typeof buildProcessHandlerContext>;
 
@@ -1359,7 +1363,7 @@ export async function endGameFlow(runtime: SessionRuntime, winResult: WinResult)
   // Error-isolated: completion must finish even if the callback fails.
   if (runtime.onCompleted) {
     try {
-      await runtime.onCompleted(winResult, leaderboard);
+      await runtime.onCompleted(winResult, leaderboard, runtime.gameState);
     } catch (e: unknown) {
       runtime.log.error('onCompleted callback failed', e);
     }

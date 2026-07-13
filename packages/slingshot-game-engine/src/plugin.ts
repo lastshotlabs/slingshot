@@ -372,11 +372,15 @@ export function createGameEnginePackage(
           // Natural completion: persist terminal session state and surface the
           // app-bus event so server-side listeners (e.g. an owning "match"
           // record) hear about it — the WS broadcast alone only reaches clients.
-          onCompleted: async (winResult, leaderboard) => {
+          onCompleted: async (winResult, leaderboard, finalGameState) => {
             const completedAt = new Date().toISOString();
             await capturedSessionAdapter.update(sessionId, {
               status: 'completed',
               completedAt,
+              // Persist the terminal game state — durable records (results
+              // screens, replays, owning "match" rows) need the finished
+              // game, not whatever was last written during play.
+              ...(finalGameState ? { gameState: finalGameState } : {}),
             });
             bus.emit('game:session.completed', {
               id: sessionId,

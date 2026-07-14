@@ -984,6 +984,17 @@ export async function processInputPipeline(
   if (!validation.valid) {
     return (validation as { valid: false; ack: InputAck }).ack;
   }
+  // Everything downstream — the game-loop buffer, recordSubmission, the onInput
+  // hook, the channel process handler, the replay log, and the relay — must see
+  // the schema's PARSED output, not the raw wire object. `validateInput` runs a
+  // full `safeParse`, so `validation.parsed` has every `.default()` applied; the
+  // original `data` does not. Forwarding the raw object meant a channel field
+  // declared `optional().default([])` arrived `undefined` at a handler that read
+  // it, the handler threw, and (see Step 9) that throw was swallowed with no ack
+  // and no log — the player tapped the button and the phase sat there until it
+  // timed out. Re-point `data` at the parsed value here, once, so no consumer
+  // can diverge.
+  data = validation.parsed;
 
   // Step 5: Rate limit
   const rlKey = channelRateLimitKey(sessionId, channelName, userId);
@@ -1035,10 +1046,28 @@ export async function processInputPipeline(
   rebuildHandlerContext(runtime);
   await invokeOnInput(gameDef.hooks, runtime.handlerContext, channelName, userId, data, hookError);
 
-  // Step 9: Invoke channel process handler
+  // Step 9: Invoke channel process handler.
+  //
+  // A throwing handler must never be silent. Previously the error propagated out
+  // of the pipeline and rejected the promise the WS layer awaited: no ack was
+  // returned or cached, nothing was logged, and the input simply vanished — the
+  // hardest possible failure to diagnose from the outside (the phase just hangs).
+  // Isolate it the same way lifecycle hooks are already isolated: log loudly with
+  // the channel, session, user, and stack, and return an explicit rejection so
+  // the client is nacked rather than left waiting. On a handler failure we do NOT
+  // fall through to replay/relay/turn/phase-advance — a half-processed input must
+  // not advance the game.
   if (channel.definition.process && Object.hasOwn(gameDef.handlers, channel.definition.process)) {
     const handler = gameDef.handlers[channel.definition.process];
-    await handler(runtime.handlerContext, userId, data);
+    try {
+      await handler(runtime.handlerContext, userId, data);
+    } catch (err) {
+      runtime.log.error(
+        `Channel process handler '${channel.definition.process}' threw for channel '${channelName}' in session ${sessionId} (user ${userId})`,
+        err,
+      );
+      return rejectInput('HANDLER_ERROR', 'Input could not be processed.', sequence);
+    }
   }
 
   // Step 10: Log to replay

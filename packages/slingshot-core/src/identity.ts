@@ -16,9 +16,15 @@
  * - `'service-account'` — a machine-to-machine client (e.g. M2M JWT with `azp`/`client_id`).
  * - `'api-key'`         — a statically configured bearer/API-key client.
  * - `'system'`          — an internal framework-initiated action (cron, lifecycle).
+ * - `'display'`         — a read-only "screen" bound to ONE resource (e.g. a game
+ *                         cast to a TV). Carries `id: null` on purpose, so it can
+ *                         never satisfy `userAuth` (which requires `kind === 'user'`
+ *                         AND a non-null `id`) and can never widen into a user
+ *                         session. Everything a display may see is granted
+ *                         explicitly by the package that minted its token.
  * - `'anonymous'`       — unauthenticated request.
  */
-export type ActorKind = 'user' | 'service-account' | 'api-key' | 'system' | 'anonymous';
+export type ActorKind = 'user' | 'service-account' | 'api-key' | 'system' | 'display' | 'anonymous';
 
 /**
  * Canonical identity for the current request.

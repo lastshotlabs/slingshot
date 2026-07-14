@@ -17,11 +17,13 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import type {
+  HookServices,
   PluginSetupContext,
   SlingshotEventBus,
   SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
+  buildHookServices,
   createConsoleLogger,
   deepFreeze,
   definePackage,
@@ -36,6 +38,7 @@ import { buildGameEngineEntityModules } from './entities/modules';
 import type { GameEngineAdapterRefs } from './entities/modules';
 import { listAdapterRecords } from './lib/adapterQuery';
 import { createCleanupState, startCleanupSweep, stopCleanupSweep } from './lib/cleanup';
+import { createDisplayTokenMiddleware, resolveContextSigningSecret } from './lib/displayRuntime';
 import { createInMemoryReplayStore } from './lib/replay';
 import { createSessionControls } from './lib/sessionControl';
 import {
@@ -249,6 +252,13 @@ export function createGameEnginePackage(
         getPlayerAdapter,
       };
 
+      // Resolve a display (TV) token on any request that carries one, BEFORE the
+      // game routes run, so `getDisplaySessionId(c)` is available to them and to
+      // any app route mounted after us. An absent token is a no-op; an invalid
+      // one is a loud 401 rather than a silent downgrade to anonymous — a
+      // silently-ignored token is exactly the bug this feature exists to fix.
+      app.use(`${config.mountPath}/*`, createDisplayTokenMiddleware({ getSessionAdapter }));
+
       mountGameRegistryRoutes(app, routeDeps);
       mountGameSessionRoutes(app, routeDeps);
     },
@@ -266,6 +276,29 @@ export function createGameEnginePackage(
       // workspace logger boundary so production deployments can pipe to their
       // structured log sink instead of writing directly to stdout/stderr.
       const packageLogger = createConsoleLogger({ base: { plugin: 'slingshot-game-engine' } });
+
+      // ── ctx.services — the route from a game handler to a framework capability
+      //
+      // This is `ProcessHandlerContext.services`, and until now NOTHING supplied
+      // it: the type, the getter and the docs all existed, and the value was
+      // `undefined` in every game, always. So no game could resolve a framework
+      // capability from a handler — which is exactly why hotseat's LLM never
+      // generated a card in production (the AI client was registered, booted and
+      // pre-warmed; the handler that had to *find* it saw nothing, and silently
+      // dealt from the house deck). Hundreds of tests were green because every
+      // one called the deck function directly; none drove the handler.
+      //
+      // Built once, read lazily per handler call. `TestGameHarness` does NOT
+      // supply it, so `ctx.services` stays `undefined` in sims — which is what
+      // keeps them hermetic and lets a game take its no-credentials path in tests.
+      const hookServices = buildHookServices({
+        app,
+        pluginState: getContext(app).pluginState,
+        bus,
+        logger: packageLogger,
+        pluginName: 'slingshot-game-engine',
+      });
+      const getHookServices = (): HookServices | undefined => hookServices;
       const log: SessionRuntime['log'] = {
         debug() {
           /* noop in production */
@@ -297,6 +330,7 @@ export function createGameEnginePackage(
           sessionAdapter: capturedSessionAdapter,
           playerAdapter: capturedPlayerAdapter,
           bus,
+          displaySecret: resolveContextSigningSecret(app),
         });
       }
 
@@ -368,6 +402,9 @@ export function createGameEnginePackage(
           replayStore,
           log,
           activeRuntimes,
+          // Hands every game handler `ctx.services` — the capability lookup that
+          // was declared, documented, and never once supplied.
+          getHookServices,
           initialGameState: (session.gameState ?? null) as Record<string, unknown> | null,
           // Natural completion: persist terminal session state and surface the
           // app-bus event so server-side listeners (e.g. an owning "match"

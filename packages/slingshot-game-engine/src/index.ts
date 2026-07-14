@@ -190,3 +190,33 @@ export {
   spectatorRoom,
   streamRoom,
 } from './lib/display';
+
+// ── Display (TV) tokens — casting a game to a real screen ────────────────────
+//
+// An app adds a cast-able TV by widening exactly the routes the TV needs, and
+// nothing else:
+//
+//   import { getDisplaySessionId } from '@lastshotlabs/slingshot-game-engine';
+//
+//   const userId  = getActorId(c);                        // null for a TV
+//   const display = getDisplaySessionId(c);               // the session, for a TV
+//   const isViewer = userId !== null || display === match.gameSessionId;
+//   if (!isViewer) return c.json({ error: … }, 401);
+//   return c.json(sanitizeForSpectator(match));           // <- the app's EXISTING redaction
+//
+// The TV must go through the same spectator projection every other client uses.
+// The framework deliberately does not redact for you: it does not know what your
+// game considers a spoiler, and guessing would be worse than not trying.
+export { getDisplaySessionId, isDisplayFor } from './lib/displayRuntime';
+export {
+  DEFAULT_DISPLAY_TOKEN_TTL_MS,
+  authorizeDisplayToken,
+  mintDisplayToken,
+  verifyDisplayToken,
+} from './lib/displayToken';
+export type {
+  DisplaySessionFacts,
+  DisplayTokenClaims,
+  DisplayTokenFailure,
+  DisplayTokenVerification,
+} from './lib/displayToken';

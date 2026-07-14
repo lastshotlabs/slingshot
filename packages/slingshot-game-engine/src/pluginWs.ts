@@ -8,7 +8,11 @@
  */
 import type { SlingshotEventBus, WsPluginEndpoint } from '@lastshotlabs/slingshot-core';
 import { listAdapterRecords } from './lib/adapterQuery';
+import { sessionRoom, spectatorRoom } from './lib/display';
+import { loadDisplaySessionFacts } from './lib/displayRuntime';
+import { authorizeDisplayToken, verifyDisplayToken } from './lib/displayToken';
 import { rejectInput } from './lib/input';
+import { createGameRoomSubscribeGuard } from './lib/roomAccess';
 import type { SessionRuntime } from './lib/sessionRuntime';
 import {
   handleDisconnect,
@@ -29,6 +33,8 @@ export interface PluginWsDeps {
   sessionAdapter: SessionAdapterShape;
   playerAdapter: PlayerAdapterShape;
   bus: SlingshotEventBus;
+  /** HMAC secret for display (TV) tokens. `null` disables casting. */
+  displaySecret: string | readonly string[] | null;
 }
 
 /**
@@ -45,6 +51,7 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     sessionAdapter,
     playerAdapter,
     bus,
+    displaySecret,
   } = deps;
 
   // Wire resolveSession callback (section 5.10.9)
@@ -160,7 +167,94 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
       },
     };
   }
+  // ── game:display.subscribe — a TV joins ────────────────────────────────────
+  //
+  // `auth: 'none'` because a cast TV has no session and never will. The token in
+  // the PAYLOAD is the credential, and this handler verifies it itself.
+  //
+  // Note what is NOT happening here: this socket never acquires a user actor. So
+  // every other handler above — `game:input` included — is still `auth: 'userAuth'`
+  // and still rejects it, without a single check written by this function.
+  // **Read-only is a property of the socket's identity, not of code remembering
+  // to be careful.** That is the whole reason the token produces `id: null`.
+  incoming['game:display.subscribe'] = {
+    auth: 'none',
+    handler: (
+      ws: unknown,
+      payload: unknown,
+      context: {
+        socketId: string;
+        publish(room: string, data: unknown): void;
+        subscribe(room: string): void;
+        unsubscribe(room: string): void;
+      },
+    ) => {
+      const wsSocket = ws as {
+        send(data: string): void;
+        data?: { displaySessionId?: string };
+      };
+      const deny = (reason: string): void => {
+        wsSocket.send(
+          JSON.stringify({
+            event: 'game:display.denied',
+            error: { code: 'DISPLAY_TOKEN_INVALID', reason },
+          }),
+        );
+      };
+
+      const body = (payload ?? {}) as { token?: unknown };
+      const token = typeof body.token === 'string' ? body.token : null;
+      if (token === null) {
+        deny('malformed');
+        return;
+      }
+      if (displaySecret === null) {
+        deny('unsupported');
+        return;
+      }
+
+      const verified = verifyDisplayToken(token, { secret: displaySecret });
+      if (!verified.ok) {
+        deny(verified.reason);
+        return;
+      }
+
+      return (async () => {
+        const facts = await loadDisplaySessionFacts(sessionAdapter, verified.claims.sessionId);
+        const authorized = authorizeDisplayToken(verified.claims, facts);
+        if (!authorized.ok) {
+          deny(authorized.reason);
+          return;
+        }
+
+        const sessionId = verified.claims.sessionId;
+
+        // Stamp the socket. `createGameRoomSubscribeGuard` reads this, and it is
+        // the ONLY thing that writes it — so its presence is proof the token was
+        // verified AND authorized, not merely presented.
+        if (wsSocket.data) wsSocket.data.displaySessionId = sessionId;
+
+        // The public feed, and nothing else. Not `host`, not `player:*`, not
+        // `team:*` — the guard denies those to a display socket anyway, but we
+        // never even ask.
+        context.subscribe(sessionRoom(sessionId));
+        context.subscribe(spectatorRoom(sessionId));
+
+        wsSocket.send(JSON.stringify({ event: 'game:display.subscribed', sessionId }));
+      })();
+    },
+  };
+
   endpoint.incoming = incoming;
+
+  // Close the room-subscription hole AND scope display sockets. Until now the
+  // engine set no guard, so the framework's default applied — and that one only
+  // protects `player:*` rooms, leaving `sessions:<id>:host` (and every other
+  // session's rooms) open to any authenticated socket. See lib/roomAccess.ts.
+  endpoint.onRoomSubscribe = createGameRoomSubscribeGuard({
+    activeRuntimes,
+    getPlayerAdapter: () => playerAdapter,
+  });
 
   // Wire WS close handler for disconnect detection (section 2)
   endpoint.on ??= {};

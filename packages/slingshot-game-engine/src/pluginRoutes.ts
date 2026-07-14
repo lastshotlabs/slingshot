@@ -12,6 +12,8 @@ import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { getActorId } from '@lastshotlabs/slingshot-core';
 import { GameErrorCode } from './errors';
 import { listAdapterRecords } from './lib/adapterQuery';
+import { resolveSigningSecret } from './lib/displayRuntime';
+import { mintDisplayToken } from './lib/displayToken';
 import { extractRulesDefaults } from './lib/rules';
 import { computeLeaderboard } from './lib/scoring';
 import type { SessionRuntime } from './lib/sessionRuntime';
@@ -436,6 +438,94 @@ export function mountGameSessionRoutes(app: Hono<AppEnv>, deps: PluginRouteDeps)
 
     const result = await replayStore.getReplayEntries(sessionId, from, limit);
     return c.json(result);
+  });
+
+  // ── Display (TV) tokens ───────────────────────────────────────────────────
+  //
+  // The host mints a token so the game can be CAST to a real screen — a
+  // Chromecast, a smart TV, a browser that has never logged in. Without this the
+  // TV view only ever worked as a tab in the host's own browser, silently
+  // borrowing their session. See `lib/displayToken.ts` for the threat model.
+
+  // POST /game/sessions/:id/display-token — host mints a TV token
+  sessionRoutes.post('/:id/display-token', async c => {
+    const sessionId = c.req.param('id');
+    const userId = getActorId(c);
+
+    if (!userId) {
+      return c.json(
+        { error: { code: GameErrorCode.UNAUTHORIZED, message: 'Authentication required.' } },
+        401,
+      );
+    }
+
+    const session = await getSessionAdapter().getById(sessionId);
+    if (!session) {
+      return c.json(
+        { error: { code: GameErrorCode.SESSION_NOT_FOUND, message: 'Session not found.' } },
+        404,
+      );
+    }
+
+    // Host-only. A display token is a grant of visibility; only the person who
+    // owns the room may hand one out.
+    if (session.hostUserId !== userId) {
+      return c.json(
+        { error: { code: GameErrorCode.FORBIDDEN, message: 'Only the host may cast this game.' } },
+        403,
+      );
+    }
+
+    const secret = resolveSigningSecret(c);
+    if (secret === null) {
+      return c.json(
+        { error: { code: 'DISPLAY_TOKEN_UNSUPPORTED', message: 'Signing is not configured.' } },
+        503,
+      );
+    }
+
+    const { token, claims } = mintDisplayToken({
+      sessionId,
+      epoch: Number(session.displayEpoch ?? 0),
+      secret,
+    });
+
+    return c.json({ token, sessionId, expiresAt: claims.expiresAt });
+  });
+
+  // POST /game/sessions/:id/display-token/revoke — kill every outstanding TV
+  sessionRoutes.post('/:id/display-token/revoke', async c => {
+    const sessionId = c.req.param('id');
+    const userId = getActorId(c);
+
+    if (!userId) {
+      return c.json(
+        { error: { code: GameErrorCode.UNAUTHORIZED, message: 'Authentication required.' } },
+        401,
+      );
+    }
+
+    const adapter = getSessionAdapter();
+    const session = await adapter.getById(sessionId);
+    if (!session) {
+      return c.json(
+        { error: { code: GameErrorCode.SESSION_NOT_FOUND, message: 'Session not found.' } },
+        404,
+      );
+    }
+    if (session.hostUserId !== userId) {
+      return c.json(
+        { error: { code: GameErrorCode.FORBIDDEN, message: 'Only the host may revoke.' } },
+        403,
+      );
+    }
+
+    // One increment invalidates every token ever minted under the old epoch.
+    // No revocation list, nothing to keep in sync, nothing that can drift.
+    const displayEpoch = Number(session.displayEpoch ?? 0) + 1;
+    await adapter.update(sessionId, { displayEpoch });
+
+    return c.json({ revoked: true, displayEpoch });
   });
 
   app.route(`${mountPath}/sessions`, sessionRoutes);

@@ -36,6 +36,15 @@ export const GameSession = defineEntity('GameSession', {
     parentSessionId: field.string({ optional: true }),
     winResult: field.json({ optional: true }),
     contentConfig: field.json({ optional: true }),
+    /**
+     * Revocation counter for display (TV) tokens.
+     *
+     * A display token embeds the epoch it was minted under, and verification
+     * demands an exact match. Revoking every outstanding TV for this session is
+     * therefore one increment — no revocation list to keep in sync, and no way
+     * for a stale token to outlive a bump. See `lib/displayToken.ts`.
+     */
+    displayEpoch: field.number({ default: 0 }),
     createdAt: field.date({ default: 'now', immutable: true }),
     updatedAt: field.date({ default: 'now' }),
     startedAt: field.date({ optional: true }),

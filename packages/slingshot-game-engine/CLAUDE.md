@@ -143,6 +143,94 @@ closure-owned state, no singletons.
 | tests/unit/input.test.ts     | Channel authorization, input accept/reject, schema validation   |
 | tests/unit/rateLimit.test.ts | Sliding window rate limiter, key composition                    |
 
+## Display tokens — casting a game to a real TV
+
+Every game has a TV view. Until now none could actually be **cast**: open the TV route on a
+Chromecast, a smart TV, or any browser that has never logged in, and every request 401s. It
+only appeared to work because the host opened the TV as a tab in their own authenticated
+browser, silently borrowing their session. In a music game where the TV is the speaker, that
+meant no TV and therefore no sound.
+
+The host mints a short-lived, single-match, **read-only** token; the TV carries it.
+
+```
+POST {mountPath}/sessions/:id/display-token          -> { token, sessionId, expiresAt }
+POST {mountPath}/sessions/:id/display-token/revoke   -> { revoked, displayEpoch }
+```
+
+**Adopting it in an app is two lines.** Widen exactly the routes the TV needs, and nothing
+else:
+
+```ts
+import { getActorId } from '@lastshotlabs/slingshot-core';
+import { getDisplaySessionId } from '@lastshotlabs/slingshot-game-engine';
+
+const userId = getActorId(c); // null for a TV
+const display = getDisplaySessionId(c); // the session id, for a TV
+
+if (!userId && display !== match.gameSessionId) {
+  return c.json({ error: { code: 'UNAUTHORIZED' } }, 401);
+}
+return c.json(sanitizeForSpectator(match)); // <- YOUR existing redaction, unchanged
+```
+
+The TV must go through the same spectator projection every other client uses. The framework
+deliberately does **not** redact for you: it does not know what your game considers a spoiler
+(hitshot's pre-reveal year, hotseat's undealt deck, blankslate's unrevealed words), and
+guessing would be worse than not trying.
+
+On the socket, the TV sends `game:display.subscribe` with `{ token }` and is subscribed to the
+session + spectator rooms. It sends nothing else, ever.
+
+### The threat model, stated plainly
+
+A display token lives in a URL, on a screen, in somebody's living room. Guests can read it off
+the TV. It will be photographed. **Assume it leaks — and make that a non-event.**
+
+- The actor it produces has `kind: 'display'` and **`id: null`**. `userAuth` requires
+  `kind === 'user'` AND a non-null `id`, so a display token **cannot satisfy `userAuth`
+  anywhere, in any package, present or future**. Read-only is _structural_, not a check
+  somebody has to remember to write — every route that guards on `getActorId(c)` already
+  rejects it, including routes written before display tokens existed.
+- It is bound to ONE `sessionId`. It is useless against any other session.
+- It expires, it dies the moment the session completes, and the host can revoke every
+  outstanding token with one call (`displayEpoch` is a counter on the session; revoke
+  increments it, and verification demands an exact match — no revocation list to drift).
+- It carries no user identity, no roles, and no claims beyond its own session.
+
+A display token is a key to a window, not a key to the house.
+
+### It also closed a live hole
+
+The framework's `defaultRoomSubscribeGuard` protects only `…:player:<uid>` rooms and returns
+`true` for everything else. The engine set no guard, so **any authenticated socket could
+subscribe to `sessions:<id>:host`** — the host-only room that `broadcastTo('host', …)` and
+`publishToHost()` write to — **or to any other session's rooms entirely.** That was true in all
+four shipped games. `lib/roomAccess.ts` now enforces: you may only subscribe to rooms of a
+session you are in, and only to the rooms within it that are yours.
+
+## ctx.services — reaching a framework capability from a handler
+
+`ProcessHandlerContext.services` is how a game handler resolves a framework capability
+(`ctx.services?.capabilities.require(AiClientCap)`).
+
+**It was declared, documented, and never wired.** `getHookServices` was a getter over a
+late-bound accessor that nothing ever supplied, so `ctx.services` was `undefined` in every
+game, always. That is why hotseat's LLM never generated a card in production: the AI client
+was registered, booted and pre-warmed, and the handler that had to _find_ it looked into an
+empty socket and silently dealt from the house deck. Hundreds of tests were green because
+every one called the generation function directly; none drove the handler that has to resolve
+the client.
+
+The plugin now supplies it. **`TestGameHarness` deliberately does not** — so `ctx.services`
+stays `undefined` in sims, which is what keeps them hermetic and lets a game take a
+no-credentials fallback path in tests. Guard for it:
+
+```ts
+const client = ctx.services?.capabilities.maybe(AiClientCap) ?? null;
+if (!client) return houseDeck(); // tests, and apps with no key
+```
+
 ## Connections
 
 - **Imports from**: `slingshot-core` (package authoring, entities, WS, context), `slingshot-entity` (operations, factories, policy)
@@ -152,7 +240,7 @@ closure-owned state, no singletons.
 
 - **Adding a channel mode**: add case in `src/lib/channels.ts` `recordSubmission()`, add to `ChannelMode` type in `src/types/models.ts`
 - **Adding a phase advance trigger**: update `PhaseAdvanceTrigger` type, handle in `src/lib/phases.ts`
-- **A phase that is a computation, not a wait** (deck prep, skip-if-not-applicable, terminal checks): call `ctx.advancePhase()` from the phase's `onEnter`, optionally after `ctx.setNextPhase(...)`. The advance cannot run inline — `onEnter` executes inside the transition — so the runtime records it and replays it once the transition settles. Chains resolve in a single transition; a cycle throws after `MAX_SELF_ADVANCE_CHAIN` (16) hops. An *external* advance (host control, phase timeout) that lands mid-transition is still dropped by the reentrancy guard.
+- **A phase that is a computation, not a wait** (deck prep, skip-if-not-applicable, terminal checks): call `ctx.advancePhase()` from the phase's `onEnter`, optionally after `ctx.setNextPhase(...)`. The advance cannot run inline — `onEnter` executes inside the transition — so the runtime records it and replays it once the transition settles. Chains resolve in a single transition; a cycle throws after `MAX_SELF_ADVANCE_CHAIN` (16) hops. An _external_ advance (host control, phase timeout) that lands mid-transition is still dropped by the reentrancy guard.
 - **Adding a handler context method**: add to `ProcessHandlerContext` interface in `src/types/models.ts`, implement in `src/lib/handlers.ts`
 - **Extending app-facing runtime controls**: update `src/types/state.ts`, implement in `src/lib/sessionControl.ts`, and wire through `src/plugin.ts`
 - **Adding a recipe**: create file in `src/recipes/`, export from `src/recipes/index.ts`

@@ -206,6 +206,33 @@ Two traps a reasoning model sets, both live in `openaiCompatible`:
   `x-grok-conv-id` on xAI so the request routes to the server that already holds
   the prefix. Without it an "automatic" cache is a coin flip.
 
+  This note was here, and the preset sent the header, and it **still didn't work
+  for months** — because the orchestrator forwarded `req.promptCacheKey`, an
+  optional field no app passes, so the header was omitted on every real call. Then
+  the first fix routed by the key `renderSystem` derives from segment **ids**, and
+  hotseat's three spice tiers share their ids and differ only in text — so all
+  three collapsed onto one key, landed on one machine, and evicted each other.
+
+  Hence **two keys, and they are not interchangeable** (`RenderedSystem`):
+
+    - `promptCacheKey` — the prefix's IDENTITY, from segment **ids**. Stays stable
+      when the text changes, which is the only reason `checkDrift` can notice that
+      it changed. Never goes on the wire.
+    - `promptCacheRouteKey` — the prefix's CONTENT. Distinct bytes route
+      distinctly. This is what the transport gets.
+
+  Measured on xAI, hotseat's 4,955-token prefix, per call:
+
+        no header       128 cached  ( 2.6%)
+        id-routed       128 cached  ( 2.6%)   <- the three pre-warms, evicting each other
+        content-routed 4,928 cached (99.6%)
+
+  Every wrong version of this is **silent**: no error, no degradation, a green test
+  suite, and ~10× the input bill. `cacheHitRate` in the app's `/status` is the only
+  thing that catches it, and only after the money is spent. **Read the per-call
+  usage ledger, not the blended rate** — the blend showed 0.40 while every
+  cache-warming call in it was missing.
+
 Take the SDK as an **optional peer**: lazy `await import()` in a try/catch with a
 typed error naming the install command (precedent:
 `slingshot-webhooks/src/queues/bullmq.ts`). Importing this package must never

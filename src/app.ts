@@ -8,6 +8,7 @@ import { createActorResolutionMiddleware } from '@framework/middleware/resolveAc
 import {
   mountCors,
   mountFrameworkMiddleware,
+  mountRateLimit,
   mountTenantMiddleware,
 } from '@framework/mountMiddleware';
 import { mountOptionalEndpoints } from '@framework/mountOptionalEndpoints';
@@ -780,6 +781,15 @@ async function assembleApp<T extends object>(
     await runPluginMiddleware(sortedPlugins, app, infra.frameworkConfig, bus, events, tracer);
   });
   app.use('*', createActorResolutionMiddleware());
+
+  // Rate limiting mounts HERE, immediately after actor resolution, so it can key
+  // by client rather than by IP. A room full of phones behind one home NAT is one
+  // IP but many clients; keying by IP divides the room's budget by the number of
+  // guests. Mounted with the other framework middleware it would run before any
+  // identity existed and would silently fall back to IP for everyone. See
+  // mountRateLimit().
+  mountRateLimit(app, mergedSecurity);
+
   for (const mw of middleware) app.use(mw);
 
   return { ...bootstrap, app, ctx, tenantCacheCarrier, seedInput: config.seed };

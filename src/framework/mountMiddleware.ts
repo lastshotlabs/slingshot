@@ -177,8 +177,34 @@ export async function mountFrameworkMiddleware(
     app.use(botProtection({ blockList: botCfg.blockList }));
   }
 
-  // Rate limiting
-  const rlConfig = securityConfig.rateLimit ?? { windowMs: 60_000, max: 100 };
+  // NOTE: rate limiting is deliberately NOT mounted here. See mountRateLimit().
+}
+
+/**
+ * Mount the global request-rate limiter.
+ *
+ * ## Why this is not in `mountFrameworkMiddleware`
+ *
+ * The limiter keys by **client** — the authenticated user or display when there is
+ * one, and the IP only for anonymous traffic (see `middleware/rateLimit.ts` for
+ * why IP alone is wrong for a product people use in the same room). To do that it
+ * must be able to see the actor.
+ *
+ * The actor is published by `createActorResolutionMiddleware()`, which runs *after*
+ * the plugin middleware phase. Hono executes middleware in registration order, so a
+ * limiter mounted with the rest of the framework middleware would run **before any
+ * identity exists** and would silently key everything by IP — looking correct,
+ * behaving exactly like the bug it was meant to fix. Mounting it here, after actor
+ * resolution, is what makes the keying real.
+ *
+ * The cost of the move: an anonymous flood now passes through auth identification
+ * before being rejected. That is cheap (no credential → anonymous immediately, no
+ * store lookup) and it is the right trade — the alternative is a limiter that
+ * cannot tell six people apart from one.
+ */
+export function mountRateLimit(app: OpenAPIHono<AppEnv>, security: SecurityConfig): void {
+  const botCfg = security.botProtection ?? {};
+  const rlConfig = security.rateLimit ?? { windowMs: 60_000, max: 100 };
   app.use(rateLimit({ ...rlConfig, fingerprintLimit: botCfg.fingerprintRateLimit ?? false }));
 }
 

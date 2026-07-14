@@ -17,6 +17,7 @@ import {
   coerceToDate,
   decodeCursor,
   fromSqliteRow,
+  quoteSqliteIdent,
   sqliteColumnType,
   storageName,
   toSnakeCase,
@@ -67,7 +68,22 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
   config: ResolvedEntityConfig,
   operations?: Record<string, OperationConfig>,
 ): EntityAdapter<Entity, CreateInput, UpdateInput> & Record<string, unknown> {
-  const table = storageName(config, 'sqlite');
+  // Quote the table identifier ONCE, here, so every statement below is safe by
+  // construction rather than by each author remembering.
+  //
+  // `_storageName` is `${namespace}_${plural}`, and a namespace is free-form. Every
+  // package in-tree happened to use a bare word (`chat`, `assets`, `community`) —
+  // until `slingshot-ai` used its own package name and produced the table
+  // `slingshot-ai_aiUsageRecords`. Interpolated unquoted, SQLite reads the hyphen
+  // as a minus operator: `near "-": syntax error`, on CREATE and on every write.
+  //
+  // The consequence was not cosmetic. That table is the AI **spend ledger**, and
+  // the pre-flight budget guard hydrates from it at boot — a guard that exists to
+  // stop a runaway LLM loop spending real money. A ledger that silently fails to
+  // persist resets the budget on every restart, which is precisely the case it was
+  // built to survive. Quoting is the fix; the hyphen was never the mistake.
+  const rawTable = storageName(config, 'sqlite');
+  const table = quoteSqliteIdent(rawTable);
   const customAutoDefault = config._conventions?.autoDefault;
   const customOnUpdate = config._conventions?.onUpdate;
   const pkField = config._pkField;
@@ -105,7 +121,8 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
           const idx = config.indexes[i];
           const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
           const unique = idx.unique ? 'UNIQUE ' : '';
-          db.run(`CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`);
+          const idxName = quoteSqliteIdent(`idx_${rawTable}_${i}`);
+          db.run(`CREATE ${unique}INDEX IF NOT EXISTS ${idxName} ON ${table} (${colList})`);
         }
       }
 
@@ -114,7 +131,8 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         for (let i = 0; i < config.uniques.length; i++) {
           const uq = config.uniques[i];
           const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
-          db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`);
+          const uidxName = quoteSqliteIdent(`uidx_${rawTable}_${i}`);
+          db.run(`CREATE UNIQUE INDEX IF NOT EXISTS ${uidxName} ON ${table} (${colList})`);
         }
       }
     });

@@ -52,7 +52,7 @@ describe('entity bootstrap hardening', () => {
       run(sql: string, params?: unknown[]) {
         const normalized = sql.trim();
         calls.push(normalized);
-        if (failIndex && normalized.includes('CREATE INDEX IF NOT EXISTS idx_widgets_0')) {
+        if (failIndex && normalized.includes('CREATE INDEX IF NOT EXISTS "idx_widgets_0"')) {
           failIndex = false;
           throw new Error('index bootstrap failed');
         }
@@ -78,7 +78,7 @@ describe('entity bootstrap hardening', () => {
     expect(calls).toContain('PRAGMA busy_timeout = 5000');
     expect(calls).toContain('BEGIN IMMEDIATE');
     expect(calls).toContain('ROLLBACK');
-    expect(calls.some(sql => sql.startsWith('INSERT OR REPLACE INTO widgets'))).toBe(false);
+    expect(calls.some(sql => sql.startsWith('INSERT OR REPLACE INTO "widgets"'))).toBe(false);
 
     calls.length = 0;
     await adapter.create({ id: 'w1', slug: 'alpha' } as never);
@@ -86,7 +86,7 @@ describe('entity bootstrap hardening', () => {
     expect(calls[0]).toBe('PRAGMA busy_timeout = 5000');
     expect(calls[1]).toBe('BEGIN IMMEDIATE');
     expect(calls).toContain('COMMIT');
-    expect(calls.some(sql => sql.startsWith('INSERT OR REPLACE INTO widgets'))).toBe(true);
+    expect(calls.some(sql => sql.startsWith('INSERT OR REPLACE INTO "widgets"'))).toBe(true);
   });
 
   test('postgres entity bootstrap runs inside a transaction and retries after failure', async () => {

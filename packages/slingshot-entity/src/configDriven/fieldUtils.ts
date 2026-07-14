@@ -835,3 +835,23 @@ export function compareForSort(
   }
   return 0;
 }
+
+/**
+ * Quote a SQLite identifier (table, index, column) so it is always valid SQL.
+ *
+ * Identifiers here are derived from user-supplied names — an entity's `namespace`
+ * is free-form, and `_storageName` is `${namespace}_${plural}`. A bare word
+ * interpolates fine, which is why every in-tree package worked by luck: `chat`,
+ * `assets`, `community`. Then `slingshot-ai` used its own package name and
+ * produced `slingshot-ai_aiUsageRecords` — and SQLite parsed the hyphen as a minus
+ * operator (`near "-": syntax error`) on CREATE and on every subsequent write.
+ *
+ * Every package on this platform is named `slingshot-something`, so a hyphenated
+ * namespace is the norm rather than an edge case; it merely hadn't been used yet.
+ *
+ * Double quotes are the SQL-standard identifier quote, which SQLite honours. An
+ * embedded double quote is escaped by doubling it, per the same standard.
+ */
+export function quoteSqliteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}

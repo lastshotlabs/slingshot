@@ -290,10 +290,21 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       // `undefined` is reserved for "this provider has no such concept".
       thinking: caps.thinking !== 'none' ? wantsThinking : undefined,
       timeoutMs: req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
-      // Handed to the transport, not just to the drift detectors: an
-      // automatic-caching provider uses it to route the request to the server
-      // that already holds the prefix.
-      promptCacheKey: req.promptCacheKey,
+      // The RENDERED key, not `req.promptCacheKey` — which is optional, and which
+      // no app in this repo actually passes. `renderSystem` derives one from the
+      // stable segment ids, so every call sharing a prefix shares a key for free.
+      //
+      // Forwarding the raw request field meant the header was omitted on every
+      // real call, and an automatic-caching provider silently re-read the whole
+      // prefix each time. Measured on xAI with hotseat's 4,955-token prefix:
+      // 128 cached tokens (2.6%) without the header, 4,928 (99.5%) with it. No
+      // error, no degradation — just ~10× the input bill, which is precisely the
+      // failure `cacheHitRate` is monitored to catch. It caught it.
+      //
+      // This is a ROUTING hint, not a cache identity: the vendor still matches the
+      // real prefix bytes, so a stale or colliding key costs a cold read, never a
+      // wrong answer.
+      promptCacheKey: rendered.promptCacheKey,
     };
 
     return { request, degradations, rendered };

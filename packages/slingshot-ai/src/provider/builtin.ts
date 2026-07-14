@@ -16,4 +16,9 @@ import './anthropic';
 import './openaiCompatible';
 
 export { createAnthropicProvider } from './anthropic';
-export { createOpenAiCompatibleProvider, createOpenAiProvider } from './openaiCompatible';
+export {
+  createDeepSeekProvider,
+  createGrokProvider,
+  createOpenAiCompatibleProvider,
+  createOpenAiProvider,
+} from './openaiCompatible';

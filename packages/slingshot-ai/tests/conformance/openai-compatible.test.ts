@@ -111,11 +111,19 @@ describe('openai-compatible adapter', () => {
     expect(mock.requests.at(-1)!).not.toHaveProperty('response_format');
   });
 
-  test('reads cached_tokens into cacheReadTokens', async () => {
+  test('reads cached_tokens into cacheReadTokens, and SUBTRACTS them from inputTokens', async () => {
     const provider = build();
     const result = await provider.generate(request());
 
-    expect(result.usage.inputTokens).toBe(13);
+    // The mock reports prompt_tokens: 13 with cached_tokens: 4 — and in this
+    // family `cached_tokens` is a SUBSET of `prompt_tokens`, not a sibling of it.
+    //
+    // `ProviderUsage`'s four counts are disjoint, because `computeUsage()` bills
+    // them additively. Passing the 13 straight through (as this adapter used to)
+    // charged the 4 cached tokens twice: once at the full input rate, and again
+    // at the cache-read rate. Anthropic reports genuinely disjoint counts, which
+    // is why the additive formula was right there and quietly wrong here.
+    expect(result.usage.inputTokens).toBe(9);
     expect(result.usage.outputTokens).toBe(9);
     expect(result.usage.cacheReadTokens).toBe(4);
   });

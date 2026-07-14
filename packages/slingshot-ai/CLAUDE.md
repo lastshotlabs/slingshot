@@ -30,6 +30,25 @@ moderation, degradation) lives in the orchestrator (`src/lib/client.ts`).
 4. **`costUsd: null` ≠ `costUsd: 0`.** Unknown is not free. This distinction has
    to survive aggregation (`AiUsageSummary.unpricedCalls`).
 
+4b. **`ProviderUsage`'s four token counts are DISJOINT.** `computeUsage()` bills
+them additively, so `inputTokens` MUST exclude cache reads and writes. The
+vendors disagree about this and the disagreement is silent:
+
+    - Anthropic reports disjoint counts natively (`input_tokens` excludes
+      `cache_read_input_tokens`) — which is why the additive formula was written.
+    - The OpenAI family reports `prompt_tokens` as a TOTAL, with
+      `prompt_tokens_details.cached_tokens` as a SUBSET of it. The adapter must
+      **subtract**. It didn't, and every cached token was billed twice.
+    - DeepSeek reports an already-disjoint `prompt_cache_hit_tokens` /
+      `prompt_cache_miss_tokens` split at the top level of `usage` — a different
+      shape again, and reading it with the generic mapper reports zero cache hits
+      and bills everything at the cache-MISS rate. On DeepSeek that is a **50×**
+      overstatement, on the provider you picked *because* it is cheap.
+
+Hence `Preset.mapUsage`. A new adapter's first question is "what exactly does
+this vendor mean by its input-token count", and the answer is never assumed.
+`tests/unit/usageDisjoint.test.ts` pins it for the whole family.
+
 5. **Moderation fails closed.** An undefined policy throws; a judge that errors
    BLOCKS; an item the judge silently dropped is BLOCKED, not waved through. A
    safety control that quietly allows everything is worse than none, because the
@@ -101,13 +120,32 @@ resolve; without that, the integration test (which boots a real app through
 
 ## Adding a provider adapter
 
-Implement `AiProvider` (`src/provider/types.ts`), register it with
-`registerBuiltinProvider(kind, factory)`, and add
-`runProviderConformanceSuite('your-kind', factory)` to
+**First ask whether you need one at all.** `grok`, `openai` and `deepseek` are
+not adapters — they are `Preset`s over the one `openaiCompatible` transport
+(baseUrl + capabilities + prices + optionally a `mapUsage`). Anything speaking
+`/chat/completions` should be a preset. Writing a second transport for it is the
+mistake.
+
+For a genuinely different wire protocol: implement `AiProvider`
+(`src/provider/types.ts`), register it with `registerBuiltinProvider(kind,
+factory)`, and add `runProviderConformanceSuite('your-kind', factory)` to
 `tests/conformance/`. The suite asserts only what the orchestrator depends on —
 notably that a provider declaring `promptCaching: 'explicit'` also declares
 `promptCacheMinTokens`, and that streaming deltas concatenate to exactly
 `finalResult().text`.
+
+Two traps a reasoning model sets, both live in `openaiCompatible`:
+
+- **`reasoning_content` must never reach `text`.** DeepSeek emits it alongside
+  `content`, in the response AND in stream deltas. Concatenating it puts the
+  model's chain-of-thought where the answer should be — it fails to parse as
+  JSON, and worse, hands an app the model's private deliberation. It is surfaced
+  as a `{type: 'thinking'}` stream event instead, which also keeps the streaming
+  invariant true: the TEXT deltas still concatenate to exactly `finalResult().text`,
+  because the reasoning never entered either side of that equation.
+- **`promptCacheKey` is a wire param, not just a bookkeeping key.** It rides as
+  `x-grok-conv-id` on xAI so the request routes to the server that already holds
+  the prefix. Without it an "automatic" cache is a coin flip.
 
 Take the SDK as an **optional peer**: lazy `await import()` in a try/catch with a
 typed error naming the install command (precedent:

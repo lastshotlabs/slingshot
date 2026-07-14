@@ -268,6 +268,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       effort: wantsEffort && caps.effort ? wantsEffort : undefined,
       thinking: wantsThinking && caps.thinking !== 'none' ? true : undefined,
       timeoutMs: req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
+      // Handed to the transport, not just to the drift detectors: an
+      // automatic-caching provider uses it to route the request to the server
+      // that already holds the prefix.
+      promptCacheKey: req.promptCacheKey,
     };
 
     return { request, degradations, rendered };

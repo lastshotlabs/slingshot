@@ -117,10 +117,36 @@ export interface NormalizedRequest {
   readonly thinking?: boolean;
   readonly structured?: NormalizedStructured;
   readonly timeoutMs: number;
+  /**
+   * Stable identifier for the cacheable prefix this request shares with others.
+   *
+   * Providers with `promptCaching: 'automatic'` may take this ON THE WIRE as a
+   * routing hint — xAI's `x-grok-conv-id` header and OpenAI's `prompt_cache_key`
+   * both exist so that requests sharing a prefix land on the same server, which
+   * is what actually turns a cacheable prefix into a cache HIT.
+   *
+   * The orchestrator has always computed this (for the drift and zero-hit
+   * detectors); it now also hands it to the transport, because a provider that
+   * can act on it and is never told is a cache that quietly never fires.
+   */
+  readonly promptCacheKey?: string;
 }
 
-/** Raw token counts. Cost is NOT the provider's job. */
+/**
+ * Raw token counts. Cost is NOT the provider's job.
+ *
+ * **`inputTokens` MUST EXCLUDE the cached counts.** The four fields are DISJOINT
+ * — `pricing.computeUsage()` bills them additively, so an adapter that reports a
+ * total which already contains its cache reads charges for them twice.
+ *
+ * This is not hypothetical: Anthropic reports disjoint counts natively
+ * (`input_tokens` excludes `cache_read_input_tokens`), while the OpenAI family
+ * reports `prompt_tokens` as a TOTAL with `cached_tokens` as a subset of it.
+ * Adapters in that family must subtract. DeepSeek, helpfully, reports the
+ * already-disjoint `prompt_cache_miss_tokens`.
+ */
 export interface ProviderUsage {
+  /** Input tokens billed at the FULL rate — i.e. excluding cache reads and writes. */
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadTokens: number;

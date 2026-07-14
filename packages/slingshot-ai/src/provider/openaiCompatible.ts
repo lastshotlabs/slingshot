@@ -33,6 +33,8 @@ import type {
 
 const KIND = 'openai-compatible';
 const OPENAI_KIND = 'openai';
+const GROK_KIND = 'grok';
+const DEEPSEEK_KIND = 'deepseek';
 
 /**
  * The pessimistic baseline, for "some endpoint that speaks /chat/completions".
@@ -86,19 +88,140 @@ const OPENAI_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
+// grok (xAI) — docs.x.ai, verified 2026-07-13
+// ---------------------------------------------------------------------------
+
+/**
+ * xAI genuinely enforces a JSON Schema ("when using supported schema features,
+ * the response is guaranteed to match your schema"), and caches prefixes on its
+ * own — automatic, so there is no breakpoint to place and nothing to degrade.
+ *
+ * `refusalSignal` is declared FALSE. xAI is OpenAI-compatible on the wire but
+ * does not document a `message.refusal` field, and under-declaring costs us
+ * nothing here (a `content_filter` finish_reason still maps to `'refusal'`),
+ * while over-declaring would have the orchestrator trust a signal that may never
+ * arrive.
+ */
+const GROK_CAPABILITIES: ProviderCapabilities = Object.freeze({
+  ...COMPATIBLE_CAPABILITIES,
+  structuredOutput: 'native',
+  promptCaching: 'automatic',
+  usageAccounting: 'full',
+  costAccounting: true,
+  refusalSignal: false,
+  toolUse: true,
+  maxOutputTokens: 32_768,
+});
+
+const GROK_BASE_URL = 'https://api.x.ai/v1';
+const GROK_DEFAULT_MODEL = 'grok-4.5';
+
+/**
+ * Verified against docs.x.ai/docs/pricing on 2026-07-13.
+ *
+ * NOTE the absent `cacheReadPerMTok`. xAI's docs say cached tokens are "billed at
+ * the cached prompt token price" but do not publish that number on either the
+ * pricing page or the caching page. Rather than invent one, we omit it — and
+ * `computeUsage()` then falls back to the full input rate, which OVERSTATES cost
+ * on a cache hit. That is the safe direction to be wrong in (a spend guard that
+ * over-estimates stops you early; one that under-estimates hands you a bill), and
+ * it is fixable without a release via `providers.grok.pricing`.
+ */
+const GROK_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
+  'grok-4.5': { inputPerMTok: 2, outputPerMTok: 6 },
+  'grok-4.3': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
+  'grok-4.20-0309-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
+  'grok-4.20-0309-non-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
+  'grok-4.20-multi-agent-0309': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
+});
+
+// ---------------------------------------------------------------------------
+// deepseek — api-docs.deepseek.com, verified 2026-07-13
+// ---------------------------------------------------------------------------
+
+/**
+ * DeepSeek supports `response_format: {type: 'json_object'}` ONLY — no
+ * `json_schema`, no strict enforcement. So: `json-mode`, declared honestly.
+ *
+ * That is not a defect, it is the degradation path this package was built for:
+ * the orchestrator injects the schema into the prompt AND sets `json_object`,
+ * then `safeParse`s the result and repairs it if needed. DeepSeek is therefore
+ * the provider that proves the design does something — a `native` provider never
+ * exercises the fallback at all.
+ *
+ * It also happens to satisfy DeepSeek's documented requirement that the word
+ * "json" appear in the prompt, for free, because `jsonInstruction()` is injected
+ * on the json-mode path.
+ *
+ * Caching is automatic and on by default for every account.
+ */
+const DEEPSEEK_CAPABILITIES: ProviderCapabilities = Object.freeze({
+  ...COMPATIBLE_CAPABILITIES,
+  structuredOutput: 'json-mode',
+  promptCaching: 'automatic',
+  streaming: true,
+  usageAccounting: 'full',
+  costAccounting: true,
+  refusalSignal: false,
+  toolUse: true,
+  maxOutputTokens: 8192,
+});
+
+const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+
+/**
+ * `deepseek-v4-flash`, NOT `deepseek-chat`.
+ *
+ * `deepseek-chat` and `deepseek-reasoner` are DEPRECATED on 2026-07-24 — eleven
+ * days after this was written. Shipping either as the default would have been a
+ * time bomb with a known fuse length.
+ */
+const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
+
+/**
+ * Verified against api-docs.deepseek.com/quick_start/pricing on 2026-07-13.
+ *
+ * The cache-hit rate is 50× cheaper than cache-miss, which is why
+ * `mapDeepSeekUsage` matters: read the cache split wrong and every cached token
+ * is billed at 50× its real price, on the provider chosen precisely because it
+ * is cheap.
+ */
+const DEEPSEEK_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
+  'deepseek-v4-flash': {
+    inputPerMTok: 0.14,
+    outputPerMTok: 0.28,
+    cacheReadPerMTok: 0.0028,
+  },
+  'deepseek-v4-pro': {
+    inputPerMTok: 0.435,
+    outputPerMTok: 0.87,
+    cacheReadPerMTok: 0.003625,
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Wire types (only the fields we read)
 // ---------------------------------------------------------------------------
 
 interface ChatChoice {
-  message?: { content?: string | null; refusal?: string | null };
-  delta?: { content?: string | null };
+  message?: {
+    content?: string | null;
+    refusal?: string | null;
+    /** DeepSeek thinking mode. Sits ALONGSIDE `content` — never part of it. */
+    reasoning_content?: string | null;
+  };
+  delta?: { content?: string | null; reasoning_content?: string | null };
   finish_reason?: string | null;
 }
 
 interface ChatUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
+  /** OpenAI + xAI: `cached_tokens` is a SUBSET of `prompt_tokens`. */
   prompt_tokens_details?: { cached_tokens?: number };
+  /** DeepSeek: already disjoint, and they sum to `prompt_tokens`. */
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
 }
 
 interface ChatResponse {
@@ -125,12 +248,52 @@ function mapStopReason(choice: ChatChoice | undefined): AiStopReason {
   }
 }
 
+/**
+ * The OpenAI family's usage shape, mapped to DISJOINT counts.
+ *
+ * `prompt_tokens` is the TOTAL input, and `prompt_tokens_details.cached_tokens`
+ * is a SUBSET of it — whereas `ProviderUsage.inputTokens` is defined as the
+ * portion billed at the FULL rate, because `computeUsage()` bills the four
+ * fields additively. Reporting the total here bills every cached token twice:
+ * once at the input rate and again at the cache-read rate.
+ *
+ * (Anthropic reports disjoint counts natively, which is why the additive formula
+ * was right there and quietly wrong here.)
+ */
 function mapUsage(usage: ChatUsage | undefined): ProviderUsage {
+  const prompt = usage?.prompt_tokens ?? 0;
+  const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
   return {
-    inputTokens: usage?.prompt_tokens ?? 0,
+    inputTokens: Math.max(0, prompt - cached),
     outputTokens: usage?.completion_tokens ?? 0,
-    cacheReadTokens: usage?.prompt_tokens_details?.cached_tokens ?? 0,
-    // No server in this family reports cache WRITES separately.
+    cacheReadTokens: cached,
+    // No server in this family reports (or bills) cache WRITES separately.
+    cacheWriteTokens: 0,
+  };
+}
+
+/**
+ * DeepSeek reports the split at the top level of `usage`, not under
+ * `prompt_tokens_details` — and reports it ALREADY DISJOINT, which is exactly
+ * the shape we want.
+ *
+ * Using the generic mapper here would read `cached_tokens: undefined` → 0, and
+ * then bill the whole prompt at the cache-MISS rate. DeepSeek's cache-hit input
+ * is $0.0028/MTok against $0.14 cache-miss — a **50× overstatement** on the
+ * cached portion, on the provider whose entire selling point is that it is cheap.
+ */
+function mapDeepSeekUsage(usage: ChatUsage | undefined): ProviderUsage {
+  const hit = usage?.prompt_cache_hit_tokens;
+  const miss = usage?.prompt_cache_miss_tokens;
+
+  // Fall back to the generic shape if the split is absent (an older deployment,
+  // or a proxy that drops the fields) rather than reporting nonsense.
+  if (hit === undefined && miss === undefined) return mapUsage(usage);
+
+  return {
+    inputTokens: miss ?? 0,
+    outputTokens: usage?.completion_tokens ?? 0,
+    cacheReadTokens: hit ?? 0,
     cacheWriteTokens: 0,
   };
 }
@@ -146,6 +309,19 @@ interface Preset {
   readonly defaultModel?: string;
   readonly pricing?: Readonly<Record<string, ModelPricing>>;
   readonly requiresApiKey: boolean;
+  /**
+   * Override the usage mapper. The one thing the vendors genuinely disagree
+   * about: OpenAI and xAI nest `cached_tokens` inside `prompt_tokens_details`
+   * (as a subset of the total), DeepSeek reports a disjoint hit/miss split at
+   * the top level. Everything else in this family is byte-identical.
+   */
+  readonly mapUsage?: (usage: ChatUsage | undefined) => ProviderUsage;
+  /**
+   * Per-request headers. `promptCacheKey` is a ROUTING key for automatic-caching
+   * providers: xAI wants `x-grok-conv-id` so the request lands on the server that
+   * already holds the prefix.
+   */
+  readonly cacheKeyHeader?: string;
 }
 
 function createProvider(
@@ -180,12 +356,20 @@ function createProvider(
 
   const capabilities = resolveCapabilities(preset.baseCapabilities, config.capabilities);
 
-  function headers(): Record<string, string> {
+  const mapUsageFor = preset.mapUsage ?? mapUsage;
+
+  function headers(req: NormalizedRequest): Record<string, string> {
     return {
       'content-type': 'application/json',
       // A local Ollama needs no key; sending an empty Authorization header would
       // make some servers 401.
       ...(deps.apiKey ? { authorization: `Bearer ${deps.apiKey}` } : {}),
+      // Route to the server holding this prefix. Without it, an automatic cache
+      // is a coin flip: the prefix is cacheable, but the request may not land on
+      // the machine that cached it.
+      ...(preset.cacheKeyHeader && req.promptCacheKey
+        ? { [preset.cacheKeyHeader]: req.promptCacheKey }
+        : {}),
       ...(config.headers ?? {}),
     };
   }
@@ -239,7 +423,7 @@ function createProvider(
     try {
       response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: headers(),
+        headers: headers(req),
         body: JSON.stringify(body(req, stream)),
         signal: combined,
       });
@@ -278,9 +462,14 @@ function createProvider(
       // stop_reason before content, always.
       const stopReason = mapStopReason(choice);
       return {
+        // `reasoning_content` (DeepSeek thinking mode) sits alongside `content`
+        // and is deliberately NOT read here. Concatenating it would put the
+        // model's chain-of-thought into `text` — which then fails to parse as
+        // JSON, and, far worse, would be handed to an app that asked for an
+        // answer and got the model's private deliberation about the answer.
         text: choice?.message?.content ?? '',
         stopReason,
-        usage: mapUsage(payload.usage),
+        usage: mapUsageFor(payload.usage),
         raw: payload,
       };
     },
@@ -338,6 +527,16 @@ function createProvider(
               if (!choice) continue;
               lastChoice = choice;
 
+              // Thinking deltas are surfaced as their OWN event type and are
+              // never accumulated into `text`. This is what keeps the conformance
+              // invariant true for a reasoning model: the concatenation of the
+              // TEXT deltas still equals `finalResult().text` exactly, because
+              // the reasoning never entered either side of that equation.
+              const thinking = choice.delta?.reasoning_content;
+              if (typeof thinking === 'string' && thinking.length > 0) {
+                events.push({ type: 'thinking', delta: thinking });
+              }
+
               const delta = choice.delta?.content;
               if (typeof delta === 'string' && delta.length > 0) {
                 text += delta;
@@ -350,7 +549,7 @@ function createProvider(
         return {
           text,
           stopReason: mapStopReason(lastChoice),
-          usage: mapUsage(usage),
+          usage: mapUsageFor(usage),
           raw: { streamed: true, usage, finishReason: lastChoice?.finish_reason ?? null },
         };
       }
@@ -430,5 +629,52 @@ export function createOpenAiProvider(
   });
 }
 
+/**
+ * xAI's Grok — same wire protocol, native schema enforcement, automatic caching.
+ *
+ * `promptCacheKey` rides as `x-grok-conv-id`, which xAI's docs call the way to
+ * "maximize cache hit rate": the prefix is cacheable either way, but without the
+ * header the request may be routed to a server that never saw it.
+ */
+export function createGrokProvider(
+  name: string,
+  config: AiProviderConfig,
+  deps: BuildProviderDeps,
+): AiProvider {
+  return createProvider(name, config, deps, {
+    kind: GROK_KIND,
+    baseCapabilities: GROK_CAPABILITIES,
+    baseUrl: GROK_BASE_URL,
+    defaultModel: GROK_DEFAULT_MODEL,
+    pricing: GROK_PRICING,
+    requiresApiKey: true,
+    cacheKeyHeader: 'x-grok-conv-id',
+  });
+}
+
+/**
+ * DeepSeek — the cheap one, and the one that actually exercises the fallback.
+ *
+ * `json-mode` (not `native`), automatic caching, and a usage mapper of its own
+ * because it reports the cache split disjointly at the top level.
+ */
+export function createDeepSeekProvider(
+  name: string,
+  config: AiProviderConfig,
+  deps: BuildProviderDeps,
+): AiProvider {
+  return createProvider(name, config, deps, {
+    kind: DEEPSEEK_KIND,
+    baseCapabilities: DEEPSEEK_CAPABILITIES,
+    baseUrl: DEEPSEEK_BASE_URL,
+    defaultModel: DEEPSEEK_DEFAULT_MODEL,
+    pricing: DEEPSEEK_PRICING,
+    requiresApiKey: true,
+    mapUsage: mapDeepSeekUsage,
+  });
+}
+
 registerBuiltinProvider(KIND, createOpenAiCompatibleProvider);
 registerBuiltinProvider(OPENAI_KIND, createOpenAiProvider);
+registerBuiltinProvider(GROK_KIND, createGrokProvider);
+registerBuiltinProvider(DEEPSEEK_KIND, createDeepSeekProvider);

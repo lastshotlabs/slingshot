@@ -94,16 +94,40 @@ the shapes an accidental bill takes.
 
 ## Providers
 
-| kind                | Backs                                                             | Notes                                                                      |
-| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `anthropic`         | the Claude API                                                    | native schemas, explicit prompt caching, adaptive thinking, refusal signal |
-| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, Groq, Together, … | plain `fetch`, **zero dependencies**; capabilities are config-declarable   |
-| `openai`            | the OpenAI API                                                    | same adapter, preset endpoint + capabilities + prices                      |
+| kind                | Backs                                             | Structured output      | Prompt caching              | Cost       |
+| ------------------- | ------------------------------------------------- | ---------------------- | --------------------------- | ---------- |
+| `anthropic`         | the Claude API                                    | native                 | **explicit** (min 4096 tok) | real       |
+| `openai`            | the OpenAI API                                    | native                 | automatic                   | real       |
+| `grok`              | xAI (`api.x.ai`)                                  | native                 | automatic (routing key)     | real¹      |
+| `deepseek`          | DeepSeek (`api.deepseek.com`)                     | **json-mode**          | automatic                   | real       |
+| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | json-mode (declarable) | none (declarable)           | off/`free` |
 
-`@anthropic-ai/sdk` is an **optional peer**, imported lazily. An app that only
-talks to a local model never installs it — which is the point of
-`openai-compatible`: free local inference on your own box is a config change,
-not a code change.
+All four presets are the **same zero-dependency `fetch` adapter** — a provider is
+a baseUrl, a capability descriptor, and a price table. Only `anthropic` has an
+SDK, and it is an **optional peer** imported lazily: an app that only talks to a
+local model never installs it.
+
+**Which to pick.** `deepseek` is by a wide margin the cheapest (`v4-flash`:
+$0.14/MTok in, $0.28 out, and a cache-hit rate of $0.0028 — 50× cheaper than a
+miss). `openai-compatible` against a local Ollama is _free_ and never leaves your
+machine. `anthropic` is the only one with explicit cache breakpoints and a real
+refusal signal. A common shape is to **generate on the cheap one and moderate on
+the trusted one** — see [Moderation](#moderation); the judge may run on a
+different provider than the generator.
+
+¹ xAI does not publish its cached-token rate, so `grok` ships **without**
+`cacheReadPerMTok`. Cache reads therefore price at the full input rate, which
+_overstates_ cost — the safe direction to be wrong in. Override
+`providers.grok.pricing` if you know the real number.
+
+**`deepseek` is `json-mode`, and that is not a footnote.** It supports
+`response_format: {type: 'json_object'}` only — valid JSON, unenforced shape. The
+orchestrator handles it by injecting the schema into the prompt _and_ setting
+`json_object`, then validating and repairing locally. It is therefore the
+provider that actually exercises the structured-output fallback (a `native`
+provider never does), which makes it the best test of whether provider-swapping
+really works in your app. It also, for free, satisfies DeepSeek's documented
+requirement that the word "json" appear in the prompt.
 
 Its defaults are deliberately pessimistic (`structuredOutput: 'json-mode'`, no
 prompt caching, no cost accounting), because that one adapter fronts backends

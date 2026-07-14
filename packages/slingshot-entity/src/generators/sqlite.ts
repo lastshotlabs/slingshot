@@ -188,6 +188,48 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
     `      db.run(\`CREATE TABLE IF NOT EXISTS \${table} (\\n  ${colDefs.join(',\\n  ')}\\n)\`);`,
   );
 
+  // Reconcile an EXISTING table with the current entity definition.
+  //
+  // `CREATE TABLE IF NOT EXISTS` is a no-op when the table already exists — so
+  // on any deployment with a live database, adding a field to an entity did
+  // NOTHING, silently, and every write blew up at runtime with
+  // `table X has no column named Y`. That shipped: the display-token work added
+  // one column to GameSession and instantly broke "join room" in all four live
+  // games, because their SQLite files predated it.
+  //
+  // SQLite has no `ADD COLUMN IF NOT EXISTS`, so diff against `PRAGMA table_info`
+  // and add what's missing. Additive only: we never drop or retype a column,
+  // because that destroys data and is a decision a human must make. A removed or
+  // retyped field still needs a real migration — this closes the common case
+  // (a new optional field) that otherwise takes a live app down on deploy.
+  lines.push('      const existingCols = new Set<string>(');
+  lines.push(
+    '        (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(r => r.name),',
+  );
+  lines.push('      );');
+  lines.push(
+    `      const wantCols: [string, string][] = [${colDefs
+      .map(def => {
+        const name = def.trim().split(/\s+/)[0];
+        const rest = def.trim().slice(name.length).trim();
+        return `['${name}', ${JSON.stringify(rest)}]`;
+      })
+      .join(', ')}];`,
+  );
+  lines.push('      for (const [col, decl] of wantCols) {');
+  lines.push('        if (existingCols.size === 0 || existingCols.has(col)) continue;');
+  // PRIMARY KEY / UNIQUE cannot be added to an existing table in SQLite; a
+  // NOT NULL column needs a default. Strip what ALTER TABLE cannot honour and
+  // add the column as nullable — the app's own defaults fill it on write.
+  lines.push('        const addable = decl');
+  lines.push("          .replace(/PRIMARY KEY/gi, '')");
+  lines.push("          .replace(/\\bUNIQUE\\b/gi, '')");
+  lines.push("          .replace(/NOT NULL/gi, '')");
+  lines.push("          .replace(/\\s+/g, ' ')");
+  lines.push('          .trim();');
+  lines.push('        db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${addable}`);');
+  lines.push('      }');
+
   // Indexes
   if (config.indexes) {
     for (let i = 0; i < config.indexes.length; i++) {

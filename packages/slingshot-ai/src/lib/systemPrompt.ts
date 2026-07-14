@@ -195,9 +195,42 @@ export function renderSystem(options: {
       } else {
         breakpointEmitted = true;
       }
+    } else if (capabilities.promptCaching === 'automatic') {
+      // This branch used to read, in full: "the provider caches on its own.
+      // Nothing to emit, nothing to degrade." That is wrong, and wrong in the
+      // exact way this file exists to prevent.
+      //
+      // An automatic provider has a minimum too — it just doesn't take a
+      // breakpoint from us, so there is nothing to get *rejected*. Below the
+      // minimum it simply never caches, forever, with no error and no signal.
+      // "Automatic" describes who places the breakpoint, not whether one exists.
+      //
+      // Measured on gpt-5.4-mini, identical prefix, second call:
+      //
+      //     1,217 tokens -> cached 0
+      //     1,337 tokens -> cached 0
+      //     1,457 tokens -> cached 1,280
+      //     2,417 tokens -> cached 2,304
+      //
+      // OpenAI documents a 1,024-token minimum. The measured cliff is above
+      // 1,337. hotseat's moderation prefix is ~1,213 tokens — under it — so that
+      // call cached 0% of every request, indefinitely, and nobody was told.
+      //
+      // There is no breakpoint to withhold here, so this degradation is the
+      // ENTIRE mechanism. Without it the app's only evidence is a cost line.
+      const minimum = capabilities.promptCacheMinTokens ?? 0;
+      if (minimum > 0 && stableTokens < minimum) {
+        degradations.push({
+          feature: 'promptCaching',
+          requested: 'automatic',
+          applied: 'none',
+          reason:
+            `stable prefix is ~${stableTokens} tokens, below this provider's ~${minimum}-token ` +
+            `caching minimum — it will silently never cache. Lengthen the stable prefix or ` +
+            `accept full price on every call`,
+        });
+      }
     }
-    // 'automatic' (e.g. OpenAI): the provider caches on its own. Nothing to
-    // emit, nothing to degrade.
   }
 
   const blocks: RenderedSystemBlock[] = [];

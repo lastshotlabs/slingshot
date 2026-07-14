@@ -65,9 +65,25 @@ const COMPATIBLE_CAPABILITIES: ProviderCapabilities = Object.freeze({
 const OPENAI_CAPABILITIES: ProviderCapabilities = Object.freeze({
   ...COMPATIBLE_CAPABILITIES,
   structuredOutput: 'native',
-  // OpenAI caches long prefixes on its own; there is no breakpoint to place, so
-  // there is also nothing for the orchestrator to degrade.
+  // OpenAI caches long prefixes on its own; there is no breakpoint to place.
   promptCaching: 'automatic',
+  // But "automatic" does not mean "unconditional", and this number is NOT the
+  // documented one. OpenAI publishes a 1,024-token minimum. Measured on
+  // gpt-5.4-mini — identical prefix, second call, `cached_tokens` on call 2:
+  //
+  //     1,217 -> 0        1,457 -> 1,280
+  //     1,337 -> 0        2,417 -> 2,304
+  //
+  // The real cliff is above 1,337, and cached blocks land in 128-token
+  // increments. A prefix under it never caches — no error, no signal, full price
+  // forever. hotseat's moderation prompt (~1,213 tokens) sat just under it and
+  // cached 0% of every call.
+  //
+  // An automatic provider takes no breakpoint from us, so there is nothing to
+  // withhold; this value's only job is to let `renderSystem` DEGRADE and say so
+  // out loud. 1,536 is the next 128-block above the measured failure — chosen to
+  // be honest about uncertainty rather than to squeeze the last 100 tokens.
+  promptCacheMinTokens: 1536,
   // The GPT-5 family reasons, and — unlike xAI — it can genuinely be told not to:
   // `reasoning_effort: 'none'` is accepted and yields 0 reasoning tokens
   // (measured on gpt-5.4-mini). Accepted values are `none | low | medium | high`;
@@ -486,6 +502,15 @@ interface Preset {
    */
   readonly cacheKeyHeader?: string;
   /**
+   * ...and OpenAI wants the same routing key as a BODY field (`prompt_cache_key`),
+   * not a header. The seam modelled only headers, so on `openai` the key had
+   * nowhere to go and was silently dropped — the abstraction quietly excluded the
+   * provider it was named after.
+   *
+   * A preset declares whichever one its vendor speaks. Neither is a default.
+   */
+  readonly cacheKeyBodyParam?: string;
+  /**
    * Vendor-specific body fields — today, reasoning control.
    *
    * This is NOT cosmetic. DeepSeek's thinking mode **defaults to ENABLED**, so
@@ -585,6 +610,12 @@ function createProvider(
       messages,
       [preset.maxTokensParam ?? 'max_tokens']: req.maxTokens,
       ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
+      // The cache ROUTING key, for a vendor that takes it in the body rather than
+      // as a header (OpenAI: `prompt_cache_key`). Same value, same purpose as
+      // xAI's `x-grok-conv-id` — a different place on the wire.
+      ...(preset.cacheKeyBodyParam && req.promptCacheKey
+        ? { [preset.cacheKeyBodyParam]: req.promptCacheKey }
+        : {}),
       ...(preset.requestExtras?.(req) ?? {}),
       // LAST, so an app can override anything above it. The alternative to an
       // escape hatch is an app forking the adapter, which is strictly worse.
@@ -833,6 +864,8 @@ export function createOpenAiProvider(
     requiresApiKey: true,
     // Every current OpenAI model rejects `max_tokens`. See `Preset.maxTokensParam`.
     maxTokensParam: 'max_completion_tokens',
+    // OpenAI takes the cache routing key in the BODY, where xAI takes a header.
+    cacheKeyBodyParam: 'prompt_cache_key',
     // The generic `mapUsage` is correct here: OpenAI's `completion_tokens`
     // INCLUDES `reasoning_tokens` (measured on gpt-5-mini: completion 40, of
     // which reasoning 40, total = prompt + completion). Same as DeepSeek,

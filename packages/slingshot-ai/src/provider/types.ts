@@ -59,6 +59,20 @@ export interface ProviderCapabilities {
   readonly promptCacheMinTokens?: number;
   readonly streaming: boolean;
   readonly thinking: 'adaptive' | 'budget' | 'none';
+  /**
+   * The provider ALWAYS reasons and cannot be told not to.
+   *
+   * xAI is the case: `thinking: {type: 'disabled'}` is accepted and silently
+   * ignored (measured: 33 reasoning tokens with the flag set), and
+   * `reasoning_effort: 'none'` is a hard 400. Reasoning is a MODEL choice there
+   * (`grok-4.20-…-non-reasoning` is a separate model), not a per-call flag.
+   *
+   * This exists so that a caller asking for thinking OFF gets a DEGRADATION
+   * rather than a silent 9× output-token bill. `thinking: 'none'` would be a lie
+   * (the provider does reason); without this flag the orchestrator has no way to
+   * say "it reasons, and you cannot stop it".
+   */
+  readonly thinkingAlwaysOn?: boolean;
   readonly effort: boolean;
   /**
    * - `'full'`    — token counts including the cache-read/write breakdown.
@@ -148,9 +162,44 @@ export interface NormalizedRequest {
 export interface ProviderUsage {
   /** Input tokens billed at the FULL rate — i.e. excluding cache reads and writes. */
   readonly inputTokens: number;
+  /**
+   * Output tokens billed at the OUTPUT rate — and that INCLUDES reasoning tokens.
+   *
+   * A reasoning model's chain-of-thought is billed as output, and the vendors
+   * report it with the SAME field name and OPPOSITE meanings. Both measured:
+   *
+   *   - **xAI**: `completion_tokens` EXCLUDES reasoning.
+   *     `prompt 215 + completion 5 + reasoning 41 = total 261`. Reading
+   *     `completion_tokens` alone bills 5 of the 46 output tokens actually
+   *     produced — an **~89% undercount**, and the spend guard is blind to it.
+   *   - **DeepSeek**: `completion_tokens` INCLUDES reasoning.
+   *     `completion 45, of which reasoning 39`. ADDING reasoning here would
+   *     DOUBLE-count it.
+   *
+   * So the adapter must know its vendor's convention (`Preset.mapUsage`) and
+   * report the true billable total here. There is deliberately no separate
+   * `reasoningTokens` billing field: a fifth number that is already inside a
+   * fourth is precisely the trap that produced this bug in the first place.
+   * (The raw split is still on `ProviderResult.raw` for observability.)
+   */
   readonly outputTokens: number;
   readonly cacheReadTokens: number;
   readonly cacheWriteTokens: number;
+  /**
+   * The vendor's own authoritative cost for this call, when it reports one.
+   *
+   * When present this BEATS the price table, and that is the point: a table we
+   * maintain by hand cannot know about a context tier, an unpublished cache rate,
+   * a promo, or a price change shipped this morning. xAI returns
+   * `usage.cost_in_usd_ticks` (1 tick = 1e-10 USD — derived exactly against five
+   * live calls across two models; see `openaiCompatible.ts`).
+   *
+   * `undefined` = the vendor said nothing → fall back to the table.
+   * This is NOT "the provider computing cost" (still forbidden); it is the
+   * provider REPORTING what the vendor charged, which is strictly better
+   * information than anything we can derive.
+   */
+  readonly reportedCostUsd?: number;
 }
 
 /** What a provider hands back. */
@@ -193,6 +242,24 @@ export interface ModelPricing {
   readonly outputPerMTok: number;
   readonly cacheReadPerMTok?: number;
   readonly cacheWritePerMTok?: number;
+  /**
+   * Prices ABOVE a context-length breakpoint. xAI doubles every rate above a
+   * 200K-token prompt ($1.25 → $2.50 in, $2.50 → $5.00 out on grok-4.3).
+   *
+   * A flat table applied to a 200K+ prompt is not slightly wrong, it is 2× wrong,
+   * and wrong in the dangerous direction: the PRE-FLIGHT spend guard would let
+   * through a call costing double what it estimated. Modelled rather than
+   * ignored, because "we'll never send prompts that big" is exactly the
+   * assumption that stops being true.
+   */
+  readonly contextTier?: {
+    /** Applies when total prompt tokens EXCEED this. */
+    readonly aboveInputTokens: number;
+    readonly inputPerMTok: number;
+    readonly outputPerMTok: number;
+    readonly cacheReadPerMTok?: number;
+    readonly cacheWritePerMTok?: number;
+  };
 }
 
 /** The transport contract every adapter implements. */

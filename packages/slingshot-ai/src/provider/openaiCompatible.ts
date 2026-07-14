@@ -20,6 +20,7 @@ import { AiConfigError, AiProviderError, AiRateLimitError, AiTimeoutError } from
 import { resolveCapabilities } from './capabilities';
 import { type BuildProviderDeps, registerBuiltinProvider } from './registry';
 import type {
+  AiEffort,
   AiProvider,
   AiStopReason,
   ModelPricing,
@@ -67,6 +68,12 @@ const OPENAI_CAPABILITIES: ProviderCapabilities = Object.freeze({
   // OpenAI caches long prefixes on its own; there is no breakpoint to place, so
   // there is also nothing for the orchestrator to degrade.
   promptCaching: 'automatic',
+  // The GPT-5 family reasons, and — unlike xAI — it can genuinely be told not to:
+  // `reasoning_effort: 'none'` is accepted and yields 0 reasoning tokens
+  // (measured on gpt-5.4-mini). Accepted values are `none | low | medium | high`;
+  // `minimal` is a 400.
+  thinking: 'adaptive',
+  effort: true,
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: true,
@@ -75,14 +82,32 @@ const OPENAI_CAPABILITIES: ProviderCapabilities = Object.freeze({
 });
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
-const OPENAI_DEFAULT_MODEL = 'gpt-4o-mini';
 
 /**
- * Per-million-token prices. Config `providers[x].pricing` overrides this, so a
- * price change never needs a package release — and an unlisted model prices as
- * `null` (unknown), never as a fabricated number.
+ * `gpt-4o-mini` was two generations stale AND — with `max_tokens` — could not
+ * have called anything newer. See `maxTokensParam` below.
+ */
+const OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini';
+
+/**
+ * Per-million-token prices, verified against developers.openai.com/api/docs/pricing
+ * on 2026-07-13. Config `providers[x].pricing` overrides this, so a price change
+ * never needs a package release — and an unlisted model prices as `null`
+ * (unknown), never as a fabricated number.
+ *
+ * The `gpt-4o` line is deliberately retained: it still works, and it is the one
+ * generation that takes the legacy `max_tokens` param.
  */
 const OPENAI_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
+  'gpt-5.6-sol': { inputPerMTok: 5, outputPerMTok: 30, cacheReadPerMTok: 0.5 },
+  'gpt-5.6-terra': { inputPerMTok: 2.5, outputPerMTok: 15, cacheReadPerMTok: 0.25 },
+  'gpt-5.6-luna': { inputPerMTok: 1, outputPerMTok: 6, cacheReadPerMTok: 0.1 },
+  'gpt-5.5': { inputPerMTok: 5, outputPerMTok: 30, cacheReadPerMTok: 0.5 },
+  'gpt-5.5-pro': { inputPerMTok: 30, outputPerMTok: 180 },
+  'gpt-5.4': { inputPerMTok: 2.5, outputPerMTok: 15, cacheReadPerMTok: 0.25 },
+  'gpt-5.4-mini': { inputPerMTok: 0.75, outputPerMTok: 4.5, cacheReadPerMTok: 0.075 },
+  'gpt-5.4-nano': { inputPerMTok: 0.2, outputPerMTok: 1.25, cacheReadPerMTok: 0.02 },
+  'gpt-5.4-pro': { inputPerMTok: 30, outputPerMTok: 180 },
   'gpt-4o': { inputPerMTok: 2.5, outputPerMTok: 10, cacheReadPerMTok: 1.25 },
   'gpt-4o-mini': { inputPerMTok: 0.15, outputPerMTok: 0.6, cacheReadPerMTok: 0.075 },
 });
@@ -106,6 +131,13 @@ const GROK_CAPABILITIES: ProviderCapabilities = Object.freeze({
   ...COMPATIBLE_CAPABILITIES,
   structuredOutput: 'native',
   promptCaching: 'automatic',
+  // It reasons, and you cannot stop it — only steer how hard. Measured:
+  // `thinking: {type:'disabled'}` is accepted and IGNORED (33 reasoning tokens
+  // anyway); `reasoning_effort: 'none'` is a hard 400. On xAI, "non-reasoning" is
+  // a separate MODEL (`grok-4.20-0309-non-reasoning`), not a flag.
+  thinking: 'adaptive',
+  thinkingAlwaysOn: true,
+  effort: true,
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: false,
@@ -114,25 +146,61 @@ const GROK_CAPABILITIES: ProviderCapabilities = Object.freeze({
 });
 
 const GROK_BASE_URL = 'https://api.x.ai/v1';
-const GROK_DEFAULT_MODEL = 'grok-4.5';
 
 /**
- * Verified against docs.x.ai/docs/pricing on 2026-07-13.
+ * `grok-4.3`, not `grok-4.5`. 4.5 is the coding-grade model; 4.3 is the general
+ * one, at roughly a third of the output price ($2.50 vs $6.00 per MTok) — and for
+ * creative generation it is the sensible default. Override per app if you need 4.5.
+ */
+const GROK_DEFAULT_MODEL = 'grok-4.3';
+
+/**
+ * Input/output verified against docs.x.ai/docs/pricing on 2026-07-13.
  *
- * NOTE the absent `cacheReadPerMTok`. xAI's docs say cached tokens are "billed at
- * the cached prompt token price" but do not publish that number on either the
- * pricing page or the caching page. Rather than invent one, we omit it — and
- * `computeUsage()` then falls back to the full input rate, which OVERSTATES cost
- * on a cache hit. That is the safe direction to be wrong in (a spend guard that
- * over-estimates stops you early; one that under-estimates hands you a bill), and
- * it is fixable without a release via `providers.grok.pricing`.
+ * **The cached rates are not published anywhere** — not on the pricing page, not
+ * on the caching page. They are DERIVED, exactly, from the vendor's own
+ * `cost_in_usd_ticks`: two identical-prompt calls per model (one cold, one
+ * cache-hit) give two equations in two unknowns (the tick unit and the cached
+ * rate), and both models solve to clean numbers with zero residual:
+ *
+ *   grok-4.5 → cached $0.50/MTok  (4× off the $2.00 input rate)
+ *   grok-4.3 → cached $0.20/MTok  (6.25× off the $1.25 input rate)
+ *
+ * $0.20 is exactly the figure xAI's billing console shows for grok-4.3 — an
+ * independent confirmation that the derivation is right rather than merely
+ * self-consistent.
+ *
+ * Previously this table OMITTED the cached rate, and `computeUsage()` fell back to
+ * the full input price: a **6.25× overcharge** on every cached token, on a provider
+ * that caches automatically and aggressively (a cold call still reported 128 cached
+ * tokens). "Wrong in the safe direction" is still wrong, and it silently poisons a
+ * spend guard.
+ *
+ * `contextTier` encodes xAI's documented doubling above a 200K-token prompt.
+ * In practice `reportedCostUsd` makes it moot for BILLING — but the pre-flight
+ * spend estimate has no vendor figure to lean on, and must not under-estimate.
  */
 const GROK_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
-  'grok-4.5': { inputPerMTok: 2, outputPerMTok: 6 },
-  'grok-4.3': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
-  'grok-4.20-0309-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
-  'grok-4.20-0309-non-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
-  'grok-4.20-multi-agent-0309': { inputPerMTok: 1.25, outputPerMTok: 2.5 },
+  'grok-4.5': {
+    inputPerMTok: 2,
+    outputPerMTok: 6,
+    cacheReadPerMTok: 0.5,
+    contextTier: { aboveInputTokens: 200_000, inputPerMTok: 4, outputPerMTok: 12 },
+  },
+  'grok-4.3': {
+    inputPerMTok: 1.25,
+    outputPerMTok: 2.5,
+    cacheReadPerMTok: 0.2,
+    contextTier: {
+      aboveInputTokens: 200_000,
+      inputPerMTok: 2.5,
+      outputPerMTok: 5,
+      cacheReadPerMTok: 0.4,
+    },
+  },
+  'grok-4.20-0309-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5, cacheReadPerMTok: 0.2 },
+  'grok-4.20-0309-non-reasoning': { inputPerMTok: 1.25, outputPerMTok: 2.5, cacheReadPerMTok: 0.2 },
+  'grok-4.20-multi-agent-0309': { inputPerMTok: 1.25, outputPerMTok: 2.5, cacheReadPerMTok: 0.2 },
 });
 
 // ---------------------------------------------------------------------------
@@ -160,6 +228,12 @@ const DEEPSEEK_CAPABILITIES: ProviderCapabilities = Object.freeze({
   structuredOutput: 'json-mode',
   promptCaching: 'automatic',
   streaming: true,
+  // Unlike xAI, thinking here is a genuine per-call toggle — and it DEFAULTS TO
+  // ENABLED at the vendor, so `requestExtras` sends `disabled` explicitly.
+  // Measured cost of leaving it on: 9× the output tokens on a trivial prompt,
+  // 3.2× on a moderation-shaped one.
+  thinking: 'adaptive',
+  effort: true,
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: false,
@@ -219,9 +293,17 @@ interface ChatUsage {
   completion_tokens?: number;
   /** OpenAI + xAI: `cached_tokens` is a SUBSET of `prompt_tokens`. */
   prompt_tokens_details?: { cached_tokens?: number };
+  /**
+   * Reasoning tokens, billed at the OUTPUT rate by every vendor here — but
+   * whether they are ALREADY inside `completion_tokens` differs per vendor.
+   * See `mapGrokUsage` / `mapDeepSeekUsage`. Getting this wrong is silent.
+   */
+  completion_tokens_details?: { reasoning_tokens?: number };
   /** DeepSeek: already disjoint, and they sum to `prompt_tokens`. */
   prompt_cache_hit_tokens?: number;
   prompt_cache_miss_tokens?: number;
+  /** xAI ONLY: the vendor's authoritative cost. 1 tick = 1e-10 USD. */
+  cost_in_usd_ticks?: number;
 }
 
 interface ChatResponse {
@@ -265,10 +347,58 @@ function mapUsage(usage: ChatUsage | undefined): ProviderUsage {
   const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
   return {
     inputTokens: Math.max(0, prompt - cached),
+    // OpenAI's o-series reports `completion_tokens` INCLUSIVE of
+    // `reasoning_tokens` (as does DeepSeek). Adding the reasoning count here
+    // would double-bill it. xAI is the odd one out — see `mapGrokUsage`.
     outputTokens: usage?.completion_tokens ?? 0,
     cacheReadTokens: cached,
     // No server in this family reports (or bills) cache WRITES separately.
     cacheWriteTokens: 0,
+  };
+}
+
+/** 1 xAI cost tick = 1e-10 USD. Derived below, not guessed. */
+const GROK_USD_PER_TICK = 1e-10;
+
+/**
+ * xAI, where `completion_tokens` EXCLUDES reasoning — the opposite of everyone
+ * else in this family, with the same field name.
+ *
+ * Measured against the live API (grok-4.5): `prompt 215, completion 5,
+ * reasoning 41, total 261`. Note **215 + 5 + 41 = 261**: the reasoning tokens
+ * are additive to the total, so `completion_tokens` alone is only the visible
+ * answer. Billing on it charges for 5 of the 46 output tokens actually produced
+ * — an **~89% undercount** — and the pre-flight spend guard, which is the thing
+ * standing between a repair loop and a surprise bill, never sees the difference.
+ *
+ * The cost is cross-checked, not assumed. xAI reports `cost_in_usd_ticks`, and
+ * solving two identical-prompt calls (one cold, one cache-hit) for the two
+ * unknowns gives EXACT answers on both models — which simultaneously proves the
+ * tick unit, the cached rate, AND that reasoning bills at the output rate:
+ *
+ *   grok-4.5  in $2.00  out $6.00  → cached solves to $0.50/MTok, tick = 1e-10
+ *   grok-4.3  in $1.25  out $2.50  → cached solves to $0.20/MTok, tick = 1e-10
+ *
+ * $0.20 is exactly what xAI's console shows for grok-4.3, which is the
+ * independent confirmation — the docs publish no cached rate at all. Every one of
+ * five live calls reproduces its reported ticks to the tick.
+ */
+function mapGrokUsage(usage: ChatUsage | undefined): ProviderUsage {
+  const prompt = usage?.prompt_tokens ?? 0;
+  const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
+  const completion = usage?.completion_tokens ?? 0;
+  const reasoning = usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+  const ticks = usage?.cost_in_usd_ticks;
+
+  return {
+    inputTokens: Math.max(0, prompt - cached),
+    // The whole billable output: what you can read, PLUS what it thought first.
+    outputTokens: completion + reasoning,
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+    // The vendor's own figure. Beats the table, and is the only thing that knows
+    // about the >200K context tier without us modelling it.
+    ...(typeof ticks === 'number' ? { reportedCostUsd: ticks * GROK_USD_PER_TICK } : {}),
   };
 }
 
@@ -292,10 +422,43 @@ function mapDeepSeekUsage(usage: ChatUsage | undefined): ProviderUsage {
 
   return {
     inputTokens: miss ?? 0,
+    // `completion_tokens` INCLUDES `reasoning_tokens` here — measured:
+    // `completion 45, of which reasoning 39`, and `prompt 18 + completion 45 =
+    // total 63`. Adding reasoning would double-bill it, which is the exact
+    // mirror-image of the xAI bug. DeepSeek's docs state NEITHER convention, so
+    // this line rests on the measurement and on `usageDisjoint.test.ts`, which
+    // pins both vendors' real payloads.
     outputTokens: usage?.completion_tokens ?? 0,
     cacheReadTokens: hit ?? 0,
     cacheWriteTokens: 0,
   };
+}
+
+/**
+ * Map our neutral effort scale onto a vendor's, per its documented vocabulary.
+ *
+ * The scales genuinely differ, and neither vendor accepts ours verbatim:
+ *   - **DeepSeek** takes `high | max`; low/medium are mapped UP to `high`, and
+ *     `xhigh` to `max` (per its thinking-mode docs).
+ *   - **xAI** takes `low | high`. It explicitly REJECTS `none` (a hard 400,
+ *     measured) — which is a different thing from not supporting effort, and is
+ *     why "turn reasoning off" is not expressible here at all.
+ */
+function grokEffort(effort: AiEffort): string {
+  return effort === 'low' || effort === 'medium' ? 'low' : 'high';
+}
+
+function deepSeekEffort(effort: AiEffort): string {
+  return effort === 'xhigh' || effort === 'max' ? 'max' : 'high';
+}
+
+/**
+ * OpenAI takes `none | low | medium | high` (`minimal` is a 400, measured). Our
+ * `xhigh`/`max` clamp to `high` — the top of what it offers.
+ */
+function openAiEffort(effort: AiEffort): string {
+  if (effort === 'low' || effort === 'medium') return effort;
+  return 'high';
 }
 
 // ---------------------------------------------------------------------------
@@ -322,6 +485,37 @@ interface Preset {
    * already holds the prefix.
    */
   readonly cacheKeyHeader?: string;
+  /**
+   * Vendor-specific body fields — today, reasoning control.
+   *
+   * This is NOT cosmetic. DeepSeek's thinking mode **defaults to ENABLED**, so
+   * simply not sending the flag means paying for a chain-of-thought on every
+   * call (measured: 9× the output tokens on a trivial prompt, 3.2× on a
+   * moderation-shaped one). "Off" therefore has to be sent EXPLICITLY — the
+   * absence of the field is not the absence of the behaviour.
+   */
+  readonly requestExtras?: (req: NormalizedRequest) => Record<string, unknown>;
+  /**
+   * The name of the output-token-limit parameter. Defaults to `max_tokens`.
+   *
+   * OpenAI renamed it: every model it currently ships (the `gpt-5.x` family)
+   * **hard-400s on `max_tokens`** —
+   *
+   *   "Unsupported parameter: 'max_tokens' is not supported with this model.
+   *    Use 'max_completion_tokens' instead."
+   *
+   * — so the `openai` preset was, in fact, broken against every current OpenAI
+   * model and worked only on the legacy `gpt-4o` line it happened to default to.
+   *
+   * `max_completion_tokens` is verified to work on BOTH the `gpt-5.x` family and
+   * legacy `gpt-4o-mini`, so this is a flat per-preset switch rather than a
+   * per-model branch — and it does not rot when the next model lands.
+   *
+   * The rest of the family (xAI, DeepSeek, Ollama, vLLM…) still speaks
+   * `max_tokens`. The vendors disagree with each other, and OpenAI disagrees with
+   * its own past self; both are load-bearing.
+   */
+  readonly maxTokensParam?: string;
 }
 
 function createProvider(
@@ -389,9 +583,20 @@ function createProvider(
     const payload: Record<string, unknown> = {
       model: req.model,
       messages,
-      max_tokens: req.maxTokens,
+      [preset.maxTokensParam ?? 'max_tokens']: req.maxTokens,
       ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
+      ...(preset.requestExtras?.(req) ?? {}),
+      // LAST, so an app can override anything above it. The alternative to an
+      // escape hatch is an app forking the adapter, which is strictly worse.
+      ...(config.extraBody ?? {}),
     };
+
+    // NOTE: no `temperature`, `top_p`, `presence_penalty`, `frequency_penalty` —
+    // this package has no such knobs by design (they are a 400 on Opus 4.8). That
+    // is load-bearing here too: DeepSeek SILENTLY IGNORES all four while thinking
+    // is enabled. Not an error — just no effect. If anyone ever adds a
+    // temperature knob, it must emit a degradation on a thinking-enabled call, or
+    // the caller is being lied to.
 
     if (req.structured?.mode === 'native') {
       payload.response_format = {
@@ -626,6 +831,20 @@ export function createOpenAiProvider(
     defaultModel: OPENAI_DEFAULT_MODEL,
     pricing: OPENAI_PRICING,
     requiresApiKey: true,
+    // Every current OpenAI model rejects `max_tokens`. See `Preset.maxTokensParam`.
+    maxTokensParam: 'max_completion_tokens',
+    // The generic `mapUsage` is correct here: OpenAI's `completion_tokens`
+    // INCLUDES `reasoning_tokens` (measured on gpt-5-mini: completion 40, of
+    // which reasoning 40, total = prompt + completion). Same as DeepSeek,
+    // opposite of xAI.
+    requestExtras: req => {
+      // `thinking: false` is expressible here — `reasoning_effort: 'none'` really
+      // does yield zero reasoning tokens. It wins over `effort`, because asking
+      // for no thinking AND a thinking depth is a contradiction, and the cheaper
+      // reading of it is the safe one.
+      if (req.thinking === false) return { reasoning_effort: 'none' };
+      return req.effort ? { reasoning_effort: openAiEffort(req.effort) } : {};
+    },
   });
 }
 
@@ -649,6 +868,12 @@ export function createGrokProvider(
     pricing: GROK_PRICING,
     requiresApiKey: true,
     cacheKeyHeader: 'x-grok-conv-id',
+    mapUsage: mapGrokUsage,
+    // Only `reasoning_effort`. There is deliberately no thinking toggle: xAI
+    // ignores one silently, so sending it would be theatre. The orchestrator
+    // raises a DEGRADATION instead (`thinkingAlwaysOn`), which is the honest
+    // answer to "I asked for thinking off and did not get it".
+    requestExtras: req => (req.effort ? { reasoning_effort: grokEffort(req.effort) } : {}),
   });
 }
 
@@ -671,6 +896,15 @@ export function createDeepSeekProvider(
     pricing: DEEPSEEK_PRICING,
     requiresApiKey: true,
     mapUsage: mapDeepSeekUsage,
+    requestExtras: req => ({
+      // Thinking defaults to ENABLED at the vendor, so "off" must be stated. The
+      // orchestrator always resolves `req.thinking` to an explicit boolean on a
+      // thinking-capable provider precisely so this is never left to the default.
+      ...(req.thinking !== undefined
+        ? { thinking: { type: req.thinking ? 'enabled' : 'disabled' } }
+        : {}),
+      ...(req.effort ? { reasoning_effort: deepSeekEffort(req.effort) } : {}),
+    }),
   });
 }
 

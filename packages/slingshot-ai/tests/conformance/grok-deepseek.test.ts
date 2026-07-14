@@ -76,14 +76,22 @@ describe('grok preset', () => {
     expect(capabilities.costAccounting).toBe(true);
   });
 
-  test('defaults to grok-4.5 and prices the lineup; unknown models price null', () => {
+  test('defaults to grok-4.3 and prices the lineup; unknown models price null', () => {
     const provider = grok();
 
-    expect(provider.defaultModel).toBe('grok-4.5');
-    expect(provider.priceFor!('grok-4.5')).toMatchObject({ inputPerMTok: 2, outputPerMTok: 6 });
+    // 4.3, not 4.5: 4.5 is the coding-grade model at ~3× the output price. The
+    // cached rates are DERIVED from the vendor's own `cost_in_usd_ticks` — xAI
+    // publishes them nowhere — and $0.20 matches its billing console exactly.
+    expect(provider.defaultModel).toBe('grok-4.3');
     expect(provider.priceFor!('grok-4.3')).toMatchObject({
       inputPerMTok: 1.25,
       outputPerMTok: 2.5,
+      cacheReadPerMTok: 0.2,
+    });
+    expect(provider.priceFor!('grok-4.5')).toMatchObject({
+      inputPerMTok: 2,
+      outputPerMTok: 6,
+      cacheReadPerMTok: 0.5,
     });
     expect(provider.priceFor!('grok-does-not-exist')).toBeNull();
   });

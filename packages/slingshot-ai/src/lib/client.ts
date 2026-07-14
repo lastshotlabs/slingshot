@@ -233,6 +233,24 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         name,
       );
     }
+    // The reverse, and it is the one that costs money: a provider that ALWAYS
+    // reasons and cannot be told not to (xAI — `thinking: {type:'disabled'}` is
+    // accepted and ignored, `reasoning_effort: 'none'` is a 400). Asking for it
+    // off and silently getting it on is a 9× output-token bill that nothing in
+    // the result would have mentioned.
+    if (!wantsThinking && caps.thinkingAlwaysOn) {
+      degrade(
+        degradations,
+        {
+          feature: 'thinking',
+          requested: 'off',
+          applied: 'on',
+          reason:
+            'the provider always reasons and cannot disable it; reasoning tokens are billed at the output rate',
+        },
+        name,
+      );
+    }
 
     const wantsEffort = req.effort ?? config.defaults.effort;
     if (wantsEffort && !caps.effort) {
@@ -266,7 +284,11 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       messages: req.messages,
       maxTokens,
       effort: wantsEffort && caps.effort ? wantsEffort : undefined,
-      thinking: wantsThinking && caps.thinking !== 'none' ? true : undefined,
+      // EXPLICIT true/false on any provider that has the concept — never
+      // `undefined` for "off". DeepSeek's thinking mode DEFAULTS TO ENABLED, so
+      // omitting the flag does not mean off, it means "on, and you pay for it".
+      // `undefined` is reserved for "this provider has no such concept".
+      thinking: caps.thinking !== 'none' ? wantsThinking : undefined,
       timeoutMs: req.timeoutMs ?? config.providers[name]?.timeoutMs ?? config.defaults.timeoutMs,
       // Handed to the transport, not just to the drift detectors: an
       // automatic-caching provider uses it to route the request to the server

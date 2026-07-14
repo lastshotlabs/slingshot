@@ -68,6 +68,24 @@ export function resolvePricing(options: {
   return DEFAULT_PRICING[options.providerKind]?.[options.model] ?? null;
 }
 
+/**
+ * Flatten a tiered price to the rates that actually apply at this prompt size.
+ *
+ * `totalInputTokens` is the WHOLE prompt — full-rate input plus cache reads and
+ * writes — because the vendor's breakpoint is on the context length it had to
+ * process, not on the portion we happened to be billed full rate for.
+ */
+export function selectTier(pricing: ModelPricing, totalInputTokens: number): ModelPricing {
+  const tier = pricing.contextTier;
+  if (!tier || totalInputTokens <= tier.aboveInputTokens) return pricing;
+  return {
+    inputPerMTok: tier.inputPerMTok,
+    outputPerMTok: tier.outputPerMTok,
+    cacheReadPerMTok: tier.cacheReadPerMTok,
+    cacheWritePerMTok: tier.cacheWritePerMTok,
+  };
+}
+
 /** Turn raw token counts into an `AiUsage`, being honest about what we don't know. */
 export function computeUsage(options: {
   usage: ProviderUsage;
@@ -82,6 +100,15 @@ export function computeUsage(options: {
     cacheWriteTokens: usage.cacheWriteTokens,
   };
 
+  // The vendor's own number BEATS our table — it already accounts for the tier,
+  // the unpublished cache rate, and any price change we haven't noticed. Checked
+  // before `pricing`, because a provider that reports cost needs no price entry
+  // at all. `pricing: 'free'` still wins: a local deployment is free even if some
+  // proxy in front of it reports a notional price.
+  if (pricing !== 'free' && usage.reportedCostUsd !== undefined) {
+    return { ...base, costUsd: usage.reportedCostUsd, accounting: capabilities.usageAccounting };
+  }
+
   if (pricing === 'free') {
     return { ...base, costUsd: 0, accounting: capabilities.usageAccounting };
   }
@@ -90,11 +117,15 @@ export function computeUsage(options: {
     return { ...base, costUsd: null, accounting: capabilities.usageAccounting };
   }
 
-  const cacheRead = pricing.cacheReadPerMTok ?? pricing.inputPerMTok;
-  const cacheWrite = pricing.cacheWritePerMTok ?? pricing.inputPerMTok;
+  const rates = selectTier(
+    pricing,
+    usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
+  );
+  const cacheRead = rates.cacheReadPerMTok ?? rates.inputPerMTok;
+  const cacheWrite = rates.cacheWritePerMTok ?? rates.inputPerMTok;
   const costUsd =
-    (usage.inputTokens * pricing.inputPerMTok +
-      usage.outputTokens * pricing.outputPerMTok +
+    (usage.inputTokens * rates.inputPerMTok +
+      usage.outputTokens * rates.outputPerMTok +
       usage.cacheReadTokens * cacheRead +
       usage.cacheWriteTokens * cacheWrite) /
     1_000_000;
@@ -117,8 +148,15 @@ export function estimateMaxCost(options: {
   const { pricing } = options;
   if (pricing === 'free') return 0;
   if (!pricing) return null;
+  // Price at the tier this prompt actually lands in. Estimating a 200K+ prompt at
+  // the small-context rate would UNDERSTATE it by 2× on xAI — and an
+  // under-estimating pre-flight guard is the one that hands you a bill.
+  //
+  // No cache discount is assumed: a cache HIT is not knowable before the call,
+  // and guessing one would understate the worst case, which is the only case this
+  // function exists to bound.
+  const rates = selectTier(pricing, options.inputTokens);
   return (
-    (options.inputTokens * pricing.inputPerMTok + options.maxTokens * pricing.outputPerMTok) /
-    1_000_000
+    (options.inputTokens * rates.inputPerMTok + options.maxTokens * rates.outputPerMTok) / 1_000_000
   );
 }

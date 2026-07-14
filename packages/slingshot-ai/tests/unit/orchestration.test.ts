@@ -18,6 +18,29 @@ import { type AiBackgroundRunner, createAiClient } from '../../src/lib/client';
 import { AI_GENERATION_TASK_NAME, createAiGenerationTask } from '../../src/orchestration';
 import { createFakeAiProvider } from '../../src/testing';
 
+type TaskHandler = ReturnType<typeof createAiGenerationTask>['handler'];
+type TaskHandlerCtx = Parameters<TaskHandler>[1];
+
+/**
+ * The handler context the orchestration engine would hand a worker.
+ *
+ * Hoisted out of the call sites rather than cast inline: `as never` on an object
+ * LITERAL suppresses the shape check as well as the nominal one, so a genuinely
+ * wrong fake would typecheck exactly as happily as a right one — which defeats
+ * the point of having the worker take a typed context at all.
+ */
+function handlerCtx(client: unknown): TaskHandlerCtx {
+  const ctx = {
+    attempt: 1,
+    runId: 'run_1',
+    signal: new AbortController().signal,
+    log: silentLogger,
+    reportProgress: () => {},
+    services: { capabilities: { require: () => client, maybe: () => client } },
+  };
+  return ctx as unknown as TaskHandlerCtx;
+}
+
 const silentLogger = {
   debug: () => {},
   info: () => {},
@@ -143,14 +166,7 @@ describe('createAiGenerationTask', () => {
 
     const result = await task.handler(
       { schemaName: 'deck', request: { messages: [{ role: 'user', content: 'go' }] } },
-      {
-        attempt: 1,
-        runId: 'run_1',
-        signal: new AbortController().signal,
-        log: silentLogger as never,
-        reportProgress: () => {},
-        services: { capabilities: { require: () => client, maybe: () => client } } as never,
-      },
+      handlerCtx(client),
     );
 
     // The full pipeline ran on the worker — this is the same call, on a
@@ -168,14 +184,7 @@ describe('createAiGenerationTask', () => {
     await expect(
       task.handler(
         { schemaName: 'not-registered', request: { messages: [{ role: 'user', content: 'go' }] } },
-        {
-          attempt: 1,
-          runId: 'run_1',
-          signal: new AbortController().signal,
-          log: silentLogger as never,
-          reportProgress: () => {},
-          services: { capabilities: { require: () => client, maybe: () => client } } as never,
-        },
+        handlerCtx(client),
       ),
     ).rejects.toThrow(/not registered with this task/);
   });

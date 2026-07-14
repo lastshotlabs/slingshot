@@ -60,6 +60,19 @@ export const aiProviderConfigSchema = z.object({
   /** `'free'` marks a zero-cost local provider; otherwise a per-model price table. */
   pricing: z.union([z.literal('free'), z.record(z.string(), modelPricingSchema)]).optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  /**
+   * Extra body fields, merged into every `/chat/completions` payload.
+   *
+   * The `openai-compatible` transport fronts Ollama, vLLM, LM Studio, OpenRouter,
+   * Groq and Together — backends with wildly divergent knobs, none of which this
+   * package can enumerate. Without an escape hatch, the next vendor-specific
+   * parameter forces either a framework release or an app-level fork of the
+   * adapter, and the second of those is exactly what this platform forbids.
+   *
+   * Merged LAST, so it can also override what the adapter chose. That is
+   * deliberate: an escape hatch you have to ask permission from is not one.
+   */
+  extraBody: z.record(z.string(), z.unknown()).optional(),
   timeoutMs: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).max(5).optional(),
   /** Escape hatch: build a provider we don't ship. */

@@ -49,6 +49,65 @@ Hence `Preset.mapUsage`. A new adapter's first question is "what exactly does
 this vendor mean by its input-token count", and the answer is never assumed.
 `tests/unit/usageDisjoint.test.ts` pins it for the whole family.
 
+4c. **`outputTokens` INCLUDES reasoning tokens — and the vendors disagree about
+whether `completion_tokens` already does.** Same field name, opposite meanings,
+measured live:
+
+    - **xAI**  `completion_tokens` EXCLUDES reasoning. `prompt 215 + completion 5
+      + reasoning 41 = total 261`. Billing `completion_tokens` charged 5 of the 46
+      output tokens actually produced — an **~89% undercount**, invisible to the
+      pre-flight spend guard.
+    - **DeepSeek / OpenAI** `completion_tokens` INCLUDES reasoning. Adding it
+      would DOUBLE-count.
+
+There is no global rule, only a per-vendor one. There is deliberately **no
+separate `reasoningTokens` billing field**: a fifth number already contained in a
+fourth is exactly the trap that produced this whole bug class. The raw split stays
+on `ProviderResult.raw`. `tests/unit/reasoningTokensAndCost.test.ts` pins all
+three vendors' REAL captured payloads.
+
+4d. **`ProviderUsage.reportedCostUsd` beats the price table.** When a vendor tells
+you what it charged, believe it. xAI returns `usage.cost_in_usd_ticks`
+(**1 tick = 1e-10 USD**, derived exactly — see below). A table we maintain by hand
+cannot know about a context tier, an unpublished cache rate, or a price change
+shipped this morning. `pricing: 'free'` still wins over it.
+
+**The xAI cached rates are published NOWHERE** — not the pricing page, not the
+caching page — yet they are billed. They were derived by solving two
+identical-prompt calls (one cold, one cache-hit) for the tick unit and the cached
+rate simultaneously: **grok-4.3 → $0.20/MTok, grok-4.5 → $0.50/MTok**, both exact,
+and $0.20 matches xAI's own billing console. Before this, the table omitted them
+and `computeUsage()` fell back to the full input rate: a **6.25× overcharge** on
+every cached token, on a provider that caches aggressively (a _cold_ call still
+reported 128 cached tokens).
+
+4e. **Reasoning is billed but not always controllable, and that asymmetry is a
+capability.** `thinking` is a real per-call toggle on DeepSeek and OpenAI, and
+**DeepSeek defaults it to ENABLED** — so "off" must be sent EXPLICITLY
+(`{thinking: {type: 'disabled'}}`), because omitting the flag means paying for a
+chain-of-thought on every call (measured: 9× the output tokens on a trivial
+prompt). xAI, by contrast, **always reasons and cannot be told not to**:
+`thinking: {type:'disabled'}` is accepted and silently ignored,
+`reasoning_effort: 'none'` is a hard 400, and "non-reasoning" is a separate MODEL.
+That is what `ProviderCapabilities.thinkingAlwaysOn` exists to say — so a caller
+asking for thinking off gets a **degradation** instead of a silent 9× bill.
+
+4f. **The token-limit parameter name is per-vendor, and OpenAI disagrees with its
+own past self.** Every model OpenAI currently ships **hard-400s on `max_tokens`**
+("Use 'max_completion_tokens' instead"), so the `openai` preset was in fact broken
+against every current OpenAI model and worked only on the legacy `gpt-4o` line it
+happened to default to. `Preset.maxTokensParam` handles it;
+`max_completion_tokens` is verified to work on both the `gpt-5.x` family and
+legacy `gpt-4o`, so it is a flat per-preset switch, not a per-model branch.
+Everyone else still speaks `max_tokens`.
+
+4g. **`config.extraBody` is the escape hatch, and it merges LAST.** This transport
+fronts Ollama, vLLM, LM Studio, OpenRouter, Groq and Together — backends whose
+knobs we cannot enumerate. Without it, the next vendor-specific parameter forces
+either a framework release or an app-level fork of the adapter, and the second is
+what this platform forbids. It can override what the adapter chose: an escape
+hatch you must ask permission from is not one.
+
 5. **Moderation fails closed.** An undefined policy throws; a judge that errors
    BLOCKS; an item the judge silently dropped is BLOCKED, not waved through. A
    safety control that quietly allows everything is worse than none, because the

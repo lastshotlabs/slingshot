@@ -94,13 +94,13 @@ the shapes an accidental bill takes.
 
 ## Providers
 
-| kind                | Backs                                             | Structured output      | Prompt caching              | Cost       |
-| ------------------- | ------------------------------------------------- | ---------------------- | --------------------------- | ---------- |
-| `anthropic`         | the Claude API                                    | native                 | **explicit** (min 4096 tok) | real       |
-| `openai`            | the OpenAI API                                    | native                 | automatic                   | real       |
-| `grok`              | xAI (`api.x.ai`)                                  | native                 | automatic (routing key)     | real¹      |
-| `deepseek`          | DeepSeek (`api.deepseek.com`)                     | **json-mode**          | automatic                   | real       |
-| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | json-mode (declarable) | none (declarable)           | off/`free` |
+| kind                | Backs                                             | Default model       | Structured output      | Prompt caching              | Reasoning          | Cost         |
+| ------------------- | ------------------------------------------------- | ------------------- | ---------------------- | --------------------------- | ------------------ | ------------ |
+| `anthropic`         | the Claude API                                    | `claude-opus-4-8`   | native                 | **explicit** (min 4096 tok) | opt-in             | table        |
+| `openai`            | the OpenAI API                                    | `gpt-5.4-mini`      | native                 | automatic                   | opt-out¹           | table        |
+| `grok`              | xAI (`api.x.ai`)                                  | `grok-4.3`          | native                 | automatic (routing key)     | **always on**²     | **vendor**³  |
+| `deepseek`          | DeepSeek (`api.deepseek.com`)                     | `deepseek-v4-flash` | **json-mode**          | automatic                   | **on by default**⁴ | table        |
+| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | _(required)_        | json-mode (declarable) | none (declarable)           | none               | off / `free` |
 
 All four presets are the **same zero-dependency `fetch` adapter** — a provider is
 a baseUrl, a capability descriptor, and a price table. Only `anthropic` has an
@@ -109,16 +109,46 @@ local model never installs it.
 
 **Which to pick.** `deepseek` is by a wide margin the cheapest (`v4-flash`:
 $0.14/MTok in, $0.28 out, and a cache-hit rate of $0.0028 — 50× cheaper than a
-miss). `openai-compatible` against a local Ollama is _free_ and never leaves your
-machine. `anthropic` is the only one with explicit cache breakpoints and a real
-refusal signal. A common shape is to **generate on the cheap one and moderate on
-the trusted one** — see [Moderation](#moderation); the judge may run on a
-different provider than the generator.
+miss). `grok` refuses far less than the others, which matters if your content is
+meant to have teeth; `grok-4.3` is the default rather than `grok-4.5` (the
+coding-grade model, at ~3× the output price). `openai-compatible` against a local
+Ollama is _free_ and never leaves your machine. `anthropic` is the only one with
+explicit cache breakpoints and a real refusal signal. A common shape is to
+**generate on the cheap or permissive one and moderate on the trusted one** — see
+[Moderation](#moderation); the judge may run on a different provider than the
+generator.
 
-¹ xAI does not publish its cached-token rate, so `grok` ships **without**
-`cacheReadPerMTok`. Cache reads therefore price at the full input rate, which
-_overstates_ cost — the safe direction to be wrong in. Override
-`providers.grok.pricing` if you know the real number.
+**Watch the reasoning tokens.** They are billed at the OUTPUT rate everywhere, and
+they are not free: leaving DeepSeek's thinking on costs **9× the output tokens** on
+a short prompt. Set `thinking: false` for generation (where chain-of-thought buys
+little) and consider leaving it on for moderation (a judgement call, and one batched
+call per deck). The vendors report reasoning tokens with the **same field name and
+opposite meanings** — xAI's `completion_tokens` excludes them, DeepSeek's and
+OpenAI's include them — so `usage.outputTokens` is normalised for you. Do not
+re-derive it from `raw`.
+
+¹ OpenAI's GPT-5 family reasons, but `reasoning_effort: 'none'` genuinely turns it
+off. Note it **rejects `max_tokens`** entirely (`max_completion_tokens` only) —
+handled by the preset.
+² xAI **always reasons and cannot be told not to** (`thinking: {type:'disabled'}` is
+accepted and ignored; `reasoning_effort: 'none'` is a 400). Ask for thinking off and
+you get an `AiDegradation`, not silence.
+³ xAI reports its own authoritative cost (`cost_in_usd_ticks`), which is preferred
+over the price table. Its cached-input rates are published nowhere, so they were
+derived from that figure: **$0.20/MTok on grok-4.3, $0.50 on grok-4.5.**
+⁴ DeepSeek's thinking mode defaults to **enabled** — the preset sends `disabled`
+explicitly when you ask for it, because omitting the flag is not the same as
+turning it off.
+
+**Vendor-specific knobs: `extraBody`.** This adapter fronts backends whose
+parameters we cannot enumerate. `providers.<name>.extraBody` is merged into every
+request **last**, so it can override anything the adapter chose:
+
+```ts
+providers: {
+  local: { kind: 'openai-compatible', baseUrl: '…', extraBody: { top_k: 40, mirostat: 2 } },
+}
+```
 
 **`deepseek` is `json-mode`, and that is not a footnote.** It supports
 `response_format: {type: 'json_object'}` only — valid JSON, unenforced shape. The

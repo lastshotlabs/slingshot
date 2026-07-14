@@ -44,10 +44,17 @@ const POLICY = {
   blockAtOrAbove: 'medium' as const,
 };
 
-function build(
-  provider: ReturnType<typeof createFakeAiProvider>,
-  overrides: Partial<AiPackageConfigInput> = {},
-) {
+/**
+ * `moderation` is deliberately loosened to a partial: every test here overrides
+ * one field of it and relies on `build` merging the policies back in. Typing it
+ * as the full config forced an `as never` at each call site, which is a cast that
+ * would have hidden a genuine type error just as happily as a spurious one.
+ */
+type BuildOverrides = Omit<Partial<AiPackageConfigInput>, 'moderation'> & {
+  moderation?: Partial<NonNullable<AiPackageConfigInput['moderation']>>;
+};
+
+function build(provider: ReturnType<typeof createFakeAiProvider>, overrides: BuildOverrides = {}) {
   const { moderation, ...rest } = overrides;
   const config = aiPackageConfigSchema.parse({
     providers: { test: { provider } },
@@ -108,7 +115,7 @@ describe('moderation', () => {
       capabilities: { structuredOutput: 'native' },
       responses: [{ error: new Error('judge exploded') }],
     });
-    const { moderator } = build(broken, { moderation: { onError: 'allow' } as never });
+    const { moderator } = build(broken, { moderation: { onError: 'allow' } });
 
     const verdict = await moderator.moderate({ content: ['anything'], policy: 'house' });
     expect(verdict.allowed).toBe(true);
@@ -156,7 +163,7 @@ describe('moderation', () => {
         };
       },
     });
-    const { moderator } = build(provider, { moderation: { maxBatchSize: 2 } as never });
+    const { moderator } = build(provider, { moderation: { maxBatchSize: 2 } });
 
     const verdict = await moderator.moderate({
       content: ['a', 'b', 'c', 'd', 'e'],
@@ -229,7 +236,7 @@ describe('moderation', () => {
     };
 
     const provider = judge([{ index: 0, severity: 'none' }]);
-    const { moderator } = build(provider, { moderation: { moderator: custom } as never });
+    const { moderator } = build(provider, { moderation: { moderator: custom } });
 
     const verdict = await moderator.moderate({ content: ['x'], policy: 'house' });
     expect(verdict.categories).toContain('blocklist');

@@ -161,6 +161,15 @@ export interface OpenAiMockOptions extends MockOptions {
   readonly usageDialect?: 'openai' | 'deepseek';
   /** DeepSeek thinking mode: emitted alongside `content`, never inside it. */
   readonly reasoning?: string;
+  /**
+   * Return this `usage` block verbatim, overriding the dialect presets.
+   *
+   * Exists so a test can pin a REAL payload captured from a live vendor rather
+   * than a shape we invented. The vendors disagree about what a token count
+   * means, so a fixture we made up would only prove our own assumptions back to
+   * us.
+   */
+  readonly usage?: Record<string, unknown>;
 }
 
 /** OpenAI/xAI: `cached_tokens` ⊆ `prompt_tokens`. 13 total, 4 of them cached. */
@@ -184,7 +193,8 @@ export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
   const requests: Record<string, unknown>[] = [];
   const headers: Record<string, string>[] = [];
 
-  const usage = options.usageDialect === 'deepseek' ? DEEPSEEK_USAGE : OPENAI_USAGE;
+  const usage =
+    options.usage ?? (options.usageDialect === 'deepseek' ? DEEPSEEK_USAGE : OPENAI_USAGE);
 
   const server = Bun.serve({
     port: 0,

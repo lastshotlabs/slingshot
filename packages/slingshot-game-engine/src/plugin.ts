@@ -299,12 +299,20 @@ export function createGameEnginePackage(
         pluginName: 'slingshot-game-engine',
       });
       const getHookServices = (): HookServices | undefined => hookServices;
+      // All four levels go to the real logger. `debug` and `info` used to be
+      // hardcoded empty function bodies ("noop in production"), which meant NO
+      // game could ever emit an informational log line from a handler — a
+      // `ctx.log.info('deck generated', {...})` printed nothing, anywhere, ever,
+      // and a game's own diagnostics were a black hole. It was also redundant:
+      // `createConsoleLogger` already drops anything below its `minRank`
+      // (default `info`), so debug is filtered by the logger, at the logger's
+      // configured level, which is the only place that decision belongs.
       const log: SessionRuntime['log'] = {
-        debug() {
-          /* noop in production */
+        debug(message, data) {
+          packageLogger.debug(message, data as Record<string, unknown> | undefined);
         },
-        info() {
-          /* noop in production */
+        info(message, data) {
+          packageLogger.info(message, data as Record<string, unknown> | undefined);
         },
         warn(message, data) {
           packageLogger.warn(message, data as Record<string, unknown> | undefined);

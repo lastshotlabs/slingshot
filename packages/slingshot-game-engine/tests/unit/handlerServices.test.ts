@@ -83,7 +83,7 @@ async function runWith(
       prep: { next: null, advance: 'manual', onEnter: 'prepEnter' },
     },
     handlers: {
-      prepEnter: (ctx: any) => {
+      prepEnter: async (ctx: any) => {
         seen.sawServices = ctx.services !== undefined;
         const cap = ctx.services?.capabilities.maybe({} as never) as { answer: string } | undefined;
         seen.answer = cap?.answer ?? null;

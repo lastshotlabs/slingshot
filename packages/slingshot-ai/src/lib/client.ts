@@ -304,7 +304,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       // This is a ROUTING hint, not a cache identity: the vendor still matches the
       // real prefix bytes, so a stale or colliding key costs a cold read, never a
       // wrong answer.
-      promptCacheKey: rendered.promptCacheKey,
+      promptCacheKey: rendered.promptCacheRouteKey,
     };
 
     return { request, degradations, rendered };

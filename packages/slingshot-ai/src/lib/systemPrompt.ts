@@ -37,7 +37,29 @@ function toCachedSystem(system: SystemPrompt | undefined): CachedSystem {
 export interface RenderedSystem {
   readonly blocks: readonly RenderedSystemBlock[];
   readonly degradations: readonly AiDegradation[];
+  /**
+   * The prefix's IDENTITY, for the drift monitor. Derived from segment **ids**,
+   * so it stays stable when the text underneath changes — which is exactly what
+   * lets `checkDrift` notice that it changed. A content-derived key could never
+   * detect drift: the key would simply move with the content.
+   */
   readonly promptCacheKey: string;
+  /**
+   * The prefix's CONTENT, for the wire. These are two different questions and
+   * they were one variable, which was a real cost bug.
+   *
+   * An automatic-caching provider uses this to route a request to the machine
+   * holding the prefix. Route by identity and every variant of a prompt collides
+   * on ONE key: hotseat's three spice tiers share segment ids (`role`, `edges`,
+   * …) and differ only in text, so all three routed to the same grok server and
+   * serially EVICTED each other. Measured — the three boot pre-warms, one per
+   * tier, each reported 128 cached tokens of 4,955 (2.6%): every one a miss, on
+   * the calls whose entire job is to warm the cache.
+   *
+   * Distinct bytes must route distinctly. A collision is never a wrong answer —
+   * the vendor still matches real prefix bytes — it is silently a full-price read.
+   */
+  readonly promptCacheRouteKey: string;
   readonly breakpointEmitted: boolean;
   readonly stableTokens: number;
 }
@@ -134,6 +156,12 @@ export function renderSystem(options: {
     options.promptCacheKey ??
     (cached.stable.length > 0 ? hashText(cached.stable.map(s => s.id).join('|')) : 'none');
 
+  // Routes by CONTENT, so two prompts sharing a shape but not their bytes do not
+  // land on the same machine and evict one another. An app-supplied key still
+  // wins: a caller who names its own key has said where it wants to route.
+  const promptCacheRouteKey =
+    options.promptCacheKey ?? (stableText ? hashText(stableText) : 'none');
+
   if (cached.stable.length > 0 && monitor) {
     monitor.checkDrift(promptCacheKey, cached.stable);
   }
@@ -183,5 +211,5 @@ export function renderSystem(options: {
     blocks.push({ text: segment.text, cache: false });
   }
 
-  return { blocks, degradations, promptCacheKey, breakpointEmitted, stableTokens };
+  return { blocks, degradations, promptCacheKey, promptCacheRouteKey, breakpointEmitted, stableTokens };
 }

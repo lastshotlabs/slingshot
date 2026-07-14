@@ -94,6 +94,38 @@ describe('promptCacheKey reaches the provider', () => {
     expect(provider.calls[0]?.promptCacheKey).not.toBe(provider.calls[1]?.promptCacheKey as string);
   });
 
+  test('same segment IDS, different TEXT — must NOT share a key', async () => {
+    const provider = createFakeAiProvider({ responses: ['a', 'b', 'c'] });
+    const client = build(provider);
+
+    // This is hotseat's three spice tiers, exactly: identical segment ids, and the
+    // tier lives in the TEXT. Keying on ids collapsed all three onto one routing
+    // key, so they landed on the same grok machine and serially EVICTED each other
+    // — all three boot pre-warms, whose only job is to warm the cache, missed.
+    for (const tier of ['family', 'party', 'spicy']) {
+      await client.generate({
+        system: { stable: [{ id: 'tier-policy', text: `Write ${tier} cards.` }] },
+        ...ask,
+      });
+    }
+
+    const keys = provider.calls.map(c => c.promptCacheKey);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  test('byte-identical prefixes DO share a key, whatever the segment is called', async () => {
+    const provider = createFakeAiProvider({ responses: ['a', 'b'] });
+    const client = build(provider);
+    const stable = [{ id: 'role', text: 'You deal cards.' }];
+
+    await client.generate({ system: { stable }, ...ask });
+    await client.generate({ system: { stable }, ...ask });
+
+    // The other half of the contract. Routing by content is only correct if the
+    // SAME content still converges — otherwise nothing would ever hit at all.
+    expect(provider.calls[0]?.promptCacheKey).toBe(provider.calls[1]?.promptCacheKey as string);
+  });
+
   test('an explicit key from the app still wins', async () => {
     const provider = createFakeAiProvider({ responses: ['a'] });
     await build(provider).generate({ system, promptCacheKey: 'mine', ...ask });

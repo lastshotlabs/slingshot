@@ -9,6 +9,7 @@
  *
  * @internal — not exported from the package public API.
  */
+import type { HookServices } from '@lastshotlabs/slingshot-core';
 import { GameError, GameErrorCode } from '../errors';
 import type { RateLimitBackend, ReplayStore } from '../types/adapters';
 import type {
@@ -188,6 +189,13 @@ export interface SessionRuntime {
     finalGameState?: Record<string, unknown>,
   ) => Promise<void> | void;
 
+  /**
+   * Accessor for framework {@link HookServices}. Supplied by the plugin on the
+   * real runtime; absent in `TestGameHarness` so sims stay hermetic.
+   * See {@link SessionRuntimeDeps.getHookServices}.
+   */
+  readonly getHookServices?: () => HookServices | undefined;
+
   handlerContext: ReturnType<typeof buildProcessHandlerContext>;
 
   /** Per-session per-player sequence dedup cache. */
@@ -207,6 +215,29 @@ export interface SessionRuntimeDeps {
   replayStore: ReplayStore;
   log: SessionRuntime['log'];
   activeRuntimes: Map<string, SessionRuntime>;
+  /**
+   * Accessor for framework {@link HookServices} — the documented route from a game
+   * handler to a framework capability (`ctx.services.capabilities.require(...)`).
+   *
+   * ## This was declared and never wired, and it broke a shipped game
+   *
+   * `ProcessHandlerContext.services` is a getter over this function. The type
+   * existed, the getter existed, the docs existed — and **nothing ever supplied
+   * it**, so `ctx.services` was `undefined` for every game, always. No game on
+   * this platform could reach a framework capability from a handler.
+   *
+   * That is why hotseat's LLM never generated a single card in production: the AI
+   * client was registered, booted and pre-warmed, and the handler that had to
+   * *find* it looked into an empty socket and quietly dealt from the house deck
+   * instead. Hundreds of tests were green, because every test called the deck
+   * function directly and none drove the handler that has to resolve the client.
+   *
+   * The plugin supplies this on the real runtime. `TestGameHarness` deliberately
+   * does NOT — leaving `ctx.services` undefined there, which is what keeps the
+   * engine sims hermetic and lets games take a no-credentials fallback path in
+   * tests. That was always the intent; it had merely become true *everywhere*.
+   */
+  getHookServices?: () => HookServices | undefined;
   /**
    * Persisted session gameState to hydrate into the runtime (e.g. state
    * written at session creation, or surviving a restart). Cloned on use;
@@ -241,6 +272,10 @@ function toGamePlayerState(p: MutablePlayer): GamePlayerState {
 
 function buildHandlerDeps(runtime: SessionRuntime): HandlerContextDeps {
   return {
+    // THE missing link. `ProcessHandlerContext.services` is a getter over this,
+    // and until now nothing passed it — so `ctx.services` was undefined in every
+    // game, forever. See SessionRuntimeDeps.getHookServices.
+    getHookServices: runtime.getHookServices,
     sessionId: runtime.sessionId,
     gameType: runtime.gameType,
     rules: runtime.rules,
@@ -425,6 +460,10 @@ export async function createSessionRuntime(
   // read from the `runtime` variable — they resolve at call time, not capture
   // time, so this works despite runtime not being assigned yet.
   const initialDeps: HandlerContextDeps = {
+    // The runtime object does not exist yet, but `deps` does — and `onGameStart`
+    // fires against THIS context. Omitting it here would leave the very first
+    // hook of every game unable to see a capability.
+    getHookServices: deps.getHookServices,
     sessionId,
     gameType: gameDef.name,
     rules,
@@ -508,6 +547,7 @@ export async function createSessionRuntime(
     replayStore: deps.replayStore,
     log: deps.log,
     onCompleted: deps.onCompleted,
+    getHookServices: deps.getHookServices,
     handlerContext,
     sequenceCache: new Map(),
     pendingReplayEntries: [],

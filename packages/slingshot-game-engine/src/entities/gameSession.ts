@@ -51,6 +51,14 @@ export const GameSession = defineEntity('GameSession', {
      * for a stale token to outlive a bump. See `lib/displayToken.ts`.
      */
     displayEpoch: field.number({ default: 0 }),
+    /**
+     * The session's INPUT EPOCH at the last settled phase transition — part of
+     * the durable footprint (see `PersistedRuntimeState.inputEpoch`). Clients
+     * echo the last-broadcast epoch on `game:input`; a restart that lost this
+     * counter would misjudge every stamped input. Distinct from `displayEpoch`
+     * (TV-token revocation) above.
+     */
+    inputEpoch: field.number({ default: 0 }),
     createdAt: field.date({ default: 'now', immutable: true }),
     updatedAt: field.date({ default: 'now' }),
     startedAt: field.date({ optional: true }),

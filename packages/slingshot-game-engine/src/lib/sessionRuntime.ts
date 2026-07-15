@@ -151,6 +151,25 @@ export interface SessionRuntime {
   currentRound: number;
 
   /**
+   * Monotonic INPUT EPOCH — bumped on every phase transition, stamped onto
+   * every session-room frame the runtime publishes, and echoed back (optionally)
+   * on `game:input`. The input pipeline rejects an input stamped with an OLDER
+   * epoch: after a reconnect the per-connection sequence cache is reset and the
+   * client's outbound queue flushes, so a stale input could otherwise re-land
+   * under a fresh sequence and complete a same-named channel that has since
+   * been reopened for a NEW phase/turn (hotseat's vanishing-picker P0). The
+   * only phase-scoping before this was the channel-open check, which is exactly
+   * what a reopened channel defeats.
+   *
+   * Inputs with NO stamp are treated as current (old clients, tests, REST-side
+   * drivers). Inputs stamped AHEAD of the runtime are also accepted: a crash
+   * can lose the tail of the epoch's history (it persists per phase
+   * transition), so after a resume clients may briefly hold a higher stamp than
+   * the runtime; a genuinely stale input is always strictly LOWER.
+   */
+  inputEpoch: number;
+
+  /**
    * When true the session is paused: all timers are frozen and the input
    * pipeline rejects submissions with code `SESSION_PAUSED`. Toggled by the
    * engine's `pauseSession` / `resumeSession` controls.
@@ -258,6 +277,13 @@ export interface PersistedRuntimeState {
   rules: Record<string, unknown>;
   /** A staged-but-not-yet-applied patch. Survives a restart; `null` when none. */
   stagedRulesPatch: Record<string, unknown> | null;
+  /**
+   * The input epoch at the settled transition. Must ride the durable footprint:
+   * clients hold the last-broadcast epoch, so a restart that reset the counter
+   * to zero would make the engine reject EVERY stamped input as "from the
+   * future"… or, worse, accept genuinely stale ones as current.
+   */
+  inputEpoch: number;
 }
 
 /** Snapshot fields hydrated back into a resumed runtime. */
@@ -269,6 +295,8 @@ export interface RuntimeResumeState {
   rngState?: number | null;
   /** A rules patch that was staged when the process died — still pending. */
   stagedRulesPatch?: Record<string, unknown> | null;
+  /** The persisted input epoch; see {@link SessionRuntime.inputEpoch}. */
+  inputEpoch?: number | null;
 }
 
 /** External dependencies injected by the plugin closure. */
@@ -551,6 +579,10 @@ export async function createSessionRuntime(
   );
   const resume = deps.resume ?? null;
   const currentRound = resume ? Math.max(1, resume.currentRound) : 1;
+  const initialInputEpoch =
+    resume && typeof resume.inputEpoch === 'number' && resume.inputEpoch >= 0
+      ? resume.inputEpoch
+      : 0;
 
   // Step 2: Initialize player scores
   for (const p of players.values()) {
@@ -620,6 +652,28 @@ export async function createSessionRuntime(
   // is fully assigned below, so the forward reference is safe.
   const runtimeRef: { current: SessionRuntime | null } = { current: null };
 
+  // Stamp the CURRENT input epoch onto every frame this runtime publishes for
+  // its own session, so clients always hold a fresh value to echo back on
+  // `game:input`. One wrapper instead of a stamp at each publish site — a
+  // session-room frame that skipped the stamp would leave clients echoing an
+  // old epoch and getting rejected for it. Frames that already carry an
+  // `epoch` (none today) are left alone.
+  const publish: SessionRuntimeDeps['publish'] = (room, message, options) => {
+    if (
+      message !== null &&
+      typeof message === 'object' &&
+      !Array.isArray(message) &&
+      (message as Record<string, unknown>).sessionId === sessionId &&
+      (message as Record<string, unknown>).epoch === undefined
+    ) {
+      message = {
+        ...(message as Record<string, unknown>),
+        epoch: runtimeRef.current?.inputEpoch ?? initialInputEpoch,
+      };
+    }
+    deps.publish(room, message, options);
+  };
+
   // Step 5: Build handler deps and context. The closures in buildHandlerDeps
   // read from the `runtime` variable — they resolve at call time, not capture
   // time, so this works despite runtime not being assigned yet.
@@ -642,7 +696,7 @@ export async function createSessionRuntime(
     timerState,
     gameLoopState,
     rng,
-    publish: deps.publish,
+    publish,
     requestAdvancePhase: () => {
       const runtime = runtimeRef.current;
       if (!runtime) return;
@@ -702,13 +756,14 @@ export async function createSessionRuntime(
     players,
     channels,
     currentRound,
+    inputEpoch: initialInputEpoch,
     stagedRulesPatch: resume?.stagedRulesPatch ? structuredClone(resume.stagedRulesPatch) : null,
     paused: false,
     advancing: false,
     inOnEnter: false,
     pendingSelfAdvance: false,
     selfAdvanceChain: [],
-    publish: deps.publish,
+    publish,
     replayStore: deps.replayStore,
     log: deps.log,
     onCompleted: deps.onCompleted,
@@ -809,7 +864,10 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
   const { gameDef, phaseState, timerState, replaySeq, sessionId } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
 
-  // Step 1: Update phase state
+  // Step 1: Update phase state. Entering a phase opens a new INPUT EPOCH:
+  // anything a client composed against the previous phase's frames is now
+  // stale, even if a channel of the same name reopens here.
+  runtime.inputEpoch += 1;
   phaseState.currentPhase = phaseName;
   phaseState.phaseStartedAt = Date.now();
   phaseState.subPhaseIndex = -1;
@@ -1091,6 +1149,7 @@ function persistRuntimeState(runtime: SessionRuntime): void {
     rngState: (runtime.rng as unknown as { getState(): number }).getState(),
     rules: runtime.rules as Record<string, unknown>,
     stagedRulesPatch: runtime.stagedRulesPatch,
+    inputEpoch: runtime.inputEpoch,
   };
   void runtime.persistState(snapshot).catch((error: unknown) => {
     runtime.log.error(
@@ -1427,6 +1486,7 @@ export async function processInputPipeline(
   userId: string,
   data: unknown,
   sequence: number,
+  epoch?: number,
 ): Promise<InputAck> {
   const { sessionId, gameDef, replaySeq } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
@@ -1455,6 +1515,23 @@ export async function processInputPipeline(
   const cachedAck = playerSeqCache.get(sequence);
   if (cachedAck) {
     return cachedAck;
+  }
+
+  // Step 2.5: Epoch guard. A stale input is one composed against an EARLIER
+  // phase's frames — after a reconnect the sequence cache above is reset and
+  // the client's outbound queue flushes, so without this a stale input lands
+  // under a fresh sequence in a same-named channel reopened for a new phase
+  // (the cross-turn wrong-phase-completion class; see SessionRuntime.inputEpoch).
+  // Runs AFTER the dedup so an exact resend of an already-accepted input still
+  // gets its cached ack. Unstamped inputs pass; inputs stamped AHEAD pass too
+  // (a restart may resume the epoch slightly behind the last broadcast).
+  if (epoch !== undefined && epoch < runtime.inputEpoch) {
+    return rejectInput(
+      GameErrorCode.INPUT_STALE_EPOCH,
+      `Input was composed for epoch ${epoch}; the session is at ${runtime.inputEpoch}.`,
+      sequence,
+      { currentEpoch: runtime.inputEpoch },
+    );
   }
 
   // Step 3: Authorize

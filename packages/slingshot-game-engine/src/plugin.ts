@@ -440,6 +440,7 @@ export function createGameEnginePackage(
               // rules and eats the host's saved edit.
               rules: snapshot.rules,
               stagedRules: snapshot.stagedRulesPatch,
+              inputEpoch: snapshot.inputEpoch,
               lastActivityAt: new Date().toISOString(),
             });
           },
@@ -451,6 +452,7 @@ export function createGameEnginePackage(
                 privateState: (session.privateState ?? null) as Record<string, unknown> | null,
                 rngState: typeof session.rngState === 'number' ? session.rngState : null,
                 stagedRulesPatch: (session.stagedRules ?? null) as Record<string, unknown> | null,
+                inputEpoch: typeof session.inputEpoch === 'number' ? session.inputEpoch : null,
               }
             : undefined,
           // A rules patch APPLIED to the live rules (staged landing at its

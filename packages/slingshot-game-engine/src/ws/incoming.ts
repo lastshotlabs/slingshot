@@ -65,6 +65,7 @@ export interface IncomingDispatchDeps {
     userId: string,
     data: unknown,
     sequence: number,
+    epoch?: number,
   ): Promise<{
     accepted: boolean;
     code?: string;
@@ -99,6 +100,16 @@ export interface IncomingDispatchDeps {
     userId: string,
     publish: (room: string, data: unknown) => void,
   ): Promise<boolean>;
+
+  /**
+   * Current input epoch of a LIVE session runtime, or `null` when no runtime
+   * is active. Rides the `game:state.snapshot` subscribe ack so a
+   * (re)connecting client immediately holds a fresh epoch to stamp inputs
+   * with — without it, a client's first inputs after reconnect would echo the
+   * pre-disconnect epoch and be rejected even when nothing advanced. Optional
+   * so tests without a runtime can omit it.
+   */
+  getSessionEpoch?(sessionId: string): number | null;
 
   /** Event bus for emitting game events. */
   bus: {
@@ -169,9 +180,11 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
         );
 
         // Send state snapshot
+        const currentEpoch = deps.getSessionEpoch?.(sessionId) ?? null;
         ctx.ack({
           type: 'game:state.snapshot',
           sessionId,
+          ...(currentEpoch !== null && { epoch: currentEpoch }),
           session: {
             id: session.id,
             gameType: session.gameType,
@@ -292,9 +305,16 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
           return;
         }
 
-        const { sessionId, channel, data, sequence } = parsed.data;
+        const { sessionId, channel, data, sequence, epoch } = parsed.data;
 
-        const result = await deps.processInput(sessionId, channel, ctx.actorId, data, sequence);
+        const result = await deps.processInput(
+          sessionId,
+          channel,
+          ctx.actorId,
+          data,
+          sequence,
+          epoch,
+        );
 
         // Send input ack to the sender
         ctx.ack({

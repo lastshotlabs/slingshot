@@ -92,12 +92,13 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     userId: string,
     data: unknown,
     sequence: number,
+    epoch?: number,
   ) => {
     const runtime = activeRuntimes.get(sessionId);
     if (!runtime) {
       return rejectInput('SESSION_NOT_FOUND', 'No active runtime for session.', sequence);
     }
-    return processInputPipeline(runtime, channel, userId, data, sequence);
+    return processInputPipeline(runtime, channel, userId, data, sequence, epoch);
   };
 
   // Wire handleReconnect callback (section 5.10.7)
@@ -129,6 +130,7 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     processInput,
     handleReconnect,
     restoreConnection,
+    getSessionEpoch: sessionId => activeRuntimes.get(sessionId)?.inputEpoch ?? null,
     bus,
   });
 

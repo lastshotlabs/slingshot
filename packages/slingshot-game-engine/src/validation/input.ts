@@ -19,6 +19,17 @@ export const GameInputMessageSchema = z.object({
     .int()
     .nonnegative()
     .describe('Monotonically increasing sequence number per session per client.'),
+  epoch: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'The session input epoch this input was composed under (echoed from the ' +
+        'last server frame seen). The engine rejects inputs from an older epoch ' +
+        'so a stale frame re-delivered after a reconnect cannot land in a later ' +
+        'phase. Optional: an unstamped input is treated as current.',
+    ),
 });
 
 /** Schema for `game:subscribe` WS messages. */

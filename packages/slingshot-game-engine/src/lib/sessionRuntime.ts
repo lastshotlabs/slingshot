@@ -280,6 +280,23 @@ export interface SessionRuntimeDeps {
    */
   initialGameState?: Record<string, unknown> | null;
   /**
+   * STAGED per-player private state to hydrate on a FRESH start, keyed like
+   * the private-state manager (user id → value).
+   *
+   * A lobby has no runtime, and the lobby is exactly where a player tells the
+   * game about themselves (a hotseat dossier: facts, no-go topics, pronouns) —
+   * so the app stages those entries on the session row's `privateState`
+   * before the game starts. Without this hydration, everything the room typed
+   * while waiting evaporates at the precise moment the game starts reading it:
+   * deck-prep builds the FIRST prompt from private state.
+   *
+   * Applied BEFORE role assignment: in a role game, the engine's role entry
+   * for a player overwrites that player's staged value — roles own their
+   * players' initial private state. (The resume path has its own hydration,
+   * from the persisted snapshot.)
+   */
+  initialPrivateState?: Record<string, unknown> | null;
+  /**
    * Invoked after natural game completion is broadcast, so the owning plugin
    * can persist the terminal session state and emit the app-bus
    * `game:session.completed` event. Without this, natural completion is only
@@ -504,6 +521,15 @@ export async function createSessionRuntime(
   // dealt once and live on the player rows (already copied into `players`
   // above); re-rolling them would hand people new identities mid-game.
   if (!resume) {
+    // STAGED private state (e.g. a dossier typed in the lobby, where no
+    // runtime exists) hydrates FIRST, so role assignment below wins for its
+    // players — roles own their players' initial private state.
+    if (deps.initialPrivateState) {
+      for (const [key, value] of Object.entries(deps.initialPrivateState)) {
+        privateStateManager.set(key, structuredClone(value));
+      }
+    }
+
     // Step 3: Assign roles
     if (Object.keys(gameDef.roles).length > 0) {
       const assignments = assignRoles(gameDef, playerRecords, rng);

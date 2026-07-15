@@ -132,6 +132,7 @@ async function boot(
       rngState?: number | null;
     };
     initialGameState?: Record<string, unknown>;
+    initialPrivateState?: Record<string, unknown>;
   } = {},
 ) {
   const activeRuntimes = new Map<string, SessionRuntime>();
@@ -153,6 +154,7 @@ async function boot(
     persistState: options.persistState,
     resume: options.resume,
     initialGameState: options.initialGameState ?? null,
+    initialPrivateState: options.initialPrivateState ?? null,
   });
 
   if (!runtime) throw new Error('Expected createSessionRuntime() to create a runtime.');
@@ -244,6 +246,26 @@ describe('resume from a persisted snapshot', () => {
     const ack = await processInputPipeline(runtime, 'tap', 'host-user', { n: 2 }, 1);
     expect(ack.accepted).toBe(true);
     expect((runtime.gameState as { taps?: number }).taps).toBe(5);
+  });
+
+  test('a FRESH start hydrates STAGED private state from the session row', async () => {
+    // The lobby is where a player tells the game about themselves (a hotseat
+    // dossier), and a lobby has no runtime — the app stages the entry on the
+    // session row's privateState. A fresh start must carry it into the
+    // runtime, or everything the room typed while waiting evaporates at the
+    // exact moment the game starts reading it (deck-prep builds the FIRST
+    // prompt from private state).
+    const calls: string[] = [];
+    const { runtime } = await boot(makeGame('staged-private', calls), {
+      initialPrivateState: { 'host-user': { dossier: { facts: ['staged in the lobby'] } } },
+    });
+
+    // Fresh start: onGameStart ran (this is NOT a resume)…
+    expect(calls).toContain('onGameStart');
+    // …and the staged private state is in the manager, readable by handlers.
+    expect(runtime.privateStateManager.get('host-user')).toEqual({
+      dossier: { facts: ['staged in the lobby'] },
+    });
   });
 
   test('resuming still advances normally afterwards', async () => {

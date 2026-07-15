@@ -410,6 +410,11 @@ export function createGameEnginePackage(
           // was declared, documented, and never once supplied.
           getHookServices,
           initialGameState: (session.gameState ?? null) as Record<string, unknown> | null,
+          // STAGED private state — what the app wrote onto the row while there
+          // was no runtime to hold it (a lobby dossier). Hydrated on fresh
+          // start so the first deck-prep prompt can read it; the resume path
+          // hydrates the same field through `resume.privateState`.
+          initialPrivateState: (session.privateState ?? null) as Record<string, unknown> | null,
           /**
            * DURABILITY. The engine used to keep a live session's state in
            * memory only — the row was written at creation and completion, and

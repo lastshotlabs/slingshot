@@ -345,28 +345,24 @@ export function createGameEnginePackage(
       // §1.3 — SlingshotEventBus now supports string-indexed on/off/emit overloads,
       // so we can subscribe to dynamic event names directly without a cast.
 
-      // Listen for game start events to initialize the session runtime.
-      // Entity after-response middleware emits this after startGame op.transition
-      // succeeds. Payload shape: { tenantId, actorId, id, gameType }.
-      const onSessionStarted = async (payload: Record<string, unknown>) => {
-        const sessionId = payload.id as string | undefined;
-        const gameType = payload.gameType as string | undefined;
-
-        if (!sessionId || !gameType) {
-          log.error('game:session.started — missing id or gameType', { payload });
-          return;
-        }
-
+      /**
+       * Build (or rebuild) the live runtime for a session row.
+       *
+       * ONE spawn path for both callers — the `game:session.started` event (a
+       * fresh game) and the boot-time respawn of interrupted sessions (a
+       * resumed one) — so the wiring (publish, persist, completion, services)
+       * cannot drift between them.
+       */
+      const spawnRuntime = async (
+        session: Record<string, unknown>,
+        options: { resume: boolean },
+      ) => {
+        const sessionId = session.id as string;
+        const gameType = String(session.gameType ?? '');
         const gameDef = gameRegistry.get(gameType);
         if (!gameDef) {
-          log.error(`game:session.started — unknown gameType '${gameType}'`, { sessionId });
-          return;
-        }
-
-        const session = await capturedSessionAdapter.getById(sessionId);
-        if (!session) {
-          log.error('game:session.started — session not found', { sessionId });
-          return;
+          log.error(`spawnRuntime — unknown gameType '${gameType}'`, { sessionId });
+          return null;
         }
 
         const playerRecords = await listAdapterRecords(capturedPlayerAdapter, { sessionId });
@@ -405,7 +401,7 @@ export function createGameEnginePackage(
           }
         };
 
-        const runtime = await createSessionRuntime(sessionId, gameDef, rules, players, rngSeed, {
+        return createSessionRuntime(sessionId, gameDef, rules, players, rngSeed, {
           publish,
           replayStore,
           log,
@@ -414,6 +410,37 @@ export function createGameEnginePackage(
           // was declared, documented, and never once supplied.
           getHookServices,
           initialGameState: (session.gameState ?? null) as Record<string, unknown> | null,
+          /**
+           * DURABILITY. The engine used to keep a live session's state in
+           * memory only — the row was written at creation and completion, and
+           * every deploy therefore killed every in-flight game on the box
+           * (three real parties in one night). Every settled phase transition
+           * now writes the durable footprint back to the session row; the
+           * respawn below reads it after a restart.
+           */
+          persistState: async snapshot => {
+            await capturedSessionAdapter.update(sessionId, {
+              gameState: snapshot.gameState,
+              currentPhase: snapshot.currentPhase,
+              currentSubPhase: snapshot.currentSubPhase,
+              currentRound: snapshot.currentRound,
+              privateState: snapshot.privateState,
+              // Written ONLY here — this is the marker that says "this row is
+              // real mid-game progress, safe to resume", as well as the RNG's
+              // live position.
+              rngState: snapshot.rngState,
+              lastActivityAt: new Date().toISOString(),
+            });
+          },
+          resume: options.resume
+            ? {
+                currentPhase: (session.currentPhase ?? null) as string | null,
+                currentSubPhase: (session.currentSubPhase ?? null) as string | null,
+                currentRound: Number(session.currentRound ?? 1),
+                privateState: (session.privateState ?? null) as Record<string, unknown> | null,
+                rngState: typeof session.rngState === 'number' ? session.rngState : null,
+              }
+            : undefined,
           // Natural completion: persist terminal session state and surface the
           // app-bus event so server-side listeners (e.g. an owning "match"
           // record) hear about it — the WS broadcast alone only reaches clients.
@@ -435,7 +462,27 @@ export function createGameEnginePackage(
             });
           },
         });
+      };
 
+      // Listen for game start events to initialize the session runtime.
+      // Entity after-response middleware emits this after startGame op.transition
+      // succeeds. Payload shape: { tenantId, actorId, id, gameType }.
+      const onSessionStarted = async (payload: Record<string, unknown>) => {
+        const sessionId = payload.id as string | undefined;
+        const gameType = payload.gameType as string | undefined;
+
+        if (!sessionId || !gameType) {
+          log.error('game:session.started — missing id or gameType', { payload });
+          return;
+        }
+
+        const session = await capturedSessionAdapter.getById(sessionId);
+        if (!session) {
+          log.error('game:session.started — session not found', { sessionId });
+          return;
+        }
+
+        const runtime = await spawnRuntime(session, { resume: false });
         if (!runtime) {
           log.warn('game:session.started — runtime creation cancelled by onGameStart hook', {
             sessionId,
@@ -449,6 +496,72 @@ export function createGameEnginePackage(
       };
 
       bus.on('game:session.started', onSessionStarted);
+
+      /**
+       * ── RESPAWN INTERRUPTED SESSIONS ─────────────────────────────────────
+       *
+       * A runtime only ever came into existence via `game:session.started`,
+       * which only a game's START route emits — so after a restart, every
+       * in-flight session was a row that said `playing` with no process behind
+       * it, forever. This scan brings them back from the footprint the persist
+       * path wrote.
+       *
+       * Only sessions that are provably resumable are touched:
+       *  - status in (starting, playing, paused) — the in-flight statuses;
+       *  - `rngState` present — the marker only the persist path writes. A row
+       *    without it predates this change (or never advanced a phase), and its
+       *    gameState is the CREATION snapshot: "resuming" it would restart the
+       *    game to turn zero while claiming to have recovered it. Those rows
+       *    stay down, and the owning app's interrupted-honesty surface tells
+       *    the room the truth instead.
+       *  - recent activity — a fresh boot must not resurrect week-old zombies.
+       *
+       * Per-session failures are loud and isolated: one corrupt row must never
+       * take the boot (or the other resumable sessions) down with it.
+       */
+      const RESUME_ACTIVITY_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
+      const respawnInterruptedSessions = async () => {
+        const inFlight = (
+          await Promise.all([
+            listAdapterRecords(capturedSessionAdapter, { status: 'starting' }),
+            listAdapterRecords(capturedSessionAdapter, { status: 'playing' }),
+            listAdapterRecords(capturedSessionAdapter, { status: 'paused' }),
+          ])
+        ).flat();
+
+        for (const session of inFlight) {
+          const sessionId = String(session.id ?? '');
+          if (!sessionId || activeRuntimes.has(sessionId)) continue;
+          if (typeof session.rngState !== 'number') {
+            log.warn(
+              'respawn — in-flight session has no persisted mid-game state; leaving it down',
+              { sessionId, status: session.status },
+            );
+            continue;
+          }
+          const lastActivity = Date.parse(String(session.lastActivityAt ?? '')) || 0;
+          if (Date.now() - lastActivity > RESUME_ACTIVITY_WINDOW_MS) {
+            log.info('respawn — session too stale to resume', { sessionId });
+            continue;
+          }
+          try {
+            const runtime = await spawnRuntime(session, { resume: true });
+            if (runtime) {
+              log.info('respawn — resumed in-flight session after restart', {
+                sessionId,
+                phase: runtime.phaseState.currentPhase,
+                round: runtime.currentRound,
+              });
+            }
+          } catch (error) {
+            log.error('respawn — FAILED to resume in-flight session', {
+              sessionId,
+              error: String(error),
+            });
+          }
+        }
+      };
+      await respawnInterruptedSessions();
 
       // §1.5 — Store refs for teardown.
       onSessionStartedRef = onSessionStarted;

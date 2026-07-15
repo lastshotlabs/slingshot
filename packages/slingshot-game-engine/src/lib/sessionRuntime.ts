@@ -96,6 +96,7 @@ import {
   initializePlayerScore,
   registerPlayerTeam,
 } from './scoring';
+import { serializeMap } from './serialize';
 import { createPrivateStateManager } from './state';
 import type { MutableTimerState } from './timers';
 import {
@@ -203,6 +204,40 @@ export interface SessionRuntime {
 
   /** Pending replay entries not yet flushed. */
   readonly pendingReplayEntries: ReplayEntry[];
+
+  /** See {@link SessionRuntimeDeps.persistState}. */
+  readonly persistState?: (snapshot: PersistedRuntimeState) => Promise<void>;
+}
+
+/**
+ * The durable footprint of a live session — everything a fresh process needs
+ * to pick a game back up mid-phase.
+ *
+ * Handed to {@link SessionRuntimeDeps.persistState} after every settled phase
+ * transition, and hydrated back through {@link SessionRuntimeDeps.resume}.
+ *
+ * `rngState` doubles as the RESUMABILITY MARKER: only the persist path ever
+ * writes it, so a session row carrying one is a row whose gameState is real
+ * mid-game progress — as opposed to the creation-time snapshot every session
+ * row has always carried, which resurrecting would "resume" a game back to
+ * turn zero with a straight face.
+ */
+export interface PersistedRuntimeState {
+  gameState: Record<string, unknown>;
+  currentPhase: string | null;
+  currentSubPhase: string | null;
+  currentRound: number;
+  privateState: Record<string, unknown>;
+  rngState: number;
+}
+
+/** Snapshot fields hydrated back into a resumed runtime. */
+export interface RuntimeResumeState {
+  currentPhase: string | null;
+  currentRound: number;
+  currentSubPhase?: string | null;
+  privateState?: Record<string, unknown> | null;
+  rngState?: number | null;
 }
 
 /** External dependencies injected by the plugin closure. */
@@ -251,6 +286,46 @@ export interface SessionRuntimeDeps {
    * observable over the WS room — server-side listeners never hear it.
    */
   onCompleted?: SessionRuntime['onCompleted'];
+
+  /**
+   * Persist the session's durable footprint. Called (fire-and-forget) after
+   * every settled phase transition with the POST-transition snapshot.
+   *
+   * ## Why this exists
+   *
+   * The engine kept a live session's gameState, phase and private state in
+   * memory ONLY: the session row was written at creation and completion, and
+   * nothing in between. A process restart — every deploy — therefore destroyed
+   * every in-flight game on the instance: the row said `playing`, the state was
+   * the creation snapshot, and no runtime ever came back. Three real parties
+   * died to that in one night before this landed.
+   *
+   * A failure here is logged LOUDLY and never breaks the transition — the room
+   * keeps playing on the in-memory state; durability degrades, gameplay does
+   * not. But it must never fail silently: a quiet persist failure is how "the
+   * state is safe" stays believed right up until the restart that proves it
+   * was not.
+   */
+  persistState?: (snapshot: PersistedRuntimeState) => Promise<void>;
+
+  /**
+   * Resume a previously persisted session instead of starting a fresh one.
+   *
+   * The resume path deliberately does NOT:
+   *  - run `onGameStart` — games initialize (and often WIPE) their state there;
+   *    a respawn that re-runs it erases the very progress it came to restore;
+   *  - re-run the resumed phase's `onEnter` — its mutations are already inside
+   *    the persisted gameState (the snapshot is taken post-transition), and
+   *    running them again double-applies them;
+   *  - re-assign roles or teams — they were dealt once, live on the player
+   *    rows, and re-rolling them mid-game would hand people new identities.
+   *
+   * It DOES re-open the phase's channels, re-arm its timer at full duration
+   * (the original deadline died with the process; a fresh window beats a
+   * phase that can never end), restore private state and the RNG, and publish
+   * `game:phase.entered` so every client wakes up.
+   */
+  resume?: RuntimeResumeState;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -414,7 +489,8 @@ export async function createSessionRuntime(
       },
     ]),
   );
-  const currentRound = 1;
+  const resume = deps.resume ?? null;
+  const currentRound = resume ? Math.max(1, resume.currentRound) : 1;
 
   // Step 2: Initialize player scores
   for (const p of players.values()) {
@@ -424,30 +500,49 @@ export async function createSessionRuntime(
     }
   }
 
-  // Step 3: Assign roles
-  if (Object.keys(gameDef.roles).length > 0) {
-    const assignments = assignRoles(gameDef, playerRecords, rng);
-    for (const assignment of assignments) {
-      const player = players.get(assignment.userId);
-      if (player) {
-        player.role = assignment.role;
-        privateStateManager.set(assignment.userId, {
-          role: assignment.role,
-          visiblePlayers: assignment.visiblePlayers,
-        });
+  // Steps 3 & 4 are for a FRESH game only. On resume, roles and teams were
+  // dealt once and live on the player rows (already copied into `players`
+  // above); re-rolling them would hand people new identities mid-game.
+  if (!resume) {
+    // Step 3: Assign roles
+    if (Object.keys(gameDef.roles).length > 0) {
+      const assignments = assignRoles(gameDef, playerRecords, rng);
+      for (const assignment of assignments) {
+        const player = players.get(assignment.userId);
+        if (player) {
+          player.role = assignment.role;
+          privateStateManager.set(assignment.userId, {
+            role: assignment.role,
+            visiblePlayers: assignment.visiblePlayers,
+          });
+        }
+      }
+    }
+
+    // Step 4: Assign teams
+    if (gameDef.teams) {
+      const teamMap = assignTeams(gameDef, playerRecords, rng);
+      for (const [userId, team] of teamMap) {
+        const player = players.get(userId);
+        if (player) {
+          player.team = team;
+          registerPlayerTeam(scoreState, userId, team);
+        }
       }
     }
   }
 
-  // Step 4: Assign teams
-  if (gameDef.teams) {
-    const teamMap = assignTeams(gameDef, playerRecords, rng);
-    for (const [userId, team] of teamMap) {
-      const player = players.get(userId);
-      if (player) {
-        player.team = team;
-        registerPlayerTeam(scoreState, userId, team);
+  // Resume: hydrate what the persist path saved. Private state first (a
+  // dossier must survive a deploy), then the RNG's live position — resuming
+  // with a reseeded RNG would replay the shuffles the game already dealt.
+  if (resume) {
+    if (resume.privateState) {
+      for (const [key, value] of Object.entries(resume.privateState)) {
+        privateStateManager.set(key, value);
       }
+    }
+    if (typeof resume.rngState === 'number') {
+      (rng as unknown as { setState(s: number): void }).setState(resume.rngState);
     }
   }
 
@@ -551,8 +646,32 @@ export async function createSessionRuntime(
     handlerContext,
     sequenceCache: new Map(),
     pendingReplayEntries: [],
+    persistState: deps.persistState,
   };
   runtimeRef.current = runtime;
+
+  if (resume) {
+    // ── THE RESUME PATH ────────────────────────────────────────────────────
+    // No onGameStart (it wipes and rebuilds state — the one thing a respawn
+    // must never do), no first-phase resolution, no onEnter. The persisted
+    // snapshot was taken AFTER the transition into `resume.currentPhase`
+    // settled, so every mutation those hooks would make is already in it.
+    appendReplay(
+      runtime,
+      logSessionStarted(sessionId, replaySeq, {
+        playerCount: players.size,
+        firstPhase: resume.currentPhase,
+        resumed: true,
+      }),
+    );
+
+    if (resume.currentPhase) {
+      await resumePhaseFlow(runtime, resume.currentPhase, resume.currentSubPhase ?? null);
+    }
+
+    deps.activeRuntimes.set(sessionId, runtime);
+    return runtime;
+  }
 
   // Step 7: Invoke onGameStart hook
   const hookError = createHookErrorHandler(sessionId, deps.log);
@@ -609,6 +728,9 @@ async function enterInitialPhase(runtime: SessionRuntime, phaseName: string): Pr
     runtime.advancing = false;
     runtime.pendingSelfAdvance = false;
     runtime.selfAdvanceChain.length = 0;
+    // The very first durable footprint. Without it, a session that crashed
+    // between start and its first advance would resume into nothing.
+    persistRuntimeState(runtime);
   }
 }
 
@@ -775,6 +897,128 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
   });
 }
 
+/**
+ * Re-arm a persisted phase on a resumed runtime — `enterPhaseFlow` minus every
+ * side effect that already happened before the crash.
+ *
+ * What runs: phase state, channel creation, the phase timer (full duration —
+ * the original deadline died with the old process, and a fresh window beats a
+ * phase that can never end), sub-phase restore, and the `game:phase.entered`
+ * publish that wakes every client.
+ *
+ * What deliberately does NOT run:
+ *  - the phase's `onEnter` handler and `onPhaseEnter` hooks — the persisted
+ *    snapshot was taken after they ran; running them again double-applies
+ *    their mutations (a round counter incremented twice, a deck re-generated);
+ *  - turn-channel auto-advance — the turn was already taken once;
+ *  - the enter delay — the room has waited long enough.
+ */
+async function resumePhaseFlow(
+  runtime: SessionRuntime,
+  phaseName: string,
+  subPhase: string | null,
+): Promise<void> {
+  const { gameDef, phaseState, timerState, replaySeq, sessionId } = runtime;
+
+  if (!Object.hasOwn(gameDef.phases, phaseName)) {
+    runtime.log.error(
+      `[slingshot-game-engine] Cannot resume session ${sessionId}: persisted phase '${phaseName}' ` +
+        `is not in the '${runtime.gameType}' game definition.`,
+    );
+    return;
+  }
+  const phaseDef = gameDef.phases[phaseName];
+
+  phaseState.currentPhase = phaseName;
+  phaseState.phaseStartedAt = Date.now();
+  phaseState.subPhaseIndex = -1;
+  phaseState.currentSubPhase = subPhase;
+  phaseState.activeChannels.clear();
+
+  rebuildHandlerContext(runtime);
+  const readonlyCtx = buildReadonlyHandlerContext(buildHandlerDeps(runtime));
+
+  if (phaseDef.channels) {
+    for (const [channelName, channelDef] of Object.entries(phaseDef.channels)) {
+      const channelState = createChannelState(channelName, channelDef, readonlyCtx);
+      runtime.channels.set(channelName, channelState);
+      phaseState.activeChannels.add(channelName);
+      runtime.publish(sessionRoom(sessionId), {
+        type: 'game:channel.opened',
+        sessionId,
+        channel: channelName,
+        mode: channelDef.mode,
+      });
+    }
+  }
+
+  const timeout = resolveTimeout(phaseDef, readonlyCtx);
+  if (timeout) {
+    const timerId = createTimer(timerState, sessionId, 'phase', timeout, 'phaseTimeout', () => {
+      onPhaseTimeout(runtime);
+    });
+    phaseState.phaseTimerId = timerId;
+  }
+
+  if (phaseDef.loop && runtime.gameLoopState) {
+    startGameLoop(
+      runtime.gameLoopState,
+      () => {
+        rebuildHandlerContext(runtime);
+      },
+      runtime.gameState,
+      gameDef.sync,
+    );
+  }
+
+  rebuildHandlerContext(runtime);
+  appendReplay(
+    runtime,
+    logPhaseEntered(sessionId, replaySeq, {
+      phase: phaseName,
+      timeout,
+      channels: [...phaseState.activeChannels],
+    }),
+  );
+
+  const phaseEndsAt = timeout ? Date.now() + timeout : null;
+  runtime.publish(sessionRoom(sessionId), {
+    type: 'game:phase.entered',
+    sessionId,
+    phase: phaseName,
+    subPhase: phaseState.currentSubPhase,
+    timeout,
+    phaseEndsAt,
+  });
+}
+
+/**
+ * Hand the durable footprint to the owner's `persistState`, fire-and-forget.
+ *
+ * Called after every settled phase transition. Never awaited by gameplay and
+ * never able to break it — but a failure is SCREAMED, because a silent persist
+ * failure is how "the state is safe" stays believed right up until the restart
+ * that proves it was not.
+ */
+function persistRuntimeState(runtime: SessionRuntime): void {
+  if (!runtime.persistState) return;
+  const snapshot: PersistedRuntimeState = {
+    gameState: runtime.gameState,
+    currentPhase: runtime.phaseState.currentPhase,
+    currentSubPhase: runtime.phaseState.currentSubPhase,
+    currentRound: runtime.currentRound,
+    privateState: serializeMap(runtime.privateStateManager.getAll() as Map<string, unknown>),
+    rngState: (runtime.rng as unknown as { getState(): number }).getState(),
+  };
+  void runtime.persistState(snapshot).catch((error: unknown) => {
+    runtime.log.error(
+      `[slingshot-game-engine] PERSIST FAILED for session ${runtime.sessionId} — a restart will ` +
+        `LOSE this game's live state. Gameplay continues on memory only.`,
+      { error: String(error) },
+    );
+  });
+}
+
 // ── §5.10.4 Phase Advance Flow ───────────────────────────────────
 
 /**
@@ -869,6 +1113,11 @@ export async function advancePhase(
     runtime.advancing = false;
     runtime.pendingSelfAdvance = false;
     runtime.selfAdvanceChain.length = 0;
+    // The transition (and any self-advance chain it triggered) has settled —
+    // write the durable footprint. AFTER the finally-reset so a persist error
+    // can never leave `advancing` latched; fire-and-forget so it can never
+    // slow a turn.
+    persistRuntimeState(runtime);
   }
 }
 

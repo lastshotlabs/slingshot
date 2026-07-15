@@ -111,7 +111,7 @@ export function logSessionCreated(
 export function logSessionStarted(
   sessionId: string,
   seq: ReplaySequence,
-  data: { playerCount: number; firstPhase: string | null },
+  data: { playerCount: number; firstPhase: string | null; resumed?: boolean },
 ): ReplayEntry {
   return buildReplayEntry(sessionId, seq, 'session.started', data);
 }

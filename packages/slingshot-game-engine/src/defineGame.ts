@@ -103,6 +103,17 @@ export function defineGame<
     }
   }
 
+  // Validate staged-rules boundary phases exist. A typo here would otherwise
+  // mean staged patches silently never apply — the exact silent-failure class
+  // this feature exists to kill.
+  for (const boundaryPhase of input.applyStagedRules ?? []) {
+    if (!Object.hasOwn(input.phases, boundaryPhase)) {
+      throw new Error(
+        `[slingshot-game-engine] defineGame: applyStagedRules names phase '${boundaryPhase}' but it is not defined in phases.`,
+      );
+    }
+  }
+
   // Validate game loop handler reference
   if (input.loop?.onTick && !(input.loop.onTick in input.handlers)) {
     throw new Error(
@@ -128,6 +139,7 @@ export function defineGame<
     roleVisibility: Object.freeze(input.roleVisibility ?? {}),
     teams: input.teams ? Object.freeze(input.teams) : null,
     rules: input.rules,
+    applyStagedRules: Object.freeze(input.applyStagedRules ?? []),
     presets: Object.freeze(input.presets ?? {}),
     content: input.content ? Object.freeze(input.content as GameDefinition['content']) : null,
     playerStates: Object.freeze(input.playerStates ?? []),

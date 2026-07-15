@@ -60,6 +60,16 @@ export interface GameDefinition {
   readonly roleVisibility: Readonly<Record<string, RoleVisibilityRule>>;
   readonly teams: Readonly<TeamDefinition> | null;
   readonly rules: z.ZodType;
+  /**
+   * Phase names at whose ENTRY a staged rules patch is applied.
+   *
+   * The GAME declares where a mid-game rules change is safe to land (a
+   * turn-intro, a round-intro); the engine does the swap just before the
+   * phase's timers and channels resolve, and broadcasts `game:rules.applied`
+   * so clients learn the rules changed. Empty means staged patches only apply
+   * through an explicit `sessionControls.applyStagedRules()` call.
+   */
+  readonly applyStagedRules: readonly string[];
   readonly presets: Readonly<Record<string, Record<string, unknown>>>;
   readonly content: Readonly<ContentDefinition> | null;
   readonly playerStates: readonly string[];
@@ -100,6 +110,8 @@ export interface GameDefinitionInput<
   roleVisibility?: Record<string, RoleVisibilityRule>;
   teams?: TeamDefinition;
   rules: TRules;
+  /** Phase names where a staged rules patch applies on entry. See {@link GameDefinition.applyStagedRules}. */
+  applyStagedRules?: string[];
   presets?: Record<string, Partial<z.infer<TRules>>>;
   content?: ContentDefinition<TContent>;
   playerStates?: string[];

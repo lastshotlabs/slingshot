@@ -9,8 +9,11 @@ import { buildLeaderboard, getScore } from './scoring';
 import {
   type SessionRuntime,
   advancePhase,
+  applyRulesPatch,
+  applyStagedRules,
   processInputPipeline,
   refreshHandlerContext,
+  stageRulesPatch,
 } from './sessionRuntime';
 import { pauseAllTimers, resumeAllTimers } from './timers';
 
@@ -69,6 +72,8 @@ export function createSessionControls(
       currentRound: runtime.currentRound,
       phaseEndsAt,
       gameState: structuredClone(runtime.gameState),
+      rules: structuredClone(runtime.rules) as Record<string, unknown>,
+      stagedRulesPatch: runtime.stagedRulesPatch ? structuredClone(runtime.stagedRulesPatch) : null,
       players: [...runtime.players.values()]
         .sort((left, right) => left.joinOrder - right.joinOrder)
         .map(snapshotPlayer),
@@ -254,6 +259,30 @@ export function createSessionControls(
       }
 
       return runtime ? toSnapshot(runtime) : null;
+    },
+
+    stageRules(sessionId: string, patch: Record<string, unknown>) {
+      const runtime = activeRuntimes.get(sessionId);
+      if (!runtime) return null;
+
+      const staged = stageRulesPatch(runtime, patch);
+      return {
+        staged,
+        appliesAtPhases: runtime.gameDef.applyStagedRules,
+        snapshot: toSnapshot(runtime),
+      };
+    },
+
+    applyStagedRules(sessionId: string) {
+      const runtime = activeRuntimes.get(sessionId);
+      if (!runtime) return null;
+      return applyStagedRules(runtime);
+    },
+
+    updateRules(sessionId: string, patch: Record<string, unknown>, options?: { silent?: boolean }) {
+      const runtime = activeRuntimes.get(sessionId);
+      if (!runtime) return null;
+      return applyRulesPatch(runtime, patch, { silent: options?.silent });
     },
   };
 }

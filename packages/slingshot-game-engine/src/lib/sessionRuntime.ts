@@ -88,6 +88,7 @@ import {
   logTurnAdvanced,
 } from './replay';
 import { createSeededRng } from './rng';
+import { mergeRules } from './rules';
 import type { MutablePlayer } from './runtimeTypes';
 import type { MutableScoreState } from './scoring';
 import {
@@ -115,7 +116,21 @@ export interface SessionRuntime {
   readonly sessionId: string;
   readonly gameType: string;
   readonly gameDef: Readonly<GameDefinition>;
-  readonly rules: Readonly<Record<string, unknown>>;
+  /**
+   * The LIVE rules. Mutable on purpose: a staged patch (or an instant
+   * `applyRulesPatch`) swaps in a freshly-validated frozen object — the object
+   * itself is never mutated in place. Handlers always read the live object
+   * through the handler context, which is rebuilt on every swap.
+   */
+  rules: Readonly<Record<string, unknown>>;
+
+  /**
+   * A pending rules patch, staged by the host mid-game and applied at the next
+   * boundary the game declares safe ({@link GameDefinition.applyStagedRules}).
+   * PERSISTED the moment it is staged — a saved-but-pending edit must survive
+   * a restart.
+   */
+  stagedRulesPatch: Record<string, unknown> | null;
 
   readonly phaseState: MutablePhaseState;
   readonly turnState: MutableTurnState;
@@ -190,6 +205,12 @@ export interface SessionRuntime {
     finalGameState?: Record<string, unknown>,
   ) => Promise<void> | void;
 
+  /** See {@link SessionRuntimeDeps.onRulesApplied}. */
+  readonly onRulesApplied?: (
+    patch: Record<string, unknown>,
+    rules: Readonly<Record<string, unknown>>,
+  ) => Promise<void> | void;
+
   /**
    * Accessor for framework {@link HookServices}. Supplied by the plugin on the
    * real runtime; absent in `TestGameHarness` so sims stay hermetic.
@@ -229,6 +250,14 @@ export interface PersistedRuntimeState {
   currentRound: number;
   privateState: Record<string, unknown>;
   rngState: number;
+  /**
+   * The LIVE rules. Rules used to be frozen for the session lifetime, so the
+   * creation-time row was always right; staged patches mean a mid-game apply
+   * must reach the row or a restart resumes onto the pre-change rules.
+   */
+  rules: Record<string, unknown>;
+  /** A staged-but-not-yet-applied patch. Survives a restart; `null` when none. */
+  stagedRulesPatch: Record<string, unknown> | null;
 }
 
 /** Snapshot fields hydrated back into a resumed runtime. */
@@ -238,6 +267,8 @@ export interface RuntimeResumeState {
   currentSubPhase?: string | null;
   privateState?: Record<string, unknown> | null;
   rngState?: number | null;
+  /** A rules patch that was staged when the process died — still pending. */
+  stagedRulesPatch?: Record<string, unknown> | null;
 }
 
 /** External dependencies injected by the plugin closure. */
@@ -303,6 +334,18 @@ export interface SessionRuntimeDeps {
    * observable over the WS room — server-side listeners never hear it.
    */
   onCompleted?: SessionRuntime['onCompleted'];
+
+  /**
+   * Invoked whenever a rules patch is APPLIED to the live rules — staged
+   * patches landing at a boundary and instant `applyRulesPatch` calls alike
+   * (including silent ones: `silent` only suppresses the room broadcast, never
+   * the server-side signal). The owning plugin surfaces this on the app bus so
+   * app code that mirrors rules onto its own records (a "match" row whose
+   * judging path reads a rules snapshot per-request) can stay in sync. Without
+   * it, a rules change applied by the engine is only observable over the WS
+   * room — the same silent gap natural completion had.
+   */
+  onRulesApplied?: SessionRuntime['onRulesApplied'];
 
   /**
    * Persist the session's durable footprint. Called (fire-and-forget) after
@@ -659,6 +702,7 @@ export async function createSessionRuntime(
     players,
     channels,
     currentRound,
+    stagedRulesPatch: resume?.stagedRulesPatch ? structuredClone(resume.stagedRulesPatch) : null,
     paused: false,
     advancing: false,
     inOnEnter: false,
@@ -668,6 +712,7 @@ export async function createSessionRuntime(
     replayStore: deps.replayStore,
     log: deps.log,
     onCompleted: deps.onCompleted,
+    onRulesApplied: deps.onRulesApplied,
     getHookServices: deps.getHookServices,
     handlerContext,
     sequenceCache: new Map(),
@@ -777,6 +822,15 @@ export async function enterPhaseFlow(runtime: SessionRuntime, phaseName: string)
     return;
   }
   const phaseDef = gameDef.phases[phaseName];
+
+  // Step 2.5: Staged rules land HERE, at a declared boundary — before the
+  // handler context, channels, and the phase timer resolve, so the phase being
+  // entered runs entirely on the new rules. `persist: false` because the
+  // settled transition persists the footprint moments later (a mid-transition
+  // persist would write a half-entered phase).
+  if (runtime.stagedRulesPatch && gameDef.applyStagedRules.includes(phaseName)) {
+    applyStagedRules(runtime, { persist: false });
+  }
 
   rebuildHandlerContext(runtime);
   const readonlyCtx = buildReadonlyHandlerContext(buildHandlerDeps(runtime));
@@ -1035,6 +1089,8 @@ function persistRuntimeState(runtime: SessionRuntime): void {
     currentRound: runtime.currentRound,
     privateState: serializeMap(runtime.privateStateManager.getAll() as Map<string, unknown>),
     rngState: (runtime.rng as unknown as { getState(): number }).getState(),
+    rules: runtime.rules as Record<string, unknown>,
+    stagedRulesPatch: runtime.stagedRulesPatch,
   };
   void runtime.persistState(snapshot).catch((error: unknown) => {
     runtime.log.error(
@@ -1043,6 +1099,131 @@ function persistRuntimeState(runtime: SessionRuntime): void {
       { error: String(error) },
     );
   });
+}
+
+// ── Staged rules ─────────────────────────────────────────────────
+//
+// "Rules can only be changed between turns" is unusable in a timed game — the
+// between-turns window is seconds long, so every rules sheet was functionally
+// read-only. The engine therefore accepts a rules patch at ANY time, stages
+// it, and applies it at the next boundary the game declares safe
+// (`GameDefinition.applyStagedRules`), telling every client at both moments.
+
+/**
+ * Stage a rules patch to apply at the game's next declared boundary.
+ *
+ * Validates the patch NOW (merged over live rules against the game's schema) —
+ * an invalid patch throws `RULES_VALIDATION_FAILED` immediately rather than
+ * failing silently at the boundary. Merges over any already-staged patch
+ * (top-level shallow, same semantics as `mergeRules`), broadcasts
+ * `game:rules.staged`, and persists the durable footprint immediately: a
+ * saved-but-pending edit must survive a restart.
+ *
+ * @returns The full staged patch now pending.
+ */
+export function stageRulesPatch(
+  runtime: SessionRuntime,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const combined = { ...(runtime.stagedRulesPatch ?? {}), ...structuredClone(patch) };
+  // Throws GameError(RULES_VALIDATION_FAILED, 400) on an invalid result.
+  mergeRules(runtime.gameDef, runtime.rules, combined);
+
+  runtime.stagedRulesPatch = combined;
+  runtime.publish(sessionRoom(runtime.sessionId), {
+    type: 'game:rules.staged',
+    sessionId: runtime.sessionId,
+    patch: structuredClone(combined),
+    appliesAtPhases: [...runtime.gameDef.applyStagedRules],
+  });
+  persistRuntimeState(runtime);
+  return combined;
+}
+
+/**
+ * Apply a rules patch to the LIVE rules immediately.
+ *
+ * For the fields a game deliberately keeps instant (hotseat's dial-LOWERING
+ * kill switch), and the shared apply step for staged patches. Swaps in a
+ * freshly-validated frozen rules object, rebuilds the handler context so every
+ * subsequent handler/timeout/channel read sees the new rules, broadcasts
+ * `game:rules.applied` (unless `silent` — the kill-switch path announces
+ * nothing), and persists (unless `persist: false` — the mid-transition caller
+ * relies on the settled transition's own persist).
+ *
+ * @returns The new live rules.
+ */
+export function applyRulesPatch(
+  runtime: SessionRuntime,
+  patch: Record<string, unknown>,
+  options: { silent?: boolean; persist?: boolean } = {},
+): Readonly<Record<string, unknown>> {
+  // Throws GameError(RULES_VALIDATION_FAILED, 400) — live rules untouched.
+  const next = mergeRules(runtime.gameDef, runtime.rules, patch);
+  runtime.rules = next;
+  rebuildHandlerContext(runtime);
+
+  if (!options.silent) {
+    runtime.publish(sessionRoom(runtime.sessionId), {
+      type: 'game:rules.applied',
+      sessionId: runtime.sessionId,
+      patch: structuredClone(patch),
+      rules: structuredClone(next) as Record<string, unknown>,
+      phase: runtime.phaseState.currentPhase,
+    });
+  }
+  // The server-side signal fires even for silent applies: `silent` is about
+  // what the ROOM hears, not about whether the app's durable mirrors update.
+  if (runtime.onRulesApplied) {
+    void Promise.resolve(runtime.onRulesApplied(structuredClone(patch), next)).catch(
+      (error: unknown) => runtime.log.error('onRulesApplied error', { error: String(error) }),
+    );
+  }
+  if (options.persist !== false) {
+    persistRuntimeState(runtime);
+  }
+  return next;
+}
+
+/**
+ * Apply the staged patch (if any) to the live rules.
+ *
+ * Called by the engine on entry to a declared boundary phase, and exposed
+ * through session controls for games whose safe boundary is an explicit call
+ * in app code rather than a phase entry.
+ *
+ * A staged patch that no longer validates (an instant change landed after it
+ * was staged and now conflicts) is dropped LOUDLY: error log + a
+ * `game:rules.stage-discarded` broadcast, so no client is left rendering
+ * "pending" forever.
+ *
+ * @returns The new live rules, or `null` when nothing was staged (or the
+ *   staged patch had to be discarded).
+ */
+export function applyStagedRules(
+  runtime: SessionRuntime,
+  options: { persist?: boolean } = {},
+): Readonly<Record<string, unknown>> | null {
+  const patch = runtime.stagedRulesPatch;
+  if (!patch) return null;
+  runtime.stagedRulesPatch = null;
+
+  try {
+    return applyRulesPatch(runtime, patch, options);
+  } catch (error) {
+    runtime.log.error(
+      `[slingshot-game-engine] Staged rules patch for session ${runtime.sessionId} no longer ` +
+        `validates and was DISCARDED. The rules on screen may not match what the host saved.`,
+      { error: String(error), patch },
+    );
+    runtime.publish(sessionRoom(runtime.sessionId), {
+      type: 'game:rules.stage-discarded',
+      sessionId: runtime.sessionId,
+      patch: structuredClone(patch),
+    });
+    if (options.persist !== false) persistRuntimeState(runtime);
+    return null;
+  }
 }
 
 // ── §5.10.4 Phase Advance Flow ───────────────────────────────────

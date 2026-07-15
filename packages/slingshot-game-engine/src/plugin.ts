@@ -434,6 +434,12 @@ export function createGameEnginePackage(
               // real mid-game progress, safe to resume", as well as the RNG's
               // live position.
               rngState: snapshot.rngState,
+              // Live rules + any staged-but-pending patch. Rules used to be
+              // frozen for the session lifetime; staged patches mean both must
+              // ride the durable footprint or a restart resumes onto stale
+              // rules and eats the host's saved edit.
+              rules: snapshot.rules,
+              stagedRules: snapshot.stagedRulesPatch,
               lastActivityAt: new Date().toISOString(),
             });
           },
@@ -444,8 +450,25 @@ export function createGameEnginePackage(
                 currentRound: Number(session.currentRound ?? 1),
                 privateState: (session.privateState ?? null) as Record<string, unknown> | null,
                 rngState: typeof session.rngState === 'number' ? session.rngState : null,
+                stagedRulesPatch: (session.stagedRules ?? null) as Record<string, unknown> | null,
               }
             : undefined,
+          // A rules patch APPLIED to the live rules (staged landing at its
+          // boundary, or an instant apply). Mirror onto the row and surface on
+          // the app bus so app code that snapshots rules onto its own records
+          // (a match row read per-request by judging) can stay in sync.
+          onRulesApplied: async (patch, rules) => {
+            await capturedSessionAdapter.update(sessionId, {
+              rules: rules as Record<string, unknown>,
+              stagedRules: null,
+            });
+            bus.emit('game:rules.applied', {
+              sessionId,
+              gameType: String(session.gameType ?? ''),
+              patch,
+              rules: rules as Record<string, unknown>,
+            });
+          },
           // Natural completion: persist terminal session state and surface the
           // app-bus event so server-side listeners (e.g. an owning "match"
           // record) hear about it — the WS broadcast alone only reaches clients.

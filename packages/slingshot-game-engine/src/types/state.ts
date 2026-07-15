@@ -45,6 +45,16 @@ export interface GameEngineActiveSessionSnapshot {
   /** Structured clone of the public game state. */
   readonly gameState: Readonly<Record<string, unknown>>;
 
+  /** Structured clone of the LIVE rules (staged patches not yet included). */
+  readonly rules: Readonly<Record<string, unknown>>;
+
+  /**
+   * Structured clone of the rules patch staged for the next declared
+   * boundary, or `null` when nothing is pending. Apps render this so the
+   * rules sheet can mark pending values until they apply.
+   */
+  readonly stagedRulesPatch: Readonly<Record<string, unknown>> | null;
+
   /** Read-only player snapshot copied from the runtime roster. */
   readonly players: readonly Readonly<GamePlayerState>[];
 
@@ -199,6 +209,50 @@ export interface GameEngineSessionControls {
     sessionId: string,
     newHostUserId: string,
   ): Promise<GameEngineActiveSessionSnapshot | null>;
+
+  /**
+   * Stage a rules patch on a live session, to apply at the next boundary the
+   * game declares safe (`GameDefinition.applyStagedRules`, or an explicit
+   * {@link applyStagedRules} call). Validates the merged result NOW and throws
+   * `GameError(RULES_VALIDATION_FAILED)` on an invalid patch; broadcasts
+   * `game:rules.staged`; persists immediately so a pending edit survives a
+   * restart.
+   *
+   * Returns the full pending patch plus the phases it will apply at, or
+   * `null` when the session has no live runtime (a lobby — apply directly to
+   * the row instead).
+   */
+  stageRules(
+    sessionId: string,
+    patch: Record<string, unknown>,
+  ): {
+    staged: Record<string, unknown>;
+    appliesAtPhases: readonly string[];
+    snapshot: GameEngineActiveSessionSnapshot;
+  } | null;
+
+  /**
+   * Apply the staged patch (if any) to the live rules right now — for games
+   * whose safe boundary is an app-code moment rather than a phase entry.
+   *
+   * Returns the new live rules, `null` when nothing was staged, or `null`
+   * when the session has no live runtime.
+   */
+  applyStagedRules(sessionId: string): Readonly<Record<string, unknown>> | null;
+
+  /**
+   * Apply a rules patch to the live rules IMMEDIATELY — for the fields a game
+   * deliberately keeps instant (a kill-switch dial). `silent: true` skips the
+   * `game:rules.applied` broadcast, preserving instant-and-silent semantics.
+   *
+   * Throws `GameError(RULES_VALIDATION_FAILED)` on an invalid patch. Returns
+   * the new live rules, or `null` when the session has no live runtime.
+   */
+  updateRules(
+    sessionId: string,
+    patch: Record<string, unknown>,
+    options?: { silent?: boolean },
+  ): Readonly<Record<string, unknown>> | null;
 }
 
 /**

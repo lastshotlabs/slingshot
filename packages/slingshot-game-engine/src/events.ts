@@ -52,6 +52,12 @@ declare module '@lastshotlabs/slingshot-core' {
       phase: string;
       subPhase: string | null;
     };
+    'game:rules.applied': {
+      sessionId: string;
+      gameType: string;
+      patch: Record<string, unknown>;
+      rules: Record<string, unknown>;
+    };
     'game:input.processed': {
       sessionId: string;
       gameType: string;

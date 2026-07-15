@@ -26,6 +26,12 @@ export const GameSession = defineEntity('GameSession', {
     status: field.string({ default: 'lobby' }),
     joinCode: field.string({ optional: true }),
     rules: field.json({ optional: true }),
+    /**
+     * A rules patch staged mid-game, pending the next boundary the game
+     * declares safe. Written the moment the host saves it (a pending edit
+     * must survive a restart); cleared when it applies.
+     */
+    stagedRules: field.json({ optional: true }),
     gameState: field.json({ optional: true }),
     privateState: field.json({ optional: true }),
     currentPhase: field.string({ optional: true }),

@@ -115,6 +115,29 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       db.run(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
 
+      // Reconcile drift: an EXISTING table gains any column the entity has and
+      // it lacks. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table,
+      // so without this every deployed database breaks on the first write that
+      // touches a field added after its table was created (the
+      // `host_absent_since` lesson: fresh installs fine, every live deployment
+      // 500ing silently). Additive only — never drop, never retype. Constraints
+      // ALTER TABLE cannot honour on a populated table (PRIMARY KEY, UNIQUE,
+      // NOT NULL without default) are stripped, matching the generated-code
+      // path in `generators/sqlite.ts`.
+      const existingCols = new Set(
+        (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+          row => row.name,
+        ),
+      );
+      for (const [name, def] of Object.entries(config.fields)) {
+        const col = toSnakeCase(name);
+        if (existingCols.has(col)) continue;
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${sqliteColumnType(def.type)}`);
+      }
+      if (ttlSeconds && !existingCols.has(ttlColumn)) {
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${ttlColumn} INTEGER`);
+      }
+
       // Compound indexes
       if (config.indexes) {
         for (let i = 0; i < config.indexes.length; i++) {

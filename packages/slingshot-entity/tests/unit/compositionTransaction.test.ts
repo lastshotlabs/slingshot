@@ -80,6 +80,10 @@ function createFakePostgresInfra(): {
       return { rows: [], rowCount: 0 };
     }
 
+    if (/^ALTER TABLE .+ ADD COLUMN IF NOT EXISTS /i.test(sql)) {
+      return { rows: [], rowCount: 0 };
+    }
+
     const insert = /^INSERT INTO\s+([^\s(]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i.exec(sql);
     if (insert) {
       const table = insert[1];

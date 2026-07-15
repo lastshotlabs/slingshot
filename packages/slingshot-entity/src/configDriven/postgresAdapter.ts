@@ -138,6 +138,25 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
         await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
 
+        // Reconcile drift: an EXISTING table gains any column the entity has
+        // and it lacks — `CREATE TABLE IF NOT EXISTS` is a no-op on an existing
+        // table, so a field added after deployment otherwise breaks every write
+        // that touches it (the `host_absent_since` lesson). Additive only;
+        // `ADD COLUMN IF NOT EXISTS` keeps it replay-safe. Constraints ALTER
+        // cannot honour on a populated table (PRIMARY KEY, NOT NULL without
+        // default) are deliberately omitted, matching the sqlite path.
+        for (const [name, def] of Object.entries(config.fields)) {
+          const col = toSnakeCase(name);
+          await queryable.query(
+            `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${pgColumnType(def.type)}`,
+          );
+        }
+        if (ttlSeconds) {
+          await queryable.query(
+            `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${ttlColumn} BIGINT`,
+          );
+        }
+
         // Compound indexes
         if (config.indexes) {
           for (let i = 0; i < config.indexes.length; i++) {

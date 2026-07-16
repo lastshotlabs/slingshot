@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
-import { getActor } from '@lastshotlabs/slingshot-core';
+import { COOKIE_TOKEN, getActor } from '@lastshotlabs/slingshot-core';
 import { signToken } from '../../src/lib/jwt';
 import { createIdentifyMiddleware } from '../../src/middleware/identify';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
@@ -87,6 +87,50 @@ describe('token extraction', () => {
     const body = await res.json();
     expect(body.actorId).toBe(userId);
     expect(body.sessionId).toBe(sessionId);
+  });
+
+  test('explicit x-user-token overrides a different ambient session cookie', async () => {
+    const app = buildApp();
+    const { id: cookieUserId } = await runtime.adapter.create('cookie@example.com', 'hash');
+    const { id: seatUserId } = await runtime.adapter.create('seat@example.com', 'hash');
+    const cookieSessionId = 'sess-cookie';
+    const seatSessionId = 'sess-seat';
+    const cookieToken = await signToken(
+      { sub: cookieUserId, sid: cookieSessionId },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+    const seatToken = await signToken(
+      { sub: seatUserId, sid: seatSessionId },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+    await runtime.repos.session.createSession(
+      cookieUserId,
+      cookieToken,
+      cookieSessionId,
+      undefined,
+      runtime.config,
+    );
+    await runtime.repos.session.createSession(
+      seatUserId,
+      seatToken,
+      seatSessionId,
+      undefined,
+      runtime.config,
+    );
+
+    const res = await app.request('/test', {
+      headers: {
+        cookie: `${COOKIE_TOKEN}=${cookieToken}`,
+        'x-user-token': seatToken,
+      },
+    });
+    const body = await res.json();
+    expect(body.actorId).toBe(seatUserId);
+    expect(body.sessionId).toBe(seatSessionId);
   });
 
   test('valid token in Authorization bearer header resolves identity', async () => {

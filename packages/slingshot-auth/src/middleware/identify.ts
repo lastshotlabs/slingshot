@@ -45,8 +45,10 @@ function computeFingerprint(
  * `@lastshotlabs/slingshot-core`.
  *
  * Processing steps (in order):
- * 1. **Token extraction** — checks the auth cookie first, then `x-user-token`, then
- *    `Authorization: Bearer <token>`.
+ * 1. **Token extraction** — checks explicit `x-user-token` / Bearer credentials
+ *    first, then falls back to the ambient browser cookie. An explicit token is
+ *    a deliberate per-request identity (including multi-seat iframe tooling)
+ *    and must not be shadowed by whichever account owns the browser cookie.
  *    Initialises all identity context variables to `null` before processing.
  * 2. **JWT verification** — verifies the token's signature and expiry using the configured
  *    signing secret (supports rotating secrets via `string[]`).
@@ -164,11 +166,13 @@ export const createIdentifyMiddleware =
     let resolvedClientId: string | null = null;
     let resolvedTokenPayload: Record<string, unknown> | null = null;
 
-    // cookie for browsers, x-user-token/Authorization headers for non-browser clients
+    // Explicit credentials win over ambient browser state. This matters when
+    // one browser intentionally hosts multiple authenticated views: every
+    // iframe sends its own x-user-token, while all inherit the same cookie.
     const token =
-      readAuthCookie(c, COOKIE_TOKEN, isProd(), authConfig) ??
       c.req.header(HEADER_USER_TOKEN) ??
       readBearerToken(c.req.header('Authorization')) ??
+      readAuthCookie(c, COOKIE_TOKEN, isProd(), authConfig) ??
       null;
     log(`[identify] token=${token ? 'present' : 'absent'}`);
 

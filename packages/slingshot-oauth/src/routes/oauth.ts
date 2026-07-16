@@ -93,13 +93,21 @@ function appendRedirectParams(base: string, params: Record<string, string | unde
   }
 }
 
-function publicOAuthErrorCode(err: unknown): string {
+function publicOAuthError(err: unknown): { error: string; error_description?: string } {
   if (err instanceof HttpError) {
-    if (err.status === 401) return 'authentication_required';
-    if (err.status === 403) return 'access_denied';
-    if (err.status >= 500) return 'server_error';
+    // 4xx statuses carry operator-authored, user-safe messages (e.g. the 409
+    // "an account with this email already exists — link from settings" raised
+    // by findOrCreateByProvider), so pass the message through as
+    // `error_description`. 5xx messages can leak internals, so only the opaque
+    // code travels for those. A bare 409 previously collapsed to the dead-end
+    // `authentication_failed`; it now gets its own `account_exists` code.
+    if (err.status === 401)
+      return { error: 'authentication_required', error_description: err.message };
+    if (err.status === 403) return { error: 'access_denied', error_description: err.message };
+    if (err.status === 409) return { error: 'account_exists', error_description: err.message };
+    if (err.status >= 500) return { error: 'server_error' };
   }
-  return 'authentication_failed';
+  return { error: 'authentication_failed' };
 }
 
 // `postLoginRedirect` is sourced from server-side config (passed into
@@ -210,9 +218,7 @@ const finishOAuth = async (
       return c.redirect(`${postLoginRedirect}${sep}code=${code}${userParam}`);
     }
   } catch (err) {
-    return c.redirect(
-      appendRedirectParams(postLoginRedirect, { error: publicOAuthErrorCode(err) }),
-    );
+    return c.redirect(appendRedirectParams(postLoginRedirect, publicOAuthError(err)));
   }
 };
 

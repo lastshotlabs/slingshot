@@ -406,6 +406,38 @@ describe('OAuth continuation stale-session protection', () => {
     mockFetch.mockRestore();
   });
 
+  test('login callback surfaces account_exists (not the opaque authentication_failed) when the email already has a credential account', async () => {
+    const runtime = makeTestRuntime();
+    // A pre-existing credential account owns this email; social login for the
+    // same email must not silently take it over, so findOrCreateByProvider
+    // raises a 409 with an operator-authored, user-safe message.
+    await runtime.adapter.create('collide@example.com', 'hash');
+
+    runtime.oauth.providers.google = {
+      validateAuthorizationCode: () =>
+        Promise.resolve({ accessToken: () => 'provider-access-token' }),
+    } as never;
+
+    const mockFetch = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'google-sub-collide', email: 'collide@example.com' }), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const app = buildApp(runtime);
+    await runtime.oauth.stateStore.store('state-collide', 'code-verifier-collide');
+
+    const res = await app.request('/auth/google/callback?code=oauth-code&state=state-collide');
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain('error=account_exists');
+    expect(location).not.toContain('error=authentication_failed');
+    // The actionable adapter message rides along so the UI can show it.
+    expect(decodeURIComponent(location)).toContain('already exists');
+    mockFetch.mockRestore();
+  });
+
   test('google link callback returns 403 for suspended accounts and does not link the provider', async () => {
     const runtime = makeTestRuntime();
     const callbackProvider = {

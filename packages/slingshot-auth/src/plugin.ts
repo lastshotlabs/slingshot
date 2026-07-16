@@ -554,11 +554,14 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
             const cookieHeader = req.headers.get('cookie');
             // The `token` query param is accepted here because this resolver only
             // runs for WS/SSE upgrade requests, where browsers cannot set headers.
+            // Explicit credentials must outrank the ambient browser cookie. A
+            // multi-pane cockpit shares cookies across every iframe but gives
+            // each WebSocket its own query token.
             const token =
-              readAuthCookieHeaderValue(cookieHeader, COOKIE_TOKEN, production, runtime.config) ??
               req.headers.get(HEADER_USER_TOKEN) ??
               readBearerToken(req.headers.get('authorization')) ??
-              new URL(req.url).searchParams.get('token');
+              new URL(req.url).searchParams.get('token') ??
+              readAuthCookieHeaderValue(cookieHeader, COOKIE_TOKEN, production, runtime.config);
             if (!token) return ANONYMOUS_ACTOR;
             const payload = await verifyToken(token, runtime.config, runtime.signing);
             const sessionId = payload.sid as string | undefined;

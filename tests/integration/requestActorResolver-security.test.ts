@@ -80,6 +80,30 @@ describe('auth RequestActorResolver upgrade security', () => {
     ).toBe(userId);
   });
 
+  test('explicit query token overrides a different ambient cookie during upgrade auth', async () => {
+    const app = await createTestApp();
+    const cookieRes = await app.request(
+      '/auth/register',
+      json({ email: 'resolver-cookie-owner@example.com', password: 'password123' }),
+    );
+    const explicitRes = await app.request(
+      '/auth/register',
+      json({ email: 'resolver-explicit-seat@example.com', password: 'password123' }),
+    );
+    const cookieSession = (await cookieRes.json()) as { token: string; userId: string };
+    const explicitSession = (await explicitRes.json()) as { token: string; userId: string };
+    const resolver = getRequestActorResolver(app);
+
+    const actor = await resolver.resolveActor(
+      new Request(`http://localhost/__ws/chat?token=${explicitSession.token}`, {
+        headers: { cookie: `token=${encodeURIComponent(cookieSession.token)}` },
+      }),
+    );
+
+    expect(actor.id).toBe(explicitSession.userId);
+    expect(actor.id).not.toBe(cookieSession.userId);
+  });
+
   test('resolves M2M bearer tokens as service-account actors during upgrade auth', async () => {
     const app = await createTestApp({}, { auth: { m2m: { tokenExpiry: 3600 } } });
     const runtime = getRuntime(app);

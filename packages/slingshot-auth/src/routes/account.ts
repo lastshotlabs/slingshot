@@ -182,6 +182,12 @@ export const createAccountRouter = (
                     .boolean()
                     .optional()
                     .describe('Whether the email address has been verified.'),
+                  roles: z
+                    .array(z.string())
+                    .optional()
+                    .describe(
+                      "The user's effective (merged user + group) roles, for role-gated UIs.",
+                    ),
                   googleLinked: z
                     .boolean()
                     .optional()
@@ -212,12 +218,19 @@ export const createAccountRouter = (
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const user = adapter.getUser ? await adapter.getUser(userId) : null;
       const googleLinked = user?.providerIds?.some(id => id.startsWith('google:')) ?? false;
+      // Effective roles power role-gated client UIs (e.g. showing admin-only
+      // controls). Resolved through the adapter's merge of user + group roles,
+      // matching how server-side guards (requireRole / getEffectiveRoles) decide.
+      const roles = adapter.getEffectiveRoles
+        ? await adapter.getEffectiveRoles(userId, null).catch(() => [])
+        : [];
       return c.json(
         {
           id: userId,
           userId: userId,
           email: user?.email,
           emailVerified: user?.emailVerified,
+          roles,
           googleLinked,
           displayName: user?.displayName,
           firstName: user?.firstName,

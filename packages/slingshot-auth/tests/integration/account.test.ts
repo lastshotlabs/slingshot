@@ -109,6 +109,22 @@ describe('GET /auth/me', () => {
     expect(body.email).toBe(EMAIL);
     expect(body.emailVerified).toBe(false);
     expect(body.userMetadata).toEqual({});
+    // A user with no assignments still reports an (empty) roles array so
+    // role-gated clients can read it unconditionally.
+    expect(body.roles).toEqual([]);
+  });
+
+  test('returns the user\'s effective roles', async () => {
+    const { token, userId } = await seedAndLogin(app, runtime);
+    await runtime.adapter.addRole?.(userId, 'admin');
+
+    const res = await app.request('/auth/me', {
+      headers: { 'x-user-token': token },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.roles).toContain('admin');
   });
 
   test('returns 401 without token', async () => {

@@ -19,10 +19,15 @@
 import { GitHub, Google, Spotify } from 'arctic';
 import type { OAuth2Tokens } from 'arctic';
 import type { Context } from 'hono';
-import { generateCodeVerifier, generateState, userAuth } from '@lastshotlabs/slingshot-auth';
+import {
+  generateCodeVerifier,
+  generateState,
+  userAuth,
+  verifyToken,
+} from '@lastshotlabs/slingshot-auth';
 import type { AuthRuntimeContext, ProviderConnection } from '@lastshotlabs/slingshot-auth';
 import type { ProviderConnectionStore } from '@lastshotlabs/slingshot-auth';
-import { createRouter, errorResponse, getActor } from '@lastshotlabs/slingshot-core';
+import { createRouter, errorResponse, getActor, timingSafeEqual } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -313,6 +318,43 @@ function requireUser(c: Context<AppEnv>): string | null {
 }
 
 /**
+ * Resolve the initiating user from a `?token=` query-string session token.
+ *
+ * The connection START route is reached by a TOP-LEVEL browser navigation
+ * (`window.location = '/auth/connections/<provider>/start'`), which cannot send
+ * the `x-user-token` header a SPA (localStorage-token) app authenticates with —
+ * and a guest session sets no cookie either. So `identify` sees an anonymous
+ * actor and the route would 401 with a raw JSON body, stranding the user on an
+ * unstyled error page (never reaching the provider's consent screen).
+ *
+ * This accepts the session token on the query string for exactly that hop — the
+ * same transport the WebSocket endpoint already uses (`/game?token=…`). It is an
+ * explicit, per-route opt-in on a route DESIGNED to be entered by navigation; it
+ * does NOT loosen `identify` globally (which would expose every route to a
+ * token-in-URL / CSRF vector). The token is verified exactly as `identify` does:
+ * signature + expiry, a `sid` claim, and a timing-safe match against the stored
+ * session so a superseded (logged-out / rotated) token is rejected.
+ */
+async function resolveUserFromQueryToken(
+  c: Context<AppEnv>,
+  runtime: AuthRuntimeContext,
+): Promise<string | null> {
+  const token = c.req.query('token');
+  if (!token) return null;
+  try {
+    const payload = await verifyToken(token, runtime.config, runtime.signing ?? null);
+    const sessionId = payload.sid as string | undefined;
+    const sub = payload.sub;
+    if (!sessionId || !sub) return null;
+    const stored = await runtime.repos.session.getSession(sessionId, runtime.config);
+    if (!timingSafeEqual(stored ?? '', token)) return null;
+    return sub;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Builds the connections router. Mounted by `createOAuthPlugin` only when a
  * `connections` option is configured.
  */
@@ -354,8 +396,12 @@ export function createConnectionsRouter(
     return c.json({ connections: connections.map(toSummary) });
   });
 
-  router.get('/auth/connections/:provider/start', userAuth, async c => {
-    const userId = requireUser(c);
+  // NOTE: deliberately NOT behind `userAuth` — this route is entered by a
+  // top-level browser navigation that cannot carry the `x-user-token` header,
+  // so it resolves the user from the identified actor (cookie mode) OR a
+  // `?token=` query param (SPA/guest token mode). See resolveUserFromQueryToken.
+  router.get('/auth/connections/:provider/start', async c => {
+    const userId = requireUser(c) ?? (await resolveUserFromQueryToken(c, runtime));
     if (!userId) return errorResponse(c, 'Authenticated user required', 401);
     const provider = c.req.param('provider');
     const client = clients.get(provider);

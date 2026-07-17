@@ -42,6 +42,17 @@ describe('main package exports', () => {
     expect(typeof mod.getSession).toBe('function');
     expect(typeof mod.deleteSession).toBe('function');
   });
+
+  test('audited role helpers are exported', async () => {
+    const mod = await import('@lastshotlabs/slingshot-auth');
+    expect(typeof mod.setUserRoles).toBe('function');
+    expect(typeof mod.addUserRole).toBe('function');
+    expect(typeof mod.removeUserRole).toBe('function');
+    expect(typeof mod.getTenantRoles).toBe('function');
+    expect(typeof mod.setTenantRoles).toBe('function');
+    expect(typeof mod.addTenantRole).toBe('function');
+    expect(typeof mod.removeTenantRole).toBe('function');
+  });
 });
 
 describe('main package — intentionally NOT exported', () => {

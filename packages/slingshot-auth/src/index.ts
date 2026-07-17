@@ -37,6 +37,16 @@ export type {
 // Session / JWT
 /** Sign and verify Slingshot auth JWTs using the configured signing policy. */
 export { signToken, verifyToken } from './lib/jwt';
+/** Audited helpers for app-level and tenant-scoped role management. */
+export {
+  addTenantRole,
+  addUserRole,
+  getTenantRoles,
+  removeTenantRole,
+  removeUserRole,
+  setTenantRoles,
+  setUserRoles,
+} from './lib/roles';
 /** Session repository helpers and adapters used by Slingshot auth runtime flows. */
 export {
   createSession,

@@ -10,6 +10,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
+import { HttpError } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -26,6 +27,23 @@ import {
 import { resolveListFilter } from './listFilter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
 import { buildSqliteOperations } from './sqliteOperationWiring';
+
+/**
+ * Detect a SQLite UNIQUE/PRIMARY KEY constraint failure across drivers.
+ *
+ * `better-sqlite3` exposes a `.code` like `SQLITE_CONSTRAINT_UNIQUE` /
+ * `SQLITE_CONSTRAINT_PRIMARYKEY`; `bun:sqlite` throws a plain `Error` whose
+ * message reads `UNIQUE constraint failed: table.column` (or `... constraint
+ * failed`). Match either so the caller can translate to a 409 regardless of
+ * which runtime is backing the adapter.
+ */
+function isSqliteUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT')) return true;
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' && /constraint failed/i.test(message);
+}
 
 function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
   let inTransaction = false;
@@ -218,10 +236,24 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       const placeholders = columns.map(() => '?').join(', ');
       const values = columns.map(c => row[c]);
 
-      db.run(
-        `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
-        values,
-      );
+      // Plain INSERT — NOT `INSERT OR REPLACE`. `OR REPLACE` silently DELETEs any
+      // row conflicting on the primary key OR any unique index and inserts the new
+      // one in its place, orphaning children that referenced the deleted row. A
+      // uniqueness conflict must FAIL, matching the memory adapter; explicit
+      // replacement belongs in a dedicated upsert operation, not the create path.
+      try {
+        db.run(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`, values);
+      } catch (error) {
+        // Reject (not sync-throw) so the contract matches the memory adapter,
+        // which returns `Promise.reject(new HttpError(409, …))` on the same
+        // conflict — callers can rely on a rejected promise from every adapter.
+        if (isSqliteUniqueViolation(error)) {
+          return Promise.reject(
+            new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION'),
+          );
+        }
+        return Promise.reject(error);
+      }
 
       return Promise.resolve({ ...record } as unknown as Entity);
     },
@@ -296,12 +328,18 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       const setClauses = entries.map(([col]) => `${col} = ?`).join(', ');
       const values = [...entries.map(([, v]) => v), ...checkParams];
 
-      db.run(`UPDATE ${table} SET ${setClauses} ${where}`, values);
+      const result = db.run(`UPDATE ${table} SET ${setClauses} ${where}`, values);
+      // The guarded UPDATE is the source of truth: zero rows changed means the
+      // CAS guard lost (the row no longer matched `where`), so return null.
+      if (result.changes === 0) return Promise.resolve(null);
 
-      // Read back the updated record
+      // Read back by PRIMARY KEY, never by the guard `where`. If the update
+      // changed a guarded column (e.g. a CAS `version` bump), re-selecting with
+      // the original filter would miss the just-updated row and return null —
+      // indistinguishable from a guard failure. The UPDATE already succeeded.
       const updated = db
-        .query<Record<string, unknown>>(`SELECT * FROM ${table} ${where}`)
-        .get(...checkParams);
+        .query<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${pkColumn} = ?`)
+        .get(id);
       if (!updated) return Promise.resolve(null);
       return Promise.resolve(fromSqliteRow(updated, config.fields) as Entity);
     },

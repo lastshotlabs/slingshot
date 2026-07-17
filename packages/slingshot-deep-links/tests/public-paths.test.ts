@@ -8,7 +8,14 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { InProcessAdapter, attachContext, isPublicPath } from '@lastshotlabs/slingshot-core';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import {
+  InProcessAdapter,
+  attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  isPublicPath,
+} from '@lastshotlabs/slingshot-core';
 import { createDeepLinksPlugin } from '../src/plugin';
 import { ANDROID_ASSETLINKS_PATH, APPLE_AASA_PATH } from '../src/routes';
 
@@ -30,12 +37,13 @@ const ANDROID = {
  * that blocks all routes lacking a valid `Authorization` header, except those
  * declared in `ctx.publicPaths`.
  */
-function bootWithAuthGuard(): Hono {
+function bootWithAuthGuard(): Hono<AppEnv> {
   const plugin = createDeepLinksPlugin({ apple: APPLE, android: ANDROID });
   const publicPaths = new Set(plugin.publicPaths ?? []);
 
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({ definitions: createEventDefinitionRegistry(), bus });
 
   attachContext(app, {
     app,
@@ -64,9 +72,9 @@ function bootWithAuthGuard(): Hono {
 
   const emptyConfigRaw = {};
   const emptyConfig = emptyConfigRaw as unknown as never;
-  plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
-  plugin.setupRoutes?.({ app, config: emptyConfig, bus });
-  plugin.setupPost?.({ app, config: emptyConfig, bus });
+  plugin.setupMiddleware?.({ app, config: emptyConfig, bus, events });
+  plugin.setupRoutes?.({ app, config: emptyConfig, bus, events });
+  plugin.setupPost?.({ app, config: emptyConfig, bus, events });
 
   return app;
 }

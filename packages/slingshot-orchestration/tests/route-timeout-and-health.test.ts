@@ -7,7 +7,7 @@ import {
 } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationRouter } from '../src/routes';
 
-const minimalAdapter = (): OrchestrationAdapter => ({
+const minimalAdapter = (): OrchestrationAdapter & { supports(cap: string): boolean } => ({
   registerTask() {},
   registerWorkflow() {},
   async runTask() {
@@ -19,7 +19,9 @@ const minimalAdapter = (): OrchestrationAdapter => ({
   async getRun() {
     return null;
   },
-  async cancelRun() {},
+  async cancelRun() {
+    return undefined;
+  },
   async listRuns() {
     return { runs: [], total: 0 };
   },
@@ -43,7 +45,7 @@ function buildHangingRuntime(): OrchestrationRuntime {
     unschedule: async () => undefined,
     listSchedules: async () => [],
     onProgress: () => () => undefined,
-    supports: cap => cap === 'observability',
+    supports: (cap: string) => cap === 'observability',
     adapter,
   } as unknown as OrchestrationRuntime;
 }

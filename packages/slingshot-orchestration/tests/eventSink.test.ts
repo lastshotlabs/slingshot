@@ -99,8 +99,8 @@ describe('createSlingshotEventSink', () => {
     const startedEvents: unknown[] = [];
     const completedEvents: unknown[] = [];
 
-    bus.on('orchestration.task.started', p => startedEvents.push(p));
-    bus.on('orchestration.task.completed', p => completedEvents.push(p));
+    bus.on('orchestration.task.started', p => void startedEvents.push(p));
+    bus.on('orchestration.task.completed', p => void completedEvents.push(p));
 
     const sink = createSlingshotEventSink(bus);
     sink.emit('orchestration.task.started', { runId: 'r1', task: 't1', input: {} });

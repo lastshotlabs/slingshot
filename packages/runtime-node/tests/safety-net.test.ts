@@ -101,15 +101,11 @@ describe('installProcessSafetyNet — handler behavior', () => {
 });
 
 describe('fetch error callback failure (P-NODE-4)', () => {
-  let server: ReturnType<typeof nodeRuntime> extends {
-    server: { listen: (opts: unknown) => Promise<infer R> };
-  }
-    ? R
-    : never;
+  let server: Awaited<ReturnType<ReturnType<typeof nodeRuntime>['server']['listen']>>;
 
   afterEach(async () => {
     if (server) {
-      await (server as { stop: (force: boolean) => Promise<void> }).stop(true).catch(() => {});
+      await server.stop(true).catch(() => {});
       server = undefined as unknown as typeof server;
     }
     configureRuntimeNodeLogger(null);

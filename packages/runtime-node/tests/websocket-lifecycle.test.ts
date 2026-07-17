@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WebSocket as WsClient } from 'ws';
-import type { RuntimeServerInstance } from '@lastshotlabs/slingshot-core';
+import type { NodeRuntimeServerInstance } from '../src/index';
 import { nodeRuntime } from '../src/index';
 
 /**
@@ -96,7 +96,7 @@ async function expectNoMessage(nextMessage: () => Promise<string>, ms = 300): Pr
 const ALREADY_SENT = new Response(null, { headers: { 'x-hono-already-sent': 'true' } });
 
 describe('runtime-node WebSocket lifecycle', () => {
-  let server: RuntimeServerInstance | null = null;
+  let server: NodeRuntimeServerInstance | null = null;
 
   afterEach(async () => {
     if (server) {
@@ -111,7 +111,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('publishToSelf: true includes the sender', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -122,7 +122,9 @@ describe('runtime-node WebSocket lifecycle', () => {
           ws.send('ready');
         },
         message(ws, msg) {
-          server.publish('self-chat', `broadcast:${msg}`);
+          // Non-null: the message callback only fires after listen() resolved
+          // and `server` was assigned.
+          server!.publish('self-chat', `broadcast:${msg}`);
         },
         close() {},
       },
@@ -156,7 +158,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('subscribing to multiple channels receives publishes on all', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -202,7 +204,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('multiple clients on same channel all receive the message', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -249,7 +251,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('disconnecting a client removes it from all channels', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -328,7 +330,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('large message can be sent and received over WebSocket', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -372,7 +374,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('open handler fires with data payload from upgrade', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
     let receivedData: unknown;
 
     server = await runtime.server.listen({
@@ -413,7 +415,7 @@ describe('runtime-node WebSocket lifecycle', () => {
 
   test('pong handler fires when client responds to server ping', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
     let serverWs: import('@lastshotlabs/slingshot-core').RuntimeWebSocket | null = null;
     let pongReceived = false;
 

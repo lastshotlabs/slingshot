@@ -16,6 +16,7 @@ import type {
   OrchestrationRuntime,
   Run,
   RunFilter,
+  RunStatus,
 } from '@lastshotlabs/slingshot-orchestration-engine';
 import { createOrchestrationRouter } from '../src/routes';
 
@@ -31,7 +32,6 @@ function makeFakeRun(id: string): Run {
     status: 'pending' as const,
     input: {},
     createdAt: new Date(),
-    updatedAt: new Date(),
   };
 }
 
@@ -243,7 +243,14 @@ describe('P-OPLUGIN-5 — pagination parameter parsing', () => {
   });
 
   test('all valid RunStatus values are accepted', async () => {
-    const validStatuses = ['pending', 'running', 'completed', 'failed', 'cancelled', 'skipped'];
+    const validStatuses: RunStatus[] = [
+      'pending',
+      'running',
+      'completed',
+      'failed',
+      'cancelled',
+      'skipped',
+    ];
     for (const status of validStatuses) {
       let captured: RunFilter | undefined;
       const { runtime } = makeSpyRuntime(async filter => {

@@ -42,11 +42,11 @@ const ROOT_EXPORTS = [
 const TESTING_EXPORTS = ['createTestFullServer'] as const;
 
 describe('public API surface', () => {
-  test.each(ROOT_EXPORTS)('@lastshotlabs/slingshot exports %s', name => {
+  test.each([...ROOT_EXPORTS])('@lastshotlabs/slingshot exports %s', name => {
     expect(slingshot[name as keyof typeof slingshot]).toBeDefined();
   });
 
-  test.each(TESTING_EXPORTS)('@lastshotlabs/slingshot/testing exports %s', name => {
+  test.each([...TESTING_EXPORTS])('@lastshotlabs/slingshot/testing exports %s', name => {
     expect(testing[name as keyof typeof testing]).toBeDefined();
   });
 });

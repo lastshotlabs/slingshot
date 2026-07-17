@@ -214,12 +214,11 @@ Two traps a reasoning model sets, both live in `openaiCompatible`:
   three collapsed onto one key, landed on one machine, and evicted each other.
 
   Hence **two keys, and they are not interchangeable** (`RenderedSystem`):
-
-    - `promptCacheKey` — the prefix's IDENTITY, from segment **ids**. Stays stable
-      when the text changes, which is the only reason `checkDrift` can notice that
-      it changed. Never goes on the wire.
-    - `promptCacheRouteKey` — the prefix's CONTENT. Distinct bytes route
-      distinctly. This is what the transport gets.
+  - `promptCacheKey` — the prefix's IDENTITY, from segment **ids**. Stays stable
+    when the text changes, which is the only reason `checkDrift` can notice that
+    it changed. Never goes on the wire.
+  - `promptCacheRouteKey` — the prefix's CONTENT. Distinct bytes route
+    distinctly. This is what the transport gets.
 
   Measured on xAI, hotseat's 4,955-token prefix, per call:
 

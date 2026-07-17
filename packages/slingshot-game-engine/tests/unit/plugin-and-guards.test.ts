@@ -196,7 +196,7 @@ describe('adapter query and cleanup helpers', () => {
   test('starts and stops the cleanup timer and reports query failures', async () => {
     const intervalSpy = spyOn(globalThis, 'setInterval').mockImplementation((() => {
       return 123 as unknown as ReturnType<typeof setInterval>;
-    }) as typeof globalThis.setInterval);
+    }) as unknown as typeof globalThis.setInterval);
     const clearSpy = spyOn(globalThis, 'clearInterval').mockImplementation(() => {});
 
     const state = createCleanupState({ sweepInterval: 500 });

@@ -244,5 +244,12 @@ export function renderSystem(options: {
     blocks.push({ text: segment.text, cache: false });
   }
 
-  return { blocks, degradations, promptCacheKey, promptCacheRouteKey, breakpointEmitted, stableTokens };
+  return {
+    blocks,
+    degradations,
+    promptCacheKey,
+    promptCacheRouteKey,
+    breakpointEmitted,
+    stableTokens,
+  };
 }

@@ -1,12 +1,29 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { type Mock, afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
 import { createGifsPlugin } from '../src/plugin';
 import { createGiphyProvider } from '../src/providers/giphy';
 import { createTenorProvider } from '../src/providers/tenor';
 import { gifsPluginConfigSchema } from '../src/types';
 
-let fetchSpy: ReturnType<typeof spyOn> | null = null;
+function createTestBusAndEvents() {
+  const bus = createInProcessAdapter();
+  return {
+    bus,
+    events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus }),
+  };
+}
+
+let fetchSpy: { mockRestore: () => void } | null = null;
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+function spyOnFetch() {
+  return spyOn(globalThis, 'fetch') as unknown as Mock<FetchLike>;
+}
 
 afterEach(() => {
   fetchSpy?.mockRestore();
@@ -19,7 +36,7 @@ afterEach(() => {
 
 describe('slingshot-gifs empty upstream responses', () => {
   test('giphy trending returns empty array when upstream returns no data', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -33,7 +50,7 @@ describe('slingshot-gifs empty upstream responses', () => {
   });
 
   test('tenor search returns empty array when upstream returns no results', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(JSON.stringify({ results: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -53,7 +70,7 @@ describe('slingshot-gifs empty upstream responses', () => {
 
 describe('slingshot-gifs malformed upstream responses', () => {
   test('giphy trending throws on non-JSON response body', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response('this is not json', {
         status: 200,
         headers: { 'content-type': 'text/plain' },
@@ -66,7 +83,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
   });
 
   test('tenor search throws on non-JSON response body', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response('<html>bad</html>', {
         status: 200,
         headers: { 'content-type': 'text/html' },
@@ -79,7 +96,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
   });
 
   test('giphy search throws when data field is missing', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(JSON.stringify({ results: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -94,7 +111,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
   });
 
   test('tenor trending throws when results field is missing', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -109,7 +126,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
   });
 
   test('giphy throws when a data item is missing required fields', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           data: [{ id: 'gif-1' }],
@@ -129,7 +146,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
   });
 
   test('tenor throws when a result item is missing media_formats', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           results: [
@@ -160,7 +177,7 @@ describe('slingshot-gifs malformed upstream responses', () => {
 
 describe('slingshot-gifs fetch timeout', () => {
   test('giphy throws a timeout error when fetch takes too long', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(
+    fetchSpy = spyOnFetch().mockImplementationOnce(
       (_input: string | URL | Request, init?: RequestInit) => {
         return new Promise((_resolve, reject) => {
           // Simulate the AbortController aborting the fetch
@@ -182,7 +199,7 @@ describe('slingshot-gifs fetch timeout', () => {
   });
 
   test('tenor throws a timeout error when fetch takes too long', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(
+    fetchSpy = spyOnFetch().mockImplementationOnce(
       (_input: string | URL | Request, init?: RequestInit) => {
         return new Promise((_resolve, reject) => {
           if (init?.signal) {
@@ -261,7 +278,7 @@ describe('slingshot-gifs default config', () => {
 
 describe('slingshot-gifs tenor trending route', () => {
   test('tenor trending route returns normalized results', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           results: [
@@ -299,7 +316,7 @@ describe('slingshot-gifs tenor trending route', () => {
     await plugin.setupRoutes?.({
       app: app as never,
       config: emptyConfig,
-      bus: createInProcessAdapter(),
+      ...createTestBusAndEvents(),
     });
 
     const response = await app.request('/gifs/trending');
@@ -320,7 +337,7 @@ describe('slingshot-gifs tenor trending route', () => {
   });
 
   test('tenor trending route with offset works through the route', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async input => {
+    fetchSpy = spyOnFetch().mockImplementationOnce(async input => {
       const url = new URL(String(input));
       expect(url.searchParams.get('pos')).toBe('5');
 
@@ -341,7 +358,7 @@ describe('slingshot-gifs tenor trending route', () => {
     await plugin.setupRoutes?.({
       app: app as never,
       config: emptyConfig,
-      bus: createInProcessAdapter(),
+      ...createTestBusAndEvents(),
     });
 
     const response = await app.request('/gifs/trending?offset=5');
@@ -362,7 +379,7 @@ describe('slingshot-gifs tenor trending route', () => {
     await plugin.setupRoutes?.({
       app: app as never,
       config: emptyConfig,
-      bus: createInProcessAdapter(),
+      ...createTestBusAndEvents(),
     });
 
     const response = await app.request('/gifs/trending?offset=-1');

@@ -13,7 +13,13 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { InProcessAdapter, attachContext } from '@lastshotlabs/slingshot-core';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import {
+  InProcessAdapter,
+  attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+} from '@lastshotlabs/slingshot-core';
 import type { DeepLinksConfigInput } from '../src/config';
 import { createDeepLinksPlugin } from '../src/plugin';
 
@@ -22,11 +28,12 @@ import { createDeepLinksPlugin } from '../src/plugin';
  * config blob (as you'd get from JSON.parse of an app config), pass
  * it to createDeepLinksPlugin, and wire up the plugin.
  */
-function bootFromManifestJson(configJson: string): Hono {
+function bootFromManifestJson(configJson: string): Hono<AppEnv> {
   const parsed = JSON.parse(configJson) as DeepLinksConfigInput;
 
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({ definitions: createEventDefinitionRegistry(), bus });
 
   attachContext(app, {
     app,
@@ -40,9 +47,9 @@ function bootFromManifestJson(configJson: string): Hono {
   const emptyConfigRaw = {};
   const emptyConfig = emptyConfigRaw as unknown as never;
   const plugin = createDeepLinksPlugin(parsed);
-  plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
-  plugin.setupRoutes?.({ app, config: emptyConfig, bus });
-  plugin.setupPost?.({ app, config: emptyConfig, bus });
+  plugin.setupMiddleware?.({ app, config: emptyConfig, bus, events });
+  plugin.setupRoutes?.({ app, config: emptyConfig, bus, events });
+  plugin.setupPost?.({ app, config: emptyConfig, bus, events });
 
   return app;
 }

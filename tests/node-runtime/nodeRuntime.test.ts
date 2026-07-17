@@ -367,11 +367,7 @@ describe('RuntimeGlob (fast-glob)', () => {
     await writeFile(join(tmpDir, 'sub', 'd.ts'), '');
 
     const results = await runtime.glob.scan('**/*.ts', { cwd: tmpDir });
-    const sorted: string[] = Array.isArray(results) ? [...results].sort() : [];
-    if (!Array.isArray(results)) {
-      for await (const f of results) sorted.push(f);
-      sorted.sort();
-    }
+    const sorted: string[] = [...results].sort();
     expect(sorted).toContain('a.ts');
     expect(sorted).toContain('b.ts');
     expect(sorted).toContain('sub/d.ts');

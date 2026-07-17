@@ -90,7 +90,7 @@ function makeWsContext(actorId = 'host-user') {
     ctx: {
       actorId,
       socketId: 'socket-1',
-      payload: null,
+      payload: null as unknown,
       ack(data: unknown) {
         acknowledgements.push(data);
       },

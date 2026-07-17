@@ -1,4 +1,4 @@
-// packages/slingshot-chat/src/entities/message-reaction.ts
+// packages/slingshot-chat/src/entities/messageReaction.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 

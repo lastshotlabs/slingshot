@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -107,15 +108,15 @@ describe('createBullMQAdapter — queue closure', () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'q1' });
     bus.on('auth:logout' as any, async () => {}, { durable: true, name: 'q2' });
-    await bus.shutdown();
+    await shutdownBus(bus);
     expect(fakeBullMQState.queues.every(q => q.closed)).toBe(true);
   });
 
   test('queue close is idempotent — calling shutdown twice does not throw', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'q1' });
-    await bus.shutdown();
-    await expect(bus.shutdown()).resolves.toBeUndefined();
+    await shutdownBus(bus);
+    await expect(shutdownBus(bus)).resolves.toBeUndefined();
   });
 
   test('queue is not closed before shutdown', () => {

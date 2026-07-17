@@ -125,9 +125,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       // NOT NULL without default) are stripped, matching the generated-code
       // path in `generators/sqlite.ts`.
       const existingCols = new Set(
-        (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
-          row => row.name,
-        ),
+        (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(row => row.name),
       );
       for (const [name, def] of Object.entries(config.fields)) {
         const col = toSnakeCase(name);

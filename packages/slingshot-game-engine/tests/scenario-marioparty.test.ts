@@ -260,7 +260,10 @@ describe('Mario Party-style scenario', () => {
 
     test('onGameStart can cancel the start', async () => {
       const hooks: GameLifecycleHooks = {
-        onGameStart: async () => ({ cancel: true, reason: 'Not enough stars' }),
+        onGameStart: (async () => ({
+          cancel: true as const,
+          reason: 'Not enough stars',
+        })) as unknown as GameLifecycleHooks['onGameStart'],
       };
 
       const result = await invokeOnGameStart(hooks, makeMockCtx(), () => {});
@@ -319,7 +322,7 @@ describe('Mario Party-style scenario', () => {
       };
 
       await invokeOnGameEnd(hooks, makeMockCtx(), winResult, () => {});
-      expect(receivedResult).toEqual(winResult);
+      expect(receivedResult as WinResult | null).toEqual(winResult);
     });
 
     test('onTurnStart and onTurnEnd receive userId', async () => {
@@ -349,7 +352,11 @@ describe('Mario Party-style scenario', () => {
       };
 
       await invokeOnInput(hooks, makeMockCtx(), 'roll', 'p1', { value: 6 }, () => {});
-      expect(received).toEqual({ channel: 'roll', userId: 'p1', data: { value: 6 } });
+      expect(received as { channel: string; userId: string; data: unknown } | null).toEqual({
+        channel: 'roll',
+        userId: 'p1',
+        data: { value: 6 },
+      });
     });
 
     test('onAllPlayersDisconnected defaults to NOT abandon (transient all-disconnected)', async () => {

@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
+  type AppEnv,
   InProcessAdapter,
   PERMISSIONS_STATE_KEY,
   type PermissionsState,
@@ -169,14 +170,14 @@ const MANIFEST_JSON = JSON.stringify({
 // ---------------------------------------------------------------------------
 
 interface Harness {
-  app: Hono;
+  app: Hono<AppEnv>;
   bus: InProcessAdapter;
 }
 
 async function bootFromManifest(): Promise<Harness> {
   const config = JSON.parse(MANIFEST_JSON) as unknown;
 
-  const app = new Hono<import('@lastshotlabs/slingshot-core').AppEnv>();
+  const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
   const events = createEventPublisher({
     definitions: createEventDefinitionRegistry(),
@@ -467,7 +468,7 @@ describe('Config validation', () => {
     const minimalConfig = JSON.parse(JSON.stringify({ handlers: {} })) as unknown;
     const { getContext } = await import('@lastshotlabs/slingshot-core');
 
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     const bus = new InProcessAdapter();
     const events = createEventPublisher({
       definitions: createEventDefinitionRegistry(),

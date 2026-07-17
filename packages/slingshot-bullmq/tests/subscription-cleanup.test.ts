@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -23,7 +24,9 @@ describe('createBullMQAdapter — listener lifecycle', () => {
   test('on() with same listener registered twice fires twice per emit', () => {
     const bus = createBullMQAdapter({ connection: {} });
     let callCount = 0;
-    const fn = () => callCount++;
+    const fn = () => {
+      callCount++;
+    };
     bus.on('auth:login' as any, fn);
     bus.on('auth:login' as any, fn);
     bus.emit('auth:login' as any, {} as any);
@@ -33,9 +36,15 @@ describe('createBullMQAdapter — listener lifecycle', () => {
   test('off() removes only the specified listener, not others', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: number[] = [];
-    const fn1 = () => calls.push(1);
-    const fn2 = () => calls.push(2);
-    const fn3 = () => calls.push(3);
+    const fn1 = () => {
+      calls.push(1);
+    };
+    const fn2 = () => {
+      calls.push(2);
+    };
+    const fn3 = () => {
+      calls.push(3);
+    };
     bus.on('auth:login' as any, fn1);
     bus.on('auth:login' as any, fn2);
     bus.on('auth:login' as any, fn3);
@@ -48,9 +57,13 @@ describe('createBullMQAdapter — listener lifecycle', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const loginCalls: number[] = [];
     const logoutCalls: number[] = [];
-    const fn = () => loginCalls.push(1);
+    const fn = () => {
+      loginCalls.push(1);
+    };
     bus.on('auth:login' as any, fn);
-    bus.on('auth:logout' as any, () => logoutCalls.push(1));
+    bus.on('auth:logout' as any, () => {
+      logoutCalls.push(1);
+    });
     bus.off('auth:login' as any, fn);
     bus.emit('auth:login' as any, {} as any);
     bus.emit('auth:logout' as any, {} as any);
@@ -61,9 +74,13 @@ describe('createBullMQAdapter — listener lifecycle', () => {
   test('shutdown clears all non-durable listeners', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    bus.on('auth:login' as any, () => calls.push(true));
-    bus.on('auth:logout' as any, () => calls.push(true));
-    await bus.shutdown();
+    bus.on('auth:login' as any, () => {
+      calls.push(true);
+    });
+    bus.on('auth:logout' as any, () => {
+      calls.push(true);
+    });
+    await shutdownBus(bus);
     bus.emit('auth:login' as any, {} as any);
     bus.emit('auth:logout' as any, {} as any);
     expect(calls).toHaveLength(0);
@@ -71,9 +88,11 @@ describe('createBullMQAdapter — listener lifecycle', () => {
 
   test('registering listener after shutdown still results in no-op emit', async () => {
     const bus = createBullMQAdapter({ connection: {} });
-    await bus.shutdown();
+    await shutdownBus(bus);
     const calls: unknown[] = [];
-    bus.on('auth:login' as any, () => calls.push(true));
+    bus.on('auth:login' as any, () => {
+      calls.push(true);
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(calls).toHaveLength(0);
   });

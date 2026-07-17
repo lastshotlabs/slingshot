@@ -70,7 +70,12 @@ function stubCtx(overrides: Partial<ReadonlyHandlerContext> = {}): ReadonlyHandl
     getChannelInputs: () => new Map(),
     getTimeRemaining: () => 0,
     getPhaseEndsAt: () => 0,
-    random: { next: () => 0, nextInt: () => 0, nextFloat: () => 0, shuffle: <T>(a: T[]) => a },
+    random: {
+      next: () => 0,
+      nextInt: () => 0,
+      nextFloat: () => 0,
+      shuffle: <T>(a: T[]) => a,
+    } as unknown as ReadonlyHandlerContext['random'],
     getScheduledEvents: () => [],
     log: { debug() {}, info() {}, warn() {}, error() {} },
     ...overrides,

@@ -1347,8 +1347,18 @@ export function createKafkaConnectors(
           };
           inboundRuntimes.push(runtime);
           await consumer.connect();
+          // Exactly one of topic/topicPattern is enforced by config validation
+          // at startup; the throw here keeps that invariant local.
+          const subscribeTopic =
+            config.topic ??
+            (config.topicPattern !== undefined ? new RegExp(config.topicPattern) : undefined);
+          if (subscribeTopic === undefined) {
+            throw new Error(
+              `[slingshot-kafka-connectors] inbound "${config.groupId}": neither "topic" nor "topicPattern" is set`,
+            );
+          }
           await consumer.subscribe({
-            topic: config.topic ?? new RegExp(config.topicPattern!),
+            topic: subscribeTopic,
             fromBeginning: config.fromBeginning ?? false,
           });
 
@@ -1709,7 +1719,7 @@ export function createKafkaConnectors(
           runtime.listener = listener;
           outboundRuntimes.push(runtime);
           if (config.durable) {
-            bus.onEnvelope(config.event, listener, { durable: true, name: config.name! });
+            bus.onEnvelope(config.event, listener, { durable: true, name: config.name });
           } else {
             bus.onEnvelope(config.event, listener);
           }

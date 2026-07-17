@@ -71,7 +71,12 @@ describe('runtime-bun server integration — real HTTP', () => {
       const res = await fetch(`http://127.0.0.1:${port}/search?q=hello`, {
         headers: { 'user-agent': 'test-agent' },
       });
-      const data = await res.json();
+      const data = (await res.json()) as {
+        method: string;
+        path: string;
+        query: string;
+        agent: string;
+      };
       expect(data.method).toBe('GET');
       expect(data.path).toBe('/search');
       expect(data.query).toBe('hello');

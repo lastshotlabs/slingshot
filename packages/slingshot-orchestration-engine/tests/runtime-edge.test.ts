@@ -222,7 +222,9 @@ describe('createOrchestrationRuntime — signal, schedule are wired through to t
       async getRun() {
         return null;
       },
-      async cancelRun() {},
+      async cancelRun() {
+        return undefined;
+      },
       async start() {},
       async shutdown() {},
     };
@@ -267,7 +269,9 @@ describe('createOrchestrationRuntime — onProgress', () => {
       async getRun() {
         return null;
       },
-      async cancelRun() {},
+      async cancelRun() {
+        return undefined;
+      },
       async start() {},
       async shutdown() {},
     };

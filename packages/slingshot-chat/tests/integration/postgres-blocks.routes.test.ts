@@ -44,7 +44,8 @@ class FakeChatRoutePostgresPool {
     if (
       sql.startsWith('CREATE TABLE IF NOT EXISTS') ||
       sql.startsWith('CREATE INDEX IF NOT EXISTS') ||
-      sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS')
+      sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS') ||
+      sql.startsWith(`ALTER TABLE ${BLOCK_TABLE} ADD COLUMN IF NOT EXISTS`)
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }

@@ -3,10 +3,13 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { warnOnPathCollisions } from '../src/collisions';
 import type { DeepLinksConfig } from '../src/config';
 
-const appleConfig: DeepLinksConfig = Object.freeze({
+// Frozen at runtime like compileDeepLinksConfig output; the assertion bridges
+// Object.freeze's Readonly<...> view back to the DeepLinksConfig interface.
+const appleConfig = Object.freeze({
   apple: Object.freeze([
     Object.freeze({
       teamId: 'TEAM123456',
@@ -14,10 +17,10 @@ const appleConfig: DeepLinksConfig = Object.freeze({
       paths: Object.freeze(['/share/*', '/posts/*']),
     }),
   ]),
-});
+}) as DeepLinksConfig;
 
-function makeApp(...routePaths: string[]): Hono {
-  const app = new Hono();
+function makeApp(...routePaths: string[]): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
   for (const path of routePaths) {
     app.get(path, c => c.text('ok'));
   }

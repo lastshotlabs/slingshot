@@ -57,7 +57,7 @@ describe('Temporal workflow implementations', () => {
   test('rejects task workflow when taskManifestMap is null', async () => {
     // Simulate a null/empty manifest map
     await expect(
-      slingshotTaskWorkflowImpl(null as unknown as Record<string, unknown>, {
+      slingshotTaskWorkflowImpl(null as never, {
         taskName: 'some-task',
         input: null,
         runId: 'run-4',
@@ -120,7 +120,7 @@ describe('Temporal workflow implementations', () => {
 
   test('rejects task workflow with undefined manifest', async () => {
     await expect(
-      slingshotTaskWorkflowImpl(undefined as unknown as Record<string, unknown>, {
+      slingshotTaskWorkflowImpl(undefined as never, {
         taskName: 'any',
         input: {},
         runId: 'run-6',

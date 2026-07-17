@@ -1,24 +1,24 @@
 {
   "name": "@lastshotlabs/slingshot-postgres",
   "version": "0.2.0",
-  "description": "Postgres adapter and connection helper for Slingshot auth",
+  "description": "Postgres adapter and connection helper for Slingshot",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
       "bun": "./dist/src/index.js",
-      "import": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
     },
     "./testing": {
       "bun": "./dist/src/testing.js",
-      "import": "./dist/src/testing.js",
-      "types": "./dist/src/testing.d.ts"
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
     },
     "./errors": {
       "bun": "./dist/src/errors.js",
-      "import": "./dist/src/errors.js",
-      "types": "./dist/src/errors.d.ts"
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {

@@ -7,6 +7,7 @@
  */
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -58,15 +59,15 @@ describe('createBullMQAdapter — worker shutdown', () => {
   test('shutdown closes all workers', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w-shutdown' });
-    await bus.shutdown();
+    await shutdownBus(bus);
     expect(fakeBullMQState.workers[0].closed).toBe(true);
   });
 
   test('worker close is idempotent across multiple shutdown calls', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w-idemp' });
-    await bus.shutdown();
-    await bus.shutdown();
+    await shutdownBus(bus);
+    await shutdownBus(bus);
     // Worker was already closed — second shutdown should not throw
     expect(fakeBullMQState.workers[0].closed).toBe(true);
   });
@@ -135,14 +136,26 @@ describe('createBullMQAdapter — concurrent workers', () => {
     const logoutCalls: unknown[] = [];
 
     const bus = createBullMQAdapter({ connection: {} });
-    bus.on('auth:login' as any, async (payload: unknown) => loginCalls.push(payload), {
-      durable: true,
-      name: 'con-w1',
-    });
-    bus.on('auth:logout' as any, async (payload: unknown) => logoutCalls.push(payload), {
-      durable: true,
-      name: 'con-w2',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        loginCalls.push(payload);
+      },
+      {
+        durable: true,
+        name: 'con-w1',
+      },
+    );
+    bus.on(
+      'auth:logout' as any,
+      async (payload: unknown) => {
+        logoutCalls.push(payload);
+      },
+      {
+        durable: true,
+        name: 'con-w2',
+      },
+    );
 
     const loginQueue = fakeBullMQState.queues.find(q => q.name.includes('auth_login'));
     const logoutQueue = fakeBullMQState.queues.find(q => q.name.includes('auth_logout'));

@@ -292,7 +292,10 @@ describe('transferHost', () => {
   test('moves the host role across rows, session, and runtime, and broadcasts', async () => {
     const { activeRuntimes, runtime } = await createHarness();
     const published: Array<Record<string, unknown>> = [];
-    runtime.publish = (_room: string, message: unknown) => {
+    (runtime as unknown as { publish: (room: string, message: unknown) => void }).publish = (
+      _room: string,
+      message: unknown,
+    ) => {
       published.push(message as Record<string, unknown>);
     };
     const { rows, session, adapters } = makeAdapters();

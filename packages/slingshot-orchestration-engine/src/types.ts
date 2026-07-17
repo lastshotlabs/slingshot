@@ -260,6 +260,8 @@ export interface RunProgress {
  */
 export interface RunError {
   message: string;
+  /** Optional error class name (e.g. `Error`, `TimeoutError`) when the producer preserves it. */
+  name?: string;
   stack?: string;
 }
 

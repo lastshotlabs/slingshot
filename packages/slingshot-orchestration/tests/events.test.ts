@@ -67,7 +67,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.task.started', (p: unknown) => received.push(p));
+      bus.on('orchestration.task.started', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.started', {
@@ -86,7 +86,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.task.completed', (p: unknown) => received.push(p));
+      bus.on('orchestration.task.completed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.completed', {
@@ -105,7 +105,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.task.failed', (p: unknown) => received.push(p));
+      bus.on('orchestration.task.failed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.failed', {
@@ -123,7 +123,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.workflow.started', (p: unknown) => received.push(p));
+      bus.on('orchestration.workflow.started', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.workflow.started', {
@@ -141,7 +141,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.workflow.completed', (p: unknown) => received.push(p));
+      bus.on('orchestration.workflow.completed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.workflow.completed', {
@@ -160,7 +160,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.workflow.failed', (p: unknown) => received.push(p));
+      bus.on('orchestration.workflow.failed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.workflow.failed', {
@@ -179,7 +179,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.step.completed', (p: unknown) => received.push(p));
+      bus.on('orchestration.step.completed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.step.completed', {
@@ -198,7 +198,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.step.failed', (p: unknown) => received.push(p));
+      bus.on('orchestration.step.failed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.step.failed', {
@@ -216,7 +216,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.step.skipped', (p: unknown) => received.push(p));
+      bus.on('orchestration.step.skipped', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.step.skipped', {
@@ -233,7 +233,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.task.progress', (p: unknown) => received.push(p));
+      bus.on('orchestration.task.progress', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.progress', {
@@ -250,7 +250,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.workflow.hookError', (p: unknown) => received.push(p));
+      bus.on('orchestration.workflow.hookError', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.workflow.hookError', {
@@ -268,7 +268,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.task.postReturnError', (p: unknown) => received.push(p));
+      bus.on('orchestration.task.postReturnError', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.postReturnError', {
@@ -285,7 +285,7 @@ describe('createSlingshotEventSink', () => {
       const bus = createInProcessAdapter();
       const received: unknown[] = [];
 
-      bus.on('orchestration.bullmq.snapshotMalformed', (p: unknown) => received.push(p));
+      bus.on('orchestration.bullmq.snapshotMalformed', (p: unknown) => void received.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.bullmq.snapshotMalformed', {
@@ -306,9 +306,9 @@ describe('createSlingshotEventSink', () => {
       const completed: unknown[] = [];
       const failed: unknown[] = [];
 
-      bus.on('orchestration.task.started', (p: unknown) => started.push(p));
-      bus.on('orchestration.task.completed', (p: unknown) => completed.push(p));
-      bus.on('orchestration.task.failed', (p: unknown) => failed.push(p));
+      bus.on('orchestration.task.started', (p: unknown) => void started.push(p));
+      bus.on('orchestration.task.completed', (p: unknown) => void completed.push(p));
+      bus.on('orchestration.task.failed', (p: unknown) => void failed.push(p));
 
       const sink = createSlingshotEventSink(bus);
       sink.emit('orchestration.task.started', { runId: 'r1', task: 't1', input: {} });
@@ -745,7 +745,7 @@ describe('createSlingshotEventSink', () => {
       const captured: unknown[] = [];
 
       const sink = createSlingshotEventSink(bus);
-      sink.subscribe('orchestration.task.started', (p: unknown) => captured.push(p));
+      sink.subscribe('orchestration.task.started', (p: unknown) => void captured.push(p));
 
       sink.dispose();
 
@@ -759,8 +759,9 @@ describe('createSlingshotEventSink', () => {
       const calls: string[] = [];
 
       const sink = createSlingshotEventSink(bus);
-      const unsub = sink.subscribe('orchestration.task.started', (p: unknown) =>
-        calls.push((p as { runId: string }).runId),
+      const unsub = sink.subscribe(
+        'orchestration.task.started',
+        (p: unknown) => void calls.push((p as { runId: string }).runId),
       );
 
       unsub();
@@ -777,8 +778,9 @@ describe('createSlingshotEventSink', () => {
       const calls: string[] = [];
 
       const sink = createSlingshotEventSink(bus);
-      const unsub = sink.subscribe('orchestration.task.started', (p: unknown) =>
-        calls.push((p as { runId: string }).runId),
+      const unsub = sink.subscribe(
+        'orchestration.task.started',
+        (p: unknown) => void calls.push((p as { runId: string }).runId),
       );
 
       unsub();

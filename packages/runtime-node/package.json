@@ -40,9 +40,6 @@
     "test:integration": "bun test tests/integration/",
     "typecheck": "tsc --noEmit"
   },
-  "doc": {
-    "test-split": "Bun test covers everything except SQLite. Tests using better-sqlite3 (a native Node addon incompatible with Bun) live under tests/node-runtime/ and run via vitest (test:vitest). Integration tests under tests/integration/ run under bun test (test:integration)."
-  },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"
   },

@@ -51,8 +51,9 @@ describe('plugin public exports', () => {
   test('exports all type symbols (runtime check via typeof)', () => {
     // Types are erased at runtime, but we can verify the export names are
     // present by checking that index.ts re-exports them without error.
-    expect(typeof pluginExports.ConfigurableOrchestrationPluginOptions).toBe('undefined');
-    expect(typeof pluginExports.OrchestrationPluginOptions).toBe('undefined');
+    const exportsRecord = pluginExports as unknown as Record<string, unknown>;
+    expect(typeof exportsRecord.ConfigurableOrchestrationPluginOptions).toBe('undefined');
+    expect(typeof exportsRecord.OrchestrationPluginOptions).toBe('undefined');
     // All the above are TS-only type exports; verifying they don't throw is the goal.
   });
 });

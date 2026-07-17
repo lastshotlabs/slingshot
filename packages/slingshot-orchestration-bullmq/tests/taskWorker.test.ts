@@ -96,10 +96,10 @@ describe('bullmq task processor error handling', () => {
     await Promise.resolve();
 
     // The default logger emits a JSON line per call. Match by msg field.
-    const calls = consoleErrorSpy.mock.calls.map(args =>
+    const calls = consoleErrorSpy.mock.calls.map((args: unknown[]) =>
       typeof args[0] === 'string' ? args[0] : '',
     );
-    const matched = calls.some(line => {
+    const matched = calls.some((line: string) => {
       try {
         const record = JSON.parse(line) as { msg?: string };
         return record.msg === 'Failed to update job progress';

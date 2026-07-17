@@ -114,7 +114,7 @@ describe('GET /auth/me', () => {
     expect(body.roles).toEqual([]);
   });
 
-  test('returns the user\'s effective roles', async () => {
+  test("returns the user's effective roles", async () => {
     const { token, userId } = await seedAndLogin(app, runtime);
     await runtime.adapter.addRole?.(userId, 'admin');
 

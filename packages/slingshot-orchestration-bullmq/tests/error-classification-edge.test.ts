@@ -51,6 +51,7 @@ describe('ErrorClassification type', () => {
   test('has retryable flag', () => {
     const classification: ErrorClassification = {
       retryable: false,
+      permanent: true,
     };
     expect(classification.retryable).toBe(false);
   });
@@ -58,6 +59,7 @@ describe('ErrorClassification type', () => {
   test('retryable true indicates should retry', () => {
     const classification: ErrorClassification = {
       retryable: true,
+      permanent: false,
     };
     expect(classification.retryable).toBe(true);
   });

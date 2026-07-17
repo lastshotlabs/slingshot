@@ -47,7 +47,8 @@ describe('defineWorkflow — output and outputMapper', () => {
       output: z.object({ allOk: z.boolean() }),
       steps: [step('s1', noopTask)],
       outputMapper(results) {
-        return { allOk: results['s1']?.ok === true };
+        const s1 = results['s1'] as { ok?: boolean } | undefined;
+        return { allOk: s1?.ok === true };
       },
     });
     expect(typeof workflow.outputMapper).toBe('function');
@@ -83,7 +84,7 @@ describe('defineWorkflow — step condition', () => {
       name: 'conditional-wf',
       input: z.object({ skip: z.boolean() }),
       steps: [
-        step('s1', noopTask, {
+        step<{ skip: boolean }>('s1', noopTask, {
           condition: ctx => !ctx.workflowInput.skip,
         }),
       ],

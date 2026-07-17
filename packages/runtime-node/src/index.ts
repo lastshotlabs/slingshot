@@ -20,10 +20,10 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   RuntimeFs,
-  RuntimeGlob,
   RuntimePassword,
   RuntimeServerFactory,
   RuntimeServerInstance,
+  RuntimeServerOptions,
   RuntimeSqliteDatabase,
   RuntimeSqlitePreparedStatement,
   RuntimeSqliteRunResult,
@@ -451,6 +451,45 @@ interface ResolvedNodeRuntimeOptions {
   gracefulUpgradeDrainMs: number;
 }
 
+/**
+ * The server instance returned by the Node runtime's `server.listen()`.
+ *
+ * Narrows the core `RuntimeServerInstance` contract to what the Node
+ * implementation actually provides:
+ * - `stop()` always returns a promise and additionally accepts the richer
+ *   object form `stop({ timeoutMs, closeActiveConnections })` for bounded
+ *   graceful drains.
+ * - `upgrade()` / `publish()` are always available (backed by `ws`).
+ */
+export interface NodeRuntimeServerInstance extends RuntimeServerInstance {
+  stop(opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean }): Promise<void>;
+  upgrade(req: Request, opts: { data: unknown }): boolean;
+  publish(channel: string, message: string): void;
+}
+
+/**
+ * The server factory returned by the Node runtime — `listen()` always resolves
+ * asynchronously to a {@link NodeRuntimeServerInstance}.
+ */
+export interface NodeRuntimeServerFactory extends RuntimeServerFactory {
+  listen(opts: RuntimeServerOptions): Promise<NodeRuntimeServerInstance>;
+}
+
+/**
+ * The runtime returned by {@link nodeRuntime}.
+ *
+ * Narrows the core `SlingshotRuntime` contract to the Node implementation's
+ * concrete behavior: `server.listen()` resolves to a
+ * {@link NodeRuntimeServerInstance} and `glob.scan()` (fast-glob) always
+ * resolves to a `string[]`.
+ */
+export interface NodeSlingshotRuntime extends SlingshotRuntime {
+  readonly server: NodeRuntimeServerFactory;
+  readonly glob: {
+    scan(pattern: string, options?: { cwd?: string }): Promise<string[]>;
+  };
+}
+
 function resolveNodeRuntimeOptions(opts?: NodeRuntimeOptions): ResolvedNodeRuntimeOptions {
   return {
     wsUpgradeTimeoutMs:
@@ -490,9 +529,9 @@ function resolveNodeRuntimeOptions(opts?: NodeRuntimeOptions): ResolvedNodeRunti
  * - `stop({ timeoutMs })` — drain for up to `timeoutMs` ms then force-close any
  *   remaining sockets. Recommended for production deploys behind a load balancer.
  */
-function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServerFactory {
+function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): NodeRuntimeServerFactory {
   return {
-    async listen(opts): Promise<RuntimeServerInstance> {
+    async listen(opts): Promise<NodeRuntimeServerInstance> {
       const { serve, getRequestListener } = await import('@hono/node-server');
 
       // Validate mutually exclusive transport options up-front. `unix` and
@@ -1092,10 +1131,7 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
         get port(): number {
           return port;
         },
-        // Cast retains compatibility with the contract's
-        // `(closeActiveConnections?: boolean) => Promise<void>` while exposing
-        // the richer object-form locally.
-        stop: stop as RuntimeServerInstance['stop'],
+        stop,
         upgrade(req: Request, upgradeOpts: { data: unknown }): boolean {
           if (!wss || !wsHandler) return false;
           const key = req.headers.get('sec-websocket-key');
@@ -1148,7 +1184,7 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
             }
           }
         },
-      } satisfies RuntimeServerInstance;
+      } satisfies NodeRuntimeServerInstance;
     },
   };
 }
@@ -1190,7 +1226,7 @@ function createNodeFs(): RuntimeFs {
 // Glob — fast-glob
 // ---------------------------------------------------------------------------
 
-function createNodeGlob(): RuntimeGlob {
+function createNodeGlob(): NodeSlingshotRuntime['glob'] {
   return {
     async scan(pattern: string, options?: { cwd?: string }): Promise<string[]> {
       const fg = await import('fast-glob');
@@ -1242,7 +1278,7 @@ function createNodeGlob(): RuntimeGlob {
  * logger writes to `console.warn` / `console.error`; production deployments
  * should swap in a logger that forwards to pino/bunyan/OpenTelemetry.
  */
-export function nodeRuntime(options?: NodeRuntimeOptions): SlingshotRuntime {
+export function nodeRuntime(options?: NodeRuntimeOptions): NodeSlingshotRuntime {
   const resolvedRuntimeOpts = resolveNodeRuntimeOptions(options);
   return {
     password: createNodePassword(),

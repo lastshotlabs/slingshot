@@ -1,4 +1,4 @@
-// packages/slingshot-chat/src/entities/read-receipt.ts
+// packages/slingshot-chat/src/entities/readReceipt.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 

@@ -23,7 +23,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { type GameDefinition, defineGame } from '../../src/defineGame';
+import { defineGame } from '../../src/defineGame';
 import { GameErrorCode } from '../../src/errors';
 import { createInMemoryReplayStore } from '../../src/lib/replay';
 import {
@@ -34,8 +34,9 @@ import {
   destroySessionRuntime,
   processInputPipeline,
 } from '../../src/lib/sessionRuntime';
-import { buildIncomingDispatch } from '../../src/ws/incoming';
+import type { GameDefinition } from '../../src/types/models';
 import type { GamePlayerState } from '../../src/types/models';
+import { buildIncomingDispatch } from '../../src/ws/incoming';
 
 const activeRuntimeMaps: Array<Map<string, SessionRuntime>> = [];
 
@@ -220,7 +221,14 @@ describe('the epoch guard in the input pipeline', () => {
     const runtime = await boot(makeGame('epoch-dedup', picks));
     const epochAtSend = runtime.inputEpoch;
 
-    const first = await processInputPipeline(runtime, 'pick', 'host-user', { v: 5 }, 4, epochAtSend);
+    const first = await processInputPipeline(
+      runtime,
+      'pick',
+      'host-user',
+      { v: 5 },
+      4,
+      epochAtSend,
+    );
     expect(first.accepted).toBe(true);
 
     await advancePhase(runtime);
@@ -228,7 +236,14 @@ describe('the epoch guard in the input pipeline', () => {
     // Same connection, same sequence: the resend of an input that WAS applied
     // must report success, not STALE_EPOCH — the client is asking "did it
     // land?", and it did.
-    const resend = await processInputPipeline(runtime, 'pick', 'host-user', { v: 5 }, 4, epochAtSend);
+    const resend = await processInputPipeline(
+      runtime,
+      'pick',
+      'host-user',
+      { v: 5 },
+      4,
+      epochAtSend,
+    );
     expect(resend.accepted).toBe(true);
     expect(picks.length).toBe(1);
   });
@@ -266,7 +281,12 @@ describe('clients can always know the current epoch', () => {
     const acks: unknown[] = [];
     const handlers = buildIncomingDispatch({
       resolveSession: async () => ({
-        session: { id: 'session-1', gameType: 'epoch-snapshot', status: 'playing', hostUserId: 'host-user' },
+        session: {
+          id: 'session-1',
+          gameType: 'epoch-snapshot',
+          status: 'playing',
+          hostUserId: 'host-user',
+        },
         players: [makePlayer()],
         gameDef: runtime.gameDef,
       }),
@@ -318,7 +338,14 @@ describe('clients can always know the current epoch', () => {
       unsubscribe() {},
     });
     await input.handler(
-      ctx({ type: 'game:input', sessionId: 's', channel: 'pick', data: { v: 1 }, sequence: 1, epoch: 4 }),
+      ctx({
+        type: 'game:input',
+        sessionId: 's',
+        channel: 'pick',
+        data: { v: 1 },
+        sequence: 1,
+        epoch: 4,
+      }),
     );
     await input.handler(
       ctx({ type: 'game:input', sessionId: 's', channel: 'pick', data: { v: 1 }, sequence: 2 }),

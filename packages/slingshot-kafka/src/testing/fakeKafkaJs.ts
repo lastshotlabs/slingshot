@@ -16,6 +16,24 @@ export interface FakeCreateTopicsPayload {
   }>;
 }
 
+/**
+ * Loose shape of the kafkajs `EachMessagePayload` as tests construct it.
+ * `heartbeat`/`pause` are optional because unit tests usually omit them.
+ */
+export interface FakeEachMessagePayload {
+  topic: string;
+  partition: number;
+  message: {
+    offset: string;
+    key?: Buffer | string | null;
+    value?: Buffer | string | null;
+    headers?: Record<string, Buffer | string | undefined>;
+    timestamp?: string;
+  };
+  heartbeat?: () => Promise<void>;
+  pause?: () => unknown;
+}
+
 export interface FakeConsumerObj {
   events: Record<string, string>;
   connect: () => Promise<void>;
@@ -24,7 +42,7 @@ export interface FakeConsumerObj {
   run: (payload: {
     autoCommit?: boolean;
     partitionsConsumedConcurrently?: number;
-    eachMessage: (payload: any) => Promise<void>;
+    eachMessage: (payload: FakeEachMessagePayload) => Promise<void>;
   }) => Promise<void>;
   commitOffsets: (
     args: Array<{ topic: string; partition: number; offset: string }>,
@@ -45,7 +63,7 @@ export interface FakeConsumerRecord {
   pauseCalls: Array<Array<{ topic: string; partitions?: number[] }>>;
   resumeCalls: Array<Array<{ topic: string; partitions?: number[] }>>;
   eventListeners: Map<string, Array<(event: unknown) => void>>;
-  eachMessage?: (payload: any) => Promise<void>;
+  eachMessage?: (payload: FakeEachMessagePayload) => Promise<void>;
   /** The consumer object returned by `kafka.consumer()`. Tests can monkey-patch methods on this. */
   consumerObj?: FakeConsumerObj;
   /** Trigger a registered event listener (e.g. REBALANCING) for testing. */
@@ -303,7 +321,7 @@ export function createFakeKafkaJsModule(state?: FakeKafkaState) {
         }: {
           autoCommit?: boolean;
           partitionsConsumedConcurrently?: number;
-          eachMessage: (payload: any) => Promise<void>;
+          eachMessage: (payload: FakeEachMessagePayload) => Promise<void>;
         }) => {
           const nextError = s.consumerRunErrors.shift();
           if (nextError) {

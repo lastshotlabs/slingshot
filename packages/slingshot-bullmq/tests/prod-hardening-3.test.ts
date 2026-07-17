@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -105,10 +106,16 @@ describe('createBullMQAdapter — worker crash recovery', () => {
     try {
       const bus = createBullMQAdapter({ connection: {} });
       const received: unknown[] = [];
-      bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-        durable: true,
-        name: 'crash-recovery',
-      });
+      bus.on(
+        'auth:login' as any,
+        async (payload: unknown) => {
+          received.push(payload);
+        },
+        {
+          durable: true,
+          name: 'crash-recovery',
+        },
+      );
 
       // Simulate a worker crash
       const worker = fakeBullMQState.workers[0];
@@ -140,10 +147,16 @@ describe('createBullMQAdapter — worker crash recovery', () => {
   test('worker completed handler fires after successful job processing', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'completed-test',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'completed-test',
+      },
+    );
 
     const envelope = {
       key: 'auth:login',
@@ -252,7 +265,7 @@ describe('createBullMQAdapter — event loss prevention', () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'loss-prevent' });
     const queueCountBefore = fakeBullMQState.queues.length;
-    await bus.shutdown();
+    await shutdownBus(bus);
 
     // Attempt to emit after shutdown
     bus.emit('auth:login' as any, {} as any);
@@ -262,7 +275,9 @@ describe('createBullMQAdapter — event loss prevention', () => {
   test('non-durable listener is called exactly once per emit', () => {
     const bus = createBullMQAdapter({ connection: {} });
     let callCount = 0;
-    bus.on('auth:login' as any, () => callCount++);
+    bus.on('auth:login' as any, () => {
+      callCount++;
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(callCount).toBe(1);
     bus.emit('auth:login' as any, {} as any);
@@ -272,9 +287,15 @@ describe('createBullMQAdapter — event loss prevention', () => {
   test('multiple listeners on same event all fire', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const results: number[] = [];
-    bus.on('auth:login' as any, () => results.push(1));
-    bus.on('auth:login' as any, () => results.push(2));
-    bus.on('auth:login' as any, () => results.push(3));
+    bus.on('auth:login' as any, () => {
+      results.push(1);
+    });
+    bus.on('auth:login' as any, () => {
+      results.push(2);
+    });
+    bus.on('auth:login' as any, () => {
+      results.push(3);
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(results).toEqual([1, 2, 3]);
   });

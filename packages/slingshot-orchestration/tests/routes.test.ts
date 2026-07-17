@@ -554,7 +554,6 @@ function makeFakeRun(id: string, tenantId?: string): Run {
     input: {},
     tenantId,
     createdAt: new Date(),
-    updatedAt: new Date(),
   };
 }
 
@@ -568,7 +567,7 @@ function makeMockRuntime(listRunsImpl: OrchestrationRuntime['listRuns']): Orches
     schedule: mock(async () => ({ id: 'sched-mock' })),
     listRuns: listRunsImpl,
     onProgress: mock(() => () => {}),
-    supports: cap => cap === 'observability',
+    supports: (cap: string) => cap === 'observability',
   } as unknown as OrchestrationRuntime;
 }
 

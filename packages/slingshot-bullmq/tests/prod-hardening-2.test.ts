@@ -135,10 +135,16 @@ describe('createBullMQAdapter — worker error cleanup', () => {
     try {
       const bus = createBullMQAdapter({ connection: {} });
       const received: unknown[] = [];
-      bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-        durable: true,
-        name: 'resilient-worker',
-      });
+      bus.on(
+        'auth:login' as any,
+        async (payload: unknown) => {
+          received.push(payload);
+        },
+        {
+          durable: true,
+          name: 'resilient-worker',
+        },
+      );
       const worker = fakeBullMQState.workers[0];
       // Fire the error handler
       for (const handler of worker.errorHandlers) {

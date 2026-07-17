@@ -53,7 +53,7 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
 
   it('starts the adapter and runs a task through live BullMQ', async () => {
     if (!REDIS_URL) return;
-    const { createBullMQOrchestrationAdapter } = await import('../src/adapter');
+    const { createBullMQOrchestrationAdapter } = await import('../../src/adapter');
 
     const task = defineTask({
       name: 'redis-echo-task',
@@ -80,7 +80,7 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
 
   it('supports idempotency through live BullMQ', async () => {
     if (!REDIS_URL) return;
-    const { createBullMQOrchestrationAdapter } = await import('../src/adapter');
+    const { createBullMQOrchestrationAdapter } = await import('../../src/adapter');
 
     let executions = 0;
     const task = defineTask({
@@ -113,7 +113,7 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
 
   it('supports scheduling and unscheduling through live BullMQ', async () => {
     if (!REDIS_URL) return;
-    const { createBullMQOrchestrationAdapter } = await import('../src/adapter');
+    const { createBullMQOrchestrationAdapter } = await import('../../src/adapter');
 
     const task = defineTask({
       name: 'redis-schedule-task',
@@ -147,7 +147,7 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
 
   it('shuts down gracefully', async () => {
     if (!REDIS_URL) return;
-    const { createBullMQOrchestrationAdapter } = await import('../src/adapter');
+    const { createBullMQOrchestrationAdapter } = await import('../../src/adapter');
 
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: conn.host, port: conn.port, password: conn.password },
@@ -164,7 +164,7 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
 
   it('handles task failure gracefully through live BullMQ', async () => {
     if (!REDIS_URL) return;
-    const { createBullMQOrchestrationAdapter } = await import('../src/adapter');
+    const { createBullMQOrchestrationAdapter } = await import('../../src/adapter');
 
     const failingTask = defineTask({
       name: 'redis-failing-task',

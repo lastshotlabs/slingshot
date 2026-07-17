@@ -24,7 +24,7 @@ import { definePackageContract } from '@lastshotlabs/slingshot-core';
 // time and runtime.
 import { messageModule } from './entities/message';
 import { roomModule } from './entities/room';
-import { roomMemberModule } from './entities/room-member';
+import { roomMemberModule } from './entities/roomMember';
 
 export const Chat = definePackageContract('slingshot-chat');
 

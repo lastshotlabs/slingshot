@@ -23,7 +23,9 @@ describe('createBullMQAdapter — payload edge cases', () => {
   test('emit with null payload delivers null to listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, null as any);
     expect(received[0]).toBeNull();
   });
@@ -31,7 +33,9 @@ describe('createBullMQAdapter — payload edge cases', () => {
   test('emit with undefined payload delivers undefined to listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, undefined as any);
     expect(received[0]).toBeUndefined();
   });
@@ -40,7 +44,9 @@ describe('createBullMQAdapter — payload edge cases', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
     const nested = { level1: { level2: { level3: { value: 'deep' } } } };
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, nested as any);
     expect(received[0]).toEqual(nested);
   });
@@ -48,7 +54,9 @@ describe('createBullMQAdapter — payload edge cases', () => {
   test('emit with numeric payload is delivered', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, 42 as any);
     expect(received[0]).toBe(42);
   });
@@ -57,7 +65,9 @@ describe('createBullMQAdapter — payload edge cases', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
     const items = ['a', 'b', 'c'];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, items as any);
     expect(received[0]).toEqual(items);
   });
@@ -71,7 +81,9 @@ describe('createBullMQAdapter — event name edge cases', () => {
   test('event name with dots delivers to correct listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('user.created' as any, (payload: unknown) => received.push(payload));
+    bus.on('user.created' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('user.created' as any, { id: 1 } as any);
     expect(received).toHaveLength(1);
   });
@@ -79,7 +91,9 @@ describe('createBullMQAdapter — event name edge cases', () => {
   test('event name with hyphens delivers to correct listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('user-created' as any, (payload: unknown) => received.push(payload));
+    bus.on('user-created' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('user-created' as any, { id: 1 } as any);
     expect(received).toHaveLength(1);
   });
@@ -87,7 +101,9 @@ describe('createBullMQAdapter — event name edge cases', () => {
   test('event name with underscores delivers to correct listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('user_created' as any, (payload: unknown) => received.push(payload));
+    bus.on('user_created' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('user_created' as any, { id: 1 } as any);
     expect(received).toHaveLength(1);
   });
@@ -96,8 +112,12 @@ describe('createBullMQAdapter — event name edge cases', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const loginCalls: unknown[] = [];
     const otherCalls: unknown[] = [];
-    bus.on('auth:login' as any, () => loginCalls.push(true));
-    bus.on('app:init' as any, () => otherCalls.push(true));
+    bus.on('auth:login' as any, () => {
+      loginCalls.push(true);
+    });
+    bus.on('app:init' as any, () => {
+      otherCalls.push(true);
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(loginCalls).toHaveLength(1);
     expect(otherCalls).toHaveLength(0);
@@ -112,7 +132,9 @@ describe('createBullMQAdapter — concurrent publishes', () => {
   test('10 concurrent emits on non-durable all deliver', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     for (let i = 0; i < 10; i++) {
       bus.emit('auth:login' as any, { idx: i } as any);
     }
@@ -125,8 +147,12 @@ describe('createBullMQAdapter — concurrent publishes', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const loginCalls: unknown[] = [];
     const logoutCalls: unknown[] = [];
-    bus.on('auth:login' as any, () => loginCalls.push(true));
-    bus.on('auth:logout' as any, () => logoutCalls.push(true));
+    bus.on('auth:login' as any, () => {
+      loginCalls.push(true);
+    });
+    bus.on('auth:logout' as any, () => {
+      logoutCalls.push(true);
+    });
 
     // Interleave emits
     bus.emit('auth:login' as any, {} as any);

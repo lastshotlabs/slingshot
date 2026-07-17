@@ -270,7 +270,7 @@ describe('createInteractionsPackage lifecycle', () => {
     expect(infoSpy?.mock.calls.at(-1)?.[1]).toBe('slingshot-interactions ready');
 
     // Runtime handlers can be registered after bootstrap and are dispatchable.
-    const runtimeDispatch = mock(async () => ({
+    const runtimeDispatch = mock(async (_payload: unknown) => ({
       status: 'ok' as const,
       message: 'handled',
       body: { ok: true },

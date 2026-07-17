@@ -8,11 +8,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { bunRuntime } from '../src/index';
 
 describe('runtime-bun long-running lifecycle', () => {
-  let server: ReturnType<typeof bunRuntime>['server'] extends {
-    listen: (opts: unknown) => infer R;
-  }
-    ? R
-    : never;
+  let server: ReturnType<ReturnType<typeof bunRuntime>['server']['listen']>;
 
   afterEach(async () => {
     if (server) {

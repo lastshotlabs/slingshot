@@ -6,8 +6,9 @@
  * open, message, close, and pong.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
-import type { RuntimeServerInstance, RuntimeWebSocket } from '@lastshotlabs/slingshot-core';
+import type { RuntimeWebSocket } from '@lastshotlabs/slingshot-core';
 import { bunRuntime } from '../src/index';
+import type { BunRuntimeServerInstance } from '../src/index';
 
 /**
  * Open a WebSocket client and resolve once `open` fires.
@@ -23,7 +24,7 @@ function openClient(url: string): Promise<WebSocket> {
 }
 
 describe('runtime-bun WebSocket integration — lifecycle callbacks', () => {
-  let server: RuntimeServerInstance | undefined;
+  let server: BunRuntimeServerInstance | undefined;
 
   afterEach(async () => {
     if (server) {

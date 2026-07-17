@@ -48,7 +48,7 @@ describe('createLocalRegistry', () => {
       const registry = createLocalRegistry({ path });
       await registry.initialize();
       const doc = await registry.read();
-      doc!.services = { api: { stack: 'main', stages: {} } };
+      doc!.services = { api: { stack: 'main', repo: 'github.com/acme/api', uses: [], stages: {} } };
       await registry.write(doc!);
       const reloaded = await registry.read();
       expect(reloaded!.services.api).toBeDefined();

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -82,7 +83,9 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
   test('on() + emit() delivers payload to listener', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, payload => received.push(payload));
+    bus.on('auth:login' as any, payload => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, { userId: 'u1' } as any);
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({ userId: 'u1' });
@@ -91,8 +94,12 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
   test('multiple listeners receive the same event', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: string[] = [];
-    bus.on('auth:login' as any, () => calls.push('first'));
-    bus.on('auth:login' as any, () => calls.push('second'));
+    bus.on('auth:login' as any, () => {
+      calls.push('first');
+    });
+    bus.on('auth:login' as any, () => {
+      calls.push('second');
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(calls).toEqual(['first', 'second']);
   });
@@ -100,7 +107,9 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
   test('off() removes listener — subsequent emit does not fire it', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    const listener = () => calls.push(true);
+    const listener = () => {
+      calls.push(true);
+    };
     bus.on('auth:login' as any, listener);
     bus.emit('auth:login' as any, {} as any);
     bus.off('auth:login' as any, listener);
@@ -116,7 +125,9 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
   test('on() and off() work when destructured from the adapter', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    const listener = () => calls.push(true);
+    const listener = () => {
+      calls.push(true);
+    };
     const { on, off, emit } = bus;
 
     on('auth:login' as any, listener);
@@ -131,8 +142,12 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const loginCalls: unknown[] = [];
     const logoutCalls: unknown[] = [];
-    bus.on('auth:login' as any, () => loginCalls.push(true));
-    bus.on('auth:logout' as any, () => logoutCalls.push(true));
+    bus.on('auth:login' as any, () => {
+      loginCalls.push(true);
+    });
+    bus.on('auth:logout' as any, () => {
+      logoutCalls.push(true);
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(loginCalls).toHaveLength(1);
     expect(logoutCalls).toHaveLength(0);
@@ -145,7 +160,9 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
     bus.on('auth:login' as any, () => {
       throw new Error('boom');
     });
-    bus.on('auth:login' as any, () => calls.push('second'));
+    bus.on('auth:login' as any, () => {
+      calls.push('second');
+    });
     bus.emit('auth:login' as any, {} as any);
     await new Promise(r => setTimeout(r, 10));
     expect(calls).toEqual(['second']);
@@ -220,10 +237,16 @@ describe('createBullMQAdapter — durable subscriptions', () => {
   test('worker processor delivers envelope payload to listener', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async payload => received.push(payload), {
-      durable: true,
-      name: 'audit',
-    });
+    bus.on(
+      'auth:login' as any,
+      async payload => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'audit',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     // Simulate a job arriving — data must be a valid EventEnvelope
@@ -254,10 +277,16 @@ describe('createBullMQAdapter — onEnvelope / offEnvelope', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
 
-    bus.onEnvelope('auth:login' as any, async envelope => received.push(envelope), {
-      durable: true,
-      name: 'envelope-worker',
-    });
+    bus.onEnvelope(
+      'auth:login' as any,
+      async envelope => {
+        received.push(envelope);
+      },
+      {
+        durable: true,
+        name: 'envelope-worker',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     const envelope = {
@@ -302,7 +331,7 @@ describe('createBullMQAdapter — shutdown', () => {
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w2' });
 
-    await bus.shutdown();
+    await shutdownBus(bus);
 
     expect(fakeBullMQState.workers.every(w => w.closed)).toBe(true);
     expect(fakeBullMQState.queues.every(q => q.closed)).toBe(true);
@@ -321,7 +350,7 @@ describe('createBullMQAdapter — shutdown', () => {
     bus.emit('auth:login' as any, {} as any);
     await new Promise(r => setTimeout(r, 10));
 
-    await bus.shutdown();
+    await shutdownBus(bus);
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('discarding'));
 
@@ -332,9 +361,11 @@ describe('createBullMQAdapter — shutdown', () => {
   test('shutdown clears listener maps so subsequent emits are no-ops', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    bus.on('auth:login' as any, () => calls.push(true));
+    bus.on('auth:login' as any, () => {
+      calls.push(true);
+    });
 
-    await bus.shutdown();
+    await shutdownBus(bus);
     bus.emit('auth:login' as any, {} as any);
 
     expect(calls).toHaveLength(0);
@@ -936,7 +967,7 @@ describe('createBullMQAdapter — WAL', () => {
     fakeBullMQState.nextAddError(Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }));
     bus.emit('auth:login' as any, { userId: 'wal-1' } as any);
     await new Promise(r => setTimeout(r, 30));
-    await bus.shutdown();
+    await shutdownBus(bus);
 
     const raw = await fs.readFile(walPath, 'utf8');
     expect(raw).toContain('"op":"append"');
@@ -972,7 +1003,7 @@ describe('createBullMQAdapter — WAL', () => {
     await bus2._drainPendingBuffer();
     // After drain, the event should have been forwarded to the new queue.
     expect(fakeBullMQState.queues[0].addCalls.length).toBeGreaterThanOrEqual(1);
-    await bus2.shutdown();
+    await shutdownBus(bus2);
     errorSpy.mockRestore();
   });
 
@@ -1009,7 +1040,7 @@ describe('createBullMQAdapter — WAL', () => {
     // The compaction snapshot dropped any consume tombstones. There should
     // be strictly fewer total lines than the 20+ we'd see without compaction.
     expect(lines.length).toBeLessThan(15);
-    await bus.shutdown();
+    await shutdownBus(bus);
     errorSpy.mockRestore();
   });
 
@@ -1052,7 +1083,7 @@ describe('createBullMQAdapter — WAL', () => {
     const replayed = await bus.replayFromDlq();
     expect(replayed).toBeGreaterThanOrEqual(1);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('replayFromDlq returns 0 when there are no validation DLQ queues', async () => {
@@ -1063,7 +1094,7 @@ describe('createBullMQAdapter — WAL', () => {
     // No durable subscriptions = no DLQ
     const result = await bus.replayFromDlq();
     expect(result).toBe(0);
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('replayFromDlq returns 0 when the specified DLQ does not exist', async () => {
@@ -1073,6 +1104,6 @@ describe('createBullMQAdapter — WAL', () => {
     });
     const result = await bus.replayFromDlq('nonexistent-dlq');
     expect(result).toBe(0);
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 });

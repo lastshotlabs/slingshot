@@ -34,25 +34,24 @@ sync pipeline and the API reference generator.
 For any given package, three doc files coexist with overlapping audiences. They are authored
 independently — only the docs site is generated:
 
-| File                                                            | Authored where | Synced from                                                    |
-| --------------------------------------------------------------- | -------------- | -------------------------------------------------------------- |
-| `packages/<pkg>/CLAUDE.md`                                      | hand-authored  | not synced — agent-facing, navigational                        |
-| `packages/<pkg>/README.md`                                      | hand-authored  | not synced — npm/GitHub-facing (see drift note below)          |
-| `packages/<pkg>/docs/human/index.md`                            | hand-authored  | canonical user-facing source                                   |
-| `packages/<pkg>/docs/{maintainer,operator,...}/**/*.md`         | hand-authored  | canonical per-lane source                                      |
-| `packages/docs/src/content/docs/packages/<pkg>/overview.md`     | generated      | from `docs/human/index.md` via `bun run docs:sync`             |
-| `packages/docs/src/content/docs/packages/<pkg>/<lane>/**/*.md`  | generated      | from `docs/<lane>/**/*.md` via `bun run docs:sync`             |
-| `packages/docs/src/content/docs/api/<pkg>/index.mdx`            | generated      | from `packages/<pkg>/src/**/*.ts` TSDoc via `bun run docs:api` |
-| `packages/docs/src/content/docs/{guides,examples,...}/**/*.mdx` | hand-authored  | top-level docs; not tied to any single package                 |
+| File                                                            | Authored where | Synced from                                                                           |
+| --------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `packages/<pkg>/CLAUDE.md`                                      | hand-authored  | not synced — agent-facing, navigational                                               |
+| `packages/<pkg>/README.md`                                      | generated      | copied from `docs/human/index.md` by `bun run build` (see note below)                 |
+| `packages/<pkg>/docs/human/index.md`                            | hand-authored  | canonical user-facing source                                                          |
+| `packages/<pkg>/docs/{generated,ai,notes}/**/*.md`              | mixed          | per-lane source (`generated/` overwritten by `docs:sync`; `ai`/`notes` hand-authored) |
+| `packages/docs/src/content/docs/packages/<pkg>/overview.md`     | generated      | from `docs/human/index.md` via `bun run docs:sync`                                    |
+| `packages/docs/src/content/docs/packages/<pkg>/<lane>/**/*.md`  | generated      | from `docs/<lane>/**/*.md` via `bun run docs:sync`                                    |
+| `packages/docs/src/content/docs/api/<pkg>/index.mdx`            | generated      | from `packages/<pkg>/src/**/*.ts` TSDoc via `bun run docs:api`                        |
+| `packages/docs/src/content/docs/{guides,examples,...}/**/*.mdx` | hand-authored  | top-level docs; not tied to any single package                                        |
 
-### Drift hazard: README ↔ docs/human/index.md
+### README ↔ docs/human/index.md
 
 `sync-workspace-docs.ts` reads from `<pkg>/docs/` and writes into the Astro tree. It does
-**not** touch `<pkg>/README.md`. When the human guide and the README cover the same content
-(dependency tables, install snippets, the high-level "what does this package do" blurb), they
-drift silently — there is no validation step.
+**not** touch `<pkg>/README.md` — but `scripts/build.ts` does: at the end of every
+`bun run build` it copies `docs/human/index.md` over `README.md` verbatim for every
+workspace package.
 
-**Convention:** keep `README.md` thin. Install / usage one-liner, link to the human guide
-for the canonical content, then a short "what it does" paragraph. Anything deeper belongs
-in `docs/human/index.md` only. If a README needs to mirror dependency tables or
-configuration walkthroughs, expect to update it by hand every time the human guide changes.
+**Convention:** never edit a package `README.md` by hand — it is build output.
+`docs/human/index.md` is the single canonical source; write everything there
+(the copied README currently carries the guide's Starlight frontmatter, a known wart).

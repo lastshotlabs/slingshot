@@ -27,7 +27,12 @@ import {
 } from '@lastshotlabs/slingshot-auth';
 import type { AuthRuntimeContext, ProviderConnection } from '@lastshotlabs/slingshot-auth';
 import type { ProviderConnectionStore } from '@lastshotlabs/slingshot-auth';
-import { createRouter, errorResponse, getActor, timingSafeEqual } from '@lastshotlabs/slingshot-core';
+import {
+  createRouter,
+  errorResponse,
+  getActor,
+  timingSafeEqual,
+} from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 /**

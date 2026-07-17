@@ -35,12 +35,13 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "bun test",
     "coverage": "bun test --coverage",
     "test:unit": "bun test tests/unit tests/kafkaShared.test.ts",
     "test:integration": "bun test tests/integration",
-    "bench": "bun run tests/bench/kafka-throughput.bench.ts"
+    "bench": "bun run tests/bench/kafka-throughput.bench.ts",
+    "lint": "eslint src/ --cache"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

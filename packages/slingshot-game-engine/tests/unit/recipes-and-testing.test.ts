@@ -13,7 +13,10 @@ import { SimulatedPlayer } from '../../src/testing/simulatedPlayer';
 import { createMockClock } from '../../src/testing/timeControl';
 
 function makeProcessContext() {
-  const players = new Map([
+  const players = new Map<
+    string,
+    { userId: string; playerState: string | null; isSpectator: boolean; team: string }
+  >([
     ['alice', { userId: 'alice', playerState: null, isSpectator: false, team: 'red' }],
     ['bob', { userId: 'bob', playerState: null, isSpectator: false, team: 'red' }],
     ['carol', { userId: 'carol', playerState: null, isSpectator: false, team: 'blue' }],
@@ -315,7 +318,7 @@ describe('testing helpers', () => {
     harness.endGame({ winners: ['host-user'], reason: 'Last player standing' });
     (harness as any).scoreState.scores.set('host-user', 3);
     (harness as any).scoreState.scores.set('guest-user', 1);
-    harness.getPlayer('guest-user').playerState = 'ready';
+    (harness.getPlayer('guest-user') as { playerState: string | null }).playerState = 'ready';
 
     gameAssertions.playerState(harness, 'guest-user', 'ready');
     gameAssertions.activePlayer(harness, 'host-user');

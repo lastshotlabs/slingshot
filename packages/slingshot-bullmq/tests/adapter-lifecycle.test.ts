@@ -7,6 +7,7 @@
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -87,21 +88,21 @@ describe('createBullMQAdapter — shutdown idempotency', () => {
   test('shutdown is callable multiple times without throwing', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
-    await bus.shutdown();
-    await expect(bus.shutdown()).resolves.toBeUndefined();
-    await expect(bus.shutdown()).resolves.toBeUndefined();
+    await shutdownBus(bus);
+    await expect(shutdownBus(bus)).resolves.toBeUndefined();
+    await expect(shutdownBus(bus)).resolves.toBeUndefined();
   });
 
   test('shutdown with no subscriptions does not throw', async () => {
     const bus = createBullMQAdapter({ connection: {} });
-    await expect(bus.shutdown()).resolves.toBeUndefined();
+    await expect(shutdownBus(bus)).resolves.toBeUndefined();
   });
 
   test('shutdown closes all workers that were created', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
     bus.on('auth:logout' as any, async () => {}, { durable: true, name: 'w2' });
-    await bus.shutdown();
+    await shutdownBus(bus);
     expect(fakeBullMQState.workers).toHaveLength(2);
     expect(fakeBullMQState.workers.every(w => w.closed)).toBe(true);
   });
@@ -110,7 +111,7 @@ describe('createBullMQAdapter — shutdown idempotency', () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
     bus.on('auth:logout' as any, async () => {}, { durable: true, name: 'w2' });
-    await bus.shutdown();
+    await shutdownBus(bus);
     expect(fakeBullMQState.queues.every(q => q.closed)).toBe(true);
   });
 });
@@ -123,8 +124,10 @@ describe('createBullMQAdapter — emit after shutdown', () => {
   test('emit after shutdown is a no-op for non-durable listeners', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    bus.on('auth:login' as any, () => calls.push(true));
-    await bus.shutdown();
+    bus.on('auth:login' as any, () => {
+      calls.push(true);
+    });
+    await shutdownBus(bus);
     bus.emit('auth:login' as any, {} as any);
     expect(calls).toHaveLength(0);
   });
@@ -134,7 +137,7 @@ describe('createBullMQAdapter — emit after shutdown', () => {
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
     const workerCountBefore = fakeBullMQState.workers.length;
     const queueCountBefore = fakeBullMQState.queues.length;
-    await bus.shutdown();
+    await shutdownBus(bus);
     // Verify shutdown closed everything
     expect(fakeBullMQState.workers.every(w => w.closed)).toBe(true);
     expect(fakeBullMQState.queues.every(q => q.closed)).toBe(true);
@@ -146,8 +149,10 @@ describe('createBullMQAdapter — emit after shutdown', () => {
   test('non-durable listeners registered before shutdown are cleared on shutdown', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: unknown[] = [];
-    bus.on('auth:login' as any, () => calls.push(true));
-    await bus.shutdown();
+    bus.on('auth:login' as any, () => {
+      calls.push(true);
+    });
+    await shutdownBus(bus);
     bus.emit('auth:login' as any, {} as any);
     expect(calls).toHaveLength(0);
   });
@@ -202,7 +207,7 @@ describe('createBullMQAdapter — health lifecycle', () => {
 
   test('health snapshot is available after shutdown', async () => {
     const bus = createBullMQAdapter({ connection: {} });
-    await bus.shutdown();
+    await shutdownBus(bus);
     const health = bus.getHealth();
     expect(health.component).toBe('slingshot-bullmq');
     expect(typeof health.state).toBe('string');

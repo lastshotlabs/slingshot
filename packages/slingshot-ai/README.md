@@ -1,4 +1,7 @@
-# @lastshotlabs/slingshot-ai
+---
+title: Human Guide
+description: Human-maintained guidance for @lastshotlabs/slingshot-ai
+---
 
 Provider-neutral AI generation for slingshot apps.
 

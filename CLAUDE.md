@@ -149,3 +149,19 @@ and detailed agent context strategy lives in the companion `slingshot-specs/` di
 - `bun run test:all`: full verification pass. Runs `test`, then `test:docker`, then `test:e2e`.
 
 Do not assume `test:all` is a different test universe. It should be a composition of the real entrypoints above.
+
+<!-- contextshot:begin -->
+
+# Slingshot
+
+Context lives in Contextshot (project: slingshot). Content in the DB, not this file.
+(If $CONTEXTSHOT_URL/$CONTEXTSHOT_TOKEN are unset: source ~/.config/contextshot/env)
+
+## Session protocol
+
+- START: read the briefing:
+  `curl -s -H "Authorization: Bearer $CONTEXTSHOT_TOKEN" "$CONTEXTSHOT_URL/api/projects/slingshot/briefing"`
+- Bug/task found → ticket. Non-obvious fact learned → gotcha.
+- END / task complete: write a worklog, update state if it changed. Work is NOT done until logged.
+- Full protocol: `curl -s -H "Authorization: Bearer $CONTEXTSHOT_TOKEN" "$CONTEXTSHOT_URL/api/protocol?slug=slingshot"`
+<!-- contextshot:end -->

@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -80,13 +81,13 @@ describe('createBullMQAdapter — logger events', () => {
     bus.emit('auth:login' as any, {} as any);
     await new Promise(r => setTimeout(r, 20));
 
-    await bus.shutdown();
+    await shutdownBus(bus);
 
     expect(captured.some(c => c.msg.includes('discarding'))).toBe(true);
   });
 
   test('enqueue timeout logs an error via configured logger', async () => {
-    const captured: Array<{ level: string }> = [];
+    const captured: Array<{ level: string; args: unknown[] }> = [];
     const logger = {
       debug: () => {},
       info: () => {},

@@ -220,7 +220,7 @@ describe('memory adapter — interleaved task and workflow stress', () => {
       name: 'interleave-wf',
       input: z.object({ label: z.string() }),
       steps: [
-        step('echo', task, {
+        step<{ label: string }>('echo', task, {
           // Map workflow input shape { label } to task input shape { value }
           input: ctx => ({ value: ctx.workflowInput.label }),
         }),

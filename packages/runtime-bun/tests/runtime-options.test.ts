@@ -12,13 +12,15 @@ describe('bunRuntime options', () => {
 
   test('creates with custom logger', () => {
     const logs: string[] = [];
+    // `logger` is not a recognized BunRuntimeOptions property — this test
+    // intentionally passes an unknown option to verify it is ignored.
     const rt = bunRuntime({
       logger: {
         info: (msg: string) => logs.push(msg),
         warn: (msg: string) => logs.push(msg),
         error: (msg: string) => logs.push(msg),
-      } as any,
-    });
+      },
+    } as unknown as Parameters<typeof bunRuntime>[0]);
     expect(rt).toBeDefined();
   });
 

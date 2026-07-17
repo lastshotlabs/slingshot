@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WebSocket as WsClient } from 'ws';
-import type { RuntimeServerInstance } from '@lastshotlabs/slingshot-core';
+import type { NodeRuntimeServerInstance } from '../../src/index';
 import {
   configureRuntimeNodeLogger,
   configureRuntimeNodeStructuredLogger,
@@ -114,7 +114,7 @@ function closeWs(ws: WsClient): Promise<void> {
 // ---------------------------------------------------------------------------
 
 describe('runtime-node WebSocket', () => {
-  let server: RuntimeServerInstance | null = null;
+  let server: NodeRuntimeServerInstance | null = null;
 
   afterEach(async () => {
     if (server) {
@@ -130,7 +130,7 @@ describe('runtime-node WebSocket', () => {
   test('open fires, message echoes, close fires on disconnect', async () => {
     const runtime = nodeRuntime();
     const events: string[] = [];
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -185,7 +185,7 @@ describe('runtime-node WebSocket', () => {
   test('data payload forwarded via upgrade() is accessible in open handler', async () => {
     const runtime = nodeRuntime();
     let receivedData: unknown;
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -224,7 +224,7 @@ describe('runtime-node WebSocket', () => {
 
   test('publish only delivers to clients subscribed to that channel', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -335,8 +335,11 @@ describe('runtime-node WebSocket', () => {
       ws.on('error', () => done('error'));
       ws.on('close', code => done(`closed:${code}`));
     });
-    if (ws && ws.readyState !== WsClient.CLOSED) {
-      await closeWs(ws);
+    // `ws` is assigned inside the promise executor, which TS's control-flow
+    // analysis does not track — re-widen from the initializer-narrowed `null`.
+    const clientWs = ws as WsClient | null;
+    if (clientWs && clientWs.readyState !== WsClient.CLOSED) {
+      await closeWs(clientWs);
     }
 
     // Should never have successfully opened
@@ -350,7 +353,7 @@ describe('runtime-node WebSocket', () => {
 
   test('async message handler rejection is logged and connection stays open', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     const logged: string[] = [];
     const origError = console.error;
@@ -409,7 +412,7 @@ describe('runtime-node WebSocket', () => {
 
   test('async close handler rejection is caught and logged', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     const logged: string[] = [];
     const origError = console.error;
@@ -458,7 +461,7 @@ describe('runtime-node WebSocket', () => {
 
   test('upgrade() returns false when no websocket handler is configured', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -481,7 +484,7 @@ describe('runtime-node WebSocket', () => {
 
   test('unsubscribe stops a client from receiving further channel messages', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -545,7 +548,7 @@ describe('runtime-node WebSocket', () => {
 
   test('heartbeat sweeper does not fire after server stop and immediate WS close', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
     let pingsReceived = 0;
 
     server = await runtime.server.listen({
@@ -600,7 +603,7 @@ describe('runtime-node WebSocket', () => {
 
   test('per-socket cleanup is idempotent across close+error events', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
     let closeCalls = 0;
 
     server = await runtime.server.listen({
@@ -642,7 +645,7 @@ describe('runtime-node WebSocket', () => {
 
   test('pong handler fires when client responds to server ping', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
     let serverWs: import('@lastshotlabs/slingshot-core').RuntimeWebSocket | null = null;
     let pongReceived = false;
 

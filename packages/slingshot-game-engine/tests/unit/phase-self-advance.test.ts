@@ -13,7 +13,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { type GameDefinition, defineGame } from '../../src/defineGame';
+import { defineGame } from '../../src/defineGame';
 import { createInMemoryReplayStore } from '../../src/lib/replay';
 import {
   type SessionRuntime,
@@ -21,6 +21,7 @@ import {
   createSessionRuntime,
   destroySessionRuntime,
 } from '../../src/lib/sessionRuntime';
+import type { GameDefinition } from '../../src/types/models';
 import type { GamePlayerState } from '../../src/types/models';
 
 const activeRuntimeMaps: Array<Map<string, SessionRuntime>> = [];
@@ -102,11 +103,11 @@ describe('phase self-advance from onEnter', () => {
         play: { next: null, advance: 'manual', onEnter: 'playEnter' },
       },
       handlers: {
-        computeEnter: (ctx: any) => {
+        computeEnter: (ctx: any): undefined => {
           entered.push('compute');
           ctx.advancePhase();
         },
-        playEnter: () => {
+        playEnter: (): undefined => {
           entered.push('play');
         },
       },
@@ -137,11 +138,11 @@ describe('phase self-advance from onEnter', () => {
         c: { next: null, advance: 'manual', onEnter: 'land' },
       },
       handlers: {
-        hop: (ctx: any) => {
+        hop: (ctx: any): undefined => {
           entered.push(ctx.currentPhase);
           ctx.advancePhase();
         },
-        land: (ctx: any) => {
+        land: (ctx: any): undefined => {
           entered.push(ctx.currentPhase);
         },
       },
@@ -166,7 +167,7 @@ describe('phase self-advance from onEnter', () => {
         fallback: { next: null, advance: 'manual' },
       },
       handlers: {
-        route: (ctx: any) => {
+        route: (ctx: any): undefined => {
           ctx.setNextPhase('target');
           ctx.advancePhase();
         },
@@ -189,7 +190,7 @@ describe('phase self-advance from onEnter', () => {
         lobby: { next: null, advance: 'manual' },
       },
       handlers: {
-        bootEnter: (ctx: any) => {
+        bootEnter: (ctx: any): undefined => {
           ctx.advancePhase();
         },
       },
@@ -212,7 +213,7 @@ describe('phase self-advance from onEnter', () => {
       },
       handlers: {
         // A → B → A forever. Without a bound this spins the event loop dead.
-        bounce: (ctx: any) => {
+        bounce: (ctx: any): undefined => {
           ctx.advancePhase();
         },
       },
@@ -248,13 +249,13 @@ describe('phase self-advance from onEnter', () => {
         play: { next: null, advance: 'manual', onEnter: 'playEnter' },
       },
       handlers: {
-        computeEnter: (ctx: any) => {
+        computeEnter: (ctx: any): undefined => {
           entered.push('compute');
           // Called twice on purpose — one advance, not two.
           ctx.advancePhase();
           ctx.advancePhase();
         },
-        playEnter: () => {
+        playEnter: (): undefined => {
           entered.push('play');
         },
       },
@@ -300,7 +301,7 @@ describe('the reentrancy guard still drops racing external advances', () => {
           inSlowOnEnter?.();
           await new Promise(resolve => setTimeout(resolve, 40));
         },
-        playEnter: () => {
+        playEnter: (): undefined => {
           entered.push('play');
         },
       },

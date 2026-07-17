@@ -2,20 +2,28 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   createInProcessAdapter,
   getEmbedsPeerOrNull,
 } from '@lastshotlabs/slingshot-core';
 import { createEmbedsPlugin } from '../src/plugin';
+
+function createTestEvents(bus: ReturnType<typeof createInProcessAdapter>) {
+  return createEventPublisher({ definitions: createEventDefinitionRegistry(), bus });
+}
 
 async function bootEmbedsApp() {
   const app = new Hono();
   const plugin = createEmbedsPlugin();
   const emptyConfigRaw = {};
   const emptyConfig = emptyConfigRaw as unknown as never;
+  const bus = createInProcessAdapter();
   await plugin.setupRoutes?.({
     app: app as never,
     config: emptyConfig,
-    bus: createInProcessAdapter(),
+    bus,
+    events: createTestEvents(bus),
   });
   return app;
 }
@@ -69,10 +77,12 @@ describe('slingshot-embeds smoke', () => {
     const plugin = createEmbedsPlugin();
     const emptyConfig2Raw = {};
     const emptyConfig2 = emptyConfig2Raw as unknown as never;
+    const bus = createInProcessAdapter();
     await plugin.setupRoutes?.({
       app: app as never,
       config: emptyConfig2,
-      bus: createInProcessAdapter(),
+      bus,
+      events: createTestEvents(bus),
     });
 
     const peer = getEmbedsPeerOrNull(app);

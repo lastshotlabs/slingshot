@@ -16,6 +16,7 @@
  */
 import { performance } from 'node:perf_hooks';
 import { createBullMQAdapter } from '../../src/bullmqAdapter';
+import { shutdownBus } from '../helpers/bus';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -79,7 +80,7 @@ async function benchNonDurableEmit(): Promise<void> {
   console.log(`[BENCH]   latency-p99-ms: ${formatDuration(computePercentiles(latencies, 99))}`);
   console.log(`[BENCH]   listener-callbacks: ${callCount}`);
 
-  await bus.shutdown();
+  await shutdownBus(bus);
 }
 
 // ---------------------------------------------------------------------------

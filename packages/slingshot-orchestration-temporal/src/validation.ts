@@ -135,7 +135,9 @@ export const temporalAdapterOptionsSchema = z.object({
    * is no-op so existing apps observe no behavior change until they opt in.
    */
   onQuery: z
-    .custom<object>(value => value === undefined || typeof value === 'function')
+    .custom<(event: { runId: string; durationMs: number; error?: unknown }) => void>(
+      value => value === undefined || typeof value === 'function',
+    )
     .optional()
     .describe(
       'Instrumentation hook called after every query. Receives runId, durationMs, and optional error.',
@@ -145,7 +147,9 @@ export const temporalAdapterOptionsSchema = z.object({
    * the adapter. Same shape as `onQuery`.
    */
   onSignal: z
-    .custom<object>(value => value === undefined || typeof value === 'function')
+    .custom<(event: { runId: string; durationMs: number; error?: unknown }) => void>(
+      value => value === undefined || typeof value === 'function',
+    )
     .optional()
     .describe(
       'Instrumentation hook called after every signal. Receives runId, durationMs, and optional error.',

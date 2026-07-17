@@ -111,7 +111,11 @@ describe('smoke: local registry lifecycle', () => {
       // Phase 2: write a service
       initial!.services.api = {
         stack: 'main',
-        stages: { dev: { imageTag: 'v1', status: 'deployed' } },
+        repo: 'github.com/acme/api',
+        uses: [],
+        stages: {
+          dev: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
+        },
       };
       await registry.write(initial!);
 
@@ -166,6 +170,8 @@ describe('smoke: config → plan → format', () => {
 
     const registry: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {},
       resources: {},
@@ -398,12 +404,19 @@ describe('smoke: config derivation chain', () => {
     const platform = createFrozenPlatform();
     const registry: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {},
       resources: {
         redis: {
+          type: 'redis',
           stages: {
-            dev: { outputs: { REDIS_HOST: 'redis://local:6379' }, status: 'provisioned' },
+            dev: {
+              outputs: { REDIS_HOST: 'redis://local:6379' },
+              status: 'provisioned',
+              provisionedAt: new Date().toISOString(),
+            },
           },
         },
       },
@@ -803,7 +816,11 @@ describe('smoke: testing helper exports', () => {
     }
     doc.services.api = {
       stack: 'main',
-      stages: { prod: { imageTag: 'v1', status: 'deployed' } },
+      repo: 'github.com/acme/api',
+      uses: [],
+      stages: {
+        prod: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
+      },
     };
     const write = await registry.write(doc);
     const lock = await registry.lock();

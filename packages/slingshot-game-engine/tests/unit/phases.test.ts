@@ -68,7 +68,12 @@ function stubCtx(overrides: Partial<ReadonlyHandlerContext> = {}): ReadonlyHandl
     getChannelInputs: () => new Map(),
     getTimeRemaining: () => 0,
     getPhaseEndsAt: () => 0,
-    random: { next: () => 0, nextInt: () => 0, nextFloat: () => 0, shuffle: <T>(a: T[]) => a },
+    random: {
+      next: () => 0,
+      nextInt: () => 0,
+      nextFloat: () => 0,
+      shuffle: <T>(a: T[]) => a,
+    } as unknown as ReadonlyHandlerContext['random'],
     getScheduledEvents: () => [],
     log: { debug() {}, info() {}, warn() {}, error() {} },
     ...overrides,
@@ -99,8 +104,8 @@ describe('createPhaseState', () => {
 
 describe('getAdvanceTrigger', () => {
   test('returns explicit advance trigger', () => {
-    const def = phaseDef({ advance: 'allChannelsComplete' });
-    expect(getAdvanceTrigger(def)).toBe('allChannelsComplete');
+    const def = phaseDef({ advance: 'all-channels-complete' });
+    expect(getAdvanceTrigger(def)).toBe('all-channels-complete');
   });
 
   test('defaults to timeout when timeout is set', () => {

@@ -7,18 +7,18 @@
   "exports": {
     ".": {
       "bun": "./dist/src/index.js",
-      "import": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
     },
     "./testing": {
       "bun": "./dist/src/testing.js",
-      "import": "./dist/src/testing.js",
-      "types": "./dist/src/testing.d.ts"
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
     },
     "./errors": {
       "bun": "./dist/src/errors.js",
-      "import": "./dist/src/errors.js",
-      "types": "./dist/src/errors.d.ts"
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -35,7 +35,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache",
     "test": "bun test",
     "coverage": "bun test --coverage",
@@ -48,8 +48,8 @@
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
-    "bullmq": ">=5",
-    "ioredis": ">=5",
+    "bullmq": ">=5 <6",
+    "ioredis": ">=5 <6",
     "zod": ">=4.0 <5"
   },
   "peerDependenciesMeta": {

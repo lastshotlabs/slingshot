@@ -50,7 +50,7 @@ describe('getOrchestrationOrNull — missing plugin state', () => {
       ]),
     } as never;
     const result = getOrchestrationOrNull(ctx);
-    expect(result).toBe('not-a-runtime');
+    expect(result as unknown).toBe('not-a-runtime');
   });
 });
 

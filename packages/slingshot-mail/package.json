@@ -4,7 +4,6 @@
   "description": "Transactional mail with provider drivers, queues, and renderer integration for Slingshot",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/src/index.js",
   "exports": {
     ".": {
       "bun": "./dist/src/index.js",

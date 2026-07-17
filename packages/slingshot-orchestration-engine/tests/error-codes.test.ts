@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { OrchestrationError } from '../src/errors';
+import type { OrchestrationErrorCode } from '../src/types';
 
 describe('OrchestrationError', () => {
   test('sets name, code, and message', () => {
@@ -35,7 +36,9 @@ describe('OrchestrationError', () => {
       'RUN_CANCELLED',
       'IDEMPOTENCY_CONFLICT',
       'WORKFLOW_HOOK_ERROR',
-    ] as const;
+      // Codes beyond the published OrchestrationErrorCode union are intentionally
+      // exercised loosely — the constructor performs no runtime validation.
+    ] as unknown as readonly OrchestrationErrorCode[];
     for (const code of codes) {
       const err = new OrchestrationError(code, `test ${code}`);
       expect(err.code).toBe(code);

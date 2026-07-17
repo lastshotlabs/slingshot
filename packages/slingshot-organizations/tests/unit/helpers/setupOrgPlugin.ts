@@ -27,6 +27,9 @@ import {
   attachContext,
   createDefaultIdentityResolver,
   createEntityRegistry,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createNoopMetricsEmitter,
   getActor,
 } from '@lastshotlabs/slingshot-core';
 import type {
@@ -34,6 +37,7 @@ import type {
   PluginSetupContext,
   ResolvedEntityConfig,
   RouteAuthRegistry,
+  SlingshotEvents,
   SlingshotFrameworkConfig,
   SlingshotPackageDefinition,
   StoreType,
@@ -65,6 +69,7 @@ function createFrameworkConfig(): SlingshotFrameworkConfig & {
       authStore: 'memory' as StoreType,
       sqlite: undefined,
     },
+    logging: { enabled: false, verbose: false, authTrace: false, auditWarnings: false },
     security: { cors: '*' },
     signing: null,
     dataEncryptionKeys: [],
@@ -112,7 +117,10 @@ async function createTestAuthRuntime(
 
   const runtime: AuthRuntimeContext = {
     adapter,
+    evaluateUserAccess: async () => undefined,
     eventBus: bus,
+    events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus }),
+    logger: { log: () => {}, authTrace: () => {} },
     config: createAuthResolvedConfig({
       emailVerification: { required: false },
     }),
@@ -282,6 +290,7 @@ function createTestContext(args: {
   app: Hono<AppEnv>;
   appName: string;
   bus: InProcessAdapter;
+  events: SlingshotEvents;
   frameworkConfig: SlingshotFrameworkConfig;
   pluginState: Map<string, unknown>;
   routeAuth: RouteAuthRegistry;
@@ -315,6 +324,10 @@ function createTestContext(args: {
     publicPaths: new Set<string>(),
     plugins: [],
     bus: args.bus,
+    events: args.events,
+    kafkaConnectors: null,
+    capabilityProviders: new Map<string, string>(),
+    metricsEmitter: createNoopMetricsEmitter(),
     routeAuth: args.routeAuth,
     actorResolver: null,
     identityResolver: createDefaultIdentityResolver(),
@@ -362,6 +375,7 @@ export async function setupOrgPluginHarness(
 ): Promise<OrgPluginTestHarness> {
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({ definitions: createEventDefinitionRegistry(), bus });
   const frameworkConfig = createFrameworkConfig();
   const authRuntime = await createTestAuthRuntime(bus, frameworkConfig.resolvedStores);
   const pluginState = new Map<string, unknown>();
@@ -374,6 +388,7 @@ export async function setupOrgPluginHarness(
       app,
       appName: 'organizations-test',
       bus,
+      events,
       frameworkConfig,
       pluginState,
       routeAuth,
@@ -423,7 +438,7 @@ export async function setupOrgPluginHarness(
     middleware: pkg.middleware ? { ...pkg.middleware } : undefined,
   });
 
-  const setupContext: PluginSetupContext = { app, bus, config: frameworkConfig };
+  const setupContext: PluginSetupContext = { app, bus, events, config: frameworkConfig };
   // Lifecycle order matches the framework path:
   //   1. package setupMiddleware     — resolves auth runtime + admin guards
   //   2. entity setupMiddleware      — entity-plugin policy hooks

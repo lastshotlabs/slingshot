@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WebSocket as WsClient } from 'ws';
-import type { RuntimeServerInstance } from '@lastshotlabs/slingshot-core';
+import type { NodeRuntimeServerInstance } from '../../src/index';
 import { nodeRuntime } from '../../src/index';
 
 const ALREADY_SENT = new Response(null, { headers: { 'x-hono-already-sent': 'true' } });
@@ -96,7 +96,7 @@ function closeWs(ws: WsClient): Promise<void> {
 }
 
 describe('runtime-node WebSocket handshake integration', () => {
-  let server: RuntimeServerInstance | null = null;
+  let server: NodeRuntimeServerInstance | null = null;
 
   afterEach(async () => {
     if (server) {
@@ -109,7 +109,7 @@ describe('runtime-node WebSocket handshake integration', () => {
     const runtime = nodeRuntime();
     let openFired = false;
     let receivedData: unknown;
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -145,7 +145,7 @@ describe('runtime-node WebSocket handshake integration', () => {
 
   test('bidirectional message exchange over WebSocket', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -186,7 +186,7 @@ describe('runtime-node WebSocket handshake integration', () => {
   test('close handler fires when client disconnects', async () => {
     const runtime = nodeRuntime();
     let closeFired = false;
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -222,7 +222,7 @@ describe('runtime-node WebSocket handshake integration', () => {
 
   test('full lifecycle fires in order: open -> message -> close', async () => {
     const events: string[] = [];
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     const runtime = nodeRuntime();
     server = await runtime.server.listen({

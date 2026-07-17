@@ -216,7 +216,11 @@ describe('buildLeaderboard', () => {
     registerPlayerTeam(state, 'alice', 'red');
     addScore(state, 'alice', 10, 1);
 
-    const lb = buildLeaderboard(state, { teamScoring: true, display: { sortDirection: 'desc' } });
+    const lb = buildLeaderboard(state, {
+      mode: 'cumulative',
+      teamScoring: true,
+      display: { sortDirection: 'desc' },
+    });
     expect(lb.players).toHaveLength(1);
     expect(lb.teams).toHaveLength(1);
   });

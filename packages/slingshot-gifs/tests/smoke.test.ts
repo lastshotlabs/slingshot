@@ -1,7 +1,19 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
 import { createGifsPlugin } from '../src/plugin';
+
+function createTestBusAndEvents() {
+  const bus = createInProcessAdapter();
+  return {
+    bus,
+    events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus }),
+  };
+}
 
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
 
@@ -21,7 +33,7 @@ async function bootGifsApp() {
   await plugin.setupRoutes?.({
     app: app as never,
     config: emptyConfig,
-    bus: createInProcessAdapter(),
+    ...createTestBusAndEvents(),
   });
   return app;
 }

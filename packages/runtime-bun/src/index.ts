@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   RuntimeServerInstance,
+  RuntimeServerOptions,
   RuntimeSqliteDatabase,
   RuntimeSqlitePreparedStatement,
   RuntimeSqliteRunResult,
@@ -270,6 +271,35 @@ export interface BunRuntimeOptions {
    * calls in the same process register the handlers exactly once.
    */
   installProcessSafetyNet?: boolean;
+}
+
+/**
+ * The server instance returned by the Bun runtime's `server.listen()`.
+ *
+ * Narrows the core `RuntimeServerInstance` contract to what the Bun
+ * implementation actually provides: `stop()` always returns a promise, and
+ * `upgrade()` / `publish()` are always available (backed by `Bun.serve`).
+ */
+export interface BunRuntimeServerInstance extends RuntimeServerInstance {
+  stop(closeActiveConnections?: boolean): Promise<void>;
+  upgrade(req: Request, opts: { data: unknown }): boolean;
+  publish(channel: string, message: string): void;
+}
+
+/**
+ * The runtime returned by {@link bunRuntime}.
+ *
+ * Narrows the core `SlingshotRuntime` contract to the Bun implementation's
+ * concrete behavior: `server.listen()` returns synchronously (no promise) and
+ * `glob.scan()` always resolves to a `string[]`.
+ */
+export interface BunSlingshotRuntime extends SlingshotRuntime {
+  readonly server: {
+    listen(opts: RuntimeServerOptions): BunRuntimeServerInstance;
+  };
+  readonly glob: {
+    scan(pattern: string, options?: { cwd?: string }): Promise<string[]>;
+  };
 }
 
 interface ResolvedBunRuntimeOptions {
@@ -572,7 +602,7 @@ function wrapWebSocketHandler(
  * });
  * ```
  */
-export function bunRuntime(options?: BunRuntimeOptions): SlingshotRuntime {
+export function bunRuntime(options?: BunRuntimeOptions): BunSlingshotRuntime {
   const resolved = resolveOptions(options);
   if (resolved.installProcessSafetyNet) {
     installProcessSafetyNet();
@@ -612,7 +642,7 @@ export function bunRuntime(options?: BunRuntimeOptions): SlingshotRuntime {
       },
     },
     server: {
-      listen(opts): RuntimeServerInstance {
+      listen(opts: RuntimeServerOptions): BunRuntimeServerInstance {
         const fetchHandler = wrapFetch(opts.fetch, opts.error);
         const activeWebSockets = new Map<BunRuntimeWebSocket, Deferred>();
         const websocketHandler = opts.websocket

@@ -28,6 +28,8 @@ describe('resolveEnvironment', () => {
 
   const emptyRegistry: RegistryDocument = {
     version: 1,
+    platform: 'acme',
+    stacks: {},
     services: {},
     resources: {},
     updatedAt: new Date().toISOString(),
@@ -53,8 +55,13 @@ describe('resolveEnvironment', () => {
       ...emptyRegistry,
       resources: {
         postgres: {
+          type: 'postgres',
           stages: {
-            dev: { outputs: { DATABASE_URL: 'postgres://localhost/dev' }, status: 'provisioned' },
+            dev: {
+              outputs: { DATABASE_URL: 'postgres://localhost/dev' },
+              status: 'provisioned',
+              provisionedAt: new Date().toISOString(),
+            },
           },
         },
       },
@@ -97,13 +104,23 @@ describe('resolveEnvironment', () => {
       ...emptyRegistry,
       resources: {
         redis: {
+          type: 'redis',
           stages: {
-            dev: { outputs: { REDIS_HOST: 'redis://local' }, status: 'provisioned' },
+            dev: {
+              outputs: { REDIS_HOST: 'redis://local' },
+              status: 'provisioned',
+              provisionedAt: new Date().toISOString(),
+            },
           },
         },
         postgres: {
+          type: 'postgres',
           stages: {
-            dev: { outputs: { DATABASE_URL: 'pg://local' }, status: 'provisioned' },
+            dev: {
+              outputs: { DATABASE_URL: 'pg://local' },
+              status: 'provisioned',
+              provisionedAt: new Date().toISOString(),
+            },
           },
         },
       },
@@ -131,6 +148,8 @@ describe('computeDeployPlan', () => {
   const stacksInfra = stacksInfraRaw as never;
   const emptyRegistry: RegistryDocument = {
     version: 1,
+    platform: 'acme',
+    stacks: {},
     services: {},
     resources: {},
     updatedAt: new Date().toISOString(),
@@ -156,8 +175,10 @@ describe('computeDeployPlan', () => {
       services: {
         default: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
-            dev: { imageTag: 'v1', status: 'deployed' },
+            dev: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
           },
         },
       },
@@ -179,8 +200,10 @@ describe('computeDeployPlan', () => {
       services: {
         default: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
-            dev: { imageTag: 'v1', status: 'deployed' },
+            dev: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
           },
         },
       },
@@ -205,8 +228,10 @@ describe('computeDeployPlan', () => {
       services: {
         default: {
           stack: 'old-stack',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
-            dev: { imageTag: 'v1', status: 'deployed' },
+            dev: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
           },
         },
       },
@@ -252,8 +277,10 @@ describe('computeDeployPlan', () => {
       services: {
         api: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
-            dev: { imageTag: 'v1', status: 'deployed' },
+            dev: { imageTag: 'v1', status: 'deployed', deployedAt: new Date().toISOString() },
           },
         },
       },
@@ -457,14 +484,19 @@ describe('runRollback', () => {
   it('acquires lock before reading registry', async () => {
     const registryDoc: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {
         api: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
             prod: {
               imageTag: 'v2',
               status: 'deployed',
+              deployedAt: new Date().toISOString(),
               previousTags: [{ imageTag: 'v1', deployedAt: new Date().toISOString() }],
             },
           },
@@ -530,14 +562,19 @@ describe('runRollback', () => {
   it('rolls back to previous tag when no targetTag specified', async () => {
     const registryDoc: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {
         api: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
             prod: {
               imageTag: 'v3',
               status: 'deployed',
+              deployedAt: new Date().toISOString(),
               previousTags: [
                 { imageTag: 'v1', deployedAt: new Date().toISOString() },
                 { imageTag: 'v2', deployedAt: new Date().toISOString() },
@@ -569,14 +606,19 @@ describe('runRollback', () => {
   it('uses explicit targetTag when provided', async () => {
     const registryDoc: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {
         api: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
             prod: {
               imageTag: 'v3',
               status: 'deployed',
+              deployedAt: new Date().toISOString(),
               previousTags: [{ imageTag: 'v2', deployedAt: new Date().toISOString() }],
             },
           },
@@ -603,12 +645,21 @@ describe('runRollback', () => {
   it('reports error when service has no previous tags', async () => {
     const registryDoc: RegistryDocument = {
       version: 1,
+      platform: 'acme',
+      stacks: {},
       updatedAt: new Date().toISOString(),
       services: {
         api: {
           stack: 'main',
+          repo: 'github.com/acme/api',
+          uses: [],
           stages: {
-            prod: { imageTag: 'v1', status: 'deployed', previousTags: [] },
+            prod: {
+              imageTag: 'v1',
+              status: 'deployed',
+              deployedAt: new Date().toISOString(),
+              previousTags: [],
+            },
           },
         },
       },

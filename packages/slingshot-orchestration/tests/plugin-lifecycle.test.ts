@@ -11,6 +11,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { SlingshotPackageDefinition } from '@lastshotlabs/slingshot-core';
 import {
+  type CancelOutcome,
   OrchestrationError,
   createMemoryAdapter,
   createOrchestrationRuntime,
@@ -44,7 +45,9 @@ function attachMinimalContext(app: Hono) {
 }
 
 function getCapabilityProviders(app: Hono): Map<string, string> {
-  const ctx = getContext(app as never) as { capabilityProviders?: Map<string, string> };
+  const ctx = getContext(app as never) as unknown as {
+    capabilityProviders?: Map<string, string>;
+  };
   return ctx.capabilityProviders ?? new Map();
 }
 
@@ -56,7 +59,7 @@ async function publishPackageCapabilities(
   app: Hono,
   plugin: SlingshotPackageDefinition,
 ): Promise<void> {
-  const ctx = getContext(app as never) as {
+  const ctx = getContext(app as never) as unknown as {
     pluginState: Map<unknown, unknown>;
     capabilityProviders?: Map<string, string>;
   };
@@ -79,7 +82,7 @@ function makeMockAdapter() {
     runTask: mock(async () => ({ id: 'run-1', result: async () => ({}) })),
     runWorkflow: mock(async () => ({ id: 'run-1', result: async () => ({}) })),
     getRun: mock(async () => null),
-    cancelRun: mock(async () => {}),
+    cancelRun: mock(async (): Promise<CancelOutcome | undefined> => undefined),
     start: mock(async () => {}),
     shutdown: mock(async () => {}),
   };

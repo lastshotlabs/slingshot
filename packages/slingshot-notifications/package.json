@@ -1,7 +1,7 @@
 {
   "name": "@lastshotlabs/slingshot-notifications",
   "version": "0.2.0",
-  "description": "Shared notification storage, scheduling, and delivery events for slingshot",
+  "description": "Shared notification storage, scheduling, and delivery events for Slingshot",
   "license": "MIT",
   "type": "module",
   "exports": {

@@ -1,4 +1,4 @@
-# Changelog
+# @lastshotlabs/slingshot-ai
 
 ## 0.2.0 (unreleased)
 

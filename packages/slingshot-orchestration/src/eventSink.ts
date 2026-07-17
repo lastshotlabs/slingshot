@@ -1,4 +1,8 @@
-import { type SlingshotEventBus, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import {
+  type SlingshotEventBus,
+  type SlingshotEventMap,
+  createConsoleLogger,
+} from '@lastshotlabs/slingshot-core';
 import type { OrchestrationEventSink } from '@lastshotlabs/slingshot-orchestration-engine';
 
 const loggerErr = createConsoleLogger({ base: { component: 'slingshot-orchestration' } });
@@ -22,10 +26,11 @@ export interface SlingshotEventSink extends OrchestrationEventSink {
    * returned handle removes the listener immediately when called; `dispose()`
    * removes it as part of bulk cleanup.
    */
-  subscribe<K extends Parameters<SlingshotEventBus['on']>[0]>(
+  subscribe<K extends keyof SlingshotEventMap>(
     event: K,
-    handler: Parameters<SlingshotEventBus['on']>[1],
+    handler: (payload: SlingshotEventMap[K]) => void | Promise<void>,
   ): () => void;
+  subscribe(event: string, handler: (payload: unknown) => void | Promise<void>): () => void;
 }
 
 /**
@@ -48,7 +53,7 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
         loggerErr.error('eventSink.emit error', { err: String(err) });
       }
     },
-    subscribe(event, handler) {
+    subscribe(event: string, handler: (payload: unknown) => void | Promise<void>) {
       if (disposed) {
         return () => {
           /* no-op */

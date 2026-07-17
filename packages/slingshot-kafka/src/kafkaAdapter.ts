@@ -894,7 +894,6 @@ export function createKafkaAdapter(
     listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
     opts?: SubscriptionOpts,
   ): void {
-    const key = event as string;
     if (isShutdown) {
       logger.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
       return;

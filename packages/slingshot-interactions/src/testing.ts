@@ -1,8 +1,9 @@
+import type { ActionRow, ButtonComponent } from './components/types';
 import type { Dispatcher } from './handlers/contracts';
 import type { DispatchResult } from './routes/dispatchRoute.schema';
 
 /** Build a default button fixture for component tests. */
-export function buildTestButton(overrides: Record<string, unknown> = {}) {
+export function buildTestButton(overrides: Partial<ButtonComponent> = {}): ButtonComponent {
   return {
     type: 'button',
     actionId: 'test:click',
@@ -12,7 +13,7 @@ export function buildTestButton(overrides: Record<string, unknown> = {}) {
 }
 
 /** Build a default action-row fixture for component tests. */
-export function buildTestActionRow(overrides: Record<string, unknown> = {}) {
+export function buildTestActionRow(overrides: Partial<ActionRow> = {}): ActionRow {
   return {
     type: 'actionRow',
     children: [buildTestButton()],

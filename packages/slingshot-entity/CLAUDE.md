@@ -18,7 +18,7 @@ used by Slingshot feature packages.
 ## Connections
 
 - **Imports from**: `packages/slingshot-core/src/index.ts`
-- **Imported by**: `packages/slingshot-assets/src/index.ts`, `packages/slingshot-chat/src/index.ts`, `packages/slingshot-community/src/index.ts`, `packages/slingshot-emoji/src/index.ts`, `packages/slingshot-interactions/src/index.ts`, `packages/slingshot-notifications/src/index.ts`, `packages/slingshot-organizations/src/index.ts`, `packages/slingshot-polls/src/index.ts`, `packages/slingshot-push/src/index.ts`, `packages/slingshot-ssr/src/index.ts`, `packages/slingshot-webhooks/src/index.ts`, and `../../src/lib/builtinPlugins.ts`
+- **Imported by**: `packages/slingshot-assets/src/index.ts`, `packages/slingshot-chat/src/index.ts`, `packages/slingshot-community/src/index.ts`, `packages/slingshot-emoji/src/index.ts`, `packages/slingshot-interactions/src/index.ts`, `packages/slingshot-notifications/src/index.ts`, `packages/slingshot-organizations/src/index.ts`, `packages/slingshot-polls/src/index.ts`, `packages/slingshot-push/src/index.ts`, `packages/slingshot-ssr/src/index.ts`, `packages/slingshot-webhooks/src/index.ts`, and the framework root (`../../src/index.ts`, `../../src/framework/packageAuthoring.ts`, CLI commands)
 
 ## Common Tasks
 

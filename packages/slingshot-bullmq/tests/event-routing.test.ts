@@ -23,8 +23,12 @@ describe('createBullMQAdapter — event isolation', () => {
   test('emit for one event does not trigger listener of another event', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const calls: string[] = [];
-    bus.on('auth:login' as any, () => calls.push('login'));
-    bus.on('auth:logout' as any, () => calls.push('logout'));
+    bus.on('auth:login' as any, () => {
+      calls.push('login');
+    });
+    bus.on('auth:logout' as any, () => {
+      calls.push('logout');
+    });
     bus.emit('auth:login' as any, {} as any);
     expect(calls).toEqual(['login']);
   });
@@ -37,10 +41,16 @@ describe('createBullMQAdapter — event isolation', () => {
   test('emit for event with only durable subscription still delivers non-durable payload', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'route-test',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'route-test',
+      },
+    );
 
     bus.emit('auth:login' as any, { userId: 'route' } as any);
     await new Promise(r => setTimeout(r, 20));
@@ -58,7 +68,9 @@ describe('createBullMQAdapter — event isolation', () => {
       userId = 'u1';
       role = 'admin';
     }
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, new UserPayload() as any);
     expect(received).toHaveLength(1);
     expect((received[0] as Record<string, unknown>).userId).toBe('u1');
@@ -76,11 +88,19 @@ describe('createBullMQAdapter — mixed subscription types', () => {
     const nonDurableCalls: unknown[] = [];
     const durableCalls: unknown[] = [];
 
-    bus.on('auth:login' as any, (payload: unknown) => nonDurableCalls.push(payload));
-    bus.on('auth:login' as any, async (payload: unknown) => durableCalls.push(payload), {
-      durable: true,
-      name: 'mixed-test',
+    bus.on('auth:login' as any, (payload: unknown) => {
+      nonDurableCalls.push(payload);
     });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        durableCalls.push(payload);
+      },
+      {
+        durable: true,
+        name: 'mixed-test',
+      },
+    );
 
     bus.emit('auth:login' as any, { userId: 'mixed' } as any);
     await new Promise(r => setTimeout(r, 20));
@@ -93,7 +113,9 @@ describe('createBullMQAdapter — mixed subscription types', () => {
   test('non-durable listener receives payload immediately', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, (payload: unknown) => received.push(payload));
+    bus.on('auth:login' as any, (payload: unknown) => {
+      received.push(payload);
+    });
     bus.emit('auth:login' as any, { value: 42 } as any);
     expect(received).toHaveLength(1);
     expect((received[0] as Record<string, unknown>).value).toBe(42);
@@ -112,7 +134,9 @@ describe('createBullMQAdapter — multiple events routing', () => {
     const events = ['e1', 'e2', 'e3', 'e4'];
     for (const e of events) {
       calls[e] = 0;
-      bus.on(e as any, () => calls[e]++);
+      bus.on(e as any, () => {
+        calls[e]++;
+      });
     }
 
     bus.emit('e1' as any, {} as any);

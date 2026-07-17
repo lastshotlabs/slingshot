@@ -1,15 +1,15 @@
 // packages/slingshot-chat/src/entities/factories.ts
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { Block, blockOperations } from './block';
-import { FavoriteRoom, favoriteRoomOperations } from './favorite-room';
+import { FavoriteRoom, favoriteRoomOperations } from './favoriteRoom';
 import { Message, messageOperations } from './message';
-import { MessageReaction, messageReactionOperations } from './message-reaction';
+import { MessageReaction, messageReactionOperations } from './messageReaction';
 import { Pin, pinOperations } from './pin';
-import { ReadReceipt, readReceiptOperations } from './read-receipt';
+import { ReadReceipt, readReceiptOperations } from './readReceipt';
 import { Reminder, reminderOperations } from './reminder';
 import { Room, roomOperations } from './room';
-import { RoomInvite, roomInviteOperations } from './room-invite';
-import { RoomMember, roomMemberOperations } from './room-member';
+import { RoomInvite, roomInviteOperations } from './roomInvite';
+import { RoomMember, roomMemberOperations } from './roomMember';
 
 /**
  * `RepoFactories` dispatch map for `Room`.

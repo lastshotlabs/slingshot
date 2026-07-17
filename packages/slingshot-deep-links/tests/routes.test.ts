@@ -6,7 +6,13 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { InProcessAdapter, attachContext } from '@lastshotlabs/slingshot-core';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import {
+  InProcessAdapter,
+  attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+} from '@lastshotlabs/slingshot-core';
 import { createDeepLinksPlugin } from '../src/plugin';
 
 const APPLE = {
@@ -22,9 +28,10 @@ const ANDROID = {
   ],
 };
 
-function bootApp(config: Parameters<typeof createDeepLinksPlugin>[0]): Hono {
-  const app = new Hono();
+function bootApp(config: Parameters<typeof createDeepLinksPlugin>[0]): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({ definitions: createEventDefinitionRegistry(), bus });
 
   attachContext(app, {
     app,
@@ -39,9 +46,9 @@ function bootApp(config: Parameters<typeof createDeepLinksPlugin>[0]): Hono {
   // Deep-links is setup-only — just call setupMiddleware + setupRoutes
   const emptyConfigRaw = {};
   const emptyConfig = emptyConfigRaw as unknown as never;
-  plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
-  plugin.setupRoutes?.({ app, config: emptyConfig, bus });
-  plugin.setupPost?.({ app, config: emptyConfig, bus });
+  plugin.setupMiddleware?.({ app, config: emptyConfig, bus, events });
+  plugin.setupRoutes?.({ app, config: emptyConfig, bus, events });
+  plugin.setupPost?.({ app, config: emptyConfig, bus, events });
 
   return app;
 }

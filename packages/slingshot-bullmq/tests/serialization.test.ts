@@ -104,10 +104,16 @@ describe('createBullMQAdapter — serialization', () => {
 
     const bus = createBullMQAdapter({ connection: {}, serializer } as any);
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'deser-transform',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'deser-transform',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     const envelope = createRawEventEnvelope('auth:login' as any, { userId: 'u-deser' });
@@ -143,10 +149,16 @@ describe('createBullMQAdapter — serialization', () => {
 
     const bus = createBullMQAdapter({ connection: {}, serializer } as any);
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'malformed-test',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'malformed-test',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     // Dispatch with valid base64 that the custom deserializer will reject
@@ -166,10 +178,16 @@ describe('createBullMQAdapter — serialization', () => {
   test('non-serialized envelope data is used directly when __slingshot_serialized is absent', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'raw-test',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'raw-test',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     const envelope = createRawEventEnvelope('auth:login' as any, { userId: 'raw' });
@@ -217,10 +235,16 @@ describe('createBullMQAdapter — serialization', () => {
 
     const bus = createBullMQAdapter({ connection: {}, serializer } as any);
     const received: unknown[] = [];
-    bus.on('auth:login' as any, async (payload: unknown) => received.push(payload), {
-      durable: true,
-      name: 'numeric-test',
-    });
+    bus.on(
+      'auth:login' as any,
+      async (payload: unknown) => {
+        received.push(payload);
+      },
+      {
+        durable: true,
+        name: 'numeric-test',
+      },
+    );
 
     const queueName = fakeBullMQState.queues[0].name;
     const envelope = createRawEventEnvelope('auth:login' as any, { count: 42, active: true });

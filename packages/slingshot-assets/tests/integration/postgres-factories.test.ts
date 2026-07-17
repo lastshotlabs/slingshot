@@ -18,7 +18,8 @@ class FakeAssetPostgresPool {
     if (
       sql.startsWith('CREATE TABLE IF NOT EXISTS') ||
       sql.startsWith('CREATE INDEX IF NOT EXISTS') ||
-      sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS')
+      sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS') ||
+      sql.startsWith(`ALTER TABLE ${ASSET_TABLE} ADD COLUMN IF NOT EXISTS`)
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }

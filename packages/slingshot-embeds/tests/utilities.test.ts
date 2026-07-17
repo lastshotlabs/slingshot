@@ -113,7 +113,7 @@ describe('embed cache', () => {
 describe('embed unfurl redirects', () => {
   test('resolves final url metadata against the final redirect target', async () => {
     dnsSpy = spyOn(Bun.dns, 'lookup').mockImplementation(async () => [
-      { address: '93.184.216.34' },
+      { address: '93.184.216.34', family: 4 as const, ttl: 60 },
     ]);
     fetchSpy = spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(

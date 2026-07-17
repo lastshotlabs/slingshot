@@ -11,12 +11,16 @@ import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
+  ObservabilityCapability,
   OrchestrationAdapter,
+  ProgressCapability,
   Run,
   RunFilter,
   RunHandle,
   RunOptions,
+  ScheduleCapability,
   ScheduleHandle,
+  SignalCapability,
   WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration-engine';
 import {
@@ -252,7 +256,12 @@ export function createTemporalOrchestrationAdapter(
     structuredLogger?: Logger;
     logger?: Logger;
   },
-): OrchestrationAdapter & TemporalOrchestrationHealthCapability {
+): OrchestrationAdapter &
+  SignalCapability &
+  ScheduleCapability &
+  ObservabilityCapability &
+  ProgressCapability &
+  TemporalOrchestrationHealthCapability {
   const { structuredLogger: rawLogger, ...parsedInput } = rawOptions;
   const options = temporalAdapterOptionsSchema.parse(parsedInput);
   const logger: Logger =

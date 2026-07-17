@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.tests.typecheck.tsbuildinfo",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": ".tmp/typecheck/tests",
+    "noEmit": false,
+    // Tests run under `bun test` (plus a vitest split for better-sqlite3),
+    // so they need the bun:test module and Bun global types in addition to
+    // the package's node/better-sqlite3 types.
+    "types": ["node", "better-sqlite3", "bun"]
+  },
+  "include": ["tests"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    {
+      "path": "./tsconfig.typecheck.json"
+    }
+  ]
+}

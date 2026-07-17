@@ -34,7 +34,7 @@ function assertNonNegativeInteger(value: number, message: string): void {
 }
 
 export function normalizeRetryPolicy(
-  retry: RetryPolicy | undefined,
+  retry: Partial<RetryPolicy> | undefined,
   ownerLabel: string,
 ): RetryPolicy {
   if (retry?.maxAttempts !== undefined) {

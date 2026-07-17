@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WebSocket as WsClient } from 'ws';
-import type { RuntimeServerInstance } from '@lastshotlabs/slingshot-core';
+import type { NodeRuntimeServerInstance } from '../src/index';
 import { nodeRuntime } from '../src/index';
 
 /**
@@ -96,7 +96,7 @@ async function expectNoMessage(nextMessage: () => Promise<string>, ms = 300): Pr
 const ALREADY_SENT = new Response(null, { headers: { 'x-hono-already-sent': 'true' } });
 
 describe('runtime-node publish fan-out', () => {
-  let server: RuntimeServerInstance | null = null;
+  let server: NodeRuntimeServerInstance | null = null;
 
   afterEach(async () => {
     if (server) {
@@ -111,7 +111,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('publish fan-out delivers to all subscribers on the same channel', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -163,7 +163,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('a disconnected subscriber does not prevent other subscribers from receiving', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -216,7 +216,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('channel map is cleaned up when the last subscriber unsubscribes', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -279,7 +279,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('publish to different channels are isolated', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -350,7 +350,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('multiple publish calls in sequence all deliver in order', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,
@@ -397,7 +397,7 @@ describe('runtime-node publish fan-out', () => {
 
   test('publish with an empty string message does not throw', async () => {
     const runtime = nodeRuntime();
-    let inst: RuntimeServerInstance;
+    let inst: NodeRuntimeServerInstance;
 
     server = await runtime.server.listen({
       port: 0,

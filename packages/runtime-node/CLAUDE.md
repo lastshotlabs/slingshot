@@ -16,6 +16,12 @@ better-sqlite3, Node filesystem APIs, globbing, and an HTTP server factory.
 - **Imports from**: `packages/slingshot-core/src/runtime.ts`
 - **Imported by**: direct application use; no workspace package has a static dependency on it
 
+## Test Split
+
+Bun test covers everything except SQLite. Tests using better-sqlite3 (a native Node addon
+incompatible with Bun) live under `tests/node-runtime/` and run via vitest (`test:vitest`).
+Integration tests under `tests/integration/` run under bun test (`test:integration`).
+
 ## Common Tasks
 
 - **Changing Node runtime capabilities**: update `src/index.ts` and keep its JSDoc examples accurate

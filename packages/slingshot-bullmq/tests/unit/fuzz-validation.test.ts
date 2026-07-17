@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { ZodError } from 'zod';
 import { createFakeBullMQModule, fakeBullMQState } from '../../src/testing/fakeBullMQ';
+import { shutdownBus } from '../helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 const { createBullMQAdapter, bullmqAdapterOptionsSchema } = await import('../../src/bullmqAdapter');
@@ -190,7 +191,7 @@ describe('event key sanitization fuzz', () => {
     bus.emit(eventKey as any, { ok: true } as any);
 
     expect(called).toBe(true);
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('event keys with special characters do not crash adapter', async () => {
@@ -207,7 +208,7 @@ describe('event key sanitization fuzz', () => {
       expect(called).toBe(true);
     }
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('durable subscriptions with colons in event name create sanitized queue names', async () => {
@@ -221,7 +222,7 @@ describe('event key sanitization fuzz', () => {
     const queueName = fakeBullMQState.queues[0]?.name;
     expect(queueName).not.toContain(':');
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('SQL injection attempt in event key is handled gracefully', async () => {
@@ -241,7 +242,7 @@ describe('event key sanitization fuzz', () => {
       expect(called).toBe(true);
     }
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('emoji event keys are handled without crash', async () => {
@@ -257,7 +258,7 @@ describe('event key sanitization fuzz', () => {
       expect(called).toBe(true);
     }
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('durable subscription with colon in event name creates valid queue name', async () => {
@@ -271,7 +272,7 @@ describe('event key sanitization fuzz', () => {
       expect(q.name).not.toMatch(/:/);
     }
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('empty event key does not crash adapter', async () => {
@@ -284,7 +285,7 @@ describe('event key sanitization fuzz', () => {
     bus.emit('' as any, { ok: true } as any);
 
     expect(called).toBe(true);
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('very long event key does not crash adapter', async () => {
@@ -299,7 +300,7 @@ describe('event key sanitization fuzz', () => {
     bus.emit(longKey as any, { ok: true } as any);
 
     expect(called).toBe(true);
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('200 random event keys through durable subscription lifecycle', async () => {
@@ -322,7 +323,7 @@ describe('event key sanitization fuzz', () => {
       expect(q.name).not.toContain(':');
     }
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 });
 

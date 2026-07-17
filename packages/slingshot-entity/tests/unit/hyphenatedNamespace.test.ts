@@ -43,7 +43,7 @@ function adapterFor(namespace: string) {
     { id: string; provider: string; costUsd: number },
     { provider: string; costUsd: number },
     { costUsd?: number }
-  >(db as never, (entity as { config: never }).config ?? (entity as never));
+  >(db as never, (entity as unknown as { config: never }).config ?? (entity as never));
 }
 
 describe('quoteSqliteIdent', () => {
@@ -70,7 +70,9 @@ describe('an entity in a HYPHENATED namespace', () => {
     // The spend guard reads the ledger back at boot. If this list is empty, the
     // budget silently resets on every restart.
     const all = await usage.list({});
-    expect((all as { items?: unknown[] }).items?.length ?? (all as unknown[]).length).toBe(1);
+    expect(
+      (all as { items?: unknown[] }).items?.length ?? (all as unknown as unknown[]).length,
+    ).toBe(1);
   });
 
   test('a bare namespace still works (no regression)', async () => {

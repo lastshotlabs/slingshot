@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { defineTask } from '@lastshotlabs/slingshot-orchestration-engine';
 
 type MockJobState =
@@ -219,13 +220,14 @@ describe('bullmq adapter runId cache eviction', () => {
 
   test('emits log + increments metric when FIFO cache evicts the oldest entry', async () => {
     const warnings: Array<{ args: unknown[] }> = [];
-    const logger = {
+    const logger: Logger = {
       info: () => {},
       warn: (...args: unknown[]) => {
         warnings.push({ args });
       },
       error: () => {},
       debug: () => {},
+      child: () => logger,
     };
 
     const adapter = createBullMQOrchestrationAdapter({

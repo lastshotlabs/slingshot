@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { createRedisOrganizationsRateLimitStore } from '../../src/lib/rateLimitRedis';
 import type { RedisLike } from '../../src/lib/rateLimitRedis';
 
-class MockRedis implements RedisLike {
+// Intentionally partial mock — the store only ever calls `eval`.
+class MockRedis {
   calls: unknown[][] = [];
   nextResult: unknown = [1, 0, 4];
   nextError: Error | null = null;
@@ -16,6 +17,8 @@ class MockRedis implements RedisLike {
   }
 }
 
+const asRedis = (mock: MockRedis) => mock as unknown as RedisLike;
+
 const realDateNow = Date.now;
 
 describe('createRedisOrganizationsRateLimitStore', () => {
@@ -27,7 +30,7 @@ describe('createRedisOrganizationsRateLimitStore', () => {
     Date.now = () => 1_700_000_000_000;
     const redis = new MockRedis();
     redis.nextResult = [1, 0, 2];
-    const store = createRedisOrganizationsRateLimitStore(redis, 'tenant-a:org-rl:');
+    const store = createRedisOrganizationsRateLimitStore(asRedis(redis), 'tenant-a:org-rl:');
 
     await expect(store.hit('invite:user-1', 5, 60_000)).resolves.toEqual({
       allowed: true,
@@ -49,7 +52,7 @@ describe('createRedisOrganizationsRateLimitStore', () => {
   test('returns a deny decision with retry-after from Redis', async () => {
     const redis = new MockRedis();
     redis.nextResult = [0, 1_250, 0];
-    const store = createRedisOrganizationsRateLimitStore(redis);
+    const store = createRedisOrganizationsRateLimitStore(asRedis(redis));
 
     await expect(store.hit('membership:create', 3, 10_000)).resolves.toEqual({
       allowed: false,
@@ -61,7 +64,7 @@ describe('createRedisOrganizationsRateLimitStore', () => {
   test('fails open when Redis is unavailable', async () => {
     const redis = new MockRedis();
     redis.nextError = new Error('redis unavailable');
-    const store = createRedisOrganizationsRateLimitStore(redis);
+    const store = createRedisOrganizationsRateLimitStore(asRedis(redis));
 
     await expect(store.hit('invite:user-2', 7, 60_000)).resolves.toEqual({
       allowed: true,

@@ -15,6 +15,7 @@ import {
   createInProcessAdapter,
 } from '@lastshotlabs/slingshot-core';
 import {
+  type CancelOutcome,
   OrchestrationError,
   createMemoryAdapter,
   createOrchestrationRuntime,
@@ -46,7 +47,7 @@ function makeMockAdapter() {
     runTask: mock(async () => ({ id: 'run-1', result: async () => ({}) })),
     runWorkflow: mock(async () => ({ id: 'run-1', result: async () => ({}) })),
     getRun: mock(async () => null),
-    cancelRun: mock(async () => {}),
+    cancelRun: mock(async (): Promise<CancelOutcome | undefined> => undefined),
     start: mock(async () => {}),
     shutdown: mock(async () => {}),
   };
@@ -97,8 +98,8 @@ describe('createOrchestrationPackage — adapter type resolution', () => {
   });
 
   test('throws INVALID_CONFIG during setupRoutes when neither adapter nor runtime is provided', () => {
+    // @ts-expect-error - testing missing adapter/runtime
     const plugin = createOrchestrationPackage({
-      // @ts-expect-error - testing missing adapter/runtime
       tasks: [noopTask],
       routes: false,
     });
@@ -112,8 +113,8 @@ describe('createOrchestrationPackage — adapter type resolution', () => {
     const adapter = makeMockAdapter();
     const runtime = createOrchestrationRuntime({ adapter: makeMockAdapter(), tasks: [noopTask] });
 
+    // @ts-expect-error - testing conflicting adapter/runtime
     const plugin = createOrchestrationPackage({
-      // @ts-expect-error - testing conflicting adapter/runtime
       adapter,
       runtime,
       tasks: [noopTask],

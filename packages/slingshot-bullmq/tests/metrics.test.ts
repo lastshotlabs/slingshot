@@ -12,6 +12,7 @@ import {
   createInProcessMetricsEmitter,
 } from '@lastshotlabs/slingshot-core';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
+import { shutdownBus } from './helpers/bus';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
@@ -39,7 +40,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     expect(duration?.count).toBeGreaterThanOrEqual(1);
     expect(duration?.min).toBeGreaterThanOrEqual(0);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('records bullmq.consume.count success + duration when worker completes', async () => {
@@ -81,7 +82,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     expect(duration?.count).toBeGreaterThanOrEqual(1);
     expect(duration?.min).toBeGreaterThanOrEqual(0);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('records bullmq.consume.count failure when worker throws', async () => {
@@ -119,7 +120,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     );
     expect(fail?.value).toBeGreaterThanOrEqual(1);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('records bullmq.dlq.count on strict-validation failure', async () => {
@@ -145,7 +146,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     );
     expect(dlq?.value).toBeGreaterThanOrEqual(1);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('records bullmq.pending.size gauge when enqueue fails', async () => {
@@ -161,7 +162,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     const pending = snap.gauges.find(g => g.name === 'bullmq.pending.size');
     expect(pending?.value).toBeGreaterThanOrEqual(1);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 
   test('publishes bullmq.worker.paused gauge on worker error', async () => {
@@ -175,6 +176,6 @@ describe('createBullMQAdapter — metrics emitter', () => {
     const paused = snap.gauges.find(g => g.name === 'bullmq.worker.paused');
     expect(paused?.value).toBe(1);
 
-    await bus.shutdown();
+    await shutdownBus(bus);
   });
 });

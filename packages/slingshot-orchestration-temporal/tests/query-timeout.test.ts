@@ -113,8 +113,11 @@ describe('temporal query timeout (P-TEMPORAL-5)', () => {
     await new Promise(r => setTimeout(r, 10));
     expect(queryCount).toBe(1);
 
-    if (resolveQuery) {
-      resolveQuery({ progress: undefined, steps: undefined });
+    // TS control-flow narrows `resolveQuery` to its initializer (`null`) because
+    // the assignment happens inside the query() closure; re-assert the declared type.
+    const settleQuery = resolveQuery as ((value: unknown) => void) | null;
+    if (settleQuery) {
+      settleQuery({ progress: undefined, steps: undefined });
     }
     await Promise.all(calls);
   });

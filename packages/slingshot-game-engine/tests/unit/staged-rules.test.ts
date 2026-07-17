@@ -27,7 +27,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { type GameDefinition, defineGame } from '../../src/defineGame';
+import { defineGame } from '../../src/defineGame';
 import { GameError } from '../../src/errors';
 import { createInMemoryReplayStore } from '../../src/lib/replay';
 import {
@@ -39,6 +39,7 @@ import {
   destroySessionRuntime,
   stageRulesPatch,
 } from '../../src/lib/sessionRuntime';
+import type { GameDefinition } from '../../src/types/models';
 import type { GamePlayerState } from '../../src/types/models';
 
 const activeRuntimeMaps: Array<Map<string, SessionRuntime>> = [];

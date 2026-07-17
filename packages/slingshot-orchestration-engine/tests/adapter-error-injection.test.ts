@@ -8,6 +8,7 @@ import { createOrchestrationRuntime } from '../src/runtime';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
+  CancelOutcome,
   ObservabilityCapability,
   OrchestrationAdapter,
   ProgressCapability,
@@ -94,8 +95,9 @@ function createErrorAdapter(triggers: Partial<ErrorTriggers> = {}): {
       if (flags.getRun) fail('getRun');
       return null;
     },
-    async cancelRun(_runId: string): Promise<void> {
+    async cancelRun(_runId: string): Promise<CancelOutcome | undefined> {
       if (flags.cancelRun) fail('cancelRun');
+      return undefined;
     },
     async start(): Promise<void> {
       if (flags.start) fail('start');

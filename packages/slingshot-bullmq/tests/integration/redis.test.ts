@@ -12,6 +12,7 @@
  * sustained failure, and recovery after a connection drop.
  */
 import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { shutdownBus } from '../helpers/bus';
 
 const REDIS_URL = process.env.REDIS_URL;
 const skipIf = (cond: boolean) => (cond ? test.skip : test);
@@ -69,7 +70,7 @@ describe('createBullMQAdapter — real Redis', () => {
         },
       },
     });
-    lastShutdown = () => bus.shutdown();
+    lastShutdown = () => shutdownBus(bus);
 
     const dropped: string[] = [];
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'hung-redis' });
@@ -102,7 +103,7 @@ describe('createBullMQAdapter — real Redis', () => {
         },
       },
     });
-    lastShutdown = () => bus.shutdown();
+    lastShutdown = () => shutdownBus(bus);
 
     bus.on(
       'auth:login' as any,
@@ -138,7 +139,7 @@ describe('createBullMQAdapter — real Redis', () => {
         },
       },
     });
-    lastShutdown = () => bus.shutdown();
+    lastShutdown = () => shutdownBus(bus);
 
     // With no durable subscriptions, there are no DLQs
     const replayed = await bus.replayFromDlq();
@@ -168,7 +169,7 @@ describe('createBullMQAdapter — real Redis', () => {
         },
       },
     });
-    lastShutdown = () => bus.shutdown();
+    lastShutdown = () => shutdownBus(bus);
 
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'drain-backoff' });
     bus.emit('auth:login' as any, { userId: 'bo' } as any);

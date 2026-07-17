@@ -28,7 +28,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { type GameDefinition, defineGame } from '../../src/defineGame';
+import { defineGame } from '../../src/defineGame';
 import { createInMemoryReplayStore } from '../../src/lib/replay';
 import {
   type PersistedRuntimeState,
@@ -38,6 +38,7 @@ import {
   destroySessionRuntime,
   processInputPipeline,
 } from '../../src/lib/sessionRuntime';
+import type { GameDefinition } from '../../src/types/models';
 import type { GamePlayerState } from '../../src/types/models';
 
 const activeRuntimeMaps: Array<Map<string, SessionRuntime>> = [];
@@ -100,7 +101,7 @@ function makeGame(name: string, calls: string[]): GameDefinition {
       wrap: { next: null, advance: 'manual' },
     },
     handlers: {
-      enterPlay: (ctx: any) => {
+      enterPlay: (ctx: any): undefined => {
         calls.push('enterPlay');
         ctx.gameState.entries = (ctx.gameState.entries ?? 0) + 1;
       },

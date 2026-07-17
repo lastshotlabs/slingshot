@@ -1,4 +1,4 @@
-// packages/slingshot-chat/src/entities/room-member.ts
+// packages/slingshot-chat/src/entities/roomMember.ts
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import { defineOperations, entity, op } from '@lastshotlabs/slingshot-entity';
 

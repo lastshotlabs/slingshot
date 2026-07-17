@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 
 type MockJobState =
   | 'active'
@@ -216,13 +217,14 @@ describe('bullmq adapter runId scan miss', () => {
 
   test('logs scan miss + increments metric when getRun cannot find a runId', async () => {
     const warnings: Array<{ args: unknown[] }> = [];
-    const logger = {
+    const logger: Logger = {
       info: () => {},
       warn: (...args: unknown[]) => {
         warnings.push({ args });
       },
       error: () => {},
       debug: () => {},
+      child: () => logger,
     };
 
     const adapter = createBullMQOrchestrationAdapter({
@@ -266,13 +268,14 @@ describe('bullmq adapter runId scan miss', () => {
 
   test('does not log a miss when a job is found via direct lookup', async () => {
     const warnings: Array<{ args: unknown[] }> = [];
-    const logger = {
+    const logger: Logger = {
       info: () => {},
       warn: (...args: unknown[]) => {
         warnings.push({ args });
       },
       error: () => {},
       debug: () => {},
+      child: () => logger,
     };
 
     const adapter = createBullMQOrchestrationAdapter({
@@ -309,13 +312,14 @@ describe('bullmq adapter runId scan miss', () => {
 
   test('logs scan miss when a runId has been evicted from the cache', async () => {
     const warnings: Array<{ args: unknown[] }> = [];
-    const logger = {
+    const logger: Logger = {
       info: () => {},
       warn: (...args: unknown[]) => {
         warnings.push({ args });
       },
       error: () => {},
       debug: () => {},
+      child: () => logger,
     };
 
     const adapter = createBullMQOrchestrationAdapter({

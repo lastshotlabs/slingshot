@@ -60,7 +60,11 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
     );
   }
 
-  const config = mod.default as { plugins?: unknown[]; db?: Record<string, unknown> };
+  const config = mod.default as {
+    plugins?: unknown[];
+    packages?: unknown[];
+    db?: Record<string, unknown>;
+  };
 
   const entities: Record<string, ResolvedEntityConfig> = {};
   for (const plugin of config.plugins ?? []) {
@@ -69,6 +73,30 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
 
     for (const entry of metadata.entries) {
       entities[entry.config.name] = entry.config;
+    }
+  }
+
+  // Package-tier entities. Modules authored via `definePackage({ entities: [...] })`
+  // are compiled into an entity plugin only at app boot, and that plugin is kept
+  // in a closure — the tooling-metadata symbol the plugin loop reads above is
+  // never attached to the package object itself. So walk each package's own
+  // `entities` array and read the resolved config straight off
+  // `module.implementation.config`: the exact `ResolvedEntityConfig` that
+  // `compileEntityEntry` would otherwise hand to the entity plugin. Without this,
+  // the canonical package-first app shape generates no migrations.
+  for (const pkg of config.packages ?? []) {
+    const pkgEntities = (pkg as { entities?: unknown } | null)?.entities;
+    if (!Array.isArray(pkgEntities)) continue;
+    for (const entityModule of pkgEntities) {
+      if (!entityModule || typeof entityModule !== 'object') continue;
+      if ((entityModule as { kind?: unknown }).kind !== 'entity') continue;
+      const impl = (entityModule as { implementation?: unknown }).implementation;
+      const cfg = (impl as { config?: unknown } | undefined)?.config as
+        | ResolvedEntityConfig
+        | undefined;
+      if (cfg && typeof (cfg as { name?: unknown }).name === 'string') {
+        entities[cfg.name] = cfg;
+      }
     }
   }
 

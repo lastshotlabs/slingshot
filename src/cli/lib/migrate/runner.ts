@@ -8,8 +8,10 @@
  * `apply` or `status` run can detect drift (e.g. someone edited an applied
  * migration file).
  *
- * Postgres uses `pg`; SQLite uses `better-sqlite3` (the CLI bundle is built
- * for Node, so we cannot use `bun:sqlite`).
+ * Postgres uses `pg`. SQLite prefers Bun's built-in `bun:sqlite` when the CLI
+ * is running under Bun (its shipped shebang is `#!/usr/bin/env bun`, so `bunx
+ * slingshot migrate` lands here under Bun, where `better-sqlite3`'s native
+ * addon fails to load), and falls back to `better-sqlite3` under Node.
  */
 import { runInNewContext } from 'node:vm';
 import { createHash } from 'crypto';
@@ -182,6 +184,24 @@ interface SqliteDb {
 
 async function loadSqliteDb(path: string): Promise<SqliteDb> {
   type SqliteCtor = new (path: string) => SqliteDb;
+
+  // Under Bun, use the built-in `bun:sqlite` driver. `better-sqlite3` is a
+  // native Node addon that does not load under Bun, and the CLI runs under Bun
+  // by default (see the `#!/usr/bin/env bun` banner in tsup.cli.config.ts).
+  // `bun:sqlite` is externalized in that bundle, so this import survives
+  // bundling and resolves at runtime; its `Database` satisfies `SqliteDb`
+  // (exec / prepare(...).all|run / close). Node runs fall through to
+  // better-sqlite3 below.
+  if (typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined') {
+    try {
+      const bunSqlite = (await import('bun:sqlite')) as unknown as { Database: SqliteCtor };
+      return new bunSqlite.Database(path);
+    } catch {
+      // Fall through to better-sqlite3 — e.g. a Bun build where bun:sqlite is
+      // unexpectedly unavailable.
+    }
+  }
+
   type SqliteShape = SqliteCtor | { default?: SqliteCtor };
   let mod: SqliteShape;
   try {

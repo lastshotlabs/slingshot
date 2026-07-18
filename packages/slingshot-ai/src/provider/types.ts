@@ -87,6 +87,8 @@ export interface ProviderCapabilities {
   readonly costAccounting: boolean;
   /** The provider emits an explicit refusal signal rather than returning odd content. */
   readonly refusalSignal: boolean;
+  /** Whether the provider accepts inline image parts in conversation messages. */
+  readonly imageInput: boolean;
   readonly toolUse: boolean;
   readonly maxOutputTokens: number;
 }
@@ -98,10 +100,28 @@ export interface RenderedSystemBlock {
   readonly cache: boolean;
 }
 
-/** A conversation turn. */
+/** A text fragment inside a multimodal conversation turn. */
+export interface AiTextPart {
+  readonly type: 'text';
+  readonly text: string;
+}
+
+/** An inline image. The caller owns MIME validation and payload-size limits. */
+export interface AiImagePart {
+  readonly type: 'image';
+  readonly mediaType: string;
+  /** Base64 payload without a data-URL prefix. */
+  readonly data: string;
+}
+
+/** Provider-neutral content accepted by every Slingshot AI request. */
+export type AiContentPart = AiTextPart | AiImagePart;
+export type AiMessageContent = string | readonly AiContentPart[];
+
+/** A conversation turn. String content remains the concise text-only form. */
 export interface AiMessage {
   readonly role: 'user' | 'assistant';
-  readonly content: string;
+  readonly content: AiMessageContent;
 }
 
 /**

@@ -13,6 +13,7 @@
  *    quietly differ between them.
  */
 import { describe, expect, test } from 'bun:test';
+import { messageContentText } from './lib/messageContent';
 import { CONSERVATIVE_CAPABILITIES } from './provider/capabilities';
 import type {
   AiProvider,
@@ -106,7 +107,7 @@ export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeA
     if (options.match) {
       const haystack = [
         ...req.system.map(block => block.text),
-        ...req.messages.map(message => message.content),
+        ...req.messages.map(message => messageContentText(message.content)),
       ].join('\n');
       const hit = options.match.find(entry => entry.when.test(haystack));
       if (hit) return hit.respond;
@@ -156,7 +157,7 @@ export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeA
     async countTokens(req: NormalizedRequest): Promise<number> {
       const text = [
         ...req.system.map(block => block.text),
-        ...req.messages.map(message => message.content),
+        ...req.messages.map(message => messageContentText(message.content)),
       ].join('');
       return Math.ceil(text.length / 4);
     },

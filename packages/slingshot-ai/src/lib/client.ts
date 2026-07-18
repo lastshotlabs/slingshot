@@ -42,12 +42,14 @@ import type {
   AiProviderInfo,
   AiRequestBase,
   AiResult,
+  AiSpendReservation,
   AiStream,
   AiStreamEvent,
   AiStructuredRequest,
   AiUsage,
   AiVerdict,
 } from '../types';
+import { messageContentUnits } from './messageContent';
 import { createModerator } from './moderation';
 import { computeUsage, estimateMaxCost, resolvePricing } from './pricing';
 import { createResponseCache, responseCacheKey } from './responseCache';
@@ -205,6 +207,18 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const degradations: AiDegradation[] = [];
     const { capabilities: caps, name } = resolved;
 
+    const hasImages = req.messages.some(
+      message =>
+        Array.isArray(message.content) && message.content.some(part => part.type === 'image'),
+    );
+    if (hasImages && !caps.imageInput) {
+      throw new AiUnsupportedFeatureError(
+        `Provider '${name}' does not accept image input. Select an image-capable provider or ` +
+          `inspect client.capabilitiesOf(provider).imageInput before sending the request.`,
+        { feature: 'imageInput', provider: name },
+      );
+    }
+
     const rendered = renderSystem({
       system: req.system,
       capabilities: caps,
@@ -310,33 +324,91 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     return { request, degradations, rendered };
   }
 
+  function estimateRequest(resolved: Resolved, request: NormalizedRequest): number | null {
+    const inputUnits =
+      request.system.reduce((sum, block) => sum + block.text.length, 0) +
+      request.messages.reduce((sum, message) => sum + messageContentUnits(message.content), 0);
+    return estimateMaxCost({
+      inputTokens: Math.ceil(inputUnits / 4),
+      maxTokens: request.maxTokens,
+      pricing: priceFor(resolved),
+    });
+  }
+
+  async function reserveScoped(
+    source: AiRequestBase,
+    resolved: Resolved,
+    operation: 'generate' | 'generateStructured' | 'stream',
+    estimate: number | null,
+  ): Promise<AiSpendReservation | null> {
+    if (!config.spend.controller) return null;
+    if (!source.spendScope) {
+      if (config.spend.requireScope) {
+        throw new AiConfigError(
+          'slingshot-ai spend.requireScope is enabled, but this request omitted spendScope.',
+        );
+      }
+      return null;
+    }
+    return config.spend.controller.reserve({
+      scope: source.spendScope,
+      provider: resolved.name,
+      model: resolved.model,
+      operation,
+      estimatedMaxCostUsd: estimate,
+      tags: source.tags ?? null,
+    });
+  }
+
   /** Call the provider, re-checking spend before every attempt (retries included). */
   async function callProvider(
     resolved: Resolved,
     request: NormalizedRequest,
     signal: AbortSignal | undefined,
+    source: AiRequestBase,
+    operation: 'generate' | 'generateStructured' | 'stream',
   ): Promise<ProviderResult> {
     // The messages count too — and they GROW on every repair turn, since each
     // one appends the model's bad answer plus the validation errors. Estimating
     // from the system prompt alone would under-count exactly the loop we most
     // need to catch.
-    const inputChars =
-      request.system.reduce((sum, block) => sum + block.text.length, 0) +
-      request.messages.reduce((sum, message) => sum + message.content.length, 0);
-    const estimate = estimateMaxCost({
-      inputTokens: Math.ceil(inputChars / 4),
-      maxTokens: request.maxTokens,
-      pricing: priceFor(resolved),
-    });
+    const estimate = estimateRequest(resolved, request);
 
-    return withRetry(() => resolved.provider.generate(request, signal), {
-      maxAttempts: (config.providers[resolved.name]?.maxRetries ?? 2) + 1,
-      logger,
-      // THE invariant: every attempt re-enters the spend guard. A retry storm
-      // and a repair loop both spend real money, and neither is covered by a
-      // single check at the top of the call.
-      onAttempt: () => spend.check(estimate),
-    });
+    let reservation: AiSpendReservation | null = null;
+    return withRetry(
+      async () => {
+        let result: ProviderResult | undefined;
+        try {
+          result = await resolved.provider.generate(request, signal);
+          if (reservation) {
+            await reservation.settle({
+              usage: computeUsage({
+                usage: result.usage,
+                pricing: priceFor(resolved),
+                capabilities: resolved.capabilities,
+              }),
+            });
+          }
+          return result;
+        } catch (error) {
+          if (!result) await reservation?.release();
+          throw error;
+        } finally {
+          reservation = null;
+        }
+      },
+      {
+        maxAttempts: (config.providers[resolved.name]?.maxRetries ?? 2) + 1,
+        logger,
+        // THE invariant: every attempt re-enters the spend guard. A retry storm
+        // and a repair loop both spend real money, and neither is covered by a
+        // single check at the top of the call.
+        onAttempt: async () => {
+          spend.check(estimate);
+          reservation = await reserveScoped(source, resolved, operation, estimate);
+        },
+      },
+    );
   }
 
   function finishUsage(
@@ -422,6 +494,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       content: extracted,
       policy: request.policy,
       tags: req.tags,
+      spendScope: req.spendScope,
     });
 
     metrics?.counter('ai.moderation', 1, {
@@ -463,6 +536,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         system: request.system,
         messages: request.messages,
         maxTokens: request.maxTokens,
+        spendScope: req.spendScope,
       });
 
     if (cacheEnabled) {
@@ -474,7 +548,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     }
 
     const run = async (): Promise<AiResult<string>> => {
-      const result = await callProvider(resolved, request, req.signal);
+      const result = await callProvider(resolved, request, req.signal, req, 'generate');
       checkRefusal(result, resolved, degradations);
 
       const computed = finishUsage(
@@ -567,7 +641,13 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       const attemptRequest: NormalizedRequest = { ...baseRequest, messages };
       // Each repair attempt is a fresh provider call — and `callProvider`
       // re-enters the spend guard on every one of them, including its retries.
-      const result = await callProvider(resolved, attemptRequest, req.signal);
+      const result = await callProvider(
+        resolved,
+        attemptRequest,
+        req.signal,
+        req,
+        'generateStructured',
+      );
       checkRefusal(result, resolved, degradations);
 
       const computed = finishUsage(
@@ -715,7 +795,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       );
 
       const once = async (): Promise<AiResult<string>> => {
-        const result = await callProvider(resolved, request, req.signal);
+        const result = await callProvider(resolved, request, req.signal, req, 'stream');
         return toResult(result);
       };
 
@@ -733,27 +813,69 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       };
     }
 
-    spend.check(
-      estimateMaxCost({
-        inputTokens: Math.ceil(
-          request.system.reduce((sum, block) => sum + block.text.length, 0) / 4,
-        ),
-        maxTokens: request.maxTokens,
-        pricing: priceFor(resolved),
-      }),
-    );
-    const providerStream = resolved.provider.stream(request, req.signal);
+    const estimate = estimateRequest(resolved, request);
+    let started:
+      | Promise<{
+          providerStream: ReturnType<AiProvider['stream']>;
+          reservation: AiSpendReservation | null;
+        }>
+      | undefined;
+
+    const startStream = () => {
+      started ??= (async () => {
+        spend.check(estimate);
+        const reservation = await reserveScoped(req, resolved, 'stream', estimate);
+        try {
+          return {
+            providerStream: resolved.provider.stream(request, req.signal),
+            reservation,
+          };
+        } catch (error) {
+          await reservation?.release();
+          throw error;
+        }
+      })();
+      return started;
+    };
+
+    const finishStream = async (): Promise<AiResult<string>> => {
+      const active = await startStream();
+      let result: ProviderResult | undefined;
+      try {
+        result = await active.providerStream.finalResult();
+        if (active.reservation) {
+          await active.reservation.settle({
+            usage: computeUsage({
+              usage: result.usage,
+              pricing: priceFor(resolved),
+              capabilities: resolved.capabilities,
+            }),
+          });
+        }
+        return toResult(result);
+      } catch (error) {
+        if (!result) await active.reservation?.release();
+        throw error;
+      }
+    };
 
     return {
       async *[Symbol.asyncIterator](): AsyncIterator<AiStreamEvent> {
-        for await (const event of providerStream) {
-          yield event;
+        const active = await startStream();
+        try {
+          for await (const event of active.providerStream) {
+            yield event;
+          }
+        } catch (error) {
+          await active.reservation?.release();
+          throw error;
         }
-        const final = await providerStream.finalResult();
+        finalPromise ??= finishStream();
+        const final = await finalPromise;
         yield { type: 'done', stopReason: final.stopReason };
       },
-      async finalResult(): Promise<AiResult<string>> {
-        finalPromise ??= providerStream.finalResult().then(toResult);
+      finalResult(): Promise<AiResult<string>> {
+        finalPromise ??= finishStream();
         return finalPromise;
       },
     };

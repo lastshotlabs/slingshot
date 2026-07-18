@@ -98,6 +98,7 @@ describe('the cost consequence', () => {
     usageAccounting: 'full',
     costAccounting: true,
     refusalSignal: false,
+    imageInput: false,
     toolUse: false,
     maxOutputTokens: 4096,
   } as const;

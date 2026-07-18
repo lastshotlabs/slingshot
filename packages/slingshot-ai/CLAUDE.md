@@ -1,7 +1,7 @@
 # slingshot-ai — agent notes
 
-Provider-neutral AI generation. Read `README.md` first; this file is the stuff
-that will bite you.
+Provider-neutral text and multimodal AI generation. Read `README.md` first;
+this file is the stuff that will bite you.
 
 ## Architecture in one line
 
@@ -21,6 +21,16 @@ moderation, degradation) lives in the orchestrator (`src/lib/client.ts`).
    guard is pre-flight (`spend.check()` _before_ the HTTP call), because a
    post-hoc check only tells you about the runaway loop after it has finished
    spending.
+
+2b. **A request-scoped controller reserves each paid attempt.** When configured,
+it is invoked for retries and structured repairs as well as first attempts.
+Provider failures release; successful transports settle with normalized usage.
+Never move it outside `callProvider()` or eagerly settle before streaming ends.
+
+2c. **Images are never dropped as a degradation.** `AiMessage.content` can carry
+inline image parts, but a provider with `imageInput: false` throws before the
+transport call. Sending only the text parts would look successful while changing
+the request's meaning.
 
 3. **Nothing degrades silently.** Anything the provider can't honor becomes an
    `AiDegradation` on the result. `degradations.length === 0` must continue to

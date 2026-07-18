@@ -192,6 +192,7 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
     policy: Policy,
     strategy: Strategy,
     tags: AiTags | undefined,
+    spendScope: string | undefined,
   ): Promise<AiResult<ModerationVerdict>> {
     const where = target(strategy);
     return generateStructured({
@@ -208,6 +209,7 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
       messages: [{ role: 'user', content: numberItems(items, offset) }],
       promptCacheKey: 'slingshot-ai:moderation',
       tags,
+      spendScope,
       // No `moderation` key — this call must not re-enter the moderator.
     });
   }
@@ -218,6 +220,7 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
     policy: Policy,
     strategy: Strategy,
     tags: AiTags | undefined,
+    spendScope: string | undefined,
   ): Promise<{ items: AiItemVerdict[]; usage: AiUsage | null }> {
     const size = moderation.maxBatchSize;
     const batches: { slice: readonly string[]; offset: number }[] = [];
@@ -226,7 +229,9 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
     }
 
     const results = await Promise.all(
-      batches.map(batch => judgeBatch(batch.slice, batch.offset, policy, strategy, tags)),
+      batches.map(batch =>
+        judgeBatch(batch.slice, batch.offset, policy, strategy, tags, spendScope),
+      ),
     );
 
     const threshold = SEVERITY_RANK[policy.blockAtOrAbove];
@@ -269,7 +274,7 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
   }
 
   return {
-    async moderate({ content, policy: policyName, tags }): Promise<AiVerdict> {
+    async moderate({ content, policy: policyName, tags, spendScope }): Promise<AiVerdict> {
       const items = typeof content === 'string' ? [content] : [...content];
       const strategy = moderation.strategy;
 
@@ -289,7 +294,9 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
 
       let passResults: { items: AiItemVerdict[]; usage: AiUsage | null }[];
       try {
-        passResults = await Promise.all(passes.map(pass => runPass(items, policy, pass, tags)));
+        passResults = await Promise.all(
+          passes.map(pass => runPass(items, policy, pass, tags, spendScope)),
+        );
       } catch (error) {
         // FAIL CLOSED. The judge broke; we do not get to assume the content was
         // fine. `onError: 'allow'` exists for apps that would rather ship than

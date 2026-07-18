@@ -29,6 +29,8 @@ export interface MockOptions {
   readonly stopReason?: string;
   /** OpenAI-only: populate `message.refusal`. */
   readonly refusal?: string;
+  /** Delay between streamed frames; used to prove deltas are not buffered. */
+  readonly streamDelayMs?: number;
 }
 
 /** Chunk text the way a real stream would — several deltas, not one. */
@@ -127,9 +129,85 @@ export function startMockAnthropic(options: MockOptions = {}): MockServer {
       });
       push('message_stop', { type: 'message_stop' });
 
-      return new Response(frames.join(''), {
+      const responseBody = options.streamDelayMs
+        ? new ReadableStream<Uint8Array>({
+            async start(controller) {
+              const encoder = new TextEncoder();
+              for (const frame of frames) {
+                controller.enqueue(encoder.encode(frame));
+                await Bun.sleep(options.streamDelayMs!);
+              }
+              controller.close();
+            },
+          })
+        : frames.join('');
+      return new Response(responseBody, {
         headers: { 'content-type': 'text/event-stream' },
       });
+    },
+  });
+
+  return {
+    url: `http://localhost:${server.port}`,
+    requests,
+    headers,
+    stop: () => server.stop(true),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Gemini
+// ---------------------------------------------------------------------------
+
+export function startMockGemini(options: MockOptions = {}): MockServer {
+  const text = options.text ?? 'Hello from Gemini.';
+  const finishReason = options.stopReason ?? 'STOP';
+  const requests: Record<string, unknown>[] = [];
+  const headers: Record<string, string>[] = [];
+  const usageMetadata = { promptTokenCount: 13, candidatesTokenCount: 9 };
+
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      requests.push(body);
+      headers.push(Object.fromEntries(request.headers.entries()));
+
+      if (options.status && options.status >= 400) {
+        return new Response(JSON.stringify({ error: { message: 'mock failure' } }), {
+          status: options.status,
+          headers: { 'content-type': 'application/json', ...(options.headers ?? {}) },
+        });
+      }
+
+      const payload = (delta: string, final = false) => ({
+        candidates: [
+          {
+            content: { role: 'model', parts: [{ text: delta }] },
+            ...(final ? { finishReason } : {}),
+          },
+        ],
+        ...(final ? { usageMetadata } : {}),
+      });
+
+      if (!url.pathname.endsWith(':streamGenerateContent')) {
+        return Response.json(payload(text, true));
+      }
+
+      const frames = [...chunk(text).map(delta => `data: ${JSON.stringify(payload(delta))}\n\n`)];
+      frames.push(`data: ${JSON.stringify(payload('', true))}\n\n`);
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          for (const frame of frames) {
+            controller.enqueue(encoder.encode(frame));
+            if (options.streamDelayMs) await Bun.sleep(options.streamDelayMs);
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
     },
   });
 
@@ -256,7 +334,19 @@ export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
       );
       frames.push('data: [DONE]\n\n');
 
-      return new Response(frames.join(''), {
+      const responseBody = options.streamDelayMs
+        ? new ReadableStream<Uint8Array>({
+            async start(controller) {
+              const encoder = new TextEncoder();
+              for (const frame of frames) {
+                controller.enqueue(encoder.encode(frame));
+                await Bun.sleep(options.streamDelayMs!);
+              }
+              controller.close();
+            },
+          })
+        : frames.join('');
+      return new Response(responseBody, {
         headers: { 'content-type': 'text/event-stream' },
       });
     },

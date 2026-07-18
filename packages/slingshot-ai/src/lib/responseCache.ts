@@ -18,7 +18,7 @@
  *     costing the variety. That asymmetry is the whole design.
  */
 import type { AiPackageConfig } from '../config';
-import type { AiLogger } from '../provider/types';
+import type { AiLogger, AiMessageContent } from '../provider/types';
 import type { AiCacheAdapter } from './seams';
 
 export interface ResponseCache {
@@ -116,9 +116,10 @@ export function responseCacheKey(parts: {
   provider: string;
   model: string;
   system: readonly { text: string }[];
-  messages: readonly { role: string; content: string }[];
+  messages: readonly { role: string; content: AiMessageContent }[];
   maxTokens: number;
   schemaName?: string;
+  spendScope?: string;
 }): string {
   const source = JSON.stringify([
     parts.provider,
@@ -127,6 +128,7 @@ export function responseCacheKey(parts: {
     parts.messages.map(message => [message.role, message.content]),
     parts.maxTokens,
     parts.schemaName ?? null,
+    parts.spendScope ?? null,
   ]);
   let hash = 0x811c9dc5;
   for (let i = 0; i < source.length; i++) {

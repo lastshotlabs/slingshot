@@ -13,9 +13,11 @@
  * gets the built-ins without doing anything.
  */
 import './anthropic';
+import './gemini';
 import './openaiCompatible';
 
 export { createAnthropicProvider } from './anthropic';
+export { createGeminiProvider } from './gemini';
 export {
   createDeepSeekProvider,
   createGrokProvider,

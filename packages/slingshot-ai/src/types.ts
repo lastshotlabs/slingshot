@@ -6,14 +6,28 @@
  */
 import type { z } from 'zod';
 import type {
+  AiContentPart,
   AiEffort,
+  AiImagePart,
   AiMessage,
+  AiMessageContent,
   AiStopReason,
+  AiTextPart,
   ModelPricing,
   ProviderCapabilities,
 } from './provider/types';
 
-export type { AiEffort, AiMessage, AiStopReason, ModelPricing, ProviderCapabilities };
+export type {
+  AiContentPart,
+  AiEffort,
+  AiImagePart,
+  AiMessage,
+  AiMessageContent,
+  AiStopReason,
+  AiTextPart,
+  ModelPricing,
+  ProviderCapabilities,
+};
 
 /** Arbitrary labels recorded on the usage record and used as metric labels. */
 export type AiTags = Readonly<Record<string, string>>;
@@ -80,8 +94,44 @@ export interface AiRequestBase {
   readonly promptCacheKey?: string;
   /** Recorded on the usage record; used as metric labels. e.g. `{ matchId, feature: 'deck-gen' }`. */
   readonly tags?: AiTags;
+  /**
+   * Budget identity passed to a configured request-scoped spend controller.
+   * Multi-user apps normally use a stable user or tenant id.
+   */
+  readonly spendScope?: string;
   /** Omit for the config default (on); `false` to explicitly skip. */
   readonly moderation?: AiModerationRequest | false;
+}
+
+/** One provider attempt presented to an app-supplied durable budget controller. */
+export interface AiSpendReservationRequest {
+  readonly scope: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly operation: 'generate' | 'generateStructured' | 'stream';
+  readonly estimatedMaxCostUsd: number | null;
+  readonly tags: AiTags | null;
+}
+
+/** Actual accounting supplied when a reserved provider attempt finishes. */
+export interface AiSpendSettlement {
+  readonly usage: AiUsage;
+}
+
+/** Reservation returned by a durable, request-scoped spend controller. */
+export interface AiSpendReservation {
+  settle(settlement: AiSpendSettlement): Promise<void>;
+  release(): Promise<void>;
+}
+
+/**
+ * App-owned durable spend enforcement seam.
+ *
+ * Slingshot invokes this for every provider attempt, including retries and
+ * structured-output repairs. Throwing from `reserve` prevents the paid call.
+ */
+export interface AiSpendController {
+  reserve(request: AiSpendReservationRequest): Promise<AiSpendReservation>;
 }
 
 export interface AiStructuredRequest<T> extends AiRequestBase {
@@ -108,6 +158,7 @@ export interface AiUsage {
 /** Every feature the orchestrator can silently do worse. It never does so silently. */
 export type AiDegradableFeature =
   | 'structuredOutput'
+  | 'imageInput'
   | 'promptCaching'
   | 'thinking'
   | 'effort'
@@ -235,6 +286,7 @@ export interface AiModerator {
     readonly content: string | readonly string[];
     readonly policy: string;
     readonly tags?: AiTags;
+    readonly spendScope?: string;
   }): Promise<AiVerdict>;
   policies(): readonly string[];
 }

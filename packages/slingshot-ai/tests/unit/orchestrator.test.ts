@@ -155,6 +155,113 @@ describe('cost honesty', () => {
   });
 });
 
+describe('request-scoped spend controller', () => {
+  test('reserves and settles a paid attempt under the supplied scope', async () => {
+    const events: string[] = [];
+    const controller = {
+      async reserve(request: { scope: string }) {
+        events.push(`reserve:${request.scope}`);
+        return {
+          async settle() {
+            events.push('settle');
+          },
+          async release() {
+            events.push('release');
+          },
+        };
+      },
+    };
+    const provider = createFakeAiProvider({
+      responses: ['ok'],
+      capabilities: { costAccounting: true, usageAccounting: 'full' },
+    });
+    const { client } = build(provider, {
+      providers: {
+        test: {
+          provider,
+          pricing: { 'fake-model-1': { inputPerMTok: 1, outputPerMTok: 1 } },
+        },
+      },
+      spend: { controller, requireScope: true },
+    });
+
+    await client.generate({ ...ask, spendScope: 'user-123' });
+    expect(events).toEqual(['reserve:user-123', 'settle']);
+  });
+
+  test('settles a streaming reservation when the caller only consumes the iterator', async () => {
+    const events: string[] = [];
+    const controller = {
+      async reserve(request: { scope: string; operation: string }) {
+        events.push(`reserve:${request.scope}:${request.operation}`);
+        return {
+          async settle() {
+            events.push('settle');
+          },
+          async release() {
+            events.push('release');
+          },
+        };
+      },
+    };
+    const provider = createFakeAiProvider({
+      responses: ['streamed answer'],
+      capabilities: { streaming: true, costAccounting: true, usageAccounting: 'full' },
+    });
+    const { client } = build(provider, {
+      providers: {
+        test: {
+          provider,
+          pricing: { 'fake-model-1': { inputPerMTok: 1, outputPerMTok: 1 } },
+        },
+      },
+      spend: { controller, requireScope: true },
+    });
+
+    const stream = client.stream({ ...ask, spendScope: 'user-123' });
+    for await (const _event of stream) {
+      // Consuming the iterator must finalize spend even when finalResult() is not called.
+    }
+
+    expect(events).toEqual(['reserve:user-123:stream', 'settle']);
+  });
+
+  test('requireScope blocks the provider call before money can be spent', async () => {
+    const provider = createFakeAiProvider({ responses: ['should not run'] });
+    const controller = {
+      async reserve() {
+        throw new Error('reserve should not be reached');
+      },
+    };
+    const { client } = build(provider, { spend: { controller, requireScope: true } });
+
+    await expect(client.generate(ask)).rejects.toThrow(/omitted spendScope/);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  test('releases a reservation when the provider attempt fails', async () => {
+    const events: string[] = [];
+    const controller = {
+      async reserve() {
+        events.push('reserve');
+        return {
+          async settle() {
+            events.push('settle');
+          },
+          async release() {
+            events.push('release');
+          },
+        };
+      },
+    };
+    const provider = createFakeAiProvider({ responses: [{ error: new Error('boom') }] });
+    const { client } = build(provider, { spend: { controller, requireScope: true } });
+
+    await expect(client.generate({ ...ask, spendScope: 'user-123' })).rejects.toThrow('boom');
+    expect(events).toEqual(['reserve', 'release']);
+  });
+});
+
 describe('spend guard', () => {
   test('blocks the call BEFORE it is made once the hard limit is reached', async () => {
     const provider = createFakeAiProvider({

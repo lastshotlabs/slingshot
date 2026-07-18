@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-ai
 
+## 0.3.0
+
+### Minor Changes
+
+- Add provider-neutral inline image messages, a built-in Gemini transport, durable
+  request-scoped spend reservations, and truly incremental OpenAI-compatible
+  streaming.
+
 ## 0.2.0 (unreleased)
 
 Initial implementation.

@@ -10,6 +10,7 @@ even on providers that don't support it, and cost accounting that never invents
 a number.
 
 ```ts
+import { defineApp } from '@lastshotlabs/slingshot';
 import { AiClientCap, createAiPackage } from '@lastshotlabs/slingshot-ai';
 
 export default defineApp({
@@ -62,7 +63,7 @@ by summing unknowns as zero.
 
 | Capability        | Type            | For                                             |
 | ----------------- | --------------- | ----------------------------------------------- |
-| `AiClientCap`     | `AiClient`      | generation: text, structured, streaming         |
+| `AiClientCap`     | `AiClient`      | generation: text/images, structured, streaming  |
 | `AiModerationCap` | `AiModerator`   | safety verdicts, with no ability to spend money |
 | `AiUsageCap`      | `AiUsageReader` | usage, cost, and spend reads for admin surfaces |
 
@@ -95,6 +96,62 @@ about the runaway loop once it has finished spending the money. Every retry and
 every structured-repair attempt re-enters the guard, because those are exactly
 the shapes an accidental bill takes.
 
+Multi-user apps can add a durable per-user or per-tenant controller without
+forking the generation path. Set `spend.controller` and
+`spend.requireScope: true`, then pass `spendScope` on every request. The
+controller reserves before **every provider attempt** (including retries and
+structured repairs), settles with normalized usage, and releases failed calls:
+
+```ts
+spend: {
+  requireScope: true,
+  controller: {
+    async reserve({ scope, provider, model, estimatedMaxCostUsd, tags }) {
+      const reservation = await ledger.reserve({
+        userId: scope,
+        provider,
+        model,
+        estimatedMaxCostUsd,
+        attemptId: tags?.attemptId,
+      });
+      return {
+        settle: ({ usage }) => ledger.settle(reservation.id, usage),
+        release: () => ledger.release(reservation.id),
+      };
+    },
+  },
+}
+```
+
+The built-in process-wide guard remains useful as an operator ceiling. The
+controller is the transaction/concurrency seam for application-owned budgets.
+
+## Multimodal messages
+
+`AiMessage.content` accepts either a string or provider-neutral content parts.
+Inline images are base64 payloads without a data-URL prefix:
+
+```ts
+await ai.generateStructured({
+  provider: 'vision',
+  schema: ScreenshotRecords,
+  spendScope: user.id,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Extract the visible fitness records.' },
+        { type: 'image', mediaType: 'image/webp', data: webpBase64 },
+      ],
+    },
+  ],
+});
+```
+
+Inspect `client.capabilitiesOf(provider).imageInput` before exposing an upload
+flow. Sending an image to a text-only provider throws
+`AiUnsupportedFeatureError`; images are never silently dropped.
+
 ## Providers
 
 | kind                | Backs                                             | Default model       | Structured output      | Prompt caching              | Reasoning          | Cost         |
@@ -103,12 +160,13 @@ the shapes an accidental bill takes.
 | `openai`            | the OpenAI API                                    | `gpt-5.4-mini`      | native                 | automatic                   | opt-out¹           | table        |
 | `grok`              | xAI (`api.x.ai`)                                  | `grok-4.3`          | native                 | automatic (routing key)     | **always on**²     | **vendor**³  |
 | `deepseek`          | DeepSeek (`api.deepseek.com`)                     | `deepseek-v4-flash` | **json-mode**          | automatic                   | **on by default**⁴ | table        |
+| `gemini`            | Google Gemini GenerateContent                     | `gemini-3.5-flash`  | native                 | none                        | none               | config table |
 | `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | _(required)_        | json-mode (declarable) | none (declarable)           | none               | off / `free` |
 
-All four presets are the **same zero-dependency `fetch` adapter** — a provider is
-a baseUrl, a capability descriptor, and a price table. Only `anthropic` has an
-SDK, and it is an **optional peer** imported lazily: an app that only talks to a
-local model never installs it.
+`openai`, `grok`, and `deepseek` are presets over the same zero-dependency
+compatible transport. `gemini` is a separate zero-dependency GenerateContent
+transport. Only `anthropic` has an SDK, and it is an **optional peer** imported
+lazily: an app that never selects it does not load it.
 
 **Which to pick.** `deepseek` is by a wide margin the cheapest (`v4-flash`:
 $0.14/MTok in, $0.28 out, and a cache-hit rate of $0.0028 — 50× cheaper than a
@@ -207,12 +265,13 @@ A zod schema cannot ride a queue, so the job carries the schema **name** and the
 worker looks the real schema up:
 
 ```ts
+// @skip-typecheck — abbreviated app wiring; see the orchestration package guide.
 import { createAiGenerationTask } from '@lastshotlabs/slingshot-ai/orchestration';
 
 const aiTask = createAiGenerationTask({ schemas: { deck: DeckSchema } });
 
-packages: [
-  createAiPackage({ ..., orchestration: { enabled: true } }),
+const packages = [
+  createAiPackage({ orchestration: { enabled: true } }),
   createOrchestrationPackage({ adapter, tasks: [aiTask] }),
 ];
 ```
@@ -247,6 +306,8 @@ app a fresh budget on every restart.
 ## Testing
 
 ```ts
+import { expect } from 'bun:test';
+import { createAiPackage } from '@lastshotlabs/slingshot-ai';
 import { createFakeAiProvider } from '@lastshotlabs/slingshot-ai/testing';
 
 const provider = createFakeAiProvider({
@@ -270,9 +331,11 @@ claim rather than a hope.
 ## Status
 
 Feature-complete. Landed: the provider seam and conformance suite; the
-`anthropic`, `openai-compatible`, and `openai` adapters; the orchestrator with
+`anthropic`, `gemini`, `openai-compatible`, and provider presets; multimodal
+image input; the orchestrator with
 structured output and a bounded repair loop; the three prompt-cache detectors;
-the pre-flight spend guard with ledger-backed hydration and an
+the pre-flight spend guard with ledger-backed hydration plus durable
+request-scoped reservation controllers and an
 `ai:spend.soft_limit` event; LLM-backed moderation (independent / self / both,
 batched, cross-provider, fail-closed); persisted usage with no HTTP surface;
 the cache-adapter-backed response cache plus in-flight coalescing; and durable

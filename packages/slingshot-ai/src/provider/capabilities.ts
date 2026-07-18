@@ -22,6 +22,7 @@ export const CONSERVATIVE_CAPABILITIES: ProviderCapabilities = Object.freeze({
   usageAccounting: 'none',
   costAccounting: false,
   refusalSignal: false,
+  imageInput: false,
   toolUse: false,
   maxOutputTokens: 4096,
 });

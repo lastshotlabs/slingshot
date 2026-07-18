@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 import { type AiPackageConfigInput, aiPackageConfigSchema } from '../../src/config';
 import { createAiClient } from '../../src/lib/client';
+import { messageContentText } from '../../src/lib/messageContent';
 import { createFakeAiProvider } from '../../src/testing';
 import type { AiModerator } from '../../src/types';
 
@@ -149,7 +150,9 @@ describe('moderation', () => {
       capabilities: { structuredOutput: 'native' },
       handler: req => {
         // Answer whatever indices this batch actually asked about.
-        const asked = [...req.messages[0]!.content.matchAll(/\[(\d+)\]/g)].map(m => Number(m[1]));
+        const asked = [...messageContentText(req.messages[0]!.content).matchAll(/\[(\d+)\]/g)].map(
+          m => Number(m[1]),
+        );
         return {
           text: JSON.stringify({
             items: asked.map(index => ({

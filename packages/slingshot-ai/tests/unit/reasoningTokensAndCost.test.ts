@@ -62,6 +62,7 @@ const PRICED_CAPS: ProviderCapabilities = {
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: false,
+  imageInput: false,
   toolUse: true,
   maxOutputTokens: 8192,
 };

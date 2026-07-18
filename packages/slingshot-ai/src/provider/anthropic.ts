@@ -24,6 +24,7 @@
  */
 import type { AiProviderConfig } from '../config';
 import { AiConfigError, AiProviderError, AiRateLimitError, AiTimeoutError } from '../errors';
+import { createEventQueue } from '../lib/eventQueue';
 import { resolveCapabilities } from './capabilities';
 import { registerBuiltinProvider } from './registry';
 import type { BuildProviderDeps } from './registry';
@@ -58,6 +59,7 @@ const ANTHROPIC_CAPABILITIES: ProviderCapabilities = Object.freeze({
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: true,
+  imageInput: true,
   toolUse: true,
   maxOutputTokens: 64_000,
 });
@@ -215,7 +217,24 @@ function buildParams(req: NormalizedRequest): Record<string, unknown> {
     model: req.model,
     max_tokens: req.maxTokens,
     ...(system.length > 0 ? { system } : {}),
-    messages: req.messages.map(message => ({ role: message.role, content: message.content })),
+    messages: req.messages.map(message => ({
+      role: message.role,
+      content:
+        typeof message.content === 'string'
+          ? message.content
+          : message.content.map(part =>
+              part.type === 'text'
+                ? { type: 'text', text: part.text }
+                : {
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: part.mediaType,
+                      data: part.data,
+                    },
+                  },
+            ),
+    })),
     ...(req.thinking ? { thinking: { type: 'adaptive' as const } } : {}),
     ...(Object.keys(outputConfig).length > 0 ? { output_config: outputConfig } : {}),
     // NOTE: no temperature, no top_p, no top_k. They are removed on Opus 4.8 and
@@ -280,49 +299,6 @@ function toResult(message: AnthropicMessage, textOverride?: string): ProviderRes
     stopReason,
     usage: mapUsage(message.usage),
     raw: message,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// A single-consumer async queue, for the streaming path.
-// ---------------------------------------------------------------------------
-
-function createEventQueue<T>() {
-  const items: T[] = [];
-  let wake: (() => void) | null = null;
-  let finished = false;
-  let failure: unknown = null;
-
-  const notify = (): void => {
-    wake?.();
-    wake = null;
-  };
-
-  return {
-    push(item: T): void {
-      items.push(item);
-      notify();
-    },
-    finish(): void {
-      finished = true;
-      notify();
-    },
-    fail(error: unknown): void {
-      failure = error;
-      finished = true;
-      notify();
-    },
-    async *drain(): AsyncGenerator<T> {
-      let cursor = 0;
-      for (;;) {
-        while (cursor < items.length) yield items[cursor++] as T;
-        if (failure) throw failure;
-        if (finished) return;
-        await new Promise<void>(resolve => {
-          wake = resolve;
-        });
-      }
-    },
   };
 }
 

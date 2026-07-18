@@ -9,7 +9,7 @@
  */
 import { z } from 'zod';
 import type { AiLogger, AiProvider, ModelPricing, ProviderCapabilities } from './provider/types';
-import type { AiModerator } from './types';
+import type { AiModerator, AiSpendController } from './types';
 
 /** A factory for a custom provider — the escape hatch for anything not built in. */
 export type ProviderFactory = (
@@ -35,6 +35,7 @@ const providerCapabilitiesSchema = z.object({
   usageAccounting: z.enum(['full', 'partial', 'none']),
   costAccounting: z.boolean(),
   refusalSignal: z.boolean(),
+  imageInput: z.boolean(),
   toolUse: z.boolean(),
   maxOutputTokens: z.number().int().positive(),
 });
@@ -181,6 +182,18 @@ export const aiPackageConfigSchema = z.object({
       hardLimitUsd: z.number().positive().optional(),
       refreshMs: z.number().int().positive().default(60_000),
       onSoftLimit: z.custom<(status: unknown) => void>(v => typeof v === 'function').optional(),
+      controller: z
+        .custom<AiSpendController>(
+          value => typeof value === 'object' && value !== null && 'reserve' in value,
+        )
+        .optional()
+        .describe(
+          'Optional durable request-scoped reservation controller; invoked for every provider attempt.',
+        ),
+      requireScope: z
+        .boolean()
+        .default(false)
+        .describe('Reject generation without spendScope when a spend controller is configured.'),
     })
     .prefault({}),
 

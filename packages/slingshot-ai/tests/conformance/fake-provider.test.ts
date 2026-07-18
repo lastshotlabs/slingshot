@@ -27,6 +27,7 @@ runProviderConformanceSuite('fake (fully capable)', () =>
       usageAccounting: 'full',
       costAccounting: true,
       refusalSignal: true,
+      imageInput: true,
       toolUse: true,
       maxOutputTokens: 8192,
     },

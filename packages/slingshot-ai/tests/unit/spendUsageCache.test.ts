@@ -246,6 +246,18 @@ describe('response cache vs in-flight coalescing', () => {
     expect(provider.calls).toHaveLength(1);
   });
 
+  test('never coalesces paid work across spend scopes', async () => {
+    const provider = createFakeAiProvider({ responses: ['ok'] });
+    const { client } = build(provider);
+
+    await Promise.all([
+      client.generate({ ...ask, spendScope: 'user-a' }),
+      client.generate({ ...ask, spendScope: 'user-b' }),
+    ]);
+
+    expect(provider.calls).toHaveLength(2);
+  });
+
   test('but SEQUENTIAL identical calls still hit the provider (variety is preserved)', async () => {
     // Coalescing collapses CONCURRENT requests. It must not turn into a response
     // cache, or every generated deck would be identical.

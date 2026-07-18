@@ -17,6 +17,7 @@
  */
 import type { AiProviderConfig } from '../config';
 import { AiConfigError, AiProviderError, AiRateLimitError, AiTimeoutError } from '../errors';
+import { createEventQueue } from '../lib/eventQueue';
 import { resolveCapabilities } from './capabilities';
 import { type BuildProviderDeps, registerBuiltinProvider } from './registry';
 import type {
@@ -57,6 +58,7 @@ const COMPATIBLE_CAPABILITIES: ProviderCapabilities = Object.freeze({
   // get `costUsd: 0`; otherwise cost is honestly `null`.
   costAccounting: false,
   refusalSignal: false,
+  imageInput: false,
   toolUse: false,
   maxOutputTokens: 4096,
 });
@@ -93,6 +95,7 @@ const OPENAI_CAPABILITIES: ProviderCapabilities = Object.freeze({
   usageAccounting: 'full',
   costAccounting: true,
   refusalSignal: true,
+  imageInput: true,
   toolUse: true,
   maxOutputTokens: 16_384,
 });
@@ -598,11 +601,24 @@ function createProvider(
     // are dropped on purpose: this family has no explicit breakpoint concept,
     // and the orchestrator already knows that (capabilities say
     // `promptCaching: 'none' | 'automatic'`), so nothing is being hidden.
-    const messages: { role: string; content: string }[] = [];
+    const messages: { role: string; content: unknown }[] = [];
     const systemText = req.system.map(block => block.text).join('\n\n');
     if (systemText) messages.push({ role: 'system', content: systemText });
     for (const message of req.messages) {
-      messages.push({ role: message.role, content: message.content });
+      messages.push({
+        role: message.role,
+        content:
+          typeof message.content === 'string'
+            ? message.content
+            : message.content.map(part =>
+                part.type === 'text'
+                  ? { type: 'text', text: part.text }
+                  : {
+                      type: 'image_url',
+                      image_url: { url: `data:${part.mediaType};base64,${part.data}` },
+                    },
+              ),
+      });
     }
 
     const payload: Record<string, unknown> = {
@@ -712,7 +728,7 @@ function createProvider(
 
     stream(req: NormalizedRequest, signal?: AbortSignal): ProviderStream {
       let final: Promise<ProviderResult> | undefined;
-      const events: ProviderStreamEvent[] = [];
+      const queue = createEventQueue<ProviderStreamEvent>();
 
       // One pass over the SSE body fills `events` and resolves the result. The
       // iterator replays `events`, so the deltas it yields and the text in the
@@ -770,18 +786,19 @@ function createProvider(
               // the reasoning never entered either side of that equation.
               const thinking = choice.delta?.reasoning_content;
               if (typeof thinking === 'string' && thinking.length > 0) {
-                events.push({ type: 'thinking', delta: thinking });
+                queue.push({ type: 'thinking', delta: thinking });
               }
 
               const delta = choice.delta?.content;
               if (typeof delta === 'string' && delta.length > 0) {
                 text += delta;
-                events.push({ type: 'text', delta });
+                queue.push({ type: 'text', delta });
               }
             }
           }
         }
 
+        queue.finish();
         return {
           text,
           stopReason: mapStopReason(lastChoice),
@@ -791,15 +808,18 @@ function createProvider(
       }
 
       function start(): Promise<ProviderResult> {
-        final ??= consume();
+        final ??= consume().catch(error => {
+          queue.fail(error);
+          throw error;
+        });
         void final.catch(() => {});
         return final;
       }
 
       return {
         async *[Symbol.asyncIterator](): AsyncIterator<ProviderStreamEvent> {
-          await start();
-          yield* events;
+          void start();
+          yield* queue.drain();
         },
         finalResult: () => start(),
       };

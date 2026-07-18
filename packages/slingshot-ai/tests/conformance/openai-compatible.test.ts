@@ -172,6 +172,20 @@ describe('openai-compatible adapter', () => {
     expect(final.usage.outputTokens).toBe(9);
   });
 
+  test('yields the first SSE delta before the provider finishes', async () => {
+    const delayed = startMockOpenAi({ text: 'one two three four five six', streamDelayMs: 15 });
+    try {
+      const iterator = build({}, delayed).stream(request())[Symbol.asyncIterator]();
+      const winner = await Promise.race([
+        iterator.next().then(() => 'delta'),
+        Bun.sleep(60).then(() => 'timeout'),
+      ]);
+      expect(winner).toBe('delta');
+    } finally {
+      delayed.stop();
+    }
+  });
+
   test('maps 429 → AiRateLimitError, 4xx → non-retryable, 5xx → retryable', async () => {
     const limited = startMockOpenAi({ status: 429, headers: { 'retry-after': '3' } });
     const bad = startMockOpenAi({ status: 400 });

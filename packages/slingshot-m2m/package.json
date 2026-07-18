@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-m2m",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Machine-to-machine (M2M) OAuth2 client credentials plugin for Slingshot",
   "license": "MIT",
   "type": "module",

@@ -1,5 +1,33 @@
 # @lastshotlabs/slingshot
 
+## 0.2.1
+
+### Patch Changes
+
+- Republish the framework from current HEAD so consumers install current source
+  (e.g. game-engine applyStagedRules/sessionRoom) rather than stale dist. Registry-sync release, no intended API changes.
+- Updated dependencies
+  - @lastshotlabs/slingshot-admin@0.2.1
+  - @lastshotlabs/slingshot-auth@0.2.1
+  - @lastshotlabs/slingshot-bullmq@0.2.1
+  - @lastshotlabs/slingshot-community@0.2.1
+  - @lastshotlabs/slingshot-core@0.2.1
+  - @lastshotlabs/slingshot-deep-links@0.2.1
+  - @lastshotlabs/slingshot-entity@0.2.1
+  - @lastshotlabs/slingshot-interactions@0.2.1
+  - @lastshotlabs/slingshot-kafka@0.2.1
+  - @lastshotlabs/slingshot-mail@0.2.1
+  - @lastshotlabs/slingshot-notifications@0.2.1
+  - @lastshotlabs/slingshot-orchestration@0.2.1
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.1
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.1
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.1
+  - @lastshotlabs/slingshot-organizations@0.2.1
+  - @lastshotlabs/slingshot-permissions@0.2.1
+  - @lastshotlabs/slingshot-postgres@0.2.1
+  - @lastshotlabs/slingshot-push@0.2.1
+  - @lastshotlabs/slingshot-webhooks@0.2.1
+
 ## 0.1.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-organizations",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Organizations and groups management plugin for Slingshot",
   "license": "MIT",
   "type": "module",

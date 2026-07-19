@@ -36,6 +36,7 @@ import {
   advancePhase,
   createSessionRuntime,
   destroySessionRuntime,
+  flushSessionRuntimePersistence,
   processInputPipeline,
 } from '../../src/lib/sessionRuntime';
 import type { GameDefinition } from '../../src/types/models';
@@ -204,6 +205,50 @@ describe('persist on phase transition', () => {
     // …and the failure was SCREAMED, not swallowed. A silent persist failure
     // is exactly how a "the state is safe" assumption dies unnoticed.
     expect(logErrors.some(line => /persist/i.test(line))).toBe(true);
+  });
+
+  test('serializes immutable snapshots and exposes a teardown drain', async () => {
+    const calls: string[] = [];
+    const releases: Array<() => void> = [];
+    const started: string[] = [];
+    const completed: string[] = [];
+
+    const { runtime } = await boot(makeGame('persist-ordered', calls), {
+      persistState: async snapshot => {
+        const phase = snapshot.currentPhase ?? 'none';
+        if (phase === 'lobby') return;
+        started.push(phase);
+        await new Promise<void>(resolve => releases.push(resolve));
+        completed.push(phase);
+      },
+    });
+
+    await advancePhase(runtime); // lobby -> play
+    await advancePhase(runtime); // play -> wrap
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Only the first write may start until it finishes. The second snapshot is
+    // already captured, so later runtime mutation cannot rewrite its contents.
+    expect(started).toEqual(['play']);
+    runtime.phaseState.currentPhase = 'mutated-after-queue';
+
+    let drained = false;
+    const drain = flushSessionRuntimePersistence(runtime).then(() => {
+      drained = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(drained).toBe(false);
+
+    releases.shift()?.();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(started).toEqual(['play', 'wrap']);
+    expect(completed).toEqual(['play']);
+    expect(drained).toBe(false);
+
+    releases.shift()?.();
+    await drain;
+    expect(completed).toEqual(['play', 'wrap']);
+    expect(drained).toBe(true);
   });
 });
 

@@ -247,6 +247,12 @@ export interface SessionRuntime {
 
   /** See {@link SessionRuntimeDeps.persistState}. */
   readonly persistState?: (snapshot: PersistedRuntimeState) => Promise<void>;
+
+  /**
+   * Per-runtime persistence queue. Writes must land in transition order, and
+   * teardown must be able to drain the final write before storage closes.
+   */
+  persistenceTail: Promise<void>;
 }
 
 /**
@@ -773,6 +779,7 @@ export async function createSessionRuntime(
     sequenceCache: new Map(),
     pendingReplayEntries: [],
     persistState: deps.persistState,
+    persistenceTail: Promise.resolve(),
   };
   runtimeRef.current = runtime;
 
@@ -1139,8 +1146,9 @@ async function resumePhaseFlow(
  * that proves it was not.
  */
 function persistRuntimeState(runtime: SessionRuntime): void {
-  if (!runtime.persistState) return;
-  const snapshot: PersistedRuntimeState = {
+  const persistState = runtime.persistState;
+  if (!persistState) return;
+  const snapshot = structuredClone<PersistedRuntimeState>({
     gameState: runtime.gameState,
     currentPhase: runtime.phaseState.currentPhase,
     currentSubPhase: runtime.phaseState.currentSubPhase,
@@ -1150,14 +1158,21 @@ function persistRuntimeState(runtime: SessionRuntime): void {
     rules: runtime.rules as Record<string, unknown>,
     stagedRulesPatch: runtime.stagedRulesPatch,
     inputEpoch: runtime.inputEpoch,
-  };
-  void runtime.persistState(snapshot).catch((error: unknown) => {
-    runtime.log.error(
-      `[slingshot-game-engine] PERSIST FAILED for session ${runtime.sessionId} — a restart will ` +
-        `LOSE this game's live state. Gameplay continues on memory only.`,
-      { error: String(error) },
-    );
   });
+  runtime.persistenceTail = runtime.persistenceTail
+    .then(() => persistState(snapshot))
+    .catch((error: unknown) => {
+      runtime.log.error(
+        `[slingshot-game-engine] PERSIST FAILED for session ${runtime.sessionId} — a restart will ` +
+          `LOSE this game's live state. Gameplay continues on memory only.`,
+        { error: String(error) },
+      );
+    });
+}
+
+/** Wait for every persistence write already queued for this runtime. */
+export async function flushSessionRuntimePersistence(runtime: SessionRuntime): Promise<void> {
+  await runtime.persistenceTail;
 }
 
 // ── Staged rules ─────────────────────────────────────────────────

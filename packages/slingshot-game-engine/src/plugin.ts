@@ -45,6 +45,7 @@ import {
   type SessionRuntime,
   createSessionRuntime,
   destroySessionRuntime,
+  flushSessionRuntimePersistence,
 } from './lib/sessionRuntime';
 import { buildContentValidationGuard } from './middleware/contentValidationGuard';
 import { buildHostOnlyGuard } from './middleware/hostOnlyGuard';
@@ -640,13 +641,16 @@ export function createGameEnginePackage(
       runtimeStateRef = state;
     },
 
-    teardown() {
+    async teardown() {
       // Unsubscribe bus listener.
       if (onSessionStartedRef && busRef) {
         busRef.off('game:session.started', onSessionStartedRef);
       }
 
       stopCleanupSweep(cleanupState);
+      await Promise.all(
+        [...activeRuntimes.values()].map(runtime => flushSessionRuntimePersistence(runtime)),
+      );
       // Destroy all active runtimes on shutdown
       for (const sessionId of activeRuntimes.keys()) {
         destroySessionRuntime(activeRuntimes, sessionId);

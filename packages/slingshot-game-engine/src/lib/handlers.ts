@@ -44,7 +44,7 @@ import {
   setScore,
 } from './scoring';
 import type { MutableTimerState } from './timers';
-import { extendTimer, getTimeRemaining, getTimersByType, resetTimer } from './timers';
+import { createTimer, extendTimer, getTimeRemaining, getTimersByType, resetTimer } from './timers';
 import type { MutableTurnState } from './turns';
 import {
   completeTurnCycle,
@@ -356,25 +356,43 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
     extendTimer(ms: number): void {
       const phaseTimers = getTimersByType(timerState, 'phase');
       if (phaseTimers.length > 0) {
-        extendTimer(timerState, phaseTimers[0].id, ms, () => {});
-        const remaining = getTimeRemaining(timerState, phaseTimers[0].id);
+        const phaseTimer = timerState.timers.get(phaseTimers[0].id);
+        extendTimer(timerState, phaseTimers[0].id, ms, phaseTimer?.onFire ?? requestAdvancePhase);
+        const phaseEndsAt = timerState.timers.get(phaseTimers[0].id)?.endsAt ?? Date.now();
         publish(sessionRoom(sessionId), {
           type: 'game:timer.updated',
           sessionId,
-          phaseEndsAt: Date.now() + remaining,
+          phaseEndsAt,
         });
       }
     },
     resetTimer(ms: number): void {
       const phaseTimers = getTimersByType(timerState, 'phase');
       if (phaseTimers.length > 0) {
-        resetTimer(timerState, phaseTimers[0].id, ms, () => {});
-        publish(sessionRoom(sessionId), {
-          type: 'game:timer.updated',
+        const phaseTimer = timerState.timers.get(phaseTimers[0].id);
+        resetTimer(timerState, phaseTimers[0].id, ms, phaseTimer?.onFire ?? requestAdvancePhase);
+      } else if (ms > 0) {
+        // A phase may deliberately enter with timeout 0 while it waits for a
+        // human decision, then arm its configured window from a handler. The
+        // old resetTimer silently did nothing because there was no timer to
+        // reset, leaving that phase stuck forever.
+        phaseState.phaseTimerId = createTimer(
+          timerState,
           sessionId,
-          phaseEndsAt: Date.now() + ms,
-        });
+          'phase',
+          ms,
+          'phaseTimeout',
+          requestAdvancePhase,
+        );
+      } else {
+        return;
       }
+      publish(sessionRoom(sessionId), {
+        type: 'game:timer.updated',
+        sessionId,
+        phaseEndsAt:
+          timerState.timers.get(phaseState.phaseTimerId ?? '')?.endsAt ?? Date.now() + ms,
+      });
     },
     getTimeRemaining(): number {
       const phaseTimers = getTimersByType(timerState, 'phase');

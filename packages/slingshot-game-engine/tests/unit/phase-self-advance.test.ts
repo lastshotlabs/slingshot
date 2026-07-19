@@ -90,6 +90,69 @@ const base = {
 } as const;
 
 describe('phase self-advance from onEnter', () => {
+  test('a handler can arm an untimed phase and its new timer advances the phase', async () => {
+    const published: unknown[] = [];
+    const game = defineGame({
+      ...base,
+      name: 'handler-armed-phase-timer',
+      phases: {
+        wait: { next: 'landed', advance: 'timeout', timeout: 0, onEnter: 'armTimer' },
+        landed: { next: null, advance: 'manual' },
+      },
+      handlers: {
+        armTimer: (ctx: any): undefined => {
+          ctx.resetTimer(20);
+        },
+      },
+    });
+
+    const activeRuntimes = new Map<string, SessionRuntime>();
+    activeRuntimeMaps.push(activeRuntimes);
+    const runtime = await createSessionRuntime('session-1', game, {}, [makePlayer()], 1234, {
+      publish(_room, message) {
+        published.push(message);
+      },
+      replayStore: createInMemoryReplayStore(),
+      log: { debug() {}, info() {}, warn() {}, error() {} },
+      activeRuntimes,
+    });
+
+    if (!runtime) throw new Error('Expected createSessionRuntime() to create a runtime.');
+    expect(runtime.phaseState.currentPhase).toBe('wait');
+    expect(runtime.phaseState.phaseTimerId).not.toBeNull();
+    expect(
+      published.some(
+        message =>
+          (message as { type?: string }).type === 'game:timer.updated' &&
+          typeof (message as { phaseEndsAt?: unknown }).phaseEndsAt === 'number',
+      ),
+    ).toBe(true);
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(runtime.phaseState.currentPhase).toBe('landed');
+  });
+
+  test('resetting an existing phase timer preserves its advance callback', async () => {
+    const game = defineGame({
+      ...base,
+      name: 'handler-reset-phase-timer',
+      phases: {
+        wait: { next: 'landed', advance: 'timeout', timeout: NEVER, onEnter: 'shortenTimer' },
+        landed: { next: null, advance: 'manual' },
+      },
+      handlers: {
+        shortenTimer: (ctx: any): undefined => {
+          ctx.resetTimer(20);
+        },
+      },
+    });
+
+    const { runtime } = await boot(game);
+    expect(runtime.phaseState.currentPhase).toBe('wait');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(runtime.phaseState.currentPhase).toBe('landed');
+  });
+
   test('lands in the next phase without waiting for the phase timeout', async () => {
     const entered: string[] = [];
 

@@ -34,3 +34,33 @@ export type {
 
 /** Event payload types published on the bus. */
 export type { BillingEntitlementChangedPayload, BillingPaymentCompletedPayload } from './events';
+
+/** Stripe provider implementation + the structurally-typed event normalizer. */
+export { createStripeProvider, normalizeStripeEvent } from './lib/providers/stripe';
+export type { StripeEventLike } from './lib/providers/stripe';
+
+/** Pure entitlement derivation over stored subscription rows. */
+export { deriveEntitlement, entitlementEquals, planKeyForPrice } from './lib/entitlement';
+
+/** Provider-agnostic webhook sync (idempotent, order-tolerant). */
+export { syncProviderEvent } from './lib/sync';
+export type { SyncNoopReason, SyncOutcome } from './lib/sync';
+
+/** Storage seam: narrow store interface + the entity-adapter-backed implementation. */
+export { createEntityBillingStore } from './lib/store';
+export type {
+  BillingCustomerRow,
+  BillingEntityAdapter,
+  BillingEntityAdapters,
+  BillingPaymentInput,
+  BillingPaymentRow,
+  BillingStore,
+  BillingSubscriptionInput,
+  BillingSubscriptionPatch,
+  BillingSubscriptionRow,
+} from './lib/store';
+
+/** Entity definitions (tables `billing_customers` / `billing_subscriptions` / `billing_payments`). */
+export { BillingCustomerEntity } from './entities/customer';
+export { BillingSubscriptionEntity } from './entities/subscription';
+export { BillingPaymentEntity } from './entities/payment';

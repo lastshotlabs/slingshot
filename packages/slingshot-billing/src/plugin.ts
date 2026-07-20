@@ -6,6 +6,11 @@ import {
   provideCapability,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import { entity } from '@lastshotlabs/slingshot-entity';
+import { BillingCustomerEntity } from './entities/customer';
+import { BillingPaymentEntity } from './entities/payment';
+import { BillingSubscriptionEntity } from './entities/subscription';
+import { deriveEntitlement } from './lib/entitlement';
 import { BillingEntitlementCap, FREE_ENTITLEMENT } from './public';
 import type { Entitlement } from './public';
 import type { BillingPackageConfig } from './types/config';
@@ -40,18 +45,29 @@ export function createBillingPackage(
   const webhookPath = `${config.mountPath}/webhooks/stripe`;
 
   /**
-   * Resolve an owner's current entitlement. Phase 1 stub: always free/none.
-   * Phase 5 replaces this with a read of the synced `billing_subscriptions` row.
+   * Resolve an owner's current entitlement. Still a stub: Phase 5 feeds the
+   * owner's stored `billing_subscriptions` rows into `deriveEntitlement` (and
+   * takes the ownerId the capability contract already declares); until then
+   * the pure derivation runs over an empty row set (⇒ free/none).
    */
-  const resolveEntitlement = async (_ownerId: string): Promise<Entitlement> => {
+  const resolveEntitlement = async (): Promise<Entitlement> => {
     if (!configured) return FREE_ENTITLEMENT;
-    return FREE_ENTITLEMENT;
+    return deriveEntitlement([], config.plans);
   };
 
   return definePackage({
     name: BILLING_PACKAGE_NAME,
     mountPath: config.mountPath,
     dependencies: ['slingshot-auth'],
+    // Standard-wired, internal-only entities: none declares a `routes` key, so
+    // no CRUD surface is mounted (precedent: slingshot-ai's usage ledger). The
+    // CLI's migrate discovery walks this array to generate `billing_*` tables;
+    // runtime access goes through the `BillingStore` seam (`lib/store.ts`).
+    entities: [
+      entity({ config: BillingCustomerEntity }),
+      entity({ config: BillingSubscriptionEntity }),
+      entity({ config: BillingPaymentEntity }),
+    ],
     // The Stripe webhook is an unauthenticated, server-to-server POST verified by
     // signature, so it must bypass tenant/auth gating and CSRF. Declared here so
     // the framework auto-merges it — the host app needs no config edit.
@@ -80,7 +96,7 @@ export function createBillingPackage(
         );
       }
     },
-    setupRoutes(_ctx: PluginSetupContext) {
+    setupRoutes() {
       // Phase 3/4: checkout, donate, portal, entitlement, and the Stripe webhook.
     },
   });

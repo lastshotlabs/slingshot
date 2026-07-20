@@ -1,7 +1,7 @@
 # slingshot-billing
 
 Provider-abstracted billing: subscriptions (with trials), one-time donations, and a small
-**entitlement** surface that answers one question — *what has this owner paid for right now?* —
+**entitlement** surface that answers one question — _what has this owner paid for right now?_ —
 so consuming apps map plans onto their own domain (a spend tier, a perk, ...).
 
 ## When to use
@@ -36,7 +36,9 @@ to `free` — safe to add before Stripe is configured.
 ```ts
 const entitlement = await ctx.capabilities.require(BillingEntitlementCap)(ownerId);
 // or react to writes:
-bus.on('billing:entitlement.changed', ({ ownerId, entitlement }) => { /* map plan -> your domain */ });
+bus.on('billing:entitlement.changed', ({ ownerId, entitlement }) => {
+  /* map plan -> your domain */
+});
 ```
 
 > Phase 1 scaffold. Entities, the Stripe implementation, routes, and the webhook land in later phases

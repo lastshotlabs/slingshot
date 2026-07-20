@@ -15,7 +15,7 @@
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import type { AppEnv, createRouter } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, SlingshotEventBus, createRouter } from '@lastshotlabs/slingshot-core';
 import { getActor } from '@lastshotlabs/slingshot-core';
 import type { BillingProvider, OwnerRef, ProviderCustomer } from '../lib/provider';
 import type { BillingStore } from '../lib/store';
@@ -63,6 +63,8 @@ export interface BillingRouteDeps {
   readonly configured: boolean;
   /** Auth middleware enforcing an authenticated user actor (401 otherwise). */
   readonly userAuth: MiddlewareHandler<AppEnv>;
+  /** The instance event bus — the webhook route emits `billing:*` events on it. */
+  readonly bus: SlingshotEventBus;
   /** Current provider, or null while dormant / not yet constructed. */
   provider(): BillingProvider | null;
   /** Current store, or null until the billing entity adapters are published. */

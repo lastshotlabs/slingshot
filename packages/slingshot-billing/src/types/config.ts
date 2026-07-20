@@ -119,6 +119,12 @@ export const billingPackageConfigSchema = z.object({
   urls: billingUrlsConfigSchema
     .optional()
     .describe('Checkout / Portal redirect URLs. Required once a provider is configured.'),
+  webhookMaxBodyBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum body size (bytes) accepted on the Stripe webhook route. Defaults to 1 MiB.'),
 });
 
 /** Validated, inferred configuration shape accepted by `createBillingPackage()`. */

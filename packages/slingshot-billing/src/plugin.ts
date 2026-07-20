@@ -31,6 +31,7 @@ import { registerCheckoutRoute } from './routes/checkout';
 import { registerDonateRoute } from './routes/donate';
 import { registerEntitlementRoute } from './routes/entitlement';
 import { registerPortalRoute } from './routes/portal';
+import { registerWebhookRoute } from './routes/webhook';
 import type { BillingPackageConfig } from './types/config';
 import { billingPackageConfigSchema, isBillingConfigured } from './types/config';
 
@@ -59,9 +60,10 @@ export interface BillingPackageInternals {
  * {@link FREE_ENTITLEMENT}. Adding the package without Stripe keys changes
  * nothing for the host app.
  *
- * Phase 3 mounts the client-facing routes (checkout, donate, portal,
- * entitlement) through the framework's typed OpenAPI router; the
- * signature-verified webhook lands in Phase 4.
+ * The client-facing routes (checkout, donate, portal, entitlement) mount
+ * through the framework's typed OpenAPI router; the signature-verified Stripe
+ * webhook is a plain (non-OpenAPI) POST mounted only when billing is
+ * configured — dormant apps expose no webhook surface at all.
  *
  * @param rawConfig - Partial billing configuration; validated + frozen.
  * @param internals - Test-only construction seam ({@link BillingPackageInternals}).
@@ -162,7 +164,7 @@ export function createBillingPackage(
         );
       }
     },
-    setupRoutes({ app }: PluginSetupContext) {
+    setupRoutes({ app, bus }: PluginSetupContext) {
       // Entity adapters publish during the entity plugin's `setupRoutes`, which
       // `compilePackages()` runs immediately before this hook — resolve now,
       // with a `setupPost` backstop below.
@@ -200,6 +202,7 @@ export function createBillingPackage(
         config,
         configured,
         userAuth: requireUserAuth,
+        bus,
         provider: getProvider,
         store: () => store,
       };
@@ -213,6 +216,13 @@ export function createBillingPackage(
       // OpenAPI document reflects the real client-facing paths (precedent:
       // slingshot-auth's routers).
       app.route('/', router);
+
+      // The Stripe webhook mounts ONLY when billing is configured (spec:
+      // dormant ⇒ the path 404s), and directly on the app as a plain POST so
+      // it stays off the OpenAPI contract and receives the raw body.
+      if (configured) {
+        registerWebhookRoute(app, deps);
+      }
     },
     setupPost({ app }: PluginSetupContext) {
       // Backstop: guarantees the store (and with it the DB-backed entitlement

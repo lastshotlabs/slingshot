@@ -39,6 +39,7 @@ export type { BillingEntitlementChangedPayload, BillingPaymentCompletedPayload }
 
 /** Stripe provider implementation + the structurally-typed event normalizer. */
 export { createStripeProvider, normalizeStripeEvent } from './lib/providers/stripe';
+/** Structural slice of a Stripe webhook event the normalizer reads (test-friendly). */
 export type { StripeEventLike } from './lib/providers/stripe';
 
 /** Pure entitlement derivation over stored subscription rows. */
@@ -46,10 +47,12 @@ export { deriveEntitlement, entitlementEquals, planKeyForPrice } from './lib/ent
 
 /** Provider-agnostic webhook sync (idempotent, order-tolerant). */
 export { syncProviderEvent } from './lib/sync';
+/** Sync result vocabulary: no-op reasons + the outcome the webhook route switches on. */
 export type { SyncNoopReason, SyncOutcome } from './lib/sync';
 
-/** Storage seam: narrow store interface + the entity-adapter-backed implementation. */
+/** Storage seam: the entity-adapter-backed `BillingStore` implementation. */
 export { createEntityBillingStore } from './lib/store';
+/** Store seam types: row/input shapes, the `BillingStore` interface, and adapter slices. */
 export type {
   BillingCustomerInput,
   BillingCustomerRow,
@@ -63,7 +66,9 @@ export type {
   BillingSubscriptionRow,
 } from './lib/store';
 
-/** Entity definitions (tables `billing_customers` / `billing_subscriptions` / `billing_payments`). */
+/** `Customer` entity definition (table `billing_customers`), internal-only. */
 export { BillingCustomerEntity } from './entities/customer';
+/** `Subscription` entity definition (table `billing_subscriptions`), internal-only. */
 export { BillingSubscriptionEntity } from './entities/subscription';
+/** `Payment` entity definition (table `billing_payments`), internal-only. */
 export { BillingPaymentEntity } from './entities/payment';

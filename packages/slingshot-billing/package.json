@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-billing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Provider-abstracted billing for Slingshot: subscriptions, trials, donations, and an app-agnostic entitlement surface",
   "license": "MIT",
   "type": "module",

@@ -29,11 +29,20 @@ plans onto their own domain. Dormant with no provider configured.
 
 ## Connections
 
-- **Imports from**: `@lastshotlabs/slingshot-core` (definePackage, capability/event contracts, config validation), `@lastshotlabs/slingshot-entity` (entities — Phase 2).
+- **Imports from**: `@lastshotlabs/slingshot-core` (definePackage, capability/event contracts, routing, config validation), `@lastshotlabs/slingshot-entity` (`entity({ config })` wrappers), `stripe` (ONLY inside `src/lib/providers/stripe.ts`).
+- **Runtime dependencies**: `slingshot-auth` (declared package dependency) — every client-facing route runs `userAuth`.
 - **Imported by**: consuming apps (aicoach first) via `packages:`; they read `BillingEntitlementCap` and subscribe to `billing:*` events.
 
 ## Common Tasks
 
-- **Add a provider**: implement `BillingProvider` in `src/lib/providers/<name>.ts` (Phase 2 pattern).
-- **Change config**: edit `src/types/config.ts` (keep `.describe()` on every field) — the entitlement/routes read the frozen config.
+- **Add a provider**: implement `BillingProvider` in `src/lib/providers/<name>.ts` (normalize webhooks onto `ProviderEvent`; `lib/sync.ts` needs no changes), then extend the config discriminator + the construction switch in `src/plugin.ts`.
+- **Change config**: edit `src/types/config.ts` (keep `.describe()` on every field), then update `docs/human/index.md`.
+- **Testing**: `packages/slingshot-billing/tests/` — unit (pure sync/entitlement/store/provider-normalizer) + integration via `runPackageLifecycle` with a `FakeBillingProvider` injected through the `internals` seam.
 - **Full design**: `slingshot-specs/specs/feature.billing.md`.
+
+## Gotchas
+
+- **`README.md` is build output** — `scripts/build.ts` copies `docs/human/index.md` over it on every `bun run build`. Never hand-edit README.md; edit the human guide and rebuild.
+- **Bun + Stripe sync crypto**: Bun resolves the Stripe SDK's worker build (`bun` export condition), whose default crypto provider can't do sync `constructEvent`. `src/lib/providers/stripe.ts` passes the explicit `stripeSyncCryptoProvider` (node:crypto HMAC); tests generating signed test headers under Bun must use the same provider.
+- The webhook must stay a plain `app.post` with NO `request.body` schema (raw bytes must reach `constructEvent`); its path rides the package's `publicPaths`/`csrfExemptPaths`, auto-merged by the framework.
+- `subscription.deleted` yields `{ plan: '<stored key>', status: 'canceled' }`, not the literal free entitlement — consumers key off `status`. Bus emits are fire-and-forget (handler throws are swallowed by the bus); consumers reconcile via `BillingEntitlementCap` on read.

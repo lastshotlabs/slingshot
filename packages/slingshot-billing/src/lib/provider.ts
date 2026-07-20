@@ -23,7 +23,9 @@ export interface ProviderCustomer {
 
 /** Redirect URLs a hosted checkout / portal session returns to. */
 export interface CheckoutUrls {
+  /** Absolute URL the provider redirects to after a successful checkout. */
   readonly successUrl: string;
+  /** Absolute URL the provider redirects to when the user cancels. */
   readonly cancelUrl: string;
 }
 

@@ -55,8 +55,32 @@ describe('createEntityBillingStore', () => {
     expect(customers.calls.list[0]).toEqual({ filter: { providerCustomerId: 'cus_1' }, limit: 1 });
   });
 
+  test('finds a customer by owner id via an equality list filter', async () => {
+    const { store, customers } = makeStore({
+      customers: [{ id: 'c1', ownerId: 'user_1', provider: 'stripe', providerCustomerId: 'cus_1' }],
+    });
+    const row = await store.findCustomerByOwnerId('user_1');
+    expect(row?.providerCustomerId).toBe('cus_1');
+    expect(customers.calls.list[0]).toEqual({ filter: { ownerId: 'user_1' }, limit: 1 });
+  });
+
+  test('creates a customer row through the customers adapter', async () => {
+    const { store, customers } = makeStore();
+    await store.createCustomer({
+      ownerId: 'user_1',
+      provider: 'stripe',
+      providerCustomerId: 'cus_1',
+    });
+    expect(customers.calls.create[0]).toEqual({
+      ownerId: 'user_1',
+      provider: 'stripe',
+      providerCustomerId: 'cus_1',
+    });
+  });
+
   test('returns null when nothing matches', async () => {
     const { store } = makeStore();
+    expect(await store.findCustomerByOwnerId('user_nope')).toBeNull();
     expect(await store.findCustomerByProviderCustomerId('cus_nope')).toBeNull();
     expect(await store.getSubscriptionByProviderSubscriptionId('sub_nope')).toBeNull();
     expect(await store.findPaymentByProviderPaymentId('pi_nope')).toBeNull();

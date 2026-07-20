@@ -25,6 +25,12 @@ function createFakeStore(customers: readonly Omit<BillingCustomerRow, 'id'>[] = 
   const paymentRows: BillingPaymentRow[] = [];
 
   const store: BillingStore = {
+    async findCustomerByOwnerId(ownerId) {
+      return customerRows.find(row => row.ownerId === ownerId) ?? null;
+    },
+    async createCustomer(input) {
+      customerRows.push({ id: `cus_row_${nextId++}`, ...input });
+    },
     async findCustomerByProviderCustomerId(providerCustomerId) {
       return customerRows.find(row => row.providerCustomerId === providerCustomerId) ?? null;
     },

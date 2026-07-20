@@ -57,6 +57,8 @@ export interface BillingPaymentRow {
   readonly status: string;
 }
 
+/** Input to create a customer row (id is adapter-generated). */
+export type BillingCustomerInput = Omit<BillingCustomerRow, 'id'>;
 /** Input to create a subscription row (id is adapter-generated). */
 export type BillingSubscriptionInput = Omit<BillingSubscriptionRow, 'id'>;
 /** Patch applied to an existing subscription row. */
@@ -70,6 +72,10 @@ export type BillingPaymentInput = Omit<BillingPaymentRow, 'id'>;
  * `Map` in tests.
  */
 export interface BillingStore {
+  /** Forward customer lookup the checkout/portal routes make for the acting owner. */
+  findCustomerByOwnerId(ownerId: string): Promise<BillingCustomerRow | null>;
+  /** Persist the owner ↔ provider-customer mapping (lazy, first checkout only). */
+  createCustomer(input: BillingCustomerInput): Promise<void>;
   /** Reverse customer lookup used to attribute webhook events to an owner. */
   findCustomerByProviderCustomerId(providerCustomerId: string): Promise<BillingCustomerRow | null>;
   /** Fetch the stored subscription for a provider subscription id, if any. */
@@ -182,6 +188,15 @@ function paymentRowFrom(record: Record<string, unknown>): BillingPaymentRow {
  */
 export function createEntityBillingStore(adapters: BillingEntityAdapters): BillingStore {
   return {
+    async findCustomerByOwnerId(ownerId) {
+      const record = await findOne(adapters.customers, { ownerId });
+      return record ? customerRowFrom(record) : null;
+    },
+
+    async createCustomer(input) {
+      await adapters.customers.create({ ...input });
+    },
+
     async findCustomerByProviderCustomerId(providerCustomerId) {
       const record = await findOne(adapters.customers, { providerCustomerId });
       return record ? customerRowFrom(record) : null;

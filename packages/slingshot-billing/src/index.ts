@@ -2,6 +2,8 @@ import './events';
 
 /** Create the billing package for `createApp({ packages })`. */
 export { createBillingPackage, BILLING_PACKAGE_NAME } from './plugin';
+/** Test-only construction seam (provider injection); not app configuration. */
+export type { BillingPackageInternals } from './plugin';
 
 /** Provider-owned contract, entitlement capability, and the free-entitlement constant. */
 export { Billing, BillingEntitlementCap, FREE_ENTITLEMENT } from './public';
@@ -49,6 +51,7 @@ export type { SyncNoopReason, SyncOutcome } from './lib/sync';
 /** Storage seam: narrow store interface + the entity-adapter-backed implementation. */
 export { createEntityBillingStore } from './lib/store';
 export type {
+  BillingCustomerInput,
   BillingCustomerRow,
   BillingEntityAdapter,
   BillingEntityAdapters,

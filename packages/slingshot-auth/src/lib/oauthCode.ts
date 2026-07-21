@@ -14,6 +14,7 @@ import {
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { OAuthCodePayload } from '../types/oauthCode';
 import type { RedisLike } from '../types/redis';
+import { defaultAuthLogger } from './logger';
 import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 
@@ -441,7 +442,7 @@ export const consumeOAuthCode = async (
         result.refreshToken = decryptField(result.refreshToken, [...deks]);
       }
     } catch (err) {
-      console.error('[oauthCode] decryptField failed — key rotation during active code TTL?', err);
+      defaultAuthLogger.error('OAuth code field decryption failed', { error: err });
       return null;
     }
   }

@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-ssg
----
+# @lastshotlabs/slingshot-ssg
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-ssg
+```
 
 `@lastshotlabs/slingshot-ssg` is Slingshot's static-generation helper package. It builds on the SSR
 contracts to discover which routes should be pre-rendered, resolve concrete paths for dynamic

@@ -158,10 +158,9 @@ export const createPasswordResetRouter = (
               { userId: user.id, actorId: user.id, requestTenantId: getRequestTenantId(c) },
             );
           } catch (err) {
-            console.error(
-              'Failed to send password reset email:',
-              err instanceof Error ? err.message : String(err),
-            );
+            runtime.logger.error('failed to send password reset email', {
+              error: err instanceof Error ? err.message : String(err),
+            });
           }
         })();
       }
@@ -283,10 +282,9 @@ export const createPasswordResetRouter = (
         Promise.resolve()
           .then(() => postPwHook({ userId: entry.userId, ...ctx, services }))
           .catch((e: unknown) =>
-            console.error(
-              '[lifecycle] postPasswordChange hook error:',
-              e instanceof Error ? e.message : String(e),
-            ),
+            runtime.logger.error('postPasswordChange hook failed', {
+              error: e instanceof Error ? e.message : String(e),
+            }),
           );
       }
       return c.json({ ok: true as const }, 200);

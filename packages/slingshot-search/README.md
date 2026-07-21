@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-search
----
+# @lastshotlabs/slingshot-search
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-search
+```
 
 > Human-owned documentation. This package owns search runtime behavior, not entity definition itself.
 

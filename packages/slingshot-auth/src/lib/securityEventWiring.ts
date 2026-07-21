@@ -1,4 +1,4 @@
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type { Logger, SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { SECURITY_EVENT_TYPES, type SecurityEventKey } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -136,7 +136,11 @@ export interface SecurityEvent {
  *   exclude: ['security.auth.login.success'],
  * });
  */
-export function wireSecurityEventConfig(bus: SlingshotEventBus, cfg?: SecurityEventsConfig): void {
+export function wireSecurityEventConfig(
+  bus: SlingshotEventBus,
+  cfg?: SecurityEventsConfig,
+  logger?: Logger,
+): void {
   if (!cfg?.onEvent) return;
   const { onEvent, onEventError, include = [], exclude = [] } = cfg;
 
@@ -157,7 +161,7 @@ export function wireSecurityEventConfig(bus: SlingshotEventBus, cfg?: SecurityEv
         if (onEventError) {
           onEventError(err);
         } else {
-          console.error('[slingshot-auth][security-events]', err);
+          logger?.error('security event callback failed', { error: err });
         }
       }
     });

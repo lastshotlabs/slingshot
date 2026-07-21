@@ -186,7 +186,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a5', error: 'unauthenticated' });
   });
 
-  it('auth: userAuth, anonymous actor, no ackId — silent drop', async () => {
+  it('auth: userAuth, anonymous actor, no ackId — sends an observable error', async () => {
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'secure' });
@@ -196,7 +196,11 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
-    expect(ws.sent).toHaveLength(0);
+    expect(JSON.parse(ws.sent[0])).toEqual({
+      event: 'ws:error',
+      code: 'UNAUTHENTICATED',
+      sourceEvent: 'secure',
+    });
   });
 
   it('auth: none (default), anonymous actor — handler called, context.actor.id is null', async () => {

@@ -155,7 +155,7 @@ export function validateAdapterShape(
  * // typeof config === z.infer<typeof communityConfigSchema>
  * ```
  */
-export function validatePluginConfig<S extends z.ZodObject>(
+export function validatePluginConfig<S extends z.ZodType>(
   pluginName: string,
   rawConfig: unknown,
   schema: S,
@@ -166,7 +166,12 @@ export function validatePluginConfig<S extends z.ZodObject>(
     const issues = result.error.issues.map(i => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`[${pluginName}] Invalid plugin config:\n${issues}`);
   }
-  if (rawConfig !== null && typeof rawConfig === 'object' && !Array.isArray(rawConfig)) {
+  if (
+    schema instanceof z.ZodObject &&
+    rawConfig !== null &&
+    typeof rawConfig === 'object' &&
+    !Array.isArray(rawConfig)
+  ) {
     warnUnknownPluginKeys(pluginName, rawConfig as Record<string, unknown>, schema, logger);
   }
   return result.data as z.infer<S>;

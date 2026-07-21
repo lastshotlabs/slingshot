@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-interactions
----
+# @lastshotlabs/slingshot-interactions
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-interactions
+```
 
 `@lastshotlabs/slingshot-interactions` provides the dispatch layer for interactive components such as
 buttons, menus, and action payloads emitted from chat or community surfaces. It compiles declarative

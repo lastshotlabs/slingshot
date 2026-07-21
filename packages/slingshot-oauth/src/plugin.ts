@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  emitPackageStabilityWarning,
+  getPluginStateOrNull,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 import { createConnectionsRouter } from './connections';
 import type { ConnectionsOptions } from './connections';
 import { createOAuthRouter } from './routes/oauth';
@@ -46,6 +50,9 @@ export type OAuthPluginOptions = {
    */
   connections?: ConnectionsOptions;
 };
+
+/** Canonical configuration name for `createOAuthPlugin`. */
+export type OAuthPluginConfig = OAuthPluginOptions;
 
 const absoluteHttpUrlSchema = z
   .string()
@@ -159,7 +166,11 @@ function validatePostRedirect(postRedirect: string, allowedRedirectUrls: readonl
  * ```
  */
 export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin {
-  const resolvedOptions = oauthPluginConfigSchema.parse(options ?? {}) as OAuthPluginOptions;
+  const resolvedOptions = validatePluginConfig(
+    'slingshot-oauth',
+    options ?? {},
+    oauthPluginConfigSchema,
+  ) as OAuthPluginOptions;
 
   emitPackageStabilityWarning(
     '@lastshotlabs/slingshot-oauth',

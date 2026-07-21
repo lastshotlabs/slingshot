@@ -8,7 +8,14 @@ export {
   androidAppLinkSchema,
   compileDeepLinksConfig,
 } from './config';
-export type { DeepLinksConfig, DeepLinksConfigInput, AppleAppLink, AndroidAppLink } from './config';
+export type {
+  DeepLinksConfig,
+  DeepLinksConfigInput,
+  DeepLinksPluginConfig,
+  DeepLinksPluginConfigInput,
+  AppleAppLink,
+  AndroidAppLink,
+} from './config';
 export { buildAppleAasaBody, serializeAppleAasaBody } from './aasa';
 export type { AppleAasaBody } from './aasa';
 export { buildAssetlinksBody, serializeAssetlinksBody } from './assetlinks';

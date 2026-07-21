@@ -31,6 +31,8 @@ export {
   aiProviderConfigSchema,
   type AiPackageConfig,
   type AiPackageConfigInput,
+  type AiPluginConfig,
+  type AiPluginConfigInput,
   type AiProviderConfig,
   type ProviderFactory,
 } from './config';

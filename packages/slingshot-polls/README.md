@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-polls
----
+# @lastshotlabs/slingshot-polls
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-polls
+```
 
 `@lastshotlabs/slingshot-polls` adds content-attached multiple-choice polls without baking poll logic
 into one domain package. Polls are source-type driven, so chat, community, or other packages can

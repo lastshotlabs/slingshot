@@ -11,6 +11,7 @@ import type { Connection } from 'mongoose';
 import type {
   AuthAdapter,
   DataEncryptionKey,
+  Logger,
   PostgresBundle,
   ResolvedStores,
   RuntimePassword,
@@ -53,6 +54,8 @@ export interface AuthRuntimeInfra {
     verbose: boolean;
     authTrace: boolean;
   };
+  /** Structured logger supplied by the hosting framework. */
+  logger?: Logger;
   trustProxy?: false | number;
   /** Returns the Redis client. Throws if Redis is not configured. */
   getRedis?: () => AuthRedisClient;
@@ -157,6 +160,7 @@ export async function bootstrapAuth(
   const authLogger = createAuthLogger({
     verbose: runtimeInfra?.logging?.verbose,
     authTrace: runtimeInfra?.logging?.authTrace,
+    logger: runtimeInfra?.logger,
   });
   if (!runtimeInfra?.password) {
     throw new Error(
@@ -166,7 +170,7 @@ export async function bootstrapAuth(
   const password: RuntimePassword = runtimeInfra.password;
 
   // Section A: Event bus wiring
-  wireSecurityEventConfig(bus, config.securityEvents);
+  wireSecurityEventConfig(bus, config.securityEvents, authLogger);
 
   // Section B: Store resolution
   let stores: ResolvedStores;
@@ -347,8 +351,8 @@ export async function bootstrapAuth(
           '[slingshot-auth] MFA is configured in production but SLINGSHOT_DATA_ENCRYPTION_KEY is not set. Set this env var to encrypt TOTP secrets at rest.',
         );
       } else {
-        console.warn(
-          '[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.',
+        authLogger.warn(
+          'MFA configured without a data-encryption key; TOTP secrets are stored in plaintext',
         );
       }
     }
@@ -460,10 +464,7 @@ export async function bootstrapAuth(
         '[slingshot-auth] jwt.issuer is required in production. Tokens must be bound to a specific issuer to prevent token confusion across services.',
       );
     }
-    console.warn(
-      '[slingshot-auth] WARNING: jwt.issuer is not configured. Tokens are not bound to a specific issuer, ' +
-        'which allows token confusion across services. Set auth.jwt.issuer to your application URL.',
-    );
+    authLogger.warn('JWT issuer is not configured; tokens are not bound to an issuer');
   }
   if (!resolvedConfig.jwt?.audience) {
     if (isProd()) {
@@ -471,10 +472,7 @@ export async function bootstrapAuth(
         '[slingshot-auth] jwt.audience is required in production. Tokens must be bound to a specific audience to prevent acceptance by unrelated services.',
       );
     }
-    console.warn(
-      '[slingshot-auth] WARNING: jwt.audience is not configured. Tokens are not bound to a specific audience. ' +
-        'Set auth.jwt.audience to prevent tokens from being accepted by unrelated services.',
-    );
+    authLogger.warn('JWT audience is not configured; tokens are not bound to an audience');
   }
 
   // Validate cookie domain is not overly broad
@@ -670,10 +668,9 @@ export async function bootstrapAuth(
           Promise.resolve()
             .then(() => postDeleteHook({ userId }))
             .catch((e: unknown) =>
-              console.error(
-                '[lifecycle] postDeleteAccount hook error:',
-                e instanceof Error ? e.message : String(e),
-              ),
+              authLogger.error('postDeleteAccount hook failed', {
+                error: e instanceof Error ? e.message : String(e),
+              }),
             );
         }
       },
@@ -714,9 +711,7 @@ export async function bootstrapAuth(
 
   // Warn if strictSignCount is explicitly disabled in production.
   if (authConfig.mfa?.webauthn && isProd() && !authConfig.mfa.webauthn.strictSignCount) {
-    console.warn(
-      '[slingshot] WebAuthn strictSignCount is disabled. Cloned authenticator keys will be accepted.',
-    );
+    authLogger.warn('WebAuthn strict sign-count checking is disabled');
   }
 
   let samlRequestIdRepo: import('./lib/samlRequestId').SamlRequestIdRepository | null = null;

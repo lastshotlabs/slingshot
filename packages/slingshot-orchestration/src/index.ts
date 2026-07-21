@@ -37,6 +37,7 @@ export { InvalidResolverResultError } from './errors';
 export type {
   ConfigurableOrchestrationPluginOptions,
   OrchestrationPluginOptions,
+  OrchestrationPluginConfig,
   OrchestrationRequestContext,
   OrchestrationRequestContextResolver,
   OrchestrationRunAuthorizer,

@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-edge
----
+# @lastshotlabs/slingshot-runtime-edge
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-runtime-edge
+```
 
 `@lastshotlabs/slingshot-runtime-edge` provides a `SlingshotRuntime` implementation for edge and worker
 deployments. It swaps Bun or Node assumptions for Web Crypto, bundled file access, and explicit

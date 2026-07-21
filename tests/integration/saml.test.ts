@@ -281,9 +281,11 @@ describe('SAML HTTPS enforcement', () => {
       }).catch((err: Error) => {
         expect(err.message).not.toContain('HTTPS in production');
       });
-      expect(warnSpy.mock.calls.map(call => call[0])).toContain(
-        '[saml] WARNING: IdP metadata over HTTP — do not use in production',
-      );
+      expect(
+        warnSpy.mock.calls
+          .map(call => JSON.parse(String(call[0])) as { msg?: string })
+          .some(record => record.msg === 'SAML IdP metadata uses HTTP outside production'),
+      ).toBe(true);
     } finally {
       process.env.NODE_ENV = origEnv;
       warnSpy.mockRestore();

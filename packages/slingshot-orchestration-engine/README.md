@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration-engine
----
+# @lastshotlabs/slingshot-orchestration-engine
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-orchestration-engine
+```
 
 This package provides the portable orchestration contract for Slingshot.
 

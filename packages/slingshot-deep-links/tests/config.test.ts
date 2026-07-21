@@ -171,6 +171,6 @@ describe('compileDeepLinksConfig — normalization', () => {
   test('throws on invalid input', () => {
     expect(() =>
       compileDeepLinksConfig({ apple: { teamId: 'bad', bundleId: 'bad', paths: [] } }),
-    ).toThrow();
+    ).toThrow(/\[slingshot-deep-links\] Invalid plugin config/);
   });
 });

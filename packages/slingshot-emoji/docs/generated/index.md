@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-emoji
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-emoji`
-- Version: `0.0.2`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Custom emoji management for slingshot — CRUD with storage integration
+- Description: Custom emoji management for Slingshot — CRUD with storage integration
 - Workspace path: `packages/slingshot-emoji`
 - Entry point: `packages/slingshot-emoji/src/index.ts`
 

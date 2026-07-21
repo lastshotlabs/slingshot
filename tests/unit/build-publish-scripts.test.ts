@@ -40,6 +40,15 @@ describe('build and publish scripts', () => {
     expect(rewritten).toContain('@lib/helpers');
     expect(existsSync(join(cleanDir, 'keep', 'file.txt'))).toBe(true);
     expect(existsSync(join(cleanDir, 'remove-me'))).toBe(false);
+
+    const readme = buildModule.renderPackageReadme(
+      '---\ntitle: Human Guide\ndescription: Package docs\n---\n\nPackage body.\n',
+      '@acme/demo',
+    );
+    expect(readme).toStartWith('# @acme/demo\n');
+    expect(readme).toContain('bun add @acme/demo');
+    expect(readme).toContain('Package body.');
+    expect(readme).not.toContain('title: Human Guide');
   });
 
   test('parses publish args, rewrites manifests, and stages publishable packages', async () => {

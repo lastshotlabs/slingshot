@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-notifica
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-notifications`
-- Version: `0.0.3`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Shared notification storage, scheduling, and delivery events for slingshot
+- Description: Shared notification storage, scheduling, and delivery events for Slingshot
 - Workspace path: `packages/slingshot-notifications`
 - Entry point: `packages/slingshot-notifications/src/index.ts`
 
@@ -26,6 +26,7 @@ bun add @lastshotlabs/slingshot-notifications
 - `.`
 - `./config`
 - `./errors`
+- `./public`
 - `./rateLimit`
 - `./testing`
 

@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-permissions
----
+# @lastshotlabs/slingshot-permissions
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-permissions
+```
 
 > Human-owned documentation. This package owns permission semantics, not route mounting.
 

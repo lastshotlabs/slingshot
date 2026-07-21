@@ -306,13 +306,21 @@ export async function runBuild(): Promise<number> {
     if (layer) await runPackageLayer(index, layer);
   }
 
-  // Sync README.md from docs/human/index.md for each workspace package
+  // Render package READMEs from their canonical human guides. Starlight
+  // frontmatter belongs to the docs site, not npm/GitHub package pages.
   for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === 'docs') continue;
     const humanDoc = path.join('packages', entry.name, 'docs', 'human', 'index.md');
     const readme = path.join('packages', entry.name, 'README.md');
     if (fs.existsSync(humanDoc)) {
-      fs.copyFileSync(humanDoc, readme);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join('packages', entry.name, 'package.json'), 'utf8'),
+      ) as { name: string };
+      fs.writeFileSync(
+        readme,
+        renderPackageReadme(fs.readFileSync(humanDoc, 'utf8'), manifest.name),
+        'utf8',
+      );
     }
   }
 
@@ -326,6 +334,11 @@ export async function runBuild(): Promise<number> {
   }
 
   return 0;
+}
+
+export function renderPackageReadme(humanGuide: string, packageName: string): string {
+  const withoutFrontmatter = humanGuide.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trimStart();
+  return `# ${packageName}\n\nInstall with Bun:\n\n\`\`\`sh\nbun add ${packageName}\n\`\`\`\n\n${withoutFrontmatter}`;
 }
 
 if (import.meta.main) {

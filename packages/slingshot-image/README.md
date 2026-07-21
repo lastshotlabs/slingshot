@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-image
----
+# @lastshotlabs/slingshot-image
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-image
+```
 
 `@lastshotlabs/slingshot-image` handles on-the-fly image optimization behind a single Snapshot route.
 It fetches an approved source image, validates transform parameters, optionally transforms with

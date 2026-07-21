@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-emoji
----
+# @lastshotlabs/slingshot-emoji
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-emoji
+```
 
 `@lastshotlabs/slingshot-emoji` adds custom emoji as an entity-backed domain package. It stores
 emoji metadata as entities and expects file upload bytes to be handled by the platform upload

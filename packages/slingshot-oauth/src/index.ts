@@ -1,5 +1,5 @@
 export { createOAuthPlugin, oauthPluginConfigSchema } from './plugin';
-export type { OAuthPluginOptions } from './plugin';
+export type { OAuthPluginConfig, OAuthPluginOptions } from './plugin';
 export { createOAuthRouter } from './routes/oauth';
 export {
   buildConnectionClient,

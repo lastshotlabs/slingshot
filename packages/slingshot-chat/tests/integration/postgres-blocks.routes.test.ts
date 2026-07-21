@@ -45,7 +45,7 @@ class FakeChatRoutePostgresPool {
       sql.startsWith('CREATE TABLE IF NOT EXISTS') ||
       sql.startsWith('CREATE INDEX IF NOT EXISTS') ||
       sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS') ||
-      sql.startsWith(`ALTER TABLE ${BLOCK_TABLE} ADD COLUMN IF NOT EXISTS`)
+      sql.startsWith('ALTER TABLE ')
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }
@@ -81,6 +81,12 @@ class FakeChatRoutePostgresPool {
         .slice(0, limit)
         .map(entry => ({ ...entry }));
       return Promise.resolve({ rows, rowCount: rows.length });
+    }
+
+    if (
+      sql === 'SELECT * FROM slingshot_chat_messages WHERE id = $1 AND deleted_at IS NULL LIMIT 1'
+    ) {
+      return Promise.resolve({ rows: [], rowCount: 0 });
     }
 
     throw new Error(`Unhandled SQL: ${sql}`);

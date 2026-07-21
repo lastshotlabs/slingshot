@@ -1,5 +1,6 @@
 import { isProd } from '@auth/lib/env';
 import type { IdentityProfile } from '@lastshotlabs/slingshot-core';
+import { defaultAuthLogger } from './logger';
 
 /**
  * Normalised SAML identity profile extracted from a successful login response.
@@ -146,7 +147,7 @@ export async function initSaml(
     if (isProd()) {
       throw new Error('SAML IdP metadata URL must use HTTPS in production');
     }
-    console.warn('[saml] WARNING: IdP metadata over HTTP — do not use in production');
+    defaultAuthLogger.warn('SAML IdP metadata uses HTTP outside production');
   }
 
   const samlify = await import('samlify');
@@ -168,11 +169,7 @@ export async function initSaml(
           'Install it: npm install @authenio/samlify-xsd-schema-validator',
       );
     }
-    console.warn(
-      '[saml] WARNING: @authenio/samlify-xsd-schema-validator not installed. ' +
-        'SAML assertions will not be validated against the XSD schema. ' +
-        'Install it for production use.',
-    );
+    defaultAuthLogger.warn('SAML XSD validator is not installed');
     // Set a permissive validator in development to avoid samlify's own warning
     samlify.setSchemaValidator({
       validate: () => Promise.resolve('skipped'),

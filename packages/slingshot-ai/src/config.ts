@@ -218,5 +218,9 @@ export const aiPackageConfigSchema = z.object({
 
 export type AiPackageConfig = z.infer<typeof aiPackageConfigSchema>;
 export type AiPackageConfigInput = z.input<typeof aiPackageConfigSchema>;
+/** Canonical plugin configuration name. */
+export type AiPluginConfig = AiPackageConfig;
+/** Raw input accepted by the AI plugin configuration schema. */
+export type AiPluginConfigInput = AiPackageConfigInput;
 export type ResolvedProviderCapabilities = ProviderCapabilities;
 export type { ModelPricing };

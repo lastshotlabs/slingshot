@@ -95,13 +95,8 @@ export const requireRole = Object.assign(
 
         const runtime = getAuthRuntimeFromRequest(c);
         // In development, log when tenant context is present but intentionally ignored.
-        // console.info is used deliberately: console.debug is suppressed by default in most
-        // runtimes, so info gives reliably visible output during development without being
-        // noisy in production (this branch never executes there).
         if (!isProd() && getActorTenantId(c)) {
-          console.info(
-            '[requireRole.global] tenant context present but intentionally ignored — checking app-wide roles only',
-          );
+          runtime.logger?.info('global role check intentionally ignores tenant context');
         }
 
         const effective = await getEffectiveRoles(runtime.adapter, userId, null);

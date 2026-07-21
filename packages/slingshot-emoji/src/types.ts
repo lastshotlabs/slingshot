@@ -30,6 +30,8 @@ export const emojiPackageConfigSchema = z.object({
  * configure it on the permissions package, not here.
  */
 export type EmojiPackageConfig = z.infer<typeof emojiPackageConfigSchema>;
+/** Canonical plugin configuration name. */
+export type EmojiPluginConfig = EmojiPackageConfig;
 
 /**
  * Shape of an emoji record as returned by the API.

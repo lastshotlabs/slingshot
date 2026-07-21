@@ -25,6 +25,7 @@ import type {
   SlingshotEventMap,
   SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type { OAuthProviders } from '../../../slingshot-auth/src/lib/oauth';
 
 // Removes readonly modifiers so test files can mutate runtime fields directly
@@ -125,6 +126,7 @@ export function makeTestRuntime(
       recordLoginSuccess: async () => {},
     },
     logger: {
+      ...noopLogger,
       log() {},
       authTrace() {},
     },

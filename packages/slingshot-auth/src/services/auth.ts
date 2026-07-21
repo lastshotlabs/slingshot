@@ -208,10 +208,9 @@ async function createSessionWithRefreshToken(
         customClaims = result.customClaims;
       }
     } catch (e) {
-      console.error(
-        '[lifecycle] postLogin hook error:',
-        e instanceof Error ? e.message : String(e),
-      );
+      hookLogger.error('postLogin hook failed', {
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 
@@ -392,10 +391,9 @@ export const register = async (
           identifier,
         });
       } catch (e) {
-        console.error(
-          '[email-verification] Failed to send verification email:',
-          e instanceof Error ? e.message : String(e),
-        );
+        hookLogger.error('failed to send verification email', {
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
 
@@ -415,10 +413,9 @@ export const register = async (
       Promise.resolve()
         .then(() => postRegister({ userId: user.id, identifier, ...hookContext, services }))
         .catch((e: unknown) =>
-          console.error(
-            '[lifecycle] postRegister hook error:',
-            e instanceof Error ? e.message : String(e),
-          ),
+          hookLogger.error('postRegister hook failed', {
+            error: e instanceof Error ? e.message : String(e),
+          }),
         );
     }
     return {
@@ -789,10 +786,9 @@ export const deleteAccount = async (
     Promise.resolve()
       .then(() => postDeleteAccount({ userId, services }))
       .catch((e: unknown) =>
-        console.error(
-          '[lifecycle] postDeleteAccount hook error:',
-          e instanceof Error ? e.message : String(e),
-        ),
+        hookLogger.error('postDeleteAccount hook failed', {
+          error: e instanceof Error ? e.message : String(e),
+        }),
       );
   }
 };

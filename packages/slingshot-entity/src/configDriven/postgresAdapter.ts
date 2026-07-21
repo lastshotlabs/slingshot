@@ -12,13 +12,15 @@
  * - Optional TTL column (configurable, default `_expires_at`) when `config.ttl.defaultSeconds` is set.
  * - Soft-delete: `delete()` writes the soft-delete field value instead of `DELETE`.
  * - Cursor pagination: multi-field lexicographic cursors via `buildCursorForRecord`/`decodeCursor`.
- * - `create()` uses `INSERT ... ON CONFLICT DO UPDATE` (upsert semantics) to handle idempotent creates.
+ * - `create()` uses plain `INSERT`; primary-key and unique conflicts reject consistently
+ *   with the memory and SQLite adapters. Replacement requires an explicit update/upsert operation.
  * - Spreads `buildPostgresOperations()` result to attach custom operation methods.
  */
-import type {
-  EntityAdapter,
-  OperationConfig,
-  ResolvedEntityConfig,
+import {
+  type EntityAdapter,
+  HttpError,
+  type OperationConfig,
+  type ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
@@ -276,17 +278,17 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
       const values = columns.map(c => row[c]);
 
-      // UPSERT
-      const nonPkCols = columns.filter(c => c !== pkColumn);
-      const onConflict =
-        nonPkCols.length > 0
-          ? `ON CONFLICT (${pkColumn}) DO UPDATE SET ${nonPkCols.map(c => `${c} = EXCLUDED.${c}`).join(', ')}`
-          : `ON CONFLICT (${pkColumn}) DO NOTHING`;
-
-      await pool.query(
-        `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ${onConflict}`,
-        values,
-      );
+      try {
+        await pool.query(
+          `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
+          values,
+        );
+      } catch (error) {
+        if ((error as { code?: unknown }).code === '23505') {
+          throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+        }
+        throw error;
+      }
 
       return { ...record } as unknown as Entity;
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { InProcessAdapter, SECURITY_EVENT_TYPES } from '@lastshotlabs/slingshot-core';
-import type { SecurityEventKey } from '@lastshotlabs/slingshot-core';
+import type { Logger, SecurityEventKey } from '@lastshotlabs/slingshot-core';
 import {
   type SecurityEvent,
   type SecurityEventsConfig,
@@ -204,27 +204,31 @@ describe('wireSecurityEventConfig', () => {
     expect(errors[0]).toBe(thrownError);
   });
 
-  it('logs to console.error when onEvent throws and no onEventError provided', () => {
+  it('logs through the injected logger when onEvent throws and no onEventError is provided', () => {
     const bus = new InProcessAdapter();
-    const originalError = console.error;
-    const logged: unknown[][] = [];
-    console.error = (...args: unknown[]) => logged.push(args);
-
-    try {
-      wireSecurityEventConfig(bus, {
+    const errors: Array<[string, unknown]> = [];
+    const logger: Logger = {
+      debug: mock(() => {}),
+      info: mock(() => {}),
+      warn: mock(() => {}),
+      error: (message: string, fields?: unknown) => errors.push([message, fields]),
+      child: () => logger,
+    };
+    wireSecurityEventConfig(
+      bus,
+      {
         onEvent: () => {
           throw new Error('no handler');
         },
-      });
+      },
+      logger,
+    );
 
-      bus.emit('security.auth.login.success', { userId: 'u1' });
+    bus.emit('security.auth.login.success', { userId: 'u1' });
 
-      expect(logged).toHaveLength(1);
-      expect(logged[0][0]).toBe('[slingshot-auth][security-events]');
-      expect(logged[0][1]).toBeInstanceOf(Error);
-    } finally {
-      console.error = originalError;
-    }
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.[0]).toBe('security event callback failed');
+    expect(errors[0]?.[1]).toEqual({ error: expect.any(Error) });
   });
 
   // -----------------------------------------------------------------------

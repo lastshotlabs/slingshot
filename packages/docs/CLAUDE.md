@@ -49,9 +49,9 @@ independently — only the docs site is generated:
 
 `sync-workspace-docs.ts` reads from `<pkg>/docs/` and writes into the Astro tree. It does
 **not** touch `<pkg>/README.md` — but `scripts/build.ts` does: at the end of every
-`bun run build` it copies `docs/human/index.md` over `README.md` verbatim for every
-workspace package.
+`bun run build` renders `README.md` from `docs/human/index.md` for every workspace
+package. The renderer removes Starlight frontmatter and adds the package name and
+Bun install command before the human-authored body.
 
 **Convention:** never edit a package `README.md` by hand — it is build output.
-`docs/human/index.md` is the single canonical source; write everything there
-(the copied README currently carries the guide's Starlight frontmatter, a known wart).
+`docs/human/index.md` is the single canonical source; write the guide body there.

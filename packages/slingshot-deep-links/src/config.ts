@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { deepFreeze } from '@lastshotlabs/slingshot-core';
+import { deepFreeze, validatePluginConfig } from '@lastshotlabs/slingshot-core';
 
 const teamIdPattern = /^[A-Z0-9]{10}$/;
 const reverseDnsPattern = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/;
@@ -82,6 +82,8 @@ export const deepLinksConfigSchema = z
 
 /** Raw config input accepted by `createDeepLinksPlugin()`. */
 export type DeepLinksConfigInput = z.input<typeof deepLinksConfigSchema>;
+/** Canonical raw plugin configuration input. */
+export type DeepLinksPluginConfigInput = DeepLinksConfigInput;
 /** One Apple universal-links application mapping. */
 export type AppleAppLink = z.output<typeof appleAppLinkSchema>;
 /** Android Digital Asset Links application mapping. */
@@ -95,6 +97,9 @@ export interface DeepLinksConfig {
   readonly fallbackRedirects?: Readonly<Record<string, string>>;
 }
 
+/** Canonical normalized plugin configuration name. */
+export type DeepLinksPluginConfig = DeepLinksConfig;
+
 /**
  * Validate, normalize, and deeply freeze deep-links config input.
  *
@@ -102,7 +107,7 @@ export interface DeepLinksConfig {
  * @returns Frozen config with single-apple shorthand normalized to an array.
  */
 export function compileDeepLinksConfig(input: DeepLinksConfigInput): DeepLinksConfig {
-  const parsed = deepLinksConfigSchema.parse(input);
+  const parsed = validatePluginConfig('slingshot-deep-links', input, deepLinksConfigSchema);
 
   return deepFreeze({
     apple:

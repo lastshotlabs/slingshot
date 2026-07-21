@@ -749,14 +749,16 @@ export const verifyWebAuthn = async (
     // Sign count policy
     if (authenticationInfo.newCounter < matchedCred.signCount) {
       if (config.strictSignCount) {
-        console.warn(
-          `[webauthn] Sign count went backward for credential ${credentialId} (user ${userId}) — rejecting (strictSignCount enabled)`,
-        );
+        runtime.logger.warn('WebAuthn sign count moved backward; rejecting credential', {
+          credentialId,
+          userId,
+        });
         return false;
       }
-      console.warn(
-        `[webauthn] Sign count went backward for credential ${credentialId} (user ${userId}) — possible cloned authenticator`,
-      );
+      runtime.logger.warn('WebAuthn sign count moved backward; authenticator may be cloned', {
+        credentialId,
+        userId,
+      });
     }
 
     await adapter.updateWebAuthnCredentialSignCount(

@@ -45,6 +45,38 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
   const unsubs = new Set<() => void>();
   let disposed = false;
 
+  function subscribe<K extends keyof SlingshotEventMap>(
+    event: K,
+    handler: (payload: SlingshotEventMap[K]) => void | Promise<void>,
+  ): () => void;
+  function subscribe(
+    event: string,
+    handler: (payload: unknown) => void | Promise<void>,
+  ): () => void;
+  function subscribe(event: string, handler: (payload: never) => void | Promise<void>): () => void {
+    if (disposed) {
+      return () => {
+        /* no-op */
+      };
+    }
+    const untypedHandler = handler as (payload: unknown) => void | Promise<void>;
+    bus.on(event, untypedHandler);
+    const unsubscribe = () => {
+      try {
+        if (
+          typeof (bus as unknown as { off?: (e: string, h: unknown) => void }).off === 'function'
+        ) {
+          (bus as unknown as { off: (e: string, h: unknown) => void }).off(event, untypedHandler);
+        }
+      } catch (err) {
+        loggerErr.error('eventSink.unsubscribe error', { err: String(err) });
+      }
+      unsubs.delete(unsubscribe);
+    };
+    unsubs.add(unsubscribe);
+    return unsubscribe;
+  }
+
   return {
     emit(name, payload) {
       try {
@@ -53,28 +85,7 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
         loggerErr.error('eventSink.emit error', { err: String(err) });
       }
     },
-    subscribe(event: string, handler: (payload: unknown) => void | Promise<void>) {
-      if (disposed) {
-        return () => {
-          /* no-op */
-        };
-      }
-      bus.on(event, handler);
-      const unsubscribe = () => {
-        try {
-          if (
-            typeof (bus as unknown as { off?: (e: string, h: unknown) => void }).off === 'function'
-          ) {
-            (bus as unknown as { off: (e: string, h: unknown) => void }).off(event, handler);
-          }
-        } catch (err) {
-          loggerErr.error('eventSink.unsubscribe error', { err: String(err) });
-        }
-        unsubs.delete(unsubscribe);
-      };
-      unsubs.add(unsubscribe);
-      return unsubscribe;
-    },
+    subscribe,
     dispose() {
       if (disposed) return;
       disposed = true;

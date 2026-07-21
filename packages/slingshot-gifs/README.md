@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-gifs
----
+# @lastshotlabs/slingshot-gifs
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-gifs
+```
 
 `@lastshotlabs/slingshot-gifs` is a thin server-side proxy for GIF search providers. It keeps the
 provider API key on the server, normalizes provider responses, and gives clients one stable

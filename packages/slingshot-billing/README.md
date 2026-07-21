@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-billing
----
+# @lastshotlabs/slingshot-billing
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-billing
+```
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 

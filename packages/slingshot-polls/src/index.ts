@@ -34,7 +34,7 @@ export { POLL_VOTE_ERRORS, CLIENT_SAFE_POLL_EVENTS } from './types';
 export { Polls, PollsRuntimeCap } from './public';
 
 // Config schema
-export { PollsPluginConfigSchema } from './validation/config';
+export { PollsPluginConfigSchema, pollsPluginConfigSchema } from './validation/config';
 
 // Policy factories — apps declare per-sourceType handlers via the package's
 // `sourceHandlers` / `voteHandlers` config fields.

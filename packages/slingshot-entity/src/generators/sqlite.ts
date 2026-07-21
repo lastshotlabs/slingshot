@@ -343,9 +343,20 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   lines.push('      const columns = Object.keys(row);');
   lines.push("      const placeholders = columns.map(() => '?').join(', ');");
   lines.push('      const values = columns.map(c => row[c]);');
+  lines.push('      try {');
   lines.push(
-    '      db.run(`INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`, values);',
+    '        db.run(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`, values);',
   );
+  lines.push('      } catch (error) {');
+  lines.push(
+    "        if (typeof (error as { code?: unknown }).code === 'string' && (error as { code: string }).code.startsWith('SQLITE_CONSTRAINT')) {",
+  );
+  lines.push("          const conflict = new Error('Entity already exists');");
+  lines.push("          Object.assign(conflict, { status: 409, code: 'UNIQUE_VIOLATION' });");
+  lines.push('          throw conflict;');
+  lines.push('        }');
+  lines.push('        throw error;');
+  lines.push('      }');
   lines.push(`      return fromRow(row);`);
   lines.push('    },');
   lines.push('');

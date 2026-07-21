@@ -1,6 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+export const packageTestConfigPath = 'bunfig.package-tests.toml';
+
 export interface TestCommandSuite {
   name: string;
   testsPath: string;
@@ -79,12 +81,11 @@ function packageSuites(): TestCommandSuite[] {
             !file.includes('/tests/unit/activities-codec.test.ts'),
         );
       }
-      const configPath = normalizePath(join('packages', name, 'bunfig.toml'));
       return {
         name,
         testsPath,
         testFiles,
-        configPath: existsSync(join(process.cwd(), configPath)) ? configPath : undefined,
+        configPath: packageTestConfigPath,
       };
     });
 }
@@ -219,6 +220,7 @@ const temporalWorkerSuite: TestCommandSuite = {
   name: 'slingshot-orchestration-temporal (worker isolated)',
   testsPath: 'packages/slingshot-orchestration-temporal/tests',
   testFiles: ['packages/slingshot-orchestration-temporal/tests/worker.test.ts'],
+  configPath: packageTestConfigPath,
 };
 
 // activities-codec.test.ts mocks `@temporalio/client` at module scope to
@@ -229,6 +231,7 @@ const temporalActivitiesCodecSuite: TestCommandSuite = {
   name: 'slingshot-orchestration-temporal (activities-codec isolated)',
   testsPath: 'packages/slingshot-orchestration-temporal/tests',
   testFiles: ['packages/slingshot-orchestration-temporal/tests/unit/activities-codec.test.ts'],
+  configPath: packageTestConfigPath,
 };
 
 export const packageTestSuites = applySuiteFilter([
@@ -256,10 +259,7 @@ function packageCoverageSuites(): CoverageSuite[] {
       return [];
     }
 
-    const defaultConfigPath = normalizePath(join('packages', name, 'bunfig.toml'));
-    const configPath =
-      override?.configPath ??
-      (existsSync(join(process.cwd(), defaultConfigPath)) ? defaultConfigPath : undefined);
+    const configPath = override?.configPath ?? packageTestConfigPath;
 
     return [
       {

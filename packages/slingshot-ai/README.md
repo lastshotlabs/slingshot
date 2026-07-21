@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-ai
----
+# @lastshotlabs/slingshot-ai
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-ai
+```
 
 Provider-neutral AI generation for slingshot apps.
 

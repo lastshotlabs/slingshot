@@ -99,6 +99,9 @@ export type OrchestrationPluginOptions =
       runtime?: never;
     };
 
+/** Canonical configuration name for the orchestration plugin. */
+export type OrchestrationPluginConfig = OrchestrationPluginOptions;
+
 /**
  * Fully resolved orchestration plugin options after declarative configuration
  * has been normalized. Combines the adapter/runtime choice with the optional

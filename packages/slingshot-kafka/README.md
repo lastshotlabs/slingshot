@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-kafka
----
+# @lastshotlabs/slingshot-kafka
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-kafka
+```
 
 > Human-owned documentation. This page is the package-level contract for Kafka transport behavior, operator expectations, and production guidance.
 

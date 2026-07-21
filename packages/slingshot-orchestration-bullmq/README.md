@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration-bullmq
----
+# @lastshotlabs/slingshot-orchestration-bullmq
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-orchestration-bullmq
+```
 
 This package provides a BullMQ-backed adapter for `@lastshotlabs/slingshot-orchestration-engine`.
 

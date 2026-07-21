@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-bun
----
+# @lastshotlabs/slingshot-runtime-bun
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-runtime-bun
+```
 
 `@lastshotlabs/slingshot-runtime-bun` is the Bun-native runtime implementation for Slingshot.
 Pass the return value of `bunRuntime()` to `defineApp({ runtime })` in your `app.config.ts`.

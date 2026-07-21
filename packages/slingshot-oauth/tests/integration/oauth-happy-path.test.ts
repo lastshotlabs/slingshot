@@ -8,7 +8,7 @@
  *   - Redirect target after successful OAuth login
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { oauthPluginConfigSchema } from '../../src/plugin';
+import { createOAuthPlugin, oauthPluginConfigSchema } from '../../src/plugin';
 import { createOAuthRouter } from '../../src/routes/oauth';
 import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 
@@ -231,6 +231,12 @@ describe('OAuth login happy path — provider callback to code exchange', () => 
 // ---------------------------------------------------------------------------
 
 describe('OAuth postRedirect schema validation', () => {
+  test('plugin construction wraps schema failures with the package name', () => {
+    expect(() => createOAuthPlugin({ postRedirect: '//evil.example.com/path' })).toThrow(
+      /\[slingshot-oauth\] Invalid plugin config/,
+    );
+  });
+
   test('accepts relative paths starting with /', () => {
     const result = oauthPluginConfigSchema.safeParse({ postRedirect: '/dashboard' });
     expect(result.success).toBe(true);

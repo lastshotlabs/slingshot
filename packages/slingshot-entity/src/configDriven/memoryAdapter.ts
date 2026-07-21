@@ -165,6 +165,16 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         );
         const pk = record[pkField] as string | number;
 
+        if (store.has(pk)) {
+          return Promise.reject(
+            new HttpError(
+              409,
+              `Unique constraint violated on field: ${pkField}`,
+              'UNIQUE_VIOLATION',
+            ),
+          );
+        }
+
         const violated = findUniqueViolation(record);
         if (violated) {
           return Promise.reject(

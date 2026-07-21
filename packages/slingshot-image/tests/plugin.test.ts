@@ -30,12 +30,16 @@ describe('createImagePlugin', () => {
     expect(plugin.name).toBe('slingshot-image');
   });
 
-  it('throws ZodError when maxWidth is out of range', () => {
-    expect(() => createImagePlugin({ maxWidth: 99999 })).toThrow();
+  it('throws a namespaced config error when maxWidth is out of range', () => {
+    expect(() => createImagePlugin({ maxWidth: 99999 })).toThrow(
+      /\[slingshot-image\] Invalid plugin config/,
+    );
   });
 
-  it('throws ZodError when routePrefix does not start with a slash', () => {
-    expect(() => createImagePlugin({ routePrefix: 'image' })).toThrow();
+  it('throws a namespaced config error when routePrefix does not start with a slash', () => {
+    expect(() => createImagePlugin({ routePrefix: 'image' })).toThrow(
+      /\[slingshot-image\] Invalid plugin config/,
+    );
   });
 
   it('creates isolated cache per factory call (Rule 3)', () => {

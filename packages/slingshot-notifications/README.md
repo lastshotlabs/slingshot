@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-notifications
----
+# @lastshotlabs/slingshot-notifications
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-notifications
+```
 
 `@lastshotlabs/slingshot-notifications` is Slingshot's shared notification package. It owns
 notification records, user notification preferences, dispatcher scheduling, rate limiting,

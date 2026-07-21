@@ -79,6 +79,9 @@ export const PollsPluginConfigSchema = z.object({
     ),
 });
 
+/** Canonically cased schema export. */
+export const pollsPluginConfigSchema = PollsPluginConfigSchema;
+
 /** Input type accepted by `createPollsPackage()`. */
 export type PollsPluginConfigInput = z.input<typeof PollsPluginConfigSchema>;
 

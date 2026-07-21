@@ -13,6 +13,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_AUTH_CONFIG } from '../config/authConfig';
 import { getSigningSecret } from '../infra/signing';
+import { defaultAuthLogger } from '../lib/logger';
 import { getAuthRuntimeFromRequest } from '../runtime';
 import type { AuthRuntimeContext } from '../runtime';
 
@@ -246,11 +247,8 @@ export const csrfProtection = (options: CsrfMiddlewareOptions = {}): MiddlewareH
   if (checkOrigin && originSet.size === 0) {
     // Warn in all environments — this is a one-time startup message, not per-request noise,
     // and a misconfigured production deployment should surface it.
-    console.warn(
-      '[slingshot] csrfProtection: checkOrigin is enabled but no specific allowed origins are ' +
-        'configured (CORS is "*" or allowedOrigins is unset). Origin validation is disabled — ' +
-        'only the HMAC double-submit cookie check is active. Set security.cors to specific ' +
-        'origins to enable origin validation.',
+    defaultAuthLogger.warn(
+      'CSRF origin checking is enabled without specific allowed origins; only double-submit validation is active',
     );
   }
 

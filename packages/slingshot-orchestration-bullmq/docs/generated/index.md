@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-orchestr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-orchestration-bullmq`
-- Version: `0.0.3`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: BullMQ-backed orchestration adapter for Slingshot tasks and workflows

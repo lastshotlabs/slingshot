@@ -185,10 +185,9 @@ export const createMagicLinkRouter = (
               link,
             });
           } catch (err) {
-            console.error(
-              '[magic-link] Failed to send magic link:',
-              err instanceof Error ? err.message : String(err),
-            );
+            runtime.logger.error('failed to send magic link', {
+              error: err instanceof Error ? err.message : String(err),
+            });
           }
         })();
       }

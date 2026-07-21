@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-m2m
----
+# @lastshotlabs/slingshot-m2m
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-m2m
+```
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 

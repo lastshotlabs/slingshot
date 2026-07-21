@@ -108,6 +108,8 @@ experimental and deferred tiers unless you're actively contributing.
 | `slingshot-mail`                            | Transactional mail with Resend / SES / Postmark / SendGrid providers             |
 | `slingshot-notifications`                   | Notification storage, preference resolution, dispatcher                          |
 | `slingshot-push`                            | Web push & mobile push adapters                                                  |
+| `slingshot-ai`                              | Provider-neutral AI generation, moderation, usage, and spend controls            |
+| `slingshot-billing`                         | Billing, checkout, donations, webhooks, and entitlement resolution               |
 | `slingshot-ssr` / `slingshot-ssg`           | Server-side rendering and static-site generation                                 |
 | `slingshot-runtime-bun` / `-node` / `-edge` | Runtime adapters                                                                 |
 | `slingshot-postgres`                        | Postgres connection helper and auth adapter                                      |

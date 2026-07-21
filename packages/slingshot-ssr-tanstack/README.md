@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-ssr-tanstack
----
+# @lastshotlabs/slingshot-ssr-tanstack
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-ssr-tanstack
+```
 
 > Human-owned documentation. This page should explain how to use the package, not just how it is organized internally.
 

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-auth
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-auth`
-- Version: `0.0.3`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Authentication, sessions, MFA, OAuth, WebAuthn, and passkeys for Slingshot
@@ -43,7 +43,7 @@ bun add @lastshotlabs/slingshot-auth
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `>=3.0`
 - `hono`: `>=4.12.14 <5`
-- `ioredis`: `>=5.0 <6`
+- `ioredis`: `>=5 <6`
 - `jose`: `>=6.0`
 - `mongoose`: `>=9.0 <10`
 - `otpauth`: `>=9.0 <10`

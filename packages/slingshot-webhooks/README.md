@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-webhooks
----
+# @lastshotlabs/slingshot-webhooks
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-webhooks
+```
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 

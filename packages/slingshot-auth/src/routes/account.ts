@@ -544,10 +544,9 @@ export const createAccountRouter = (
         Promise.resolve()
           .then(() => postDeleteHook({ userId: userId, ...hookCtx(c), services }))
           .catch((e: unknown) =>
-            console.error(
-              '[lifecycle] postDeleteAccount hook error:',
-              e instanceof Error ? e.message : String(e),
-            ),
+            runtime.logger.error('postDeleteAccount hook failed', {
+              error: e instanceof Error ? e.message : String(e),
+            }),
           );
       }
 
@@ -705,10 +704,9 @@ export const createAccountRouter = (
         Promise.resolve()
           .then(() => postPwHook({ userId: userId, services }))
           .catch((e: unknown) =>
-            console.error(
-              '[lifecycle] postPasswordChange hook error:',
-              e instanceof Error ? e.message : String(e),
-            ),
+            runtime.logger.error('postPasswordChange hook failed', {
+              error: e instanceof Error ? e.message : String(e),
+            }),
           );
       }
 

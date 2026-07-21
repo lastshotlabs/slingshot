@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-deep-lin
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-deep-links`
-- Version: `0.0.2`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Universal links, Android app links, and fallback redirects for slingshot
+- Description: Universal links, Android app links, and fallback redirects for Slingshot
 - Workspace path: `packages/slingshot-deep-links`
 - Entry point: `packages/slingshot-deep-links/src/index.ts`
 

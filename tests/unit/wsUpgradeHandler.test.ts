@@ -97,6 +97,42 @@ describe('createWsUpgradeHandler', () => {
     expect(capturedData.requestTenantId).toBeNull();
   });
 
+  it.each([
+    ['x-user-token header', 'http://localhost/ws', { 'x-user-token': 'invalid' }],
+    ['bearer header', 'http://localhost/ws', { authorization: 'Bearer invalid' }],
+    ['token query parameter', 'http://localhost/ws?token=invalid', {}],
+    ['session cookie', 'http://localhost/ws', { cookie: 'token=invalid' }],
+  ])('rejects an unresolved presented credential from the %s', async (_name, url, headers) => {
+    let upgradeCalled = false;
+    const server = createMockServer({
+      upgrade: () => {
+        upgradeCalled = true;
+        return true;
+      },
+    });
+    const handler = createWsUpgradeHandler(server, '/ws', anonResolver);
+
+    const result = await handler(new Request(url, { headers }));
+
+    expect(result?.status).toBe(401);
+    expect(upgradeCalled).toBe(false);
+  });
+
+  it('rejects a presented credential when the resolver has a transient failure', async () => {
+    const resolver = {
+      resolveActor: async () => {
+        throw new Error('session store unavailable');
+      },
+    };
+    const handler = createWsUpgradeHandler(createMockServer(), '/ws', resolver);
+
+    const result = await handler(
+      new Request('http://localhost/ws', { headers: { 'x-user-token': 'valid-looking' } }),
+    );
+
+    expect(result?.status).toBe(401);
+  });
+
   it('does not attach a client IP when requestIP returns null', async () => {
     const server = createMockServer({
       requestIP: () => null,

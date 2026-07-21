@@ -1,6 +1,10 @@
 import { resolveRequestActor } from '@framework/lib/resolveRequestActor';
 import type { Server } from 'bun';
-import { setStandaloneClientIp } from '@lastshotlabs/slingshot-core';
+import {
+  COOKIE_TOKEN,
+  HEADER_USER_TOKEN,
+  setStandaloneClientIp,
+} from '@lastshotlabs/slingshot-core';
 import type { Actor, RequestActorResolver } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -46,11 +50,9 @@ type BaseSocketData = SocketData;
  * `undefined` (Bun expects no response for successful upgrades); on failure it returns
  * a 400 JSON error response.
  *
- * Auth failure is not a hard rejection — unauthenticated connections proceed with
- * `actor: ANONYMOUS_ACTOR`. That includes invalid tokens, stale sessions, suspension,
- * required-email-verification failures, and session-binding mismatches resolved
- * by the active `actorResolver`. Enforce authentication in your WebSocket `open`
- * handler or a wrapping middleware if you require it.
+ * Requests without a credential may proceed as anonymous. A request that presents a
+ * standard Slingshot credential but cannot resolve it is rejected with 401 so clients
+ * can refresh or retry instead of opening a misleading anonymous connection.
  *
  * @param server - The Bun `Server` instance that owns this WebSocket connection.
  *   Typically `Bun.serve()`'s return value. Must be typed with `BaseSocketData`
@@ -77,7 +79,17 @@ export const createWsUpgradeHandler =
     } catch {
       // intentional — requestIP may throw in some environments
     }
-    const resolved = await resolveRequestActor(req, actorResolver ?? null);
+    const credentialPresented = hasPresentedCredential(req);
+    let resolved: Actor;
+    try {
+      resolved = await resolveRequestActor(req, actorResolver ?? null);
+    } catch (error) {
+      if (!credentialPresented) throw error;
+      return Response.json({ error: 'Invalid or unavailable credentials' }, { status: 401 });
+    }
+    if (credentialPresented && resolved.kind === 'anonymous') {
+      return Response.json({ error: 'Invalid or expired credentials' }, { status: 401 });
+    }
     // Freeze the actor at the boundary (Rule 10) — downstream WS handlers
     // receive an immutable identity. ANONYMOUS_ACTOR is already pre-frozen.
     const actor = Object.isFrozen(resolved) ? resolved : Object.freeze(resolved);
@@ -96,3 +108,24 @@ export const createWsUpgradeHandler =
     });
     return upgraded ? undefined : Response.json({ error: 'Upgrade failed' }, { status: 400 });
   };
+
+function hasPresentedCredential(req: Request): boolean {
+  const headerToken = req.headers.get(HEADER_USER_TOKEN)?.trim();
+  if (headerToken) return true;
+
+  const authorization = req.headers.get('authorization')?.trim();
+  if (authorization && /^Bearer\s+\S+/i.test(authorization)) return true;
+
+  const queryToken = new URL(req.url).searchParams.get('token')?.trim();
+  if (queryToken) return true;
+
+  const cookie = req.headers.get('cookie');
+  return Boolean(
+    cookie
+      ?.split(';')
+      .map(part => part.trim())
+      .find(part => part.startsWith(`${COOKIE_TOKEN}=`))
+      ?.slice(COOKIE_TOKEN.length + 1)
+      .trim(),
+  );
+}

@@ -15,6 +15,7 @@ import type {
   AppEnv,
   EntityRouteDataScopeConfig,
   EntityRoutePolicyConfig,
+  Logger,
   NamedOpHttpMethod,
   OperationConfig,
   PackageRouteRequestContext,
@@ -25,7 +26,7 @@ import type {
   TypedRouteResponseSpec,
   TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
-import { createRoute, getActor, toOpenApiPath } from '@lastshotlabs/slingshot-core';
+import { createRoute, getActor, noopLogger, toOpenApiPath } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
@@ -377,6 +378,7 @@ function applyEntityProjection(
   data: unknown,
   config: ResolvedEntityConfig,
   variant?: string,
+  logger: Logger = noopLogger,
 ): unknown {
   const privateFields = new Set<string>();
   for (const [name, def] of Object.entries(config.fields)) {
@@ -394,10 +396,11 @@ function applyEntityProjection(
       if (!warnedUnknownVariants.has(warnKey)) {
         warnedUnknownVariants.add(warnKey);
         const available = Object.keys(config.dto ?? {});
-        console.warn(
-          `[slingshot] Unknown DTO variant '${variant}' on entity '${config.name}'. ` +
-            `Available: [${available.join(', ') || '(none)'}]. Falling through to no projection.`,
-        );
+        logger.warn('unknown entity DTO variant; using no projection', {
+          entity: config.name,
+          variant,
+          available,
+        });
       }
     }
     return value;
@@ -426,11 +429,12 @@ function createResponseHelpers(
   c: Context<AppEnv>,
   route: PlannedEntityRoute,
   config: ResolvedEntityConfig,
+  logger?: Logger,
 ): EntityRouteExecutionContext['respond'] & { setOpResult(opName: string, result: unknown): void } {
   function applyTransform(data: unknown, status: number): unknown {
     // 1) Apply entity-level projection: strip private fields, run selected dto mapper.
     const responseSpec = route.responses?.[status];
-    let value = applyEntityProjection(data, config, responseSpec?.dto);
+    let value = applyEntityProjection(data, config, responseSpec?.dto, logger);
     // 2) Apply user-supplied per-route transform if present for this status.
     if (responseSpec?.transform) value = responseSpec.transform(value);
     return value;
@@ -1094,6 +1098,8 @@ export function buildBareEntityRoutes<
     policyResolver?: PolicyResolver;
     /** Event bus for emitting policy denial events. */
     bus?: SlingshotEventBus;
+    /** Structured logger for non-fatal route diagnostics. */
+    logger?: Logger;
     /** Override the OpenAPI tag for all routes. Defaults to entity name. */
     tag?: string;
   } & PlannedRouteOptions,
@@ -1198,7 +1204,7 @@ export function buildBareEntityRoutes<
             return policyResponse;
           }
 
-          const helpers = createResponseHelpers(c, route, config);
+          const helpers = createResponseHelpers(c, route, config, options?.logger);
           const execContext: EntityRouteExecutionContext = {
             request: c,
             actor: getActor(c),
@@ -1244,7 +1250,7 @@ export function buildBareEntityRoutes<
     // Per-named-op response transform — runs after the dto projection.
     const opTransform = config.routes?.operations?.[opName]?.transform;
     const projectAndTransform = (result: unknown): unknown => {
-      const projected = applyEntityProjection(result, config, opDtoVariant);
+      const projected = applyEntityProjection(result, config, opDtoVariant, options?.logger);
       return opTransform ? opTransform(projected) : projected;
     };
     const routeParams =
@@ -1404,7 +1410,12 @@ export function buildBareEntityRoutes<
         const result = await adapter.create(bodyRecord);
         c.set('__opName' as never, 'create' as never);
         c.set('__opResult' as never, result as never);
-        const projected = applyEntityProjection(result, config, config.routes?.create?.dto);
+        const projected = applyEntityProjection(
+          result,
+          config,
+          config.routes?.create?.dto,
+          options?.logger,
+        );
         const transform = config.routes?.create?.transform;
         return c.json(transform ? transform(projected) : projected, 201);
       },
@@ -1475,7 +1486,12 @@ export function buildBareEntityRoutes<
         const result = await adapter.list(listOpts);
         c.set('__opName' as never, 'list' as never);
         c.set('__opResult' as never, result as never);
-        const projected = applyEntityProjection(result, config, config.routes?.list?.dto);
+        const projected = applyEntityProjection(
+          result,
+          config,
+          config.routes?.list?.dto,
+          options?.logger,
+        );
         const transform = config.routes?.list?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },
@@ -1534,7 +1550,12 @@ export function buildBareEntityRoutes<
 
         c.set('__opName' as never, 'get' as never);
         c.set('__opResult' as never, result as never);
-        const projected = applyEntityProjection(result, config, config.routes?.get?.dto);
+        const projected = applyEntityProjection(
+          result,
+          config,
+          config.routes?.get?.dto,
+          options?.logger,
+        );
         const transform = config.routes?.get?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },
@@ -1618,7 +1639,12 @@ export function buildBareEntityRoutes<
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
         c.set('__opName' as never, 'update' as never);
         c.set('__opResult' as never, result as never);
-        const projected = applyEntityProjection(result, config, config.routes?.update?.dto);
+        const projected = applyEntityProjection(
+          result,
+          config,
+          config.routes?.update?.dto,
+          options?.logger,
+        );
         const transform = config.routes?.update?.transform;
         return c.json(transform ? transform(projected) : projected, 200);
       },

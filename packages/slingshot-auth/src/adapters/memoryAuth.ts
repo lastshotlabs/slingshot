@@ -16,6 +16,7 @@ import type {
   WebAuthnCredential,
 } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
+import { defaultAuthLogger } from '../lib/logger';
 import { normalizeEmail } from '../lib/normalizeEmail';
 import type { OAuthCodePayload } from '../types/oauthCode';
 import type { OAuthReauthConfirmation, OAuthReauthState } from '../types/oauthReauth';
@@ -277,9 +278,7 @@ export function createMemoryAuthAdapter(
   function warnMemoryAdapter(): void {
     if (!_memoryWarned) {
       _memoryWarned = true;
-      console.warn(
-        '[slingshot] Memory adapter for auth has no eviction — for development/testing only',
-      );
+      defaultAuthLogger.warn('memory auth adapter has no eviction and is for development only');
     }
   }
 

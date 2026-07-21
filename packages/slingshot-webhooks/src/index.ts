@@ -26,7 +26,7 @@ export { webhookPluginConfigSchema } from './types/config';
 /**
  * Configuration accepted by `createWebhooksPackage()`.
  */
-export type { WebhookPluginConfig } from './types/config';
+export type { WebhookPluginConfig, WebhooksPluginConfig } from './types/config';
 /**
  * Adapter contract for webhook endpoint and delivery persistence.
  */

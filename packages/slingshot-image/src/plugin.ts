@@ -1,5 +1,6 @@
 // packages/slingshot-image/src/plugin.ts
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { validatePluginConfig } from '@lastshotlabs/slingshot-core';
 import { createMemoryImageCache } from './cache';
 import { imagePluginConfigSchema } from './config.schema';
 import { buildImageRouter } from './routes';
@@ -30,10 +31,10 @@ const DEFAULTS = {
  * instances or app instances.
  *
  * @param rawConfig - Plugin configuration. Validated and frozen at construction
- *   time — throws `ZodError` if required fields fail validation.
+ *   time — throws a namespaced config error if required fields fail validation.
  * @returns A `SlingshotPlugin` for use with `createApp({ plugins: [...] })`.
  *
- * @throws {ZodError} If `rawConfig` fails schema validation.
+ * @throws {Error} If `rawConfig` fails schema validation.
  *
  * @example
  * ```ts
@@ -51,8 +52,11 @@ const DEFAULTS = {
  * ```
  */
 export function createImagePlugin(rawConfig?: ImagePluginConfig): SlingshotPlugin {
-  // Validate config with Zod (Rule 12: validate and freeze at boundary)
-  const validated = imagePluginConfigSchema.parse(rawConfig ?? {});
+  const validated = validatePluginConfig(
+    'slingshot-image',
+    rawConfig ?? {},
+    imagePluginConfigSchema,
+  );
 
   // Resolve final config with defaults applied
   const resolvedConfig: Readonly<

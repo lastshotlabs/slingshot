@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-entity
----
+# @lastshotlabs/slingshot-entity
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-entity
+```
 
 > Human-owned documentation. This page explains what this package is for and which constraints should stay true as it evolves.
 

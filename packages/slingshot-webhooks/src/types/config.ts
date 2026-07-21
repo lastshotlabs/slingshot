@@ -300,3 +300,5 @@ export const webhookPluginConfigSchema = z.object({
  * Configuration object accepted by `createWebhooksPackage`.
  */
 export type WebhookPluginConfig = z.infer<typeof webhookPluginConfigSchema>;
+/** Canonical configuration name matching the plural package name. */
+export type WebhooksPluginConfig = WebhookPluginConfig;

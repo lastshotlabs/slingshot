@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-node
----
+# @lastshotlabs/slingshot-runtime-node
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-runtime-node
+```
 
 `@lastshotlabs/slingshot-runtime-node` is the Node.js runtime implementation for Slingshot.
 Pass the return value of `nodeRuntime()` to `defineApp({ runtime })` in your `app.config.ts`.

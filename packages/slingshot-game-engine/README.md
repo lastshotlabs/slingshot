@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-game-engine
----
+# @lastshotlabs/slingshot-game-engine
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-game-engine
+```
 
 `@lastshotlabs/slingshot-game-engine` adds config-driven multiplayer game state management as a
 standard Slingshot package. Games are defined declaratively via `defineGame()` and registered with

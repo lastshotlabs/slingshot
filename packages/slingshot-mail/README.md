@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-mail
----
+# @lastshotlabs/slingshot-mail
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-mail
+```
 
 > Human-owned documentation. This package should stay explicit about provider, renderer, and queue boundaries.
 

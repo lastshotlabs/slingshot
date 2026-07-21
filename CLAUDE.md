@@ -13,8 +13,8 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
-- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
-- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`, `slingshot-ai`, `slingshot-billing`
+- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ai`, `slingshot-billing`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
+- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
 ## Canonical Authoring Path
@@ -161,6 +161,7 @@ Context lives in Contextshot (project: slingshot). Content in the DB, not this f
 
 - START: read the briefing:
   `curl -s -H "Authorization: Bearer $CONTEXTSHOT_TOKEN" "$CONTEXTSHOT_URL/api/projects/slingshot/briefing"`
+- Plans / specs / design docs are **Documents** in the API — the briefing lists their title + a `GET .../docs/<id>` URL only (never the body), and there is usually no local file. Fetch by id; never report "can't find it" without fetching first.
 - Bug/task found → ticket. Non-obvious fact learned → gotcha.
 - END / task complete: write a worklog, update state if it changed. Work is NOT done until logged.
 - Full protocol: `curl -s -H "Authorization: Bearer $CONTEXTSHOT_TOKEN" "$CONTEXTSHOT_URL/api/protocol?slug=slingshot"`

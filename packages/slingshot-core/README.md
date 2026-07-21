@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-core
----
+# @lastshotlabs/slingshot-core
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-core
+```
 
 > Human-owned documentation. This page describes what core is allowed to own and what should stay out of it.
 

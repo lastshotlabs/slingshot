@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-push
----
+# @lastshotlabs/slingshot-push
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-push
+```
 
 `@lastshotlabs/slingshot-push` is Slingshot's multi-provider push delivery package. It manages
 device subscriptions, topic fan-out, delivery records, and provider dispatch for Web Push (VAPID),

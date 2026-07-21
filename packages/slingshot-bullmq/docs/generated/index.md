@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-bullmq
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-bullmq`
-- Version: `0.0.2`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Durable BullMQ-backed event bus adapter for Slingshot
@@ -37,7 +37,7 @@ bun add @lastshotlabs/slingshot-bullmq
 - `test:integration`: `bun test tests/integration`
 - `test:redis`: `cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts`
 - `test:unit`: `bun test --ignore tests/integration --ignore tests/helpers`
-- `typecheck`: `tsc -p tsconfig.json --noEmit`
+- `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
@@ -45,8 +45,8 @@ bun add @lastshotlabs/slingshot-bullmq
 
 ## Peer Dependencies
 
-- `bullmq`: `>=5`
-- `ioredis`: `>=5`
+- `bullmq`: `>=5 <6`
+- `ioredis`: `>=5 <6`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

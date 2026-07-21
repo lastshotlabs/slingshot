@@ -43,7 +43,7 @@ describe('slingshot-emoji package', () => {
       plugins: [testPermissionsPlugin()],
       packages: [createEmojiPackage({})],
     });
-    createdApps.push((app as { ctx: { destroy(): Promise<void> } }).ctx);
+    createdApps.push((app as unknown as { ctx: { destroy(): Promise<void> } }).ctx);
 
     // Unauthenticated POST to the create route — auth intercepts first, but a
     // non-404 confirms the route is registered at the expected path.

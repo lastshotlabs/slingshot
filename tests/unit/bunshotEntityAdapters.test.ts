@@ -386,14 +386,15 @@ describe('generated sqlite adapter', () => {
     expect(result.items.length).toBe(0);
   });
 
-  it('upsert: create overwrites existing record', async () => {
+  it('create rejects an existing primary key without overwriting it', async () => {
     const db = new Database(':memory:');
     const adapter = createSqliteAdapter(db);
     const created = await adapter.create({ subject: 'Original' });
-    // Create with same explicit id should upsert
-    await adapter.create({ subject: 'Replaced', id: created.id });
+    await expect(adapter.create({ subject: 'Replaced', id: created.id })).rejects.toMatchObject({
+      status: 409,
+    });
     const found = await adapter.getById(created.id);
-    expect(found!.subject).toBe('Replaced');
+    expect(found!.subject).toBe('Original');
   });
 
   it('creates table automatically', async () => {

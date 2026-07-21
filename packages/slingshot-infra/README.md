@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: How to use @lastshotlabs/slingshot-infra for platform and deployment configuration
----
+# @lastshotlabs/slingshot-infra
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-infra
+```
 
 `@lastshotlabs/slingshot-infra` is the package for describing and operating infrastructure around
 Slingshot apps. Use it when you want typed config for stacks, shared resources, deployment plans, and

@@ -1,12 +1,20 @@
+import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+
 export interface AuthLoggerConfig {
   verbose?: boolean;
   authTrace?: boolean;
+  logger?: Logger;
 }
 
-export interface AuthLogger {
+export interface AuthLogger extends Logger {
   log: (...args: unknown[]) => void;
   authTrace: (...args: unknown[]) => void;
 }
+
+/** Shared structured fallback for standalone auth helpers. */
+export const defaultAuthLogger = createConsoleLogger({
+  base: { component: 'slingshot-auth' },
+});
 
 /**
  * Returns whether verbose (non-production) logging is enabled.
@@ -39,12 +47,18 @@ function isAuthTrace(config?: AuthLoggerConfig): boolean {
  * follows app config instead of relying solely on process-wide env vars.
  */
 export function createAuthLogger(config: AuthLoggerConfig = {}): AuthLogger {
+  const logger = config.logger ?? defaultAuthLogger;
   return {
+    debug: logger.debug.bind(logger),
+    info: logger.info.bind(logger),
+    warn: logger.warn.bind(logger),
+    error: logger.error.bind(logger),
+    child: logger.child.bind(logger),
     log(...args: unknown[]) {
-      if (isVerbose(config)) console.log(...args);
+      if (isVerbose(config)) logger.debug('auth diagnostic', { args });
     },
     authTrace(...args: unknown[]) {
-      if (isAuthTrace(config)) console.log(...args);
+      if (isAuthTrace(config)) logger.debug('auth trace', { args });
     },
   };
 }

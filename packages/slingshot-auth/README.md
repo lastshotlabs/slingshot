@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-auth
----
+# @lastshotlabs/slingshot-auth
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-auth
+```
 
 > Human-owned documentation. This page records the package boundaries and the security assumptions we want to preserve.
 

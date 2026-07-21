@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-embeds
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-embeds`
-- Version: `0.0.2`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: URL unfurling for slingshot — fetches OG metadata server-side for link previews
+- Description: URL unfurling for Slingshot — fetches OG metadata server-side for link previews
 - Workspace path: `packages/slingshot-embeds`
 - Entry point: `packages/slingshot-embeds/src/index.ts`
 

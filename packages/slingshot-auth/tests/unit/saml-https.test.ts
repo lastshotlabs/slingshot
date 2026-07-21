@@ -82,9 +82,12 @@ describe('initSaml - HTTPS enforcement (F9)', () => {
           expect(err.message).not.toContain('HTTPS in production');
         },
       );
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[saml] WARNING: IdP metadata over HTTP — do not use in production',
-      );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(warnSpy.mock.calls[0]?.[0]))).toMatchObject({
+        level: 'warn',
+        component: 'slingshot-auth',
+        msg: 'SAML IdP metadata uses HTTP outside production',
+      });
     } finally {
       warnSpy.mockRestore();
     }

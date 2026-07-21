@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-postgres
----
+# @lastshotlabs/slingshot-postgres
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-postgres
+```
 
 `@lastshotlabs/slingshot-postgres` is the Postgres-backed auth adapter and connection helper for
 Slingshot. It provides `connectPostgres()` for pool setup and `createPostgresAdapter()` for the

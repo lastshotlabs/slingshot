@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-community
----
+# @lastshotlabs/slingshot-community
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-community
+```
 
 `@lastshotlabs/slingshot-community` is Slingshot's community/forum domain package. It provides
 containers, threads, replies, reactions, container memberships and rules, reports, bans, tags,

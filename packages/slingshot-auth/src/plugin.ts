@@ -612,9 +612,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
                 });
               } else if (!timingSafeEqual(storedFp, current)) {
                 if (onMismatch === 'log-only') {
-                  console.warn(
-                    `[slingshot-auth] session binding mismatch during upgrade auth for user ${userId}`,
-                  );
+                  runtime.logger.warn('session binding mismatch during upgrade authentication', {
+                    userId,
+                  });
                 } else {
                   return ANONYMOUS_ACTOR;
                 }
@@ -690,7 +690,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
       for (const seedUser of users) {
         const existing = await result.runtime.adapter.findByEmail(seedUser.email);
         if (existing) {
-          console.log(`[slingshot-auth seed] User '${seedUser.email}' already exists — skipping.`);
+          result.runtime.logger.info('seed user already exists; skipping', {
+            email: seedUser.email,
+          });
           seedState.set(`user:${seedUser.email}`, existing.id);
           continue;
         }
@@ -698,7 +700,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         const hash = await result.runtime.password.hash(seedUser.password);
         const { id } = await result.runtime.adapter.create(seedUser.email, hash);
         seedState.set(`user:${seedUser.email}`, id);
-        console.log(`[slingshot-auth seed] Created user '${seedUser.email}' (id: ${id}).`);
+        result.runtime.logger.info('seed user created', { email: seedUser.email, userId: id });
 
         if (seedUser.superAdmin) {
           seedState.set(`superAdmin:${seedUser.email}`, true);

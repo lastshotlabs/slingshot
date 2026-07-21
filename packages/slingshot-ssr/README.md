@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-ssr
----
+# @lastshotlabs/slingshot-ssr
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-ssr
+```
 
 `@lastshotlabs/slingshot-ssr` is Slingshot's server-rendering package. It owns route resolution,
 server action routing, metadata routes, draft-mode routing, page-declaration support, and the

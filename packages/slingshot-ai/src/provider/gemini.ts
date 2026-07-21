@@ -137,6 +137,7 @@ export function createGeminiProvider(
         `secret in the app's secret store (preferred), or \`apiKey\` directly.`,
     );
   }
+  const apiKey = deps.apiKey;
 
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
   const defaultModel = config.defaultModel ?? DEFAULT_MODEL;
@@ -161,7 +162,7 @@ export function createGeminiProvider(
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-goog-api-key': deps.apiKey!,
+          'x-goog-api-key': apiKey,
           ...(config.headers ?? {}),
         },
         body: JSON.stringify(requestBody(req)),

@@ -57,12 +57,12 @@ export async function handleIncomingEvent(
   // 3. Auth check
   if (config.auth === 'userAuth') {
     if (context.actor.kind !== 'user' || !context.actor.id) {
-      sendAck(ws, ackId, { error: 'unauthenticated' });
+      sendAuthFailure(ws, ackId, eventName);
       return true;
     }
   } else if (config.auth === 'bearer') {
     if (!context.actor.id || context.actor.kind === 'anonymous') {
-      sendAck(ws, ackId, { error: 'unauthenticated' });
+      sendAuthFailure(ws, ackId, eventName);
       return true;
     }
   }
@@ -97,6 +97,18 @@ export async function handleIncomingEvent(
   }
 
   return true;
+}
+
+function sendAuthFailure(
+  ws: { send: (s: string) => void },
+  ackId: string | undefined,
+  eventName: string,
+): void {
+  if (ackId !== undefined) {
+    sendAck(ws, ackId, { error: 'unauthenticated' });
+    return;
+  }
+  ws.send(JSON.stringify({ event: 'ws:error', code: 'UNAUTHENTICATED', sourceEvent: eventName }));
 }
 
 /** Only sends if ackId is defined — callers pass it unconditionally. */

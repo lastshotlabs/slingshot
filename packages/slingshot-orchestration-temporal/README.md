@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-orchestration-temporal
----
+# @lastshotlabs/slingshot-orchestration-temporal
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-orchestration-temporal
+```
 
 ## What This Package Is For
 

@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-admin
----
+# @lastshotlabs/slingshot-admin
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-admin
+```
 
 > Human-owned documentation. This package should stay small and explicit about what it delegates.
 

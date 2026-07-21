@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-game-eng
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-game-engine`
-- Version: `0.0.3`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Multiplayer game state engine plugin for slingshot
+- Description: Multiplayer game state engine plugin for Slingshot
 - Workspace path: `packages/slingshot-game-engine`
 - Entry point: `packages/slingshot-game-engine/src/index.ts`
 

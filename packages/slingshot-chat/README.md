@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-chat
----
+# @lastshotlabs/slingshot-chat
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-chat
+```
 
 `@lastshotlabs/slingshot-chat` is Slingshot's chat domain package. It provides rooms,
 memberships, messages, reactions, read receipts, pins, blocks, favorites, invites, reminders,

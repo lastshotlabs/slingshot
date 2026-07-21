@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-bullmq
----
+# @lastshotlabs/slingshot-bullmq
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-bullmq
+```
 
 `@lastshotlabs/slingshot-bullmq` is the durable BullMQ-backed event bus adapter for Slingshot.
 Use it when the default in-process event bus is not enough and event fan-out must survive process

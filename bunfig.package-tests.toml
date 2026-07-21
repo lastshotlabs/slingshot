@@ -1,0 +1,3 @@
+[test]
+# Package suites deliberately do not preload root tests/setup.ts. Tests that need
+# app wiring import their fixtures explicitly, keeping package execution isolated.

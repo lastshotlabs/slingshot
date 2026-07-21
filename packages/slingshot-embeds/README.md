@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-embeds
----
+# @lastshotlabs/slingshot-embeds
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-embeds
+```
 
 `@lastshotlabs/slingshot-embeds` is Slingshot's server-side unfurling package. It fetches a URL on the
 server, validates it against SSRF rules, parses Open Graph and related metadata, and returns a

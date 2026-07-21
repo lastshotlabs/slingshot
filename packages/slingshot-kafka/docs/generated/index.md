@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-kafka
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-kafka`
-- Version: `0.0.2`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Kafka event bus adapter and Kafka connectors for Slingshot
@@ -32,10 +32,11 @@ bun add @lastshotlabs/slingshot-kafka
 - `bench`: `bun run tests/bench/kafka-throughput.bench.ts`
 - `build`: `tsc -p tsconfig.build.json`
 - `coverage`: `bun test --coverage`
+- `lint`: `eslint src/ --cache`
 - `test`: `bun test`
 - `test:integration`: `bun test tests/integration`
 - `test:unit`: `bun test tests/unit tests/kafkaShared.test.ts`
-- `typecheck`: `tsc -p tsconfig.json --noEmit`
+- `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 

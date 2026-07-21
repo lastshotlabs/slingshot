@@ -188,10 +188,9 @@ export const createRegisterRouter = (
           eventBus.emit('security.auth.register.concealed', { meta: { identifier } });
           if (concealRegistration.onExistingAccount) {
             void concealRegistration.onExistingAccount(identifier).catch((err: unknown) => {
-              console.error(
-                '[concealRegistration] onExistingAccount error:',
-                err instanceof Error ? err.message : String(err),
-              );
+              runtime.logger.error('concealed-registration callback failed', {
+                error: err instanceof Error ? err.message : String(err),
+              });
             });
           }
           return c.json({ message: CONCEALED_REGISTER_MESSAGE }, 200);

@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-oauth
----
+# @lastshotlabs/slingshot-oauth
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-oauth
+```
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 

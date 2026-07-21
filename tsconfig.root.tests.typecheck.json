@@ -14,6 +14,8 @@
   },
   "include": [
     "tests",
+    "packages/slingshot-ai/tests",
+    "packages/slingshot-emoji/tests",
     "packages/slingshot-auth/tests/helpers/runtime.ts",
     "scripts/build.ts",
     "scripts/publish.ts",
@@ -55,6 +57,9 @@
     },
     {
       "path": "./packages/slingshot-embeds/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-ai/tsconfig.typecheck.json"
     },
     {
       "path": "./packages/slingshot-emoji/tsconfig.typecheck.json"

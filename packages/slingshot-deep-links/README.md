@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-deep-links
----
+# @lastshotlabs/slingshot-deep-links
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-deep-links
+```
 
 `@lastshotlabs/slingshot-deep-links` publishes the well-known files and browser fallback routes needed
 for iOS universal links and Android app links. It is a small infrastructure plugin: no entities, no

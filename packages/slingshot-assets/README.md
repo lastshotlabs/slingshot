@@ -1,7 +1,10 @@
----
-title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/slingshot-assets
----
+# @lastshotlabs/slingshot-assets
+
+Install with Bun:
+
+```sh
+bun add @lastshotlabs/slingshot-assets
+```
 
 `@lastshotlabs/slingshot-assets` is Slingshot's asset storage package. It owns asset metadata, storage
 adapter resolution, presigned-upload support, image-aware asset behavior, and the runtime wiring

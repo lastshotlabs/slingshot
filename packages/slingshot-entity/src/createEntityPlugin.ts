@@ -748,6 +748,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,
               bus,
+              logger: entityLogger,
               tag: pluginConfig.defaultTag,
               plannedRoutes,
               getEntityAdapter(args) {
@@ -782,6 +783,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,
               bus,
+              logger: entityLogger,
               tag: pluginConfig.defaultTag,
               plannedRoutes,
               getEntityAdapter(args) {

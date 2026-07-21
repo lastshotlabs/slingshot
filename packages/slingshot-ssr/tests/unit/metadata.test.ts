@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { registerMetadataRoutes } from '../../src/metadata';
+import { registerMetadataRoutes, registerMetadataRoutesFromDir } from '../../src/metadata';
 
 type Handler = (ctx: {
   body(data: string, status: number, headers: Record<string, string>): Response;
@@ -113,6 +113,44 @@ describe('metadata convention routes', () => {
     expect(manifest.status).toBe(200);
     expect(manifest.headers.get('content-type')).toContain('application/manifest+json');
     expect(await manifest.json()).toEqual({ name: 'Example', start_url: '/' });
+  });
+
+  test('registerMetadataRoutesFromDir scans the given directory directly (no routes/ child required)', async () => {
+    // The dir-based entry point exists for apps using a custom routeSource
+    // (no serverRoutesDir) — metadata files live in server/ regardless of
+    // how routes are discovered.
+    const root = mkdtempSync(join(tmpdir(), 'slingshot-ssr-metadata-'));
+    tempDirs.push(root);
+    const serverDir = join(root, 'server');
+    mkdirSync(serverDir, { recursive: true });
+    writeFileSync(
+      join(serverDir, 'sitemap.ts'),
+      'export default () => [{ url: "https://example.com/" }]\n',
+      'utf8',
+    );
+    writeFileSync(
+      join(serverDir, 'robots.ts'),
+      'export default () => ({ rules: [{ userAgent: "*", allow: "/" }] })\n',
+      'utf8',
+    );
+    const { app, routes } = createHarness();
+
+    registerMetadataRoutesFromDir(app, serverDir);
+
+    expect([...routes.keys()].sort()).toEqual(['/robots.txt', '/sitemap.xml']);
+    const sitemap = await invoke(routes.get('/sitemap.xml')!);
+    expect(sitemap.status).toBe(200);
+    expect(await sitemap.text()).toContain('https://example.com/');
+  });
+
+  test('registerMetadataRoutesFromDir registers nothing for an empty or missing directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'slingshot-ssr-metadata-'));
+    tempDirs.push(root);
+    const { app, routes } = createHarness();
+
+    registerMetadataRoutesFromDir(app, join(root, 'does-not-exist'));
+
+    expect(routes.size).toBe(0);
   });
 
   test('returns 404 when a convention file does not export a handler', async () => {

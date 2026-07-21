@@ -17,16 +17,18 @@ import { useLoaderData } from '@tanstack/react-router';
 //   2. **`ssrAwareComponent`** — wrap the page module to read `loaderData`
 //      from the right place per environment:
 //
-//        - SSR: snapshot's renderer passes loaderData as a prop directly.
-//          We use the prop and DO NOT call `useLoaderData()` — there is no
-//          TanStack RouterContext during SSR.
+//        - SSR render + SSR hydration: the host passes loaderData as a prop
+//          directly (snapshot's renderer on the server, the hydration entry
+//          in the browser). We use the prop and DO NOT call `useLoaderData()`
+//          — there is no TanStack RouterContext in either context.
 //
-//        - CSR: TanStack's RouterProvider is mounted; `useLoaderData()`
-//          works. We read from it.
+//        - Soft client-side navigation: TanStack's RouterProvider mounted the
+//          component and passes no props; `useLoaderData()` works. We read
+//          from it.
 //
-//      The split is module-load-time, gated on `typeof window`. SSR build
-//      and client build each receive the right variant; hooks-rules are
-//      respected within each environment.
+//      The split is per-render: prop presence decides, with `typeof window`
+//      as the server-side backstop. Hook order stays stable because any
+//      given component instance is mounted by exactly one of the two hosts.
 //
 //      This avoids constructing a full TanStack Router during SSR (which
 //      would require pre-populating router state with our SSR-computed
@@ -204,23 +206,26 @@ function buildUrl(ctx: SsrLoaderContext): string {
  * the current execution environment.
  *
  * **Why this exists.** TanStack's `useLoaderData()` requires a RouterContext
- * provided by `<RouterProvider>`. During SSR, there's no RouterProvider —
- * snapshot's renderer instead passes loaderData to the matched component as
- * a `loaderData` prop. So:
+ * provided by `<RouterProvider>`. Two render paths run without one: SSR
+ * (snapshot's renderer) and browser hydration of SSR markup (the app's
+ * hydration entry). Both pass loaderData to the matched component as a
+ * `loaderData` prop instead. So:
  *
- *   - **server render**: read `loaderData` from props (no hook call).
- *   - **client render**: call `useLoaderData({ from: fromPath })`.
+ *   - **prop present (or no `window`)**: read `loaderData` from props — SSR
+ *     render and SSR hydration (no hook call).
+ *   - **prop absent in a browser**: TanStack mounted the component; call
+ *     `useLoaderData({ from: fromPath })`.
  *
- * The branch is on `typeof window` and is checked **per render**, not at
- * module load. A per-render check is safe because `typeof window` is stable
- * within a given execution environment — production SSR builds never see
- * `window`, browser builds always do — and it sidesteps test-environment
- * fragility (jsdom can be set up after the module is imported).
+ * The branch is checked **per render**, keyed on prop presence with
+ * `typeof window` as the server-side backstop. Keying on `typeof window`
+ * alone was a shipped bug: hydration happens in a browser, so the old check
+ * routed it to the hook, which threw ("useRouter must be used inside a
+ * <RouterProvider>") and blanked every SSR page the moment JS ran.
  *
  * The conditional hook call is fine in practice: React rules-of-hooks require
- * stable hook order *across renders of the same component instance*, and the
- * SSR-vs-CSR boundary is a fresh mount on the client. Within either side,
- * the branch is constant.
+ * stable hook order *across renders of the same component instance*, and a
+ * given instance is mounted either by a prop-passing host (SSR/hydration) or
+ * by TanStack (never passes the prop) — it never switches sides mid-life.
  *
  * @example
  * ```tsx
@@ -239,14 +244,20 @@ export function ssrAwareComponent<TLoaderData>(
   fromPath: string,
 ): SsrAwarePageComponent<TLoaderData> {
   return function SsrAwareComponent(props = {}) {
-    if (typeof window === 'undefined') {
+    // A `loaderData` prop (even null) means the host render tree supplied the
+    // data directly — SSR render AND browser hydration of SSR markup, both of
+    // which run without a TanStack RouterProvider. `typeof window` alone is
+    // NOT a safe discriminator: hydration happens in a browser too, and
+    // calling `useLoaderData()` there throws ("useRouter must be used inside
+    // a <RouterProvider>"), unwinding React and blanking the page.
+    if (typeof window === 'undefined' || props.loaderData !== undefined) {
       return Page({ loaderData: (props.loaderData ?? null) as TLoaderData });
     }
-    // Client render: TanStack's RouterProvider is mounted, hook works.
-    // The conditional hook call across the SSR/CSR boundary is intentional;
-    // it's a fresh component mount on the client, so React's rules-of-hooks
-    // (which require consistent order *across renders of the same instance*)
-    // are not violated.
+    // No prop: TanStack Router mounted this component; its RouterProvider is
+    // up and the hook works. The conditional hook call is intentional — a
+    // component instance is mounted either by the hydration root (prop always
+    // present) or by TanStack (prop never present) and never migrates, so
+    // hook order is stable across renders of any given instance.
     const loaderData = useLoaderData({ from: fromPath as never }) as TLoaderData;
     return Page({ loaderData });
   };

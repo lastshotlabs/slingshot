@@ -1089,6 +1089,16 @@ export interface SsrPluginConfig {
    */
   serverRoutesDir?: string;
   /**
+   * Absolute path to the directory containing metadata convention files
+   * (`sitemap.ts`, `robots.ts`, `manifest.ts`).
+   *
+   * Metadata discovery is independent of HOW routes are discovered. When
+   * omitted, falls back to the parent of `serverRoutesDir` (the historical
+   * file-based layout), else `<cwd>/server` — so apps using a custom
+   * `routeSource` keep their metadata files live without extra config.
+   */
+  readonly metadataDir?: string;
+  /**
    * Pluggable route discovery + resolution.
    *
    * When supplied, this overrides the file-based default. Use it to bring

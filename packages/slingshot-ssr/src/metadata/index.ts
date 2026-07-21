@@ -333,13 +333,35 @@ function serializeRobots(config: RobotsConfig): string {
  * ```
  */
 export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): void {
-  const honoApp = app as HonoAppShape;
   // Convention files live adjacent to serverRoutesDir (i.e. in the server/ directory)
-  const serverDir = dirname(serverRoutesDir);
+  registerMetadataRoutesFromDir(app, dirname(serverRoutesDir));
+}
+
+/**
+ * Register metadata file routes on a Hono application, scanning a directory
+ * directly for the convention files (`sitemap.ts`, `robots.ts`, `manifest.ts`).
+ *
+ * Unlike {@link registerMetadataRoutes}, which derives the scan directory from
+ * a `server/routes` path, this takes the metadata directory itself — the
+ * right entry point when route discovery doesn't use the file-based layout
+ * (e.g. a TanStack `routeSource`) but metadata files still live in `server/`.
+ *
+ * Registered routes are logged at info level for boot-time visibility; when
+ * no convention file exists, nothing is registered and requests fall through
+ * to SSR or the SPA.
+ *
+ * @param app - The Hono application instance. Must be registered before SSR middleware.
+ * @param metadataDir - Absolute path to the directory holding the convention files.
+ */
+export function registerMetadataRoutesFromDir(app: unknown, metadataDir: string): void {
+  const honoApp = app as HonoAppShape;
+  const serverDir = metadataDir;
+  const registered: string[] = [];
 
   // ── sitemap.xml ──────────────────────────────────────────────────────────────
   const sitemapPath = findConventionTs(serverDir, 'sitemap');
   if (sitemapPath) {
+    registered.push('/sitemap.xml');
     honoApp.get('/sitemap.xml', async c => {
       try {
         const mod = (await import(sitemapPath)) as Record<string, unknown>;
@@ -367,6 +389,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
   // ── robots.txt ───────────────────────────────────────────────────────────────
   const robotsPath = findConventionTs(serverDir, 'robots');
   if (robotsPath) {
+    registered.push('/robots.txt');
     honoApp.get('/robots.txt', async c => {
       try {
         const mod = (await import(robotsPath)) as Record<string, unknown>;
@@ -416,8 +439,16 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
         });
       }
     };
+    registered.push('/manifest.webmanifest', '/manifest.json');
     honoApp.get('/manifest.webmanifest', manifestHandler);
     honoApp.get('/manifest.json', manifestHandler);
+  }
+
+  if (registered.length > 0) {
+    logger.info('metadata convention routes registered', {
+      dir: metadataDir,
+      routes: registered.join(', '),
+    });
   }
 }
 

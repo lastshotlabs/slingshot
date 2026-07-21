@@ -15,7 +15,7 @@ import { ssrPluginConfigSchema } from './config.schema';
 import { buildDraftRouter } from './draft/routes';
 import { createMemoryIsrCache } from './isr/memory';
 import { type IsrInvalidators, createIsrInvalidators } from './isr/revalidate';
-import { registerMetadataRoutes } from './metadata/index';
+import { registerMetadataRoutesFromDir } from './metadata/index';
 import { buildSsrMiddleware, createIsrTracker } from './middleware';
 import { buildPageRouteTable } from './pageResolver';
 import { IsrInvalidatorsCap } from './public';
@@ -60,6 +60,7 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
   const config: Readonly<SsrPluginConfig> = Object.freeze({
     ...rawConfig,
     serverRoutesDir: validated.serverRoutesDir,
+    metadataDir: validated.metadataDir,
     routeSource,
     assetsManifest: validated.assetsManifest,
     entryPoint: validated.entryPoint,
@@ -200,11 +201,17 @@ export function createSsrPackage(rawConfig: SsrPluginConfig): SlingshotPackageDe
       );
 
       // Metadata convention routes (sitemap.ts / robots.ts / manifest.ts) live
-      // in `dirname(serverRoutesDir)`. Only register when the file-based source
-      // is in use; alternative sources have no co-located server/ directory.
-      if (config.serverRoutesDir !== undefined) {
-        registerMetadataRoutes(app, config.serverRoutesDir);
-      }
+      // in a `server/` directory whose location is independent of how ROUTES
+      // are discovered — apps using a custom `routeSource` still have one.
+      // Resolution: explicit `metadataDir`, else the parent of
+      // `serverRoutesDir` (historical file-based layout), else `<cwd>/server`
+      // (mirrors the `serverActionsDir` default).
+      const metadataDir =
+        config.metadataDir ??
+        (config.serverRoutesDir !== undefined
+          ? path.dirname(config.serverRoutesDir)
+          : path.resolve(process.cwd(), 'server'));
+      registerMetadataRoutesFromDir(app, metadataDir);
 
       app.use('*', buildSsrMiddleware(config, manifest, app, isrAdapter, isrTracker));
 

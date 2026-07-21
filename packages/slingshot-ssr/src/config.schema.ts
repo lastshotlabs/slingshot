@@ -124,6 +124,15 @@ export const ssrPluginConfigSchema = z
         'Absolute path to the directory containing SSR server route modules. ' +
           'Optional when `routeSource` is supplied. If both are set, `routeSource` wins.',
       ),
+    metadataDir: z
+      .string()
+      .min(1, 'metadataDir must be a non-empty path')
+      .refine(isAbsolute, { message: 'metadataDir must be an absolute path' })
+      .optional()
+      .describe(
+        'Absolute path to the directory containing metadata convention files (sitemap.ts, robots.ts, manifest.ts). ' +
+          'Omit to fall back to the parent of `serverRoutesDir`, else `<cwd>/server`.',
+      ),
     routeSource: z
       .custom<import('./routeSource/types').SsrRouteSource>()
       .optional()

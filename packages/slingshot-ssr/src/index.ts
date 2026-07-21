@@ -136,7 +136,7 @@ export { withAfterContext, buildAfterFn, drainAfterCallbacks } from './after/ind
 // ─── Metadata routes ──────────────────────────────────────────────────────────
 
 /** Register sitemap, robots, and related metadata routes for an SSR app. */
-export { registerMetadataRoutes } from './metadata/index';
+export { registerMetadataRoutes, registerMetadataRoutesFromDir } from './metadata/index';
 /** Sitemap and robots configuration types used by metadata route registration. */
 export type { SitemapEntry, RobotsConfig } from './metadata/index';
 

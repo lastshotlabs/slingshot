@@ -214,6 +214,32 @@ describe('messageNotify middleware', () => {
     expect(notifyCalls[0]!.type).toBe('chat:reply');
   });
 
+  test('keeps a reference reply but suppresses its parent notification when replyPing is off', async () => {
+    const { builder, notifyCalls } = stubBuilder();
+    const app = buildApp({
+      builder,
+      room: { id: 'room-1', type: 'group' },
+      members: [
+        { userId: 'author-1', roomId: 'room-1', notifyOn: 'all' },
+        { userId: 'parent-author', roomId: 'room-1', notifyOn: 'all' },
+      ],
+      messages: new Map([
+        ['parent-1', { id: 'parent-1', authorId: 'parent-author', roomId: 'room-1' }],
+      ]),
+      responseBody: {
+        id: 'msg-1',
+        roomId: 'room-1',
+        authorId: 'author-1',
+        body: 'A quiet reply',
+        replyToId: 'parent-1',
+        appMetadata: { replyPing: false },
+      },
+    });
+
+    await post(app);
+    expect(notifyCalls.length).toBe(0);
+  });
+
   test('does not notify when response status is non-2xx', async () => {
     const { builder, notifyCalls, notifyManyCalls } = stubBuilder();
     const app = buildApp({

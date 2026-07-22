@@ -64,6 +64,7 @@ export function createMessageNotifyMiddleware(deps: {
       mentions?: readonly string[];
       broadcastMentions?: readonly ('everyone' | 'here')[];
       authorName?: string | null;
+      appMetadata?: Record<string, unknown> | null;
     } | null;
 
     if (!result?.id || !result.roomId || !result.authorId) return;
@@ -145,7 +146,7 @@ export function createMessageNotifyMiddleware(deps: {
     }
 
     // ── Reply notification ───────────────────────────────────────────────────
-    if (!result.replyToId) return;
+    if (!result.replyToId || result.appMetadata?.replyPing === false) return;
 
     const parentMessage = await messageAdapter.getById(result.replyToId);
     if (!parentMessage?.authorId || parentMessage.authorId === result.authorId) return;

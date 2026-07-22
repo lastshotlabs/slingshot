@@ -72,6 +72,7 @@ export const Asset = defineEntity('Asset', {
       existsByKey: { auth: 'userAuth' },
       findByKey: { auth: 'userAuth' },
       presignUpload: { auth: 'userAuth' },
+      upload: { auth: 'userAuth' },
       presignDownload: { auth: 'userAuth' },
       serveImage: { auth: 'none' },
     },
@@ -112,6 +113,15 @@ export const assetOperations = defineOperations(Asset, {
    * The runtime handler is wired by the assets plugin's adapter closure.
    */
   presignUpload: op.custom({
+    http: { method: 'post' },
+  }),
+
+  /**
+   * Upload a small asset through the API. This is the portable fallback for
+   * storage adapters (notably local and memory) that cannot issue presigned
+   * PUT URLs.
+   */
+  upload: op.custom({
     http: { method: 'post' },
   }),
 

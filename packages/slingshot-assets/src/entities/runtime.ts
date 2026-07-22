@@ -320,6 +320,65 @@ export function createPresignUploadHandler(deps: AssetsHandlerDeps) {
   };
 }
 
+/** Build the authenticated JSON/base64 upload handler used by non-presigning adapters. */
+export function createUploadHandler(deps: AssetsHandlerDeps) {
+  const { config, storage } = deps;
+  return async (input: unknown): Promise<{ key: string; assetId: string; url?: string }> => {
+    const params = (input ?? {}) as Record<string, unknown>;
+    const assetAdapter = requireAssetAdapter(deps);
+    const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
+    const filename = readOptionalString(params, 'filename');
+    const mimeType = readOptionalString(params, 'mimeType') ?? 'application/octet-stream';
+    const dataBase64 = readRequiredString(params, 'dataBase64', 'dataBase64 is required');
+    const tenantId = readOptionalString(params, 'tenantId') ?? config.tenantId;
+
+    if (BLOCKED_MIME_TYPES.has(mimeType)) {
+      throw new HTTPException(400, { message: 'File type not allowed.' });
+    }
+    if (config.allowedMimeTypes?.length && !config.allowedMimeTypes.some(pattern => mimeMatches(mimeType, pattern))) {
+      throw new HTTPException(400, { message: `File type "${mimeType}" not allowed.` });
+    }
+
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(atob(dataBase64), char => char.charCodeAt(0));
+    } catch {
+      throw new HTTPException(400, { message: 'dataBase64 must be valid base64.' });
+    }
+    const maxFileSize = config.maxFileSize ?? 10 * 1024 * 1024;
+    if (bytes.byteLength > maxFileSize) {
+      throw new HTTPException(413, { message: `File exceeds maximum size of ${maxFileSize} bytes.` });
+    }
+
+    const key = generateUploadKeyFromFilename(filename, { userId, tenantId }, {
+      keyPrefix: config.keyPrefix,
+      tenantScopedKeys: config.tenantScopedKeys,
+    });
+    const body = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(body).set(bytes);
+    const stored = await storage.put(key, new Blob([body], { type: mimeType }), {
+      mimeType,
+      size: bytes.byteLength,
+    });
+    try {
+      const asset = await assetAdapter.create({
+        key,
+        ownerUserId: userId,
+        tenantId: tenantId ?? null,
+        mimeType,
+        size: bytes.byteLength,
+        bucket: null,
+        originalName: filename ?? null,
+        publicRead: false,
+      });
+      return { key, assetId: asset.id, ...(stored.url ? { url: stored.url } : {}) };
+    } catch (error) {
+      await storage.delete(key).catch(() => undefined);
+      throw error;
+    }
+  };
+}
+
 /**
  * Build the `presignDownload` handler.
  */

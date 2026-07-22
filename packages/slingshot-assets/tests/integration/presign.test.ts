@@ -37,6 +37,41 @@ function createPresignStorage() {
 }
 
 describe('presign upload and download routes', () => {
+  it('uploads bytes through the API when the adapter has no presign capability', async () => {
+    const stored: Array<{ key: string; size?: number }> = [];
+    const storage: StorageAdapter = {
+      async put(key, _body, opts) {
+        stored.push({ key, size: opts?.size });
+        return {};
+      },
+      async get() { return null; },
+      async delete() {},
+    };
+    const { app, state } = await createAssetsTestApp({
+      storage,
+      allowedMimeTypes: ['image/*'],
+      maxFileSize: 1024,
+    });
+
+    const response = await app.request('/assets/assets/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-id': 'user-1' },
+      body: JSON.stringify({
+        filename: 'avatar.png',
+        mimeType: 'image/png',
+        dataBase64: btoa('avatar-bytes'),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { key: string; assetId: string };
+    expect(stored).toEqual([{ key: body.key, size: 12 }]);
+    const asset = await state.assets.findByKey({ key: body.key });
+    expect(asset?.id).toBe(body.assetId);
+    expect(asset?.ownerUserId).toBe('user-1');
+    expect(asset?.publicRead).toBe(false);
+  });
+
   it('creates an asset record and returns a presigned upload URL', async () => {
     const { storage, putCalls } = createPresignStorage();
     const { app, state } = await createAssetsTestApp({

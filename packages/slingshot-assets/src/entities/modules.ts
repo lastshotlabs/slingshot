@@ -18,6 +18,7 @@
  */
 import type { StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
+import { HTTPException } from 'hono/http-exception';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
   BareEntityAdapter,
@@ -33,6 +34,7 @@ import {
   applyAssetTtlTransform,
   createPresignDownloadHandler,
   createPresignUploadHandler,
+  createUploadHandler,
   createServeImageHandler,
 } from './runtime';
 
@@ -70,6 +72,7 @@ export function buildAssetsEntityModules(args: {
   const ttlSeconds = args.registryTtlSeconds ?? DEFAULT_ASSET_REGISTRY_TTL_SECONDS;
 
   const presignUpload = createPresignUploadHandler(args.handlerDeps);
+  const upload = createUploadHandler(args.handlerDeps);
   const presignDownload = createPresignDownloadHandler(args.handlerDeps);
   const serveImage = createServeImageHandler(args.handlerDeps);
 
@@ -82,11 +85,19 @@ export function buildAssetsEntityModules(args: {
     (handler: (input: unknown) => Promise<unknown>): EntityRouteExecutorBuilder =>
     () =>
     async (ctx: EntityRouteExecutionContext) => {
-      const result = await handler(ctx.input);
-      if (result === null) {
-        return ctx.respond.json(null);
+      try {
+        const result = await handler(ctx.input);
+        if (result === null) {
+          return ctx.respond.json(null);
+        }
+        return ctx.respond.json(result as Record<string, unknown>);
+      } catch (error) {
+        // Entity executor overrides sit outside Hono's normal route handler
+        // boundary in a full Slingshot app. Convert Hono's typed exception
+        // here so its intended status is not flattened by the app error hook.
+        if (error instanceof HTTPException) return error.getResponse();
+        throw error;
       }
-      return ctx.respond.json(result as Record<string, unknown>);
     };
 
   /**
@@ -97,12 +108,18 @@ export function buildAssetsEntityModules(args: {
     (handler: (input: unknown) => Promise<Response>): EntityRouteExecutorBuilder =>
     () =>
     async (ctx: EntityRouteExecutionContext) => {
-      return handler(ctx.input);
+      try {
+        return await handler(ctx.input);
+      } catch (error) {
+        if (error instanceof HTTPException) return error.getResponse();
+        throw error;
+      }
     };
 
   const overrides: EntityRouteExecutorOverrides = {
     operations: {
       presignUpload: wrapJsonHandler(presignUpload),
+      upload: wrapJsonHandler(upload),
       presignDownload: wrapJsonHandler(presignDownload),
       serveImage: wrapResponseHandler(serveImage),
     },

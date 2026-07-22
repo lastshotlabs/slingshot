@@ -20,6 +20,8 @@ import type { ChatInteractionsPeer } from './public';
 export interface Room {
   readonly id: string;
   readonly tenantId?: string | null;
+  /** Optional application-owned grouping key (for example a forum container). */
+  readonly containerId?: string | null;
   readonly name?: string | null;
   readonly type: RoomType;
   readonly encrypted: boolean;
@@ -199,6 +201,7 @@ export interface Reminder {
 export interface CreateRoomInput {
   id?: string;
   tenantId?: string | null;
+  containerId?: string | null;
   name?: string | null;
   type: RoomType;
   encrypted?: boolean;
@@ -217,6 +220,7 @@ export interface CreateRoomInput {
 export interface UpdateRoomInput {
   name?: string | null;
   tenantId?: string | null;
+  containerId?: string | null;
   encrypted?: boolean;
   retentionDays?: number | null;
   description?: string | null;
@@ -453,9 +457,23 @@ export interface MessageAdapter {
 }
 
 export interface RoomBanAdapter {
-  create(input: { roomId: string; userId: string; bannedBy: string; reason?: string | null; expiresAt?: string | null }): Promise<RoomBan>;
+  create(input: {
+    roomId: string;
+    userId: string;
+    bannedBy: string;
+    reason?: string | null;
+    expiresAt?: string | null;
+  }): Promise<RoomBan>;
   getById(id: string): Promise<RoomBan | null>;
-  update(id: string, input: { bannedBy?: string; reason?: string | null; expiresAt?: string | null; liftedAt?: string | null }): Promise<RoomBan | null>;
+  update(
+    id: string,
+    input: {
+      bannedBy?: string;
+      reason?: string | null;
+      expiresAt?: string | null;
+      liftedAt?: string | null;
+    },
+  ): Promise<RoomBan | null>;
   delete(id: string): Promise<boolean>;
   list(opts?: Record<string, unknown>): Promise<PaginatedResult<RoomBan>>;
   clear(): Promise<void>;

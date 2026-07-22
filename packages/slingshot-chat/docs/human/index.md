@@ -10,6 +10,10 @@ package-first/entity authoring model. `createChatPackage()` is the runtime shell
 those entities, the entity adapter transforms and custom-op handlers, message encryption hooks,
 and notification side effects into the live package.
 
+Rooms can carry an optional `containerId` application grouping key. Community
+products use it to associate discoverable rooms with a space without encoding
+that relationship into a room name or topic.
+
 ## When To Use It
 
 Use this package when your app needs:

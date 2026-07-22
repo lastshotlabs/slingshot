@@ -20,6 +20,8 @@ export const Room = defineEntity('Room', {
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     tenantId: field.string({ optional: true }),
+    /** Optional application-owned grouping key (for example a forum container). */
+    containerId: field.string({ optional: true }),
     name: field.string({ optional: true }),
     type: field.enum(['dm', 'group', 'broadcast'] as const),
     encrypted: field.boolean({ default: false }),
@@ -41,7 +43,12 @@ export const Room = defineEntity('Room', {
     createdAt: field.date({ default: 'now' }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
-  indexes: [index(['type']), index(['tenantId', 'type']), index(['archived'])],
+  indexes: [
+    index(['type']),
+    index(['tenantId', 'type']),
+    index(['tenantId', 'containerId', 'type']),
+    index(['archived']),
+  ],
   routes: {
     defaults: { auth: 'userAuth' },
     disable: ['list', 'updateLastMessage'],
@@ -59,6 +66,7 @@ export const Room = defineEntity('Room', {
       input: {
         allow: [
           'tenantId',
+          'containerId',
           'name',
           'type',
           'encrypted',
@@ -91,7 +99,15 @@ export const Room = defineEntity('Room', {
       // messages or change room semantics). Archive state and last-message
       // pointers go through their own named operations.
       input: {
-        allow: ['name', 'description', 'topic', 'avatarUrl', 'retentionDays', 'slowModeSeconds'],
+        allow: [
+          'name',
+          'containerId',
+          'description',
+          'topic',
+          'avatarUrl',
+          'retentionDays',
+          'slowModeSeconds',
+        ],
       },
       permission: {
         requires: 'chat:room.manage',

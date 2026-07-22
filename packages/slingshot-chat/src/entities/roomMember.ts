@@ -120,6 +120,7 @@ export const RoomMember = defineEntity('RoomMember', {
       updateLastRead: { auth: 'userAuth' },
       countMembers: { auth: 'userAuth' },
       unreadCount: { auth: 'userAuth' },
+      leave: { auth: 'userAuth' },
     },
     middleware: { dmRoomGuard: true, memberGrant: true, memberInviteNotify: true },
   },
@@ -169,6 +170,17 @@ export const roomMemberOperations = defineOperations(RoomMember, {
    */
   unreadCount: op.custom({
     http: { method: 'get', path: 'unread-count' },
+  }),
+
+  /** Self-service leave for ordinary members; owners/admins cannot orphan roles. */
+  leave: op.batch({
+    action: 'delete',
+    filter: {
+      roomId: 'param:roomId',
+      userId: 'param:actor.id',
+      role: 'member',
+    },
+    returns: 'count',
   }),
 });
 

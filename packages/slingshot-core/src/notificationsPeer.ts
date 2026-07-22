@@ -29,6 +29,8 @@ export interface NotificationRecord {
   readonly data?: Readonly<Record<string, unknown>>;
   readonly read: boolean;
   readonly readAt?: Date | string | null;
+  readonly seen?: boolean;
+  readonly seenAt?: Date | string | null;
   readonly deliverAt?: Date | string | null;
   readonly dispatched: boolean;
   readonly dispatchedAt?: Date | string | null;

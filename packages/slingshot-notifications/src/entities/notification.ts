@@ -101,6 +101,8 @@ function materializeNotificationRecord(row: Record<string, unknown>): Notificati
         : undefined,
     read: row.read === true,
     readAt: row.readAt instanceof Date || typeof row.readAt === 'string' ? row.readAt : null,
+    seen: row.seen === true,
+    seenAt: row.seenAt instanceof Date || typeof row.seenAt === 'string' ? row.seenAt : null,
     deliverAt:
       row.deliverAt instanceof Date || typeof row.deliverAt === 'string' ? row.deliverAt : null,
     dispatched: row.dispatched === true,
@@ -144,6 +146,8 @@ function sqliteRowToNotification(row: Record<string, unknown>): NotificationReco
     data,
     read: row['read'] === 1 || row['read'] === true,
     readAt: typeof row['read_at'] === 'number' ? new Date(row['read_at'] as number) : null,
+    seen: row['seen'] === 1 || row['seen'] === true,
+    seenAt: typeof row['seen_at'] === 'number' ? new Date(row['seen_at'] as number) : null,
     deliverAt: typeof row['deliver_at'] === 'number' ? new Date(row['deliver_at'] as number) : null,
     dispatched: row['dispatched'] === 1 || row['dispatched'] === true,
     dispatchedAt:
@@ -172,6 +176,8 @@ export const Notification = defineEntity('Notification', {
     data: field.json({ optional: true }),
     read: field.boolean({ default: false }),
     readAt: field.date({ optional: true }),
+    seen: field.boolean({ default: false }),
+    seenAt: field.date({ optional: true }),
     deliverAt: field.date({ optional: true, immutable: true }),
     dispatched: field.boolean({ default: false }),
     dispatchedAt: field.date({ optional: true }),
@@ -182,6 +188,7 @@ export const Notification = defineEntity('Notification', {
   indexes: [
     index(['userId', 'createdAt'], { direction: 'desc' }),
     index(['userId', 'read']),
+    index(['userId', 'seen']),
     index(['userId', 'source', 'read']),
     index(['userId', 'source', 'scopeId', 'read']),
     index(['userId', 'dedupKey']),
@@ -228,6 +235,8 @@ export const Notification = defineEntity('Notification', {
           },
         },
       },
+      markAllSeen: {},
+      unseenCount: {},
       unreadCount: {},
       unreadCountBySource: {},
       unreadCountByScope: {},
@@ -260,6 +269,18 @@ export const notificationOperations = defineOperations(Notification, {
     filter: { userId: 'param:actor.id', read: false },
     set: { read: true, readAt: 'now' },
     returns: 'count',
+  }),
+
+  markAllSeen: op.batch({
+    action: 'update',
+    filter: { userId: 'param:actor.id', seen: false },
+    set: { seen: true, seenAt: 'now' },
+    returns: 'count',
+  }),
+
+  unseenCount: op.aggregate({
+    compute: { count: 'count' },
+    filter: { userId: 'param:actor.id', seen: false },
   }),
 
   unreadCount: op.aggregate({

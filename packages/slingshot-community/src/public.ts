@@ -64,7 +64,7 @@ export const CommunityEntities = Community.publicEntities({
     'listByContainerSorted',
     'search',
   ]),
-  Reply: Community.publicEntity(replyModule).readonly(['listByThread', 'search']),
+  Reply: Community.publicEntity(replyModule).readonly(['getById', 'listByThread', 'search']),
   Reaction: Community.publicEntity(reactionModule).readonly(['listByTarget', 'getUserReaction']),
 });
 

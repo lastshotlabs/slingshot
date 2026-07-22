@@ -67,6 +67,7 @@ export const Report = defineEntity('Report', {
 
     operations: {
       resolve: {
+        path: ':id/resolve',
         permission: {
           requires: 'community:container.review-report',
           scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
@@ -74,6 +75,7 @@ export const Report = defineEntity('Report', {
         middleware: ['auditLog'],
       },
       dismiss: {
+        path: ':id/dismiss',
         permission: {
           requires: 'community:container.review-report',
           scope: { resourceType: 'community:container', resourceId: 'record:containerId' },

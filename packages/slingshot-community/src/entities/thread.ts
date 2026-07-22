@@ -123,8 +123,10 @@ export const Thread = defineEntity('Thread', {
     get: { auth: 'none', middleware: ['publishedThreadGuard'] },
 
     create: {
-      // Client allowlist — fields users actually write. Excludes
-      // `authorId` (server-injected via dataScope), `status`/`pinned`/
+      // Client allowlist — fields users actually write. `id` is accepted so
+      // clients can coordinate immutable sidecars (for example a poll whose
+      // sourceId must be the final thread ID) in one create transaction.
+      // Excludes `authorId` (server-injected via dataScope), `status`/`pinned`/
       // `locked`/`score`/`reactionSummary`/`replyCount`/`viewCount`/
       // `*ReplyAt`/`solution*`/`publishedAt`/`deletedBy` (server-managed,
       // updated by named ops or denormalization triggers). Mention
@@ -133,6 +135,7 @@ export const Thread = defineEntity('Thread', {
       // them server-side from the body tokens.
       input: {
         allow: [
+          'id',
           'tenantId',
           'containerId',
           'title',

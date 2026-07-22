@@ -951,6 +951,13 @@ describe('createCommunityPackage — cascades on auth:user.deleted', () => {
 });
 
 describe('createCommunityPackage — middleware execution order', () => {
+  test('thread create accepts a caller-provided id for immutable sidecar coordination', async () => {
+    const { Thread } = await import('../../src/entities/thread');
+    const input = Thread.routes?.create?.input;
+    expect(typeof input === 'object' ? input.allow : undefined).toContain('id');
+    expect(Thread.fields.id.immutable).toBe(true);
+  });
+
   test('banCheck middleware runs before autoMod for thread.create', async () => {
     // The Thread entity declares middleware: ['banCheck', 'autoMod'] for create.
     // applyRouteConfig uses router.use() which registers in declaration order,

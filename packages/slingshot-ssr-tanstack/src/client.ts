@@ -1,4 +1,4 @@
-import { useLoaderData } from '@tanstack/react-router';
+import { useLoaderData, useRouter } from '@tanstack/react-router';
 
 // packages/slingshot-ssr-tanstack/src/client.ts
 //
@@ -63,6 +63,35 @@ interface SsrLoaderContext {
   readonly abortController?: AbortController;
   readonly location?: { readonly pathname?: string; readonly searchStr?: string };
   readonly params?: Readonly<Record<string, string | undefined>>;
+  readonly context?: unknown;
+}
+
+/** Hydration-window source of loader data that a host SSR renderer computed. */
+export interface SsrLoaderDataSource {
+  consume(href: string):
+    | { readonly found: true; readonly data: unknown }
+    | { readonly found: false };
+}
+
+/**
+ * Create a preload source for a TanStack router context.
+ *
+ * A host that ran the route's server loader before constructing TanStack's
+ * router can pass this source as `context.slingshotSsrLoaderData`. TanStack may
+ * invoke the initial loader more than once while establishing its match tree,
+ * so the source remains readable for the hydration window. The host removes it
+ * after hydration; later navigations then use the normal `_data=1` protocol.
+ */
+export function createSsrLoaderDataSource(
+  href: string,
+  data: unknown,
+): SsrLoaderDataSource {
+  return {
+    consume(candidate: string) {
+      if (candidate !== href) return { found: false };
+      return { found: true, data };
+    },
+  };
 }
 
 /**
@@ -101,6 +130,10 @@ export class SsrLoaderError extends Error {
  * Drop-in: pass directly as `loader` on `createFileRoute(...)({ loader })`.
  */
 export async function fetchSsrLoader<TData = unknown>(ctx: SsrLoaderContext): Promise<TData> {
+  const href = buildHref(ctx);
+  const preloaded = readLoaderDataSource(ctx.context)?.consume(href);
+  if (preloaded?.found) return preloaded.data as TData;
+
   const url = buildUrl(ctx);
   const res = await fetch(url, {
     method: 'GET',
@@ -179,24 +212,33 @@ export async function fetchSsrLoader<TData = unknown>(ctx: SsrLoaderContext): Pr
   return (body['data'] ?? null) as TData;
 }
 
+function readLoaderDataSource(context: unknown): SsrLoaderDataSource | undefined {
+  if (typeof context !== 'object' || context === null) return undefined;
+  const source = (context as { slingshotSsrLoaderData?: unknown }).slingshotSsrLoaderData;
+  if (typeof source !== 'object' || source === null) return undefined;
+  return typeof (source as { consume?: unknown }).consume === 'function'
+    ? (source as SsrLoaderDataSource)
+    : undefined;
+}
+
 function buildUrl(ctx: SsrLoaderContext): string {
   // Prefer the resolved location pathname; fall back to assembling from params
   // is intentionally NOT supported — TanStack always populates `location` for
   // its loaders, and forcing the user to pre-build a path defeats the helper's
   // ergonomics.
+  const href = buildHref(ctx);
+  const separator = href.includes('?') ? '&' : '?';
+  return `${href}${separator}_data=1`;
+}
+
+function buildHref(ctx: SsrLoaderContext): string {
   const pathname = ctx.location?.pathname ?? '/';
   const rawSearch = ctx.location?.searchStr ?? '';
   // Normalise to a leading-`?` form so the concatenation below is safe even
   // if a non-standard `searchStr` is passed in (e.g. tests, future TanStack
   // versions).
   const search = rawSearch.length === 0 || rawSearch.startsWith('?') ? rawSearch : `?${rawSearch}`;
-  // Append `_data=1` so the request explicitly opts into JSON mode even if
-  // a proxy normalises Accept headers. The slingshot middleware accepts
-  // either signal.
-  if (search.length === 0) return `${pathname}?_data=1`;
-  // search === '?' alone is harmless: result is `/path?&_data=1` — the api
-  // tolerates the empty pair. Avoid an extra branch for it.
-  return `${pathname}${search}&_data=1`;
+  return `${pathname}${search}`;
 }
 
 // ─── ssrAwareComponent ────────────────────────────────────────────────────────
@@ -211,10 +253,11 @@ function buildUrl(ctx: SsrLoaderContext): string {
  * hydration entry). Both pass loaderData to the matched component as a
  * `loaderData` prop instead. So:
  *
- *   - **prop present (or no `window`)**: read `loaderData` from props — SSR
- *     render and SSR hydration (no hook call).
- *   - **prop absent in a browser**: TanStack mounted the component; call
- *     `useLoaderData({ from: fromPath })`.
+ *   - **prop present**: read `loaderData` from props (Snapshot's routerless
+ *     SSR/hydration host).
+ *   - **router context present**: read TanStack loader data. This includes
+ *     router-owned SSR as well as browser navigation.
+ *   - **neither present**: normalize to null for a routerless host.
  *
  * The branch is checked **per render**, keyed on prop presence with
  * `typeof window` as the server-side backstop. Keying on `typeof window`
@@ -244,22 +287,21 @@ export function ssrAwareComponent<TLoaderData>(
   fromPath: string,
 ): SsrAwarePageComponent<TLoaderData> {
   return function SsrAwareComponent(props = {}) {
+    const router = useRouter({ warn: false });
     // A `loaderData` prop (even null) means the host render tree supplied the
     // data directly — SSR render AND browser hydration of SSR markup, both of
     // which run without a TanStack RouterProvider. `typeof window` alone is
     // NOT a safe discriminator: hydration happens in a browser too, and
     // calling `useLoaderData()` there throws ("useRouter must be used inside
     // a <RouterProvider>"), unwinding React and blanking the page.
-    if (typeof window === 'undefined' || props.loaderData !== undefined) {
+    if (props.loaderData !== undefined) {
       return Page({ loaderData: (props.loaderData ?? null) as TLoaderData });
     }
-    // No prop: TanStack Router mounted this component; its RouterProvider is
-    // up and the hook works. The conditional hook call is intentional — a
-    // component instance is mounted either by the hydration root (prop always
-    // present) or by TanStack (prop never present) and never migrates, so
-    // hook order is stable across renders of any given instance.
-    const loaderData = useLoaderData({ from: fromPath as never }) as TLoaderData;
-    return Page({ loaderData });
+    if (router) {
+      const loaderData = useLoaderData({ from: fromPath as never }) as TLoaderData;
+      return Page({ loaderData });
+    }
+    return Page({ loaderData: null as TLoaderData });
   };
 }
 

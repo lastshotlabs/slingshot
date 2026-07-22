@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { SsrLoaderError, fetchSsrLoader } from '../../src/client';
+import {
+  SsrLoaderError,
+  createSsrLoaderDataSource,
+  fetchSsrLoader,
+} from '../../src/client';
 
 const originalFetch = globalThis.fetch;
 
@@ -12,6 +16,44 @@ afterEach(() => {
 });
 
 describe('fetchSsrLoader', () => {
+  it('reuses matching host-preloaded data throughout initial router setup', async () => {
+    let fetchCount = 0;
+    globalThis.fetch = mock(async () => {
+      fetchCount += 1;
+      return new Response('{"data":{"source":"network"}}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const source = createSsrLoaderDataSource('/u/jdd?tab=takes', {
+      source: 'preloaded',
+    });
+    const context = { slingshotSsrLoaderData: source };
+
+    const first = await fetchSsrLoader<{ source: string }>({
+      location: { pathname: '/u/jdd', searchStr: '?tab=takes' },
+      context,
+    });
+    const second = await fetchSsrLoader<{ source: string }>({
+      location: { pathname: '/u/jdd', searchStr: '?tab=takes' },
+      context,
+    });
+
+    expect(first.source).toBe('preloaded');
+    expect(second.source).toBe('preloaded');
+    expect(fetchCount).toBe(0);
+  });
+
+  it('does not consume a preload for a different href', async () => {
+    mockFetchOnce(new Response('{"data":{"source":"network"}}', { status: 200 }));
+    const data = await fetchSsrLoader<{ source: string }>({
+      location: { pathname: '/search', searchStr: '?q=nba' },
+      context: {
+        slingshotSsrLoaderData: createSsrLoaderDataSource('/', {
+          source: 'preloaded',
+        }),
+      },
+    });
+    expect(data.source).toBe('network');
+  });
+
   it('returns `data` from a 200 JSON response', async () => {
     mockFetchOnce(
       new Response(JSON.stringify({ data: { profile: { id: 'u1' } } }), {

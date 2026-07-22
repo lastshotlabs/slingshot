@@ -23,9 +23,12 @@ const routerlessThrow: UseLoaderDataImpl = () => {
 
 let useLoaderDataImpl: UseLoaderDataImpl = routerlessThrow;
 const useLoaderDataSpy = mock((opts: { from: string }) => useLoaderDataImpl(opts));
+let routerPresent = false;
+const useRouterSpy = mock(() => (routerPresent ? { stores: {} } : null));
 
 mock.module('@tanstack/react-router', () => ({
   useLoaderData: useLoaderDataSpy,
+  useRouter: useRouterSpy,
 }));
 
 const { ssrAwareComponent } = await import('../../src/client');
@@ -56,7 +59,9 @@ function withWindow<T>(fn: () => T): T {
 
 afterEach(() => {
   useLoaderDataImpl = routerlessThrow;
+  routerPresent = false;
   useLoaderDataSpy.mockClear();
+  useRouterSpy.mockClear();
 });
 
 describe('ssrAwareComponent', () => {
@@ -105,6 +110,7 @@ describe('ssrAwareComponent', () => {
   it('soft client nav: window exists + no prop → reads from useLoaderData with the route path', () => {
     const { Page, calls } = makePage();
     const Component = ssrAwareComponent(Page, '/_public/u/$handle');
+    routerPresent = true;
     useLoaderDataImpl = () => ({ profile: 'from-router' });
 
     const out = withWindow(() => Component({}));
@@ -113,5 +119,17 @@ describe('ssrAwareComponent', () => {
     expect(calls[0]?.loaderData).toEqual({ profile: 'from-router' });
     expect(useLoaderDataSpy).toHaveBeenCalledTimes(1);
     expect(useLoaderDataSpy.mock.calls[0]?.[0]).toEqual({ from: '/_public/u/$handle' });
+  });
+
+  it('router-owned SSR: no window + router context → reads TanStack loader data', () => {
+    const { Page, calls } = makePage();
+    const Component = ssrAwareComponent(Page, '/_public/search');
+    routerPresent = true;
+    useLoaderDataImpl = () => ({ results: ['nba'] });
+
+    Component({});
+
+    expect(calls[0]?.loaderData).toEqual({ results: ['nba'] });
+    expect(useLoaderDataSpy).toHaveBeenCalledTimes(1);
   });
 });

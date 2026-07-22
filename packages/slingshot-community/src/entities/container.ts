@@ -72,7 +72,13 @@ export const Container = defineEntity('Container', {
           'theme',
         ],
       },
-      permission: { requires: 'community:container.write' },
+      // No entity-level permission gate: `community:container.write` is a
+      // grant that only exists AFTER a container does (issued per-container
+      // on join/ownership), so requiring it here made creation impossible
+      // for everyone — the same chicken-and-egg chat's Room.create had.
+      // Creation policy is owned by `containerCreationGuard`
+      // (`containerCreation: 'admin' | 'user'`); the creator's owner grant
+      // is issued by `containerCreatorGrant`.
       event: {
         key: 'community:container.created',
         payload: ['id', 'slug', 'tenantId', 'createdBy'],

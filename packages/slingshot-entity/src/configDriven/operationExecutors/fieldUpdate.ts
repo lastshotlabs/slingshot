@@ -51,6 +51,42 @@ function recordMatches(
   return true;
 }
 
+/**
+ * Convert a canonical field value into what SQLite can bind, using the
+ * entity's declared field type — the same mapping sqliteAdapter's own
+ * create/filter paths use. Without this, a `json` field written through
+ * `op.fieldUpdate` binds a raw object, which bun:sqlite rejects — this
+ * silently killed e.g. community's attachEmbeds fan-out.
+ */
+function serializeSqliteBindValue(
+  config: ResolvedEntityConfig,
+  field: string,
+  value: unknown,
+): unknown {
+  const def = config.fields[field];
+  if (!def || value == null) return value;
+  if (def.type === 'json' || def.type === 'string[]') return JSON.stringify(value);
+  if (def.type === 'date') return value instanceof Date ? value.getTime() : value;
+  if (def.type === 'boolean') return value ? 1 : 0;
+  return value;
+}
+
+/**
+ * Postgres variant: only `json` needs explicit stringification (node-postgres
+ * renders a JS array as a Postgres array literal, invalid for json/jsonb).
+ * `string[]` stays native (text[] columns), dates/booleans bind natively.
+ */
+function serializePostgresBindValue(
+  config: ResolvedEntityConfig,
+  field: string,
+  value: unknown,
+): unknown {
+  const def = config.fields[field];
+  if (!def || value == null) return value;
+  if (def.type === 'json') return JSON.stringify(value);
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // Memory
 // ---------------------------------------------------------------------------
@@ -135,7 +171,10 @@ export function fieldUpdateSqlite(
     for (const f of op.set) {
       if (input[f] !== undefined) {
         setClauses.push(`${toSnakeCase(f)} = ?`);
-        values.push(input[f]);
+        // Bind by declared field type — json/string[] columns take a JSON
+        // string, not a raw object (bun:sqlite rejects object bindings,
+        // which silently killed e.g. community's attachEmbeds fan-out).
+        values.push(serializeSqliteBindValue(config, f, input[f]));
       }
     }
     const whereParts = matchKeys.map(f => `${toSnakeCase(f)} = ?`);
@@ -196,7 +235,10 @@ export function fieldUpdatePostgres(
     for (const f of op.set) {
       if (input[f] !== undefined) {
         setClauses.push(`${toSnakeCase(f)} = $${++pIdx}`);
-        values.push(input[f]);
+        // json columns need an explicit JSON string: node-postgres would
+        // otherwise render a JS array as a Postgres array literal, which is
+        // invalid json/jsonb input.
+        values.push(serializePostgresBindValue(config, f, input[f]));
       }
     }
     const whereParts = matchKeys.map(f => `${toSnakeCase(f)} = $${++pIdx}`);

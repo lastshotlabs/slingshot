@@ -550,16 +550,32 @@ describe('createCommunityPackage — permission enforcement', () => {
     harness = await createCommunityHarness();
   });
 
-  test('container create returns 403 without permission', async () => {
-    // No grants issued — evaluator.can returns false.
+  test("container create succeeds without a grant when containerCreation is 'user'", async () => {
+    // Creation policy is owned by containerCreationGuard, not an entity-level
+    // `community:container.write` requirement — that grant only exists AFTER
+    // a container does, so requiring it made creation impossible for
+    // everyone (the chicken-and-egg Room.create also had).
     const res = await harness.app.request('/community/containers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-user': 'user-1' },
       body: JSON.stringify({ slug: 'general', name: 'General', createdBy: 'user-1' }),
     });
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Forbidden');
+    expect(res.status).toBeGreaterThanOrEqual(200);
+    expect(res.status).toBeLessThan(300);
+  });
+
+  test("container create returns 403 without permission when containerCreation is 'admin'", async () => {
+    const adminHarness = await createCommunityHarness({ containerCreation: 'admin' });
+    // No grants issued — evaluator.can returns false.
+    const res = await adminHarness.app.request('/community/containers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-1' },
+      body: JSON.stringify({ slug: 'general', name: 'General', createdBy: 'user-1' }),
+    });
+    // 401 when the harness carries no communityPrincipal, 403 when a
+    // principal exists but the evaluator denies — both are "creation
+    // refused under the admin policy".
+    expect([401, 403]).toContain(res.status);
   });
 
   test('container create returns 2xx with permission', async () => {

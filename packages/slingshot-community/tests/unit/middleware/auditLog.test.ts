@@ -26,13 +26,14 @@ describe('auditLog middleware', () => {
       await next();
     });
     app.use('*', createAuditLogMiddleware({ adminGate: gate }));
-    app.delete('/reports/:reportId', c => c.json({ ok: true }));
+    app.delete('/reports/:reportId', c => c.json({ ok: true, containerId: 'c1' }));
 
     const res = await app.request('/reports/r1', { method: 'DELETE' });
     expect(res.status).toBe(200);
     expect(entries.length).toBe(1);
     expect(entries[0]?.actorId).toBe('u1');
     expect(entries[0]?.resource).toBe('community');
+    expect(entries[0]?.meta).toEqual({ tenantId: undefined, containerId: 'c1' });
   });
 
   test('skips logging on non-2xx', async () => {

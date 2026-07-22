@@ -29,12 +29,23 @@ export function createAuditLogMiddleware(deps: {
     if (!deps.adminGate) return;
     if (c.res.status >= 200 && c.res.status < 300) {
       const principal = c.get('communityPrincipal') as CommunityPrincipal | undefined;
+      let containerId: string | undefined;
+      try {
+        const body = await c.res.clone().json() as Record<string, unknown>;
+        const entity = body.data && typeof body.data === 'object'
+          ? body.data as Record<string, unknown>
+          : body;
+        if (typeof entity.containerId === 'string') containerId = entity.containerId;
+      } catch {
+        // Empty/non-JSON success responses still produce an audit entry; they
+        // simply cannot contribute response-derived scope metadata.
+      }
       await deps.adminGate.logAuditEntry({
         action: c.req.method + ' ' + c.req.path,
         resource: 'community',
         actorId: principal?.subject ?? 'unknown',
         targetId: c.req.param('id') ?? c.req.param('reportId'),
-        meta: { tenantId: getActorTenantId(c) ?? undefined },
+        meta: { tenantId: getActorTenantId(c) ?? undefined, containerId },
       });
     }
   };

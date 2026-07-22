@@ -538,6 +538,7 @@ export function createCommunityPackage(
                   targetId: entry.targetId,
                   targetType: 'community',
                   tenantId: entry.meta?.tenantId as string | undefined,
+                  containerId: entry.meta?.containerId as string | undefined,
                   meta: entry.meta,
                 });
               },

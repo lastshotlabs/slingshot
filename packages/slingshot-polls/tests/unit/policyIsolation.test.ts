@@ -10,6 +10,7 @@ describe('policy state isolation', () => {
       'poll:create',
     ]);
     expect(Poll.routes?.permissions?.roles?.admin).toContain('poll:admin');
+    expect(Poll.routes?.defaults?.permission?.scope).toEqual({ resourceType: 'poll' });
   });
 
   it('two package instances do not share source handlers', () => {

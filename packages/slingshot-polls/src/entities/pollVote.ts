@@ -33,7 +33,11 @@ export const PollVote = defineEntity('PollVote', {
     ],
     defaults: {
       auth: 'userAuth',
-      permission: { requires: 'poll:read', policy: { resolver: POLL_VOTE_POLICY_KEY } },
+      permission: {
+        requires: 'poll:read',
+        scope: { resourceType: 'poll' },
+        policy: { resolver: POLL_VOTE_POLICY_KEY },
+      },
     },
     get: {},
     list: {},
@@ -43,6 +47,7 @@ export const PollVote = defineEntity('PollVote', {
       // fetches the poll and injects sourceType via context variables.
       permission: {
         requires: 'poll:vote',
+        scope: { resourceType: 'poll' },
         policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },
       },
       event: {
@@ -58,7 +63,11 @@ export const PollVote = defineEntity('PollVote', {
       middleware: ['pollVoteGuard', 'pollVoteRateLimit'],
     },
     delete: {
-      permission: { requires: 'poll:vote', policy: { resolver: POLL_VOTE_POLICY_KEY } },
+      permission: {
+        requires: 'poll:vote',
+        scope: { resourceType: 'poll' },
+        policy: { resolver: POLL_VOTE_POLICY_KEY },
+      },
       event: {
         key: 'polls:poll.vote_retracted',
         payload: ['pollId', 'optionIndex', 'userId', 'sourceType', 'sourceId', 'scopeId'],
@@ -79,6 +88,7 @@ export const PollVote = defineEntity('PollVote', {
         path: 'list-by-poll',
         permission: {
           requires: 'poll:read',
+          scope: { resourceType: 'poll' },
           policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },
         },
       },
@@ -87,12 +97,14 @@ export const PollVote = defineEntity('PollVote', {
         path: 'my-votes',
         permission: {
           requires: 'poll:read',
+          scope: { resourceType: 'poll' },
           policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },
         },
       },
       countByOption: {
         permission: {
           requires: 'poll:read',
+          scope: { resourceType: 'poll' },
           policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },
         },
       },

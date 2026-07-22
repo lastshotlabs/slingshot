@@ -39,12 +39,20 @@ export const Poll = defineEntity('Poll', {
     dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
     defaults: {
       auth: 'userAuth',
-      permission: { requires: 'poll:read', policy: { resolver: POLL_SOURCE_POLICY_KEY } },
+      permission: {
+        requires: 'poll:read',
+        scope: { resourceType: 'poll' },
+        policy: { resolver: POLL_SOURCE_POLICY_KEY },
+      },
     },
     get: {},
     list: {},
     create: {
-      permission: { requires: 'poll:create', policy: { resolver: POLL_SOURCE_POLICY_KEY } },
+      permission: {
+        requires: 'poll:create',
+        scope: { resourceType: 'poll' },
+        policy: { resolver: POLL_SOURCE_POLICY_KEY },
+      },
       middleware: ['pollCreateGuard', 'pollCreateRateLimit'],
       event: {
         key: 'polls:poll.created',
@@ -58,7 +66,11 @@ export const Poll = defineEntity('Poll', {
       },
     },
     delete: {
-      permission: { requires: 'poll:admin', policy: { resolver: POLL_SOURCE_POLICY_KEY } },
+      permission: {
+        requires: 'poll:admin',
+        scope: { resourceType: 'poll' },
+        policy: { resolver: POLL_SOURCE_POLICY_KEY },
+      },
       event: {
         key: 'polls:poll.deleted',
         payload: ['id', 'scopeId'],
@@ -78,6 +90,7 @@ export const Poll = defineEntity('Poll', {
         // is still enforced via evaluateRouteAuth.
         permission: {
           requires: 'poll:admin',
+          scope: { resourceType: 'poll' },
           policy: { resolver: POLL_SOURCE_POLICY_KEY, applyTo: [] },
         },
         event: {

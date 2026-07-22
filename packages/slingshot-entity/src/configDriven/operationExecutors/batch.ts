@@ -137,7 +137,12 @@ export function batchSqlite(
     if (op.set) {
       for (const [f, v] of Object.entries(op.set)) {
         setClauses.push(`${toSnakeCase(f)} = ?`);
-        setValues.push(resolveSetValue(v, params));
+        const resolved = resolveSetValue(v, params);
+        // bun:sqlite cannot bind Date objects; date columns store epoch ms
+        // (mirrors the transition executor's sqlite branch, which pushes
+        // Date.now()). Without this, any batch op with `set: { x: 'now' }`
+        // — e.g. Notification.markAllRead — threw a binding TypeError.
+        setValues.push(resolved instanceof Date ? resolved.getTime() : resolved);
       }
     }
     return Promise.resolve(

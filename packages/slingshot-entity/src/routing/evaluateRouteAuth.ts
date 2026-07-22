@@ -158,8 +158,14 @@ export async function evaluateRouteAuth(
     };
   }
 
-  const scope: Record<string, string | undefined> = {
-    tenantId: getActorTenantId(c) ?? undefined,
+  // `tenantId: null` is meaningful — it is the single-tenant scope and must
+  // reach the evaluator as null so it matches grants stored with a NULL
+  // tenant. Coercing to undefined told the evaluator "no tenant level at
+  // all", which filtered every tenant/resource-scoped grant and made
+  // single-tenant deploys deny ALL entity-route permissions (only
+  // super-admin grants passed).
+  const scope: Record<string, string | null | undefined> = {
+    tenantId: getActorTenantId(c),
   };
 
   let entityRecord: Record<string, unknown> | null | undefined;
@@ -183,7 +189,25 @@ export async function evaluateRouteAuth(
     (permission.ownerField !== undefined ||
       scopeEntries.some(([, value]) => value.startsWith('record:')))
   ) {
-    const id = c.req.param('id');
+    // Record-scoped permissions resolve the target row before the mutation
+    // runs. CRUD routes carry the id as the `:id` URL param; flat named-op
+    // routes (transition/fieldUpdate — e.g. POST /threads/publish) carry it
+    // in the JSON body instead, so fall back to `body.id` before 404ing.
+    let id = c.req.param('id');
+    if (!id) {
+      if (parsedBody === undefined) {
+        try {
+          parsedBody = await c.req.json();
+        } catch {
+          parsedBody = undefined;
+        }
+      }
+      const bodyId =
+        parsedBody && typeof parsedBody === 'object'
+          ? (parsedBody as Record<string, unknown>)['id']
+          : undefined;
+      if (typeof bodyId === 'string' && bodyId.length > 0) id = bodyId;
+    }
     if (!id) {
       return {
         authorized: false,

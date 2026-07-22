@@ -335,14 +335,26 @@ export function createSqlitePermissionsAdapter(
         const resourceId = scope?.resourceId;
 
         if (tenantId !== undefined) {
-          cascadeLevels.push('(tenant_id = ? AND resource_type IS NULL AND resource_id IS NULL)');
-          params.push(tenantId);
+          // `tenantId: null` is the single-tenant scope and must match grants
+          // stored with a NULL tenant column. `tenant_id = ?` with a null
+          // param is never true in SQL, which made every resource-scoped
+          // grant unreachable in single-tenant deploys — use IS NULL instead.
+          const tenantCond = (): string => {
+            if (tenantId === null) return 'tenant_id IS NULL';
+            params.push(tenantId);
+            return 'tenant_id = ?';
+          };
+          cascadeLevels.push(
+            `(${tenantCond()} AND resource_type IS NULL AND resource_id IS NULL)`,
+          );
           if (resourceType !== undefined) {
-            cascadeLevels.push('(tenant_id = ? AND resource_type = ? AND resource_id IS NULL)');
-            params.push(tenantId, resourceType);
+            const rtLevel = tenantCond();
+            params.push(resourceType);
+            cascadeLevels.push(`(${rtLevel} AND resource_type = ? AND resource_id IS NULL)`);
             if (resourceId !== undefined) {
-              cascadeLevels.push('(tenant_id = ? AND resource_type = ? AND resource_id = ?)');
-              params.push(tenantId, resourceType, resourceId);
+              const ridLevel = tenantCond();
+              params.push(resourceType, resourceId);
+              cascadeLevels.push(`(${ridLevel} AND resource_type = ? AND resource_id = ?)`);
             }
           }
         }

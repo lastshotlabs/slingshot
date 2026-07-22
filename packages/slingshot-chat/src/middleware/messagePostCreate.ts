@@ -24,7 +24,7 @@ import type { RoomAdapter } from '../types';
 export function createMessagePostCreateMiddleware(deps: {
   roomAdapter: RoomAdapter;
   permissionsAdapter: PermissionsAdapter;
-  tenantId: string;
+  tenantId: string | null;
 }): MiddlewareHandler {
   const { roomAdapter, permissionsAdapter, tenantId } = deps;
 

@@ -22,6 +22,20 @@ export function createMemberInviteNotifyMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
+    // Notification storage is a SIDE EFFECT of the membership mutation — a
+    // failure here (e.g. missing notifications backing table) must never
+    // fail the request that already committed the member row. Log and move on.
+    try {
+      await storeInviteNotification(c);
+    } catch (err) {
+      console.warn(
+        '[slingshot-chat] member invite notification failed (mutation unaffected):',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  };
+
+  async function storeInviteNotification(c: Parameters<MiddlewareHandler>[0]): Promise<void> {
     const actorId = getActorId(c);
     const result = (await c.res.clone().json()) as {
       roomId?: string;
@@ -47,5 +61,5 @@ export function createMemberInviteNotifyMiddleware(deps: {
         roomType: room?.type ?? null,
       },
     });
-  };
+  }
 }

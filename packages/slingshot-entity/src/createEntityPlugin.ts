@@ -873,7 +873,10 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
       const resolvedPermissions = resolvePermissions(app);
       const pluginCtx = getContextOrNull(app);
 
-      // Register permission resource types for all entities
+      // Register permission resource types for all entities. Log outcomes —
+      // a silently-skipped registration means every permission check against
+      // that resource type denies, which is expensive to diagnose from the
+      // outside (it looks identical to a missing grant).
       if (resolvedPermissions) {
         for (const entry of resolvedEntries) {
           const pc = entry.config.routes?.permissions;
@@ -884,8 +887,18 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                 actions: pc.actions,
                 roles: pc.roles ?? {},
               });
-            } catch {
-              // already registered — skip
+              console.log(
+                `[slingshot-entity] registered permission type '${pc.resourceType}' ` +
+                  `(${pc.actions.length} action(s)) for entity '${entry.config.name}'`,
+              );
+            } catch (err) {
+              // Usually "already registered" (another entity of the same
+              // package declares the same type) — but surface it so a real
+              // failure isn't invisible.
+              console.log(
+                `[slingshot-entity] permission type '${pc.resourceType}' not re-registered ` +
+                  `for entity '${entry.config.name}': ${err instanceof Error ? err.message : String(err)}`,
+              );
             }
           }
         }

@@ -228,10 +228,25 @@ class MockPool implements PoolLike {
       if (!params) throw new Error('MockPool: cascade SELECT missing params');
       const subjectId = String(params[0]);
       const subjectType = String(params[1]);
-      // Cascade scope params: $3=tenantId, $4=resourceType, $5=resourceId (each optional)
-      const tenantId = params[2] !== undefined ? String(params[2]) : undefined;
-      const resourceType = params[3] !== undefined ? String(params[3]) : undefined;
-      const resourceId = params[4] !== undefined ? String(params[4]) : undefined;
+      // Two SQL variants exist. With a string tenant scope the cascade uses
+      // `tenant_id = $3` and scope params are $3=tenantId, $4=resourceType,
+      // $5=resourceId. With a NULL tenant scope (single-tenant deploys) the
+      // cascade uses `tenant_id IS NULL` and the tenant param is omitted:
+      // $3=resourceType, $4=resourceId.
+      const nullTenantScope = s.includes('(tenant_id IS NULL AND resource_type = $');
+      const scopeParams = params.slice(2);
+      let tenantId: string | null | undefined;
+      let resourceType: string | undefined;
+      let resourceId: string | undefined;
+      if (nullTenantScope) {
+        tenantId = null;
+        resourceType = scopeParams[0] !== undefined ? String(scopeParams[0]) : undefined;
+        resourceId = scopeParams[1] !== undefined ? String(scopeParams[1]) : undefined;
+      } else {
+        tenantId = scopeParams[0] !== undefined ? String(scopeParams[0]) : undefined;
+        resourceType = scopeParams[1] !== undefined ? String(scopeParams[1]) : undefined;
+        resourceId = scopeParams[2] !== undefined ? String(scopeParams[2]) : undefined;
+      }
 
       const now = new Date();
       const filtered = Array.from(this.grants.values()).filter(row => {
@@ -653,6 +668,42 @@ describe('Postgres permissions adapter — getEffectiveGrantsForSubject', () => 
     await adapter.createGrant(baseGrant({ tenantId: null, resourceType: null, resourceId: null }));
     const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user');
     expect(grants).toHaveLength(1);
+  });
+
+  test('single-tenant (tenantId: null) scope matches resource-scoped NULL-tenant grants', async () => {
+    // Regression: `tenant_id = $n` with a null param is never true in SQL,
+    // which made every resource-scoped grant unreachable in single-tenant
+    // deploys. The null tenant scope must translate to `tenant_id IS NULL`.
+    await adapter.createGrant(
+      baseGrant({
+        tenantId: null,
+        resourceType: 'community:container',
+        resourceId: 'c-1',
+        roles: ['member'],
+      }),
+    );
+    const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user', {
+      tenantId: null,
+      resourceType: 'community:container',
+      resourceId: 'c-1',
+    });
+    expect(grants).toHaveLength(1);
+    expect(grants[0].roles).toEqual(['member']);
+  });
+
+  test('single-tenant scope still excludes other resources and tenant-scoped grants', async () => {
+    await adapter.createGrant(
+      baseGrant({ tenantId: null, resourceType: 'post', resourceId: 'p-2', roles: ['other'] }),
+    );
+    await adapter.createGrant(
+      baseGrant({ tenantId: 'tenant-a', resourceType: 'post', resourceId: 'p-1' }),
+    );
+    const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user', {
+      tenantId: null,
+      resourceType: 'post',
+      resourceId: 'p-1',
+    });
+    expect(grants).toHaveLength(0);
   });
 
   test('excludes tenant-scoped grant when no scope provided', async () => {

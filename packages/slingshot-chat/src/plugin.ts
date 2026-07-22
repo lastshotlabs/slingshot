@@ -112,7 +112,12 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
     validatePluginConfig('slingshot-chat', rawConfig, chatPluginConfigSchema),
   );
   const logger = createConsoleLogger({ base: { plugin: 'slingshot-chat' } });
-  const tenantId = config.tenantId ?? 'default';
+  // Default to null — the single-tenant scope. Grants written with a
+  // fabricated tenant string (the old `'default'`) can never match an
+  // evaluation scope built from `actor.tenantId` (null in single-tenant
+  // deploys), which made every chat room/message permission check deny
+  // for its own owner. Multi-tenant apps pass a real tenantId explicitly.
+  const tenantId = config.tenantId ?? null;
   const mountPath = config.mountPath ?? '/chat';
   const enablePresence = config.enablePresence ?? true;
   const encryptionProvider: ChatEncryptionProvider | null = resolveChatEncryptionProvider(

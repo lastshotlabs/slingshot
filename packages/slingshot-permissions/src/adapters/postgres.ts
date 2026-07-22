@@ -514,22 +514,29 @@ export async function createPermissionsPostgresAdapter(
       const resourceId = scope?.resourceId;
 
       if (tenantId !== undefined) {
-        params.push(tenantId);
-        const tIdx = idx++;
-        cascadeLevels.push(
-          `(tenant_id = $${tIdx} AND resource_type IS NULL AND resource_id IS NULL)`,
-        );
+        // `tenantId: null` is the single-tenant scope and must match grants
+        // stored with a NULL tenant column. `tenant_id = $n` with a null
+        // param is never true in SQL, which made every resource-scoped
+        // grant unreachable in single-tenant deploys — use IS NULL instead.
+        let tenantCond: string;
+        if (tenantId === null) {
+          tenantCond = 'tenant_id IS NULL';
+        } else {
+          params.push(tenantId);
+          tenantCond = `tenant_id = $${idx++}`;
+        }
+        cascadeLevels.push(`(${tenantCond} AND resource_type IS NULL AND resource_id IS NULL)`);
         if (resourceType !== undefined) {
           params.push(resourceType);
           const rtIdx = idx++;
           cascadeLevels.push(
-            `(tenant_id = $${tIdx} AND resource_type = $${rtIdx} AND resource_id IS NULL)`,
+            `(${tenantCond} AND resource_type = $${rtIdx} AND resource_id IS NULL)`,
           );
           if (resourceId !== undefined) {
             params.push(resourceId);
             const ridIdx = idx;
             cascadeLevels.push(
-              `(tenant_id = $${tIdx} AND resource_type = $${rtIdx} AND resource_id = $${ridIdx})`,
+              `(${tenantCond} AND resource_type = $${rtIdx} AND resource_id = $${ridIdx})`,
             );
           }
         }

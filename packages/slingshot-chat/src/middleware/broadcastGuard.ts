@@ -19,7 +19,7 @@ import type { RoomAdapter } from '../types';
 export function createBroadcastGuardMiddleware(deps: {
   roomAdapter: RoomAdapter;
   evaluator: PermissionEvaluator;
-  tenantId: string;
+  tenantId: string | null;
 }): MiddlewareHandler {
   const { roomAdapter, evaluator, tenantId } = deps;
 

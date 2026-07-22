@@ -41,6 +41,20 @@ export function createMessageNotifyMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
+    // Notifications are a SIDE EFFECT of the message mutation — a storage
+    // failure must never fail the request that already committed the
+    // message. Log and move on.
+    try {
+      await storeMessageNotifications(c);
+    } catch (err) {
+      console.warn(
+        '[slingshot-chat] message notification failed (mutation unaffected):',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  };
+
+  async function storeMessageNotifications(c: Parameters<MiddlewareHandler>[0]): Promise<void> {
     const result = (await c.res.clone().json()) as {
       id?: string;
       roomId?: string;
@@ -157,5 +171,5 @@ export function createMessageNotifyMiddleware(deps: {
         bodyPreview,
       },
     });
-  };
+  }
 }

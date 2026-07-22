@@ -75,3 +75,90 @@ describe('evaluateRouteAuth — parentAuth tenant checks', () => {
     expect(result.authorized).toBe(true);
   });
 });
+
+describe('evaluateRouteAuth — permission scope construction', () => {
+  function makeEvaluator() {
+    const seen: Array<{ action: string; scope: Record<string, unknown> }> = [];
+    return {
+      seen,
+      evaluator: {
+        can: async (_subject: unknown, action: string, scope: Record<string, unknown>) => {
+          seen.push({ action, scope });
+          return true;
+        },
+      },
+    };
+  }
+
+  test('single-tenant actor (tenantId=null) reaches the evaluator as null, not undefined', async () => {
+    // Regression: `?? undefined` coercion told the evaluator "no tenant
+    // level", filtering every tenant/resource-scoped grant — single-tenant
+    // deploys denied all entity-route permissions.
+    const { seen, evaluator } = makeEvaluator();
+    const app = new Hono<AppEnv>();
+    app.use('*', async (c, next) => {
+      c.set('actor', actor({ id: 'user-1', kind: 'user', tenantId: null }));
+      await next();
+    });
+    app.post('/threads', async c => {
+      const result = await evaluateRouteAuth(
+        c,
+        {
+          permission: {
+            requires: 'community:container.write',
+            scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
+          },
+        },
+        { permissionEvaluator: evaluator },
+      );
+      return c.json({ authorized: result.authorized });
+    });
+
+    const res = await app.request('/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ containerId: 'c-1' }),
+    });
+    expect(res.status).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.scope.tenantId).toBeNull();
+    expect(seen[0]!.scope.resourceId).toBe('c-1');
+  });
+
+  test('record: scope resolves the id from the JSON body on flat named-op routes', async () => {
+    // Flat transition/fieldUpdate routes (POST /threads/publish) carry the
+    // record id in the body, not the URL — the record lookup must fall back
+    // to body.id instead of 404ing.
+    const { seen, evaluator } = makeEvaluator();
+    const adapter = {
+      getById: async (id: string) => (id === 't-1' ? { id: 't-1', containerId: 'c-9' } : null),
+    };
+    const app = new Hono<AppEnv>();
+    app.use('*', async (c, next) => {
+      c.set('actor', actor({ id: 'user-1', kind: 'user', tenantId: null }));
+      await next();
+    });
+    app.post('/threads/publish', async c => {
+      const result = await evaluateRouteAuth(
+        c,
+        {
+          permission: {
+            requires: 'community:container.write',
+            scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+          },
+        },
+        { permissionEvaluator: evaluator, adapter },
+      );
+      return c.json({ authorized: result.authorized });
+    });
+
+    const res = await app.request('/threads/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't-1' }),
+    });
+    expect(res.status).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.scope.resourceId).toBe('c-9');
+  });
+});

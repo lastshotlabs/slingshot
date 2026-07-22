@@ -16,7 +16,7 @@ import { getActorId } from '@lastshotlabs/slingshot-core';
  */
 export function createMemberGrantMiddleware(deps: {
   permissionsAdapter: PermissionsAdapter;
-  tenantId: string;
+  tenantId: string | null;
 }): MiddlewareHandler {
   const { permissionsAdapter, tenantId } = deps;
 

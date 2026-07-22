@@ -255,6 +255,56 @@ describe('Permissions SQLite adapter', () => {
       expect(roleSet.has('other')).toBe(false);
     });
 
+    test('single-tenant (tenantId: null) scope matches resource-scoped grants with a NULL tenant', async () => {
+      // Regression: `tenant_id = ?` with a null param is never true in SQL,
+      // which made every resource-scoped grant unreachable in single-tenant
+      // deploys — the canonical `scope.tenantId: actor.tenantId` pattern
+      // (null in single-tenant) denied everything.
+      await adapter.createGrant(
+        makeGrant({
+          tenantId: null,
+          resourceType: 'community:container',
+          resourceId: 'c-1',
+          roles: ['member'],
+        }),
+      );
+      const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user', {
+        tenantId: null,
+        resourceType: 'community:container',
+        resourceId: 'c-1',
+      });
+      expect(grants).toHaveLength(1);
+      expect(grants[0].roles).toEqual(['member']);
+    });
+
+    test('single-tenant scope still excludes tenant-scoped grants and other resources', async () => {
+      await adapter.createGrant(
+        makeGrant({ tenantId: 'tenant-a', resourceType: 'post', resourceId: 'p-1' }),
+      );
+      await adapter.createGrant(
+        makeGrant({ tenantId: null, resourceType: 'post', resourceId: 'p-2', roles: ['other'] }),
+      );
+      const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user', {
+        tenantId: null,
+        resourceType: 'post',
+        resourceId: 'p-1',
+      });
+      expect(grants).toHaveLength(0);
+    });
+
+    test('single-tenant scope matches resource-type-wide NULL-tenant grants', async () => {
+      await adapter.createGrant(
+        makeGrant({ tenantId: null, resourceType: 'post', resourceId: null, roles: ['editor'] }),
+      );
+      const grants = await adapter.getEffectiveGrantsForSubject('user-1', 'user', {
+        tenantId: null,
+        resourceType: 'post',
+        resourceId: 'p-9',
+      });
+      expect(grants).toHaveLength(1);
+      expect(grants[0].roles).toEqual(['editor']);
+    });
+
     test('cascade level 2: resource-type-wide grant applies when evaluating specific resource', async () => {
       await adapter.createGrant(
         makeGrant({

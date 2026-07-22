@@ -119,7 +119,7 @@ export interface BuildChatEntityModulesArgs {
   /** Permissions adapter used by `findOrCreateDm` + `redeemInvite`. */
   permissionsAdapter: ChatPermissionsAdapter;
   /** Tenant id propagated to grants issued during DM / invite redemption. */
-  tenantId: string;
+  tenantId: string | null;
   /** Optional message-body encryption provider applied to encrypted rooms. */
   encryptionProvider: ChatEncryptionProvider | null;
   /** Whether the Room live channel should track presence. */

@@ -19,7 +19,7 @@ import type { RoomMemberAdapter } from '../types';
 export function createRoomCreatorGrantMiddleware(deps: {
   memberAdapter: RoomMemberAdapter;
   permissionsAdapter: PermissionsAdapter;
-  tenantId: string;
+  tenantId: string | null;
 }): MiddlewareHandler {
   const { memberAdapter, permissionsAdapter, tenantId } = deps;
 

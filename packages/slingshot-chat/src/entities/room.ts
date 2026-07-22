@@ -66,7 +66,11 @@ export const Room = defineEntity('Room', {
           'avatarUrl',
         ],
       },
-      permission: { requires: 'chat:room.write' },
+      // No permission gate beyond userAuth: `chat:room.write` grants are
+      // room-scoped and issued by `roomCreatorGrant`/`memberGrant` AFTER a
+      // room exists, so requiring one here was a chicken-and-egg that made
+      // it impossible for anyone to create the first room. Any authenticated
+      // user may create a room; the creator is granted `owner` on success.
       event: {
         key: 'chat:room.created',
         payload: ['id', 'type', 'name'],
@@ -163,11 +167,29 @@ export const Room = defineEntity('Room', {
     middleware: { roomCreatorGrant: true },
     permissions: {
       resourceType: 'chat:room',
-      actions: ['read', 'write', 'invite', 'kick', 'manage', 'delete'],
+      // Action strings must be fully-qualified (`<resourceType>.<verb>`) to
+      // match what `requires:` clauses and `permissionEvaluator.can(...)`
+      // pass as the action argument — the evaluator does a literal
+      // `actions.includes(action)` lookup, so bare verbs silently never
+      // match and every gated call 403s.
+      actions: [
+        'chat:room.read',
+        'chat:room.write',
+        'chat:room.invite',
+        'chat:room.kick',
+        'chat:room.manage',
+        'chat:room.delete',
+      ],
       roles: {
         owner: ['*'],
-        admin: ['read', 'write', 'invite', 'kick', 'manage'],
-        member: ['read', 'write'],
+        admin: [
+          'chat:room.read',
+          'chat:room.write',
+          'chat:room.invite',
+          'chat:room.kick',
+          'chat:room.manage',
+        ],
+        member: ['chat:room.read', 'chat:room.write'],
       },
     },
   },

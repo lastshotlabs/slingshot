@@ -199,7 +199,7 @@ export interface ChatPermissionsAdapter {
 export interface CreateFindOrCreateDmHandlerArgs {
   refs: ChatAdapterRefs;
   permissionsAdapter: ChatPermissionsAdapter;
-  tenantId: string;
+  tenantId: string | null;
 }
 
 /**
@@ -439,7 +439,7 @@ export function createForwardMessageHandler(refs: ChatAdapterRefs) {
 export interface CreateRedeemInviteHandlerArgs {
   refs: ChatAdapterRefs;
   permissionsAdapter: ChatPermissionsAdapter;
-  tenantId: string;
+  tenantId: string | null;
 }
 
 /**

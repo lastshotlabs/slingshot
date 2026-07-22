@@ -265,11 +265,23 @@ export const Message = defineEntity('Message', {
     permissions: {
       resourceType: 'chat:message',
       scopeField: 'roomId',
-      actions: ['read', 'write', 'edit', 'delete'],
+      // Fully-qualified action strings — see Room's permissions block: the
+      // evaluator matches `requires:` literally, so bare verbs never match.
+      actions: [
+        'chat:message.read',
+        'chat:message.write',
+        'chat:message.edit',
+        'chat:message.delete',
+      ],
       roles: {
         owner: ['*'],
-        author: ['read', 'write', 'edit', 'delete'],
-        member: ['read', 'write'],
+        author: [
+          'chat:message.read',
+          'chat:message.write',
+          'chat:message.edit',
+          'chat:message.delete',
+        ],
+        member: ['chat:message.read', 'chat:message.write'],
       },
     },
   },

@@ -18,6 +18,7 @@ export const Asset = defineEntity('Asset', {
     size: field.integer({ optional: true }),
     bucket: field.string({ optional: true }),
     originalName: field.string({ optional: true }),
+    publicRead: field.boolean({ default: false }),
     createdAt: field.date({ default: 'now', immutable: true }),
   },
   indexes: [
@@ -50,6 +51,9 @@ export const Asset = defineEntity('Asset', {
         },
       },
     },
+    update: {
+      input: { allow: ['publicRead'] },
+    },
     delete: {
       auth: 'userAuth',
       event: {
@@ -69,7 +73,7 @@ export const Asset = defineEntity('Asset', {
       findByKey: { auth: 'userAuth' },
       presignUpload: { auth: 'userAuth' },
       presignDownload: { auth: 'userAuth' },
-      serveImage: { auth: 'userAuth' },
+      serveImage: { auth: 'none' },
     },
     middleware: { deleteStorageFile: true },
   },

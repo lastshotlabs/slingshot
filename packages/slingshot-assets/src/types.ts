@@ -201,6 +201,8 @@ export interface Asset {
   readonly bucket?: string | null;
   /** Original filename supplied at upload time. */
   readonly originalName?: string | null;
+  /** Whether unauthenticated image retrieval is allowed. */
+  readonly publicRead?: boolean;
   /** ISO-8601 creation timestamp. */
   readonly createdAt: string;
 }
@@ -225,6 +227,7 @@ export interface CreateAssetInput {
   readonly bucket?: string | null;
   /** Original filename supplied at upload time. */
   readonly originalName?: string | null;
+  readonly publicRead?: boolean;
   /** Optional explicit creation timestamp. */
   readonly createdAt?: string;
 }
@@ -245,6 +248,7 @@ export interface UpdateAssetInput {
   readonly bucket?: string | null;
   /** Original filename supplied at upload time. */
   readonly originalName?: string | null;
+  readonly publicRead?: boolean;
 }
 
 /**

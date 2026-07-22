@@ -266,6 +266,7 @@ export function createPresignUploadHandler(deps: AssetsHandlerDeps) {
         size: null,
         bucket: null,
         originalName: filename ?? null,
+        publicRead: false,
       });
 
       return { url, key, assetId: asset.id };
@@ -433,7 +434,7 @@ export function createServeImageHandler(deps: AssetsHandlerDeps) {
     }
 
     const id = readRequiredString(params, 'id', 'id is required');
-    const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
+    const userId = readOptionalString(params, 'actor.id');
     const tenantId = readOptionalString(params, 'tenantId');
     let asset;
     try {
@@ -450,11 +451,13 @@ export function createServeImageHandler(deps: AssetsHandlerDeps) {
     if (!asset) {
       throw new HTTPException(404, { message: 'Not found' });
     }
-    if (asset.tenantId && asset.tenantId !== tenantId) {
-      throw new HTTPException(403, { message: 'Forbidden' });
-    }
-    if (!asset.ownerUserId || asset.ownerUserId !== userId) {
-      throw new HTTPException(403, { message: 'Forbidden' });
+    if (!asset.publicRead) {
+      if (asset.tenantId && asset.tenantId !== tenantId) {
+        throw new HTTPException(403, { message: 'Forbidden' });
+      }
+      if (!userId || !asset.ownerUserId || asset.ownerUserId !== userId) {
+        throw new HTTPException(403, { message: 'Forbidden' });
+      }
     }
 
     try {
@@ -475,7 +478,7 @@ export function createServeImageHandler(deps: AssetsHandlerDeps) {
       logger.error('[slingshot-assets] serveImage: image creation failed', {
         component: 'slingshot-assets.runtime',
         id,
-        userId,
+        userId: userId ?? 'public',
         err: err instanceof Error ? err.message : String(err),
       });
       throw err instanceof HTTPException

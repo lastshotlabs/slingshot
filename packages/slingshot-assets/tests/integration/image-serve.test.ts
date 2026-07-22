@@ -127,6 +127,29 @@ describe('serveImage runtime operation', () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 
+  it('serves explicitly public images without an authenticated actor', async () => {
+    const { storage } = createImageStorage();
+    const { state } = await createAssetsTestApp({
+      storage,
+      image: { maxWidth: 1024, maxHeight: 1024 },
+    });
+    const asset = await seedAsset(state, {
+      key: 'uploads/public-avatar.png',
+      ownerUserId: 'user-1',
+      mimeType: 'image/png',
+      publicRead: true,
+    });
+
+    const response = await getAssetsRuntimeAdapter(state).serveImage({
+      id: asset.id,
+      w: 100,
+      f: 'original',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('image/png');
+  });
+
   it('rejects oversized stored asset with 413 BEFORE buffering bytes', async () => {
     let getCalled = 0;
     let bytesEnqueued = 0;

@@ -82,6 +82,14 @@ export const Report = defineEntity('Report', {
         },
         middleware: ['auditLog'],
       },
+      reopen: {
+        path: ':id/reopen',
+        permission: {
+          requires: 'community:container.review-report',
+          scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+        },
+        middleware: ['auditLog'],
+      },
     },
 
     middleware: { auditLog: true, reportTargetGuard: true },
@@ -115,6 +123,14 @@ export const reportOperations = defineOperations(Report, {
     to: 'dismissed',
     match: { id: 'param:id' },
     set: { resolvedBy: 'param:actor.id' },
+    returns: 'entity',
+  }),
+
+  reopen: op.transition({
+    field: 'status',
+    from: ['resolved', 'dismissed'],
+    to: 'pending',
+    match: { id: 'param:id' },
     returns: 'entity',
   }),
 });

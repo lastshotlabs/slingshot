@@ -34,7 +34,7 @@ export const Bookmark = defineEntity('Bookmark', {
       input: {
         allow: ['targetId', 'targetType', 'tag'],
       },
-      middleware: ['targetVisibilityGuard'],
+      middleware: ['bookmarkTargetVisibilityGuard'],
     },
     update: {
       // Editable surface — only the user-defined `tag` is mutable;
@@ -48,7 +48,7 @@ export const Bookmark = defineEntity('Bookmark', {
       isBookmarked: { auth: 'userAuth' },
       listByUser: { auth: 'userAuth' },
     },
-    middleware: { targetVisibilityGuard: true },
+    middleware: { bookmarkTargetVisibilityGuard: true },
   },
 });
 

@@ -181,6 +181,7 @@ export function createCommunityPackage(
   const threadStateGuardRef = createLazyMiddleware();
   const publishedThreadGuardRef = createLazyMiddleware();
   const targetVisibilityGuardRef = createLazyMiddleware();
+  const bookmarkTargetVisibilityGuardRef = createLazyMiddleware();
   const reportTargetGuardRef = createLazyMiddleware();
   const memberJoinPolicyGuardRef = createLazyMiddleware();
   const solutionReplyGuardRef = createLazyMiddleware();
@@ -257,6 +258,8 @@ export function createCommunityPackage(
       threadStateGuard: async (c, next) => threadStateGuardRef.handler(c, next),
       publishedThreadGuard: async (c, next) => publishedThreadGuardRef.handler(c, next),
       targetVisibilityGuard: async (c, next) => targetVisibilityGuardRef.handler(c, next),
+      bookmarkTargetVisibilityGuard: async (c, next) =>
+        bookmarkTargetVisibilityGuardRef.handler(c, next),
       reportTargetGuard: async (c, next) => reportTargetGuardRef.handler(c, next),
       memberJoinPolicyGuard: async (c, next) => memberJoinPolicyGuardRef.handler(c, next),
       solutionReplyGuard: async (c, next) => solutionReplyGuardRef.handler(c, next),
@@ -489,6 +492,10 @@ export function createCommunityPackage(
       });
       publishedThreadGuardRef.handler = createPublishedThreadGuardMiddleware({
         threadAdapter: refs.thread,
+      });
+      bookmarkTargetVisibilityGuardRef.handler = createContentTargetGuardMiddleware({
+        threadAdapter: refs.thread,
+        replyAdapter: refs.reply,
       });
       targetVisibilityGuardRef.handler = createContentTargetGuardMiddleware(
         {

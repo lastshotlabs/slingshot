@@ -696,6 +696,41 @@ describe('createCommunityPackage — content visibility guards', () => {
     expect(reactionRes.status).toBe(400);
   });
 
+  test('bookmark create accepts a published target without a client container id', async () => {
+    const threadRes = await harness.app.request('/community/threads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'author-1' },
+      body: JSON.stringify({
+        containerId: 'c-bookmark',
+        title: 'Published bookmark target',
+        status: 'published',
+      }),
+    });
+    expect(threadRes.status).toBe(201);
+    const thread = (await threadRes.json()) as { id: string };
+
+    const bookmarkRes = await harness.app.request('/community/bookmarks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': 'user-2' },
+      body: JSON.stringify({
+        targetId: thread.id,
+        targetType: 'thread',
+      }),
+    });
+
+    expect(bookmarkRes.status).toBe(201);
+    const bookmark = (await bookmarkRes.json()) as {
+      targetId: string;
+      targetType: string;
+      userId: string;
+    };
+    expect(bookmark).toMatchObject({
+      targetId: thread.id,
+      targetType: 'thread',
+      userId: 'user-2',
+    });
+  });
+
   test('report create derives reporter and container from trusted context', async () => {
     const threadRes = await harness.app.request('/community/threads', {
       method: 'POST',

@@ -50,9 +50,11 @@ import { registerChatPushFormatters } from './lib/pushFormatters';
 import { createArchiveGuardMiddleware } from './middleware/archiveGuard';
 import { createSlowModeGuardMiddleware } from './middleware/slowModeGuard';
 import { createTimeoutGuardMiddleware } from './middleware/timeoutGuard';
+import { createRoomBanGuardMiddleware } from './middleware/roomBanGuard';
 import { createBroadcastGuardMiddleware } from './middleware/broadcastGuard';
 import { createDmRoomGuardMiddleware } from './middleware/dmRoomGuard';
 import { createMemberGrantMiddleware } from './middleware/memberGrant';
+import { createMemberGrantRevokeMiddleware } from './middleware/memberGrantRevoke';
 import { createMemberInviteNotifyMiddleware } from './middleware/memberInviteNotify';
 import { createMessageNotifyMiddleware } from './middleware/messageNotify';
 import { createMessagePostCreateMiddleware } from './middleware/messagePostCreate';
@@ -61,8 +63,8 @@ import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecr
 import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
 import { createRoomCreatorGrantMiddleware } from './middleware/roomCreatorGrant';
 import { probeEmbedsPeer } from './peers/embeds';
-import { ChatInteractionsPeerCap } from './public';
-import type { ChatInteractionsPeer } from './public';
+import { ChatInteractionsPeerCap, ChatModerationPeerCap } from './public';
+import type { ChatInteractionsPeer, ChatModerationPeer } from './public';
 import { CHAT_PLUGIN_STATE_KEY, CHAT_RUNTIME_KEY } from './state';
 import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from './types';
 import { buildIncomingDispatch } from './ws/incoming';
@@ -142,10 +144,12 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   const archiveGuardRef = createLazyMiddleware();
   const slowModeGuardRef = createLazyMiddleware();
   const timeoutGuardRef = createLazyMiddleware();
+  const roomBanGuardRef = createLazyMiddleware();
   const broadcastGuardRef = createLazyMiddleware();
   const dmRoomGuardRef = createLazyMiddleware();
   const roomCreatorGrantRef = createLazyMiddleware();
   const memberGrantRef = createLazyMiddleware();
+  const memberGrantRevokeRef = createLazyMiddleware();
   const messagePostCreateRef = createLazyMiddleware();
   const messageNotifyRef = createLazyMiddleware();
   const memberInviteNotifyRef = createLazyMiddleware();
@@ -197,6 +201,40 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       await refs.messages.updateComponents({ id }, { components });
     },
   };
+  const moderationPeer: ChatModerationPeer = {
+    async moderateDeleteMessage(roomId, messageId) {
+      const message = await refs.messages?.getById(messageId);
+      if (!message || message.roomId !== roomId || message.deletedAt) return null;
+      const deleted = await refs.messages?.delete(messageId);
+      return deleted ? { id: message.id, roomId: message.roomId, authorId: message.authorId } : null;
+    },
+    async banMember({ roomId, userId, bannedBy, reason, expiresAt }) {
+      if (!refs.bans || !refs.members) throw new Error('[slingshot-chat] moderation adapters unavailable');
+      const member = await refs.members.findMember({ roomId, userId });
+      if (member?.role === 'owner') throw new Error('room owners cannot be banned');
+      const existing = await refs.bans.findByRoomUser(roomId, userId);
+      const ban = existing
+        ? await refs.bans.update(existing.id, { bannedBy, reason, expiresAt, liftedAt: null })
+        : await refs.bans.create({ roomId, userId, bannedBy, reason, expiresAt });
+      if (!ban) throw new Error('[slingshot-chat] failed to persist room ban');
+      if (member) await refs.members.delete(member.id);
+      const permissionsAdapter = permissionsAdapterRef.current;
+      if (!permissionsAdapter) throw new Error('[slingshot-chat] permissions adapter unavailable');
+      const grants = await permissionsAdapter.getGrantsForSubject(userId, 'user', { tenantId, resourceType: 'chat:room', resourceId: roomId });
+      await Promise.all(grants.filter(grant => !grant.revokedAt && grant.effect === 'allow').map(grant => permissionsAdapter.revokeGrant(grant.id, bannedBy, tenantId ?? undefined, 'User banned from room')));
+      return { id: ban.id, roomId, userId };
+    },
+    async unbanMember(roomId, userId) {
+      const ban = await refs.bans?.findByRoomUser(roomId, userId);
+      if (!ban || ban.liftedAt) return false;
+      return Boolean(await refs.bans?.update(ban.id, { liftedAt: new Date().toISOString() }));
+    },
+    async listRoomBans(roomId) {
+      const rows = await refs.bans?.list({ filter: { roomId }, limit: 200 });
+      const now = Date.now();
+      return (rows?.items ?? []).filter((ban) => !ban.liftedAt && (!ban.expiresAt || new Date(ban.expiresAt).getTime() > now)).map(({ id, userId, reason, expiresAt }) => ({ id, userId, reason, expiresAt }));
+    },
+  };
 
   // ─── Build entity modules eagerly ─────────────────────────────────────────
   const entityModules = buildChatEntityModules({
@@ -210,6 +248,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   const entities = [
     entityModules.roomModule,
     entityModules.roomMemberModule,
+    entityModules.roomBanModule,
     entityModules.messageModule,
     entityModules.readReceiptModule,
     entityModules.messageReactionModule,
@@ -227,10 +266,12 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
     archiveGuard: async (c, next) => archiveGuardRef.handler(c, next),
     slowModeGuard: async (c, next) => slowModeGuardRef.handler(c, next),
     timeoutGuard: async (c, next) => timeoutGuardRef.handler(c, next),
+    roomBanGuard: async (c, next) => roomBanGuardRef.handler(c, next),
     broadcastGuard: async (c, next) => broadcastGuardRef.handler(c, next),
     dmRoomGuard: async (c, next) => dmRoomGuardRef.handler(c, next),
     roomCreatorGrant: async (c, next) => roomCreatorGrantRef.handler(c, next),
     memberGrant: async (c, next) => memberGrantRef.handler(c, next),
+    memberGrantRevoke: async (c, next) => memberGrantRevokeRef.handler(c, next),
     messagePostCreate: async (c, next) => messagePostCreateRef.handler(c, next),
     messageNotify: async (c, next) => messageNotifyRef.handler(c, next),
     memberInviteNotify: async (c, next) => memberInviteNotifyRef.handler(c, next),
@@ -247,7 +288,10 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
     entities,
     middleware,
     capabilities: {
-      provides: [provideCapability(ChatInteractionsPeerCap, () => interactionsPeer)],
+      provides: [
+        provideCapability(ChatInteractionsPeerCap, () => interactionsPeer),
+        provideCapability(ChatModerationPeerCap, () => moderationPeer),
+      ],
     },
 
     async setupMiddleware({ app, events }: PluginSetupContext) {
@@ -378,6 +422,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       if (
         !refs.rooms ||
         !refs.members ||
+        !refs.bans ||
         !refs.messages ||
         !refs.receipts ||
         !refs.reactions ||
@@ -399,6 +444,8 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       timeoutGuardRef.handler = createTimeoutGuardMiddleware({
         memberAdapter: refs.members,
       });
+      roomBanGuardRef.handler = createRoomBanGuardMiddleware({ banAdapter: refs.bans });
+      memberGrantRevokeRef.handler = createMemberGrantRevokeMiddleware({ permissionsAdapter: permissions.adapter, memberAdapter: refs.members, tenantId });
       broadcastGuardRef.handler = createBroadcastGuardMiddleware({
         roomAdapter: refs.rooms,
         evaluator: permissions.evaluator,

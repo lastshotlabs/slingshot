@@ -41,6 +41,7 @@ import { Reminder, reminderOperations } from './reminder';
 import { Room, roomOperations } from './room';
 import { RoomInvite, roomInviteOperations } from './roomInvite';
 import { RoomMember, roomMemberOperations } from './roomMember';
+import { RoomBan } from './roomBan';
 import {
   type ChatAdapterRefs,
   type ChatPermissionsAdapter,
@@ -48,6 +49,7 @@ import {
   applyClaimDueRemindersMethod,
   applyClaimDueScheduledMessagesMethod,
   applyEditedAtTransform,
+  applyMessageTombstoneTransform,
   applyInviteSlotMethods,
   asAdapter,
   createClaimDueRemindersHandler,
@@ -212,6 +214,23 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
     },
   });
 
+  const roomBanModule = entity({
+    config: RoomBan,
+    wiring: {
+      mode: 'manual',
+      buildAdapter: (storeType, infra) => {
+        const adapter = resolveStandardAdapter({ config: RoomBan, storeType, infra });
+        const typed = asAdapter<import('../types').RoomBanAdapter>(adapter);
+        typed.findByRoomUser = async (roomId, userId) => {
+          const result = await typed.list({ filter: { roomId, userId }, limit: 1 });
+          return result.items[0] ?? null;
+        };
+        refs.bans = typed;
+        return adapter;
+      },
+    },
+  });
+
   // ─── Message ───────────────────────────────────────────────────────────────
   // Adapter transforms compose innermost → outermost: editedAt first, then
   // cipher.
@@ -243,7 +262,8 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
         );
         // Attach the `claimDueScheduledMessages` method so the
         // scheduled-delivery interval and tests can call it directly.
-        const wrapped = applyClaimDueScheduledMessagesMethod(asAdapter<MessageAdapter>(withCipher));
+        const tombstoned = applyMessageTombstoneTransform(asAdapter<MessageAdapter>(withCipher));
+        const wrapped = applyClaimDueScheduledMessagesMethod(asAdapter<MessageAdapter>(tombstoned));
         refs.messages = asAdapter(wrapped);
         return wrapped;
       },
@@ -404,6 +424,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
   return {
     roomModule,
     roomMemberModule,
+    roomBanModule,
     messageModule,
     readReceiptModule,
     messageReactionModule,

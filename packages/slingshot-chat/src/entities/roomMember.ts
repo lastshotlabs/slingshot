@@ -62,7 +62,7 @@ export const RoomMember = defineEntity('RoomMember', {
           resourceId: 'record:roomId',
         },
       },
-      middleware: ['dmRoomGuard', 'memberGrant', 'memberInviteNotify'],
+      middleware: ['dmRoomGuard', 'roomBanGuard', 'memberGrant', 'memberInviteNotify'],
     },
     update: {
       // Editable surface — narrower than create. `roomId` and `userId`
@@ -100,6 +100,7 @@ export const RoomMember = defineEntity('RoomMember', {
           resourceId: 'record:roomId',
         },
       },
+      middleware: ['memberGrantRevoke'],
     },
     operations: {
       listByRoom: {
@@ -122,7 +123,7 @@ export const RoomMember = defineEntity('RoomMember', {
       unreadCount: { auth: 'userAuth' },
       leave: { auth: 'userAuth' },
     },
-    middleware: { dmRoomGuard: true, memberGrant: true, memberInviteNotify: true },
+    middleware: { dmRoomGuard: true, roomBanGuard: true, memberGrant: true, memberGrantRevoke: true, memberInviteNotify: true },
   },
 });
 

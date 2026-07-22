@@ -93,12 +93,12 @@ export { createChatPackage } from './plugin';
  * `ChatInteractionsPeerCap` through `ctx.capabilities.require(...)` instead
  * of reaching into plugin state.
  */
-export { Chat, ChatEntities, ChatInteractionsPeerCap } from './public';
+export { Chat, ChatEntities, ChatInteractionsPeerCap, ChatModerationPeerCap } from './public';
 /**
  * Cross-package peer surface used to resolve chat-owned message trees and apply
  * component updates returned by interaction dispatchers.
  */
-export type { ChatInteractionsPeer } from './public';
+export type { ChatInteractionsPeer, ChatModerationPeer } from './public';
 
 /**
  * Plugin state key under which the chat package publishes a partial

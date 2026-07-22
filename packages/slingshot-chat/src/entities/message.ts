@@ -90,7 +90,6 @@ export const Message = defineEntity('Message', {
     },
     syncMode: 'event-bus',
   },
-  softDelete: { field: 'deletedAt', strategy: 'non-null' },
   routes: {
     defaults: { auth: 'userAuth' },
     disable: [

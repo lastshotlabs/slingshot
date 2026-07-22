@@ -145,6 +145,18 @@ export interface Block {
   readonly createdAt: string;
 }
 
+export interface RoomBan {
+  readonly id: string;
+  readonly roomId: string;
+  readonly userId: string;
+  readonly bannedBy: string;
+  readonly reason?: string | null;
+  readonly expiresAt?: string | null;
+  readonly liftedAt?: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 /** A user's favorited room. */
 export interface FavoriteRoom {
   readonly id: string;
@@ -437,6 +449,16 @@ export interface MessageAdapter {
   ): Promise<Message | null>;
   /** Internal: atomic batch claim of due scheduled messages. */
   claimDueScheduledMessages(params: { limit: number }): Promise<Message[]>;
+}
+
+export interface RoomBanAdapter {
+  create(input: { roomId: string; userId: string; bannedBy: string; reason?: string | null; expiresAt?: string | null }): Promise<RoomBan>;
+  getById(id: string): Promise<RoomBan | null>;
+  update(id: string, input: { bannedBy?: string; reason?: string | null; expiresAt?: string | null; liftedAt?: string | null }): Promise<RoomBan | null>;
+  delete(id: string): Promise<boolean>;
+  list(opts?: Record<string, unknown>): Promise<PaginatedResult<RoomBan>>;
+  clear(): Promise<void>;
+  findByRoomUser(roomId: string, userId: string): Promise<RoomBan | null>;
 }
 
 /** Entity adapter for ReadReceipt — CRUD + receipt operations. */

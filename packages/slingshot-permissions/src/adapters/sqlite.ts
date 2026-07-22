@@ -287,8 +287,12 @@ export function createSqlitePermissionsAdapter(
         }
         if (scope !== undefined) {
           if (scope.tenantId !== undefined) {
-            conditions.push('tenant_id = ?');
-            params.push(scope.tenantId);
+            if (scope.tenantId === null) {
+              conditions.push('tenant_id IS NULL');
+            } else {
+              conditions.push('tenant_id = ?');
+              params.push(scope.tenantId);
+            }
           }
           if (scope.resourceType !== undefined) {
             conditions.push('resource_type = ?');

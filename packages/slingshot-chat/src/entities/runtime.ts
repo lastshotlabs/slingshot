@@ -36,6 +36,7 @@ import type {
   RoomAdapter,
   RoomInviteAdapter,
   RoomMemberAdapter,
+  RoomBanAdapter,
   UpdateMessageInput,
 } from '../types';
 
@@ -54,6 +55,7 @@ import type {
 export interface ChatAdapterRefs {
   rooms?: RoomAdapter;
   members?: RoomMemberAdapter;
+  bans?: RoomBanAdapter;
   messages?: MessageAdapter;
   receipts?: ReadReceiptAdapter;
   reactions?: MessageReactionAdapter;
@@ -96,6 +98,25 @@ export function applyEditedAtTransform(messageAdapter: MessageAdapter): BareEnti
     update: async (id: string, input: unknown) => {
       const typedInput = input as UpdateMessageInput;
       return messageAdapter.update(id, withEditedAtInput(typedInput));
+    },
+  } as unknown as BareEntityAdapter;
+}
+
+/** Keep a blank tombstone in room history instead of filtering the row away. */
+export function applyMessageTombstoneTransform(messageAdapter: MessageAdapter): BareEntityAdapter {
+  return {
+    ...messageAdapter,
+    delete: async (id: string) => {
+      const existing = await messageAdapter.getById(id);
+      if (!existing) return false;
+      const updated = await messageAdapter.update(id, {
+        body: '',
+        deletedAt: new Date().toISOString(),
+        attachments: [],
+        embeds: [],
+        appMetadata: null,
+      });
+      return updated !== null;
     },
   } as unknown as BareEntityAdapter;
 }

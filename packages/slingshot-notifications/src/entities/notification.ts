@@ -191,7 +191,18 @@ export const Notification = defineEntity('Notification', {
     defaults: { auth: 'userAuth' },
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
     list: {},
-    disable: ['create', 'update', 'delete', 'get'],
+    disable: ['create', 'update', 'get'],
+    delete: {
+      event: {
+        key: 'notifications:notification.dismissed',
+        exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:userId',
+          actorId: 'ctx:actorId',
+        },
+      },
+    },
     operations: {
       listByUser: {},
       listUnread: {},

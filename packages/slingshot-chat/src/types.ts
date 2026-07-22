@@ -391,6 +391,7 @@ export interface RoomMemberAdapter {
   countMembers(params?: Record<string, unknown>): Promise<unknown>;
   /** Per-room unread message counts for the authenticated user. */
   unreadCount(params: Record<string, unknown>): Promise<UnreadCountResponse>;
+  updatePreferences(params: { roomId: string; notifyOn: NotifyPreference }): Promise<RoomMember>;
 }
 
 /** Entity adapter for Message — CRUD + message-specific operations. */

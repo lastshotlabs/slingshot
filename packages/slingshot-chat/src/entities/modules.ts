@@ -60,6 +60,7 @@ import {
   createRedeemInviteHandler,
   createReleaseInviteSlotHandler,
   createUnreadCountOpHandler,
+  createUpdateMemberPreferencesHandler,
 } from './runtime';
 
 type EntityFactoryCreator = typeof createEntityFactories;
@@ -138,6 +139,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
   // ─── Custom-op handler wrappers as override executors ──────────────────────
   const findOrCreateDm = createFindOrCreateDmHandler({ refs, permissionsAdapter, tenantId });
   const unreadCount = createUnreadCountOpHandler(refs);
+  const updateMemberPreferences = createUpdateMemberPreferencesHandler(refs);
   const claimDueScheduledMessages = createClaimDueScheduledMessagesHandler(refs);
   const forwardMessage = createForwardMessageHandler(refs);
   const redeemInvite = createRedeemInviteHandler({ refs, permissionsAdapter, tenantId });
@@ -192,6 +194,7 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
   const roomMemberOverrides: EntityRouteExecutorOverrides = {
     operations: {
       unreadCount: wrapHandler(unreadCount),
+      updatePreferences: wrapHandler(updateMemberPreferences),
     },
   };
 

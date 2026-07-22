@@ -71,6 +71,22 @@ export function asAdapter<T>(adapter: BareEntityAdapter): T {
   return adapter as unknown as T;
 }
 
+/** Self-scoped room notification preference mutation. */
+export function createUpdateMemberPreferencesHandler(refs: ChatAdapterRefs) {
+  return async (input: unknown) => {
+    const params = (input ?? {}) as Record<string, unknown>;
+    const userId = getUserId(params);
+    const roomId = typeof params.roomId === 'string' ? params.roomId : '';
+    const notifyOn = params.notifyOn;
+    if (!roomId || !['all', 'mentions', 'none'].includes(String(notifyOn))) {
+      throw new HTTPException(400, { message: 'roomId and a valid notifyOn are required' });
+    }
+    const member = await refs.members?.findMember({ roomId, userId });
+    if (!member) throw new HTTPException(404, { message: 'room membership not found' });
+    return refs.members!.update(member.id, { notifyOn: notifyOn as 'all' | 'mentions' | 'none' });
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Message adapter transforms
 // ---------------------------------------------------------------------------

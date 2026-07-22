@@ -122,6 +122,7 @@ export const RoomMember = defineEntity('RoomMember', {
       countMembers: { auth: 'userAuth' },
       unreadCount: { auth: 'userAuth' },
       leave: { auth: 'userAuth' },
+      updatePreferences: { auth: 'userAuth', path: 'preferences' },
     },
     middleware: { dmRoomGuard: true, roomBanGuard: true, memberGrant: true, memberGrantRevoke: true, memberInviteNotify: true },
   },
@@ -183,6 +184,8 @@ export const roomMemberOperations = defineOperations(RoomMember, {
     },
     returns: 'count',
   }),
+
+  updatePreferences: op.custom({ http: { method: 'post', path: 'preferences' } }),
 });
 
 /**

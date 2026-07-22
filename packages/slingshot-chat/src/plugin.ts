@@ -48,6 +48,7 @@ import { buildChatEntityModules } from './entities/modules';
 import { type ChatAdapterRefs, buildChatPluginStateSnapshot } from './entities/runtime';
 import { registerChatPushFormatters } from './lib/pushFormatters';
 import { createArchiveGuardMiddleware } from './middleware/archiveGuard';
+import { createSlowModeGuardMiddleware } from './middleware/slowModeGuard';
 import { createBroadcastGuardMiddleware } from './middleware/broadcastGuard';
 import { createDmRoomGuardMiddleware } from './middleware/dmRoomGuard';
 import { createMemberGrantMiddleware } from './middleware/memberGrant';
@@ -138,6 +139,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   // populated in `setupPost` once `NotificationsBuilderFactoryCap` is
   // resolvable through the capability system.
   const archiveGuardRef = createLazyMiddleware();
+  const slowModeGuardRef = createLazyMiddleware();
   const broadcastGuardRef = createLazyMiddleware();
   const dmRoomGuardRef = createLazyMiddleware();
   const roomCreatorGrantRef = createLazyMiddleware();
@@ -221,6 +223,7 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
   // entry closes over a stable ref the framework re-reads at request time.
   const middleware: Record<string, MiddlewareHandler> = {
     archiveGuard: async (c, next) => archiveGuardRef.handler(c, next),
+    slowModeGuard: async (c, next) => slowModeGuardRef.handler(c, next),
     broadcastGuard: async (c, next) => broadcastGuardRef.handler(c, next),
     dmRoomGuard: async (c, next) => dmRoomGuardRef.handler(c, next),
     roomCreatorGrant: async (c, next) => roomCreatorGrantRef.handler(c, next),
@@ -385,6 +388,10 @@ export function createChatPackage(rawConfig: ChatPluginConfig): SlingshotPackage
       // ─── Adapter-dependent middleware ───────────────────────────────────
       archiveGuardRef.handler = createArchiveGuardMiddleware({
         roomAdapter: refs.rooms,
+      });
+      slowModeGuardRef.handler = createSlowModeGuardMiddleware({
+        roomAdapter: refs.rooms,
+        messageAdapter: refs.messages,
       });
       broadcastGuardRef.handler = createBroadcastGuardMiddleware({
         roomAdapter: refs.rooms,

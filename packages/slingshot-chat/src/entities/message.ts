@@ -157,6 +157,7 @@ export const Message = defineEntity('Message', {
       },
       middleware: [
         'archiveGuard',
+        'slowModeGuard',
         'pollRequiredGuard',
         'attachmentRequiredGuard',
         'broadcastGuard',
@@ -254,6 +255,7 @@ export const Message = defineEntity('Message', {
     },
     middleware: {
       archiveGuard: true,
+      slowModeGuard: true,
       broadcastGuard: true,
       pollRequiredGuard: true,
       attachmentRequiredGuard: true,

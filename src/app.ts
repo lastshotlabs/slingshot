@@ -865,6 +865,20 @@ async function mountAppRoutes<T extends object>(
       if (err.code !== undefined) body.code = err.code;
       return c.json(body, err.status as ContentfulStatusCode);
     }
+    // Hono middleware in ecosystem packages commonly throws HTTPException.
+    // Preserve its intended response instead of flattening a deliberate
+    // 4xx/501 into a generic 500. Duck-type the response method because
+    // duplicate Hono module instances make `instanceof` unreliable.
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'status' in err &&
+      typeof (err as { status?: unknown }).status === 'number' &&
+      'getResponse' in err &&
+      typeof (err as { getResponse?: unknown }).getResponse === 'function'
+    ) {
+      return (err as { getResponse(): Response }).getResponse();
+    }
     console.error(err);
     return c.json({ error: 'Internal Server Error', requestId: reqId }, 500);
   });

@@ -28,6 +28,7 @@ export interface Room {
   readonly description?: string | null;
   /** Short topic line displayed in room header. */
   readonly topic?: string | null;
+  readonly slowModeSeconds: number;
   /** URL of the room's avatar image. */
   readonly avatarUrl?: string | null;
   /** Whether the room is archived. Archived rooms reject new messages. */
@@ -192,6 +193,7 @@ export interface CreateRoomInput {
   retentionDays?: number | null;
   description?: string | null;
   topic?: string | null;
+  slowModeSeconds?: number;
   avatarUrl?: string | null;
   archived?: boolean;
   archivedAt?: string | null;
@@ -207,6 +209,7 @@ export interface UpdateRoomInput {
   retentionDays?: number | null;
   description?: string | null;
   topic?: string | null;
+  slowModeSeconds?: number;
   avatarUrl?: string | null;
   archived?: boolean;
   archivedAt?: string | null;

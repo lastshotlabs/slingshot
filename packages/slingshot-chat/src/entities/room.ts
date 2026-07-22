@@ -28,6 +28,8 @@ export const Room = defineEntity('Room', {
     description: field.string({ optional: true }),
     /** Short topic line displayed in room header. */
     topic: field.string({ optional: true }),
+    /** Minimum seconds a member must wait between messages. Zero disables it. */
+    slowModeSeconds: field.integer({ default: 0 }),
     /** URL of the room's avatar image. */
     avatarUrl: field.string({ optional: true }),
     /** Whether the room is archived. Archived rooms reject new messages. */
@@ -63,6 +65,7 @@ export const Room = defineEntity('Room', {
           'retentionDays',
           'description',
           'topic',
+          'slowModeSeconds',
           'avatarUrl',
         ],
       },
@@ -88,7 +91,7 @@ export const Room = defineEntity('Room', {
       // messages or change room semantics). Archive state and last-message
       // pointers go through their own named operations.
       input: {
-        allow: ['name', 'description', 'topic', 'avatarUrl', 'retentionDays'],
+        allow: ['name', 'description', 'topic', 'avatarUrl', 'retentionDays', 'slowModeSeconds'],
       },
       permission: {
         requires: 'chat:room.manage',

@@ -52,8 +52,6 @@ export const Reaction = defineEntity('Reaction', {
     // `targetVisibilityGuard` — reactions on private-container content are
     // fetchable by target id. Acceptable for public-community deployments;
     // guard lands with read-side visibility work.
-    listByTarget: { auth: 'none' },
-
     create: {
       // Client allowlist — `userId` is server-injected via dataScope;
       // `createdAt`/`id` auto. Update is disabled — no need for an update

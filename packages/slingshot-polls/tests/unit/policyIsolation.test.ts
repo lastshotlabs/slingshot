@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'bun:test';
 import { createPollsPackage } from '../../src/plugin';
+import { Poll } from '../../src/entities/poll';
 
 describe('policy state isolation', () => {
+  it('publishes participant and admin permission roles', () => {
+    expect(Poll.routes?.permissions?.roles?.participant).toEqual([
+      'poll:read',
+      'poll:vote',
+      'poll:create',
+    ]);
+    expect(Poll.routes?.permissions?.roles?.admin).toContain('poll:admin');
+  });
+
   it('two package instances do not share source handlers', () => {
     const packageA = createPollsPackage({
       closeCheckIntervalMs: 0,

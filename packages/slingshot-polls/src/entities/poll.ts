@@ -97,6 +97,10 @@ export const Poll = defineEntity('Poll', {
     permissions: {
       resourceType: 'poll',
       actions: ['read', 'vote', 'create', 'admin'],
+      roles: {
+        participant: ['poll:read', 'poll:vote', 'poll:create'],
+        admin: ['poll:read', 'poll:vote', 'poll:create', 'poll:admin'],
+      },
     },
   },
 });

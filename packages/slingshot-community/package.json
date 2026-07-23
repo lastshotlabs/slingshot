@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-community",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Community forum plugin for Slingshot — containers, threads, replies, reactions, moderation",
   "license": "MIT",
   "type": "module",
@@ -41,11 +41,11 @@
   },
   "peerDependencies": {
     "@hono/zod-openapi": ">=0.18",
-    "hono": ">=4.12.14 <5",
-    "zod": ">=4.0 <5",
     "drizzle-orm": ">=0.45.2 <1",
+    "hono": ">=4.12.14 <5",
     "mongoose": ">=9.0 <10",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "zod": ">=4.0 <5"
   },
   "peerDependenciesMeta": {
     "drizzle-orm": {

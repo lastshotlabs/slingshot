@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Core plugin contract, context, event bus, and shared types for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -44,9 +44,9 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": ">=7.0",
     "@faker-js/faker": ">=10.0",
     "@hono/zod-openapi": ">=0.18",
-    "@asteasolutions/zod-to-openapi": ">=7.0",
     "undici": ">=6.0 <8"
   },
   "peerDependencies": {

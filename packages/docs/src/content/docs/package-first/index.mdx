@@ -122,7 +122,7 @@ Dependencies ensure packages boot in the right order and make cross-package cont
 - **One-off routes** — if you just need a health check, put it in the app root
 - **Framework-level plugins** — auth, persistence, queues, custom middleware, anything that
   needs lifecycle hooks or registrar registrations is a `SlingshotPlugin`, not a
-  `definePackage`. See [Plugin Interface](/slingshot/authoring/plugin-interface/). Both are
+  `definePackage`. See [Plugin Interface](/authoring/plugin-interface/). Both are
   first-class authoring tiers; pick by the shape of what you're building, not by perceived
   level.
 - **A single entity with no custom routes** — a package with just one entity is fine,
@@ -135,17 +135,17 @@ Dependencies ensure packages boot in the right order and make cross-package cont
 <CardGrid>
   <LinkCard
     title="definePackage"
-    href="/slingshot/package-first/define-package/"
+    href="/package-first/define-package/"
     description="Package config, mount paths, dependencies, middleware, and composition."
   />
   <LinkCard
     title="domain and route"
-    href="/slingshot/package-first/domain-and-route/"
+    href="/package-first/domain-and-route/"
     description="Typed custom routes with auth, validation, and OpenAPI — owned by the package."
   />
   <LinkCard
     title="Package Contracts"
-    href="/slingshot/package-first/contracts/"
+    href="/package-first/contracts/"
     description="Provider-owned public surface with explicit exposure modes and boot-time validation. Recommended for any package with cross-package consumers."
   />
 </CardGrid>
@@ -157,12 +157,12 @@ Reach for these only when the primary path is overkill, when working with legacy
 <CardGrid>
   <LinkCard
     title="Capabilities and entityRef"
-    href="/slingshot/package-first/capabilities-and-entity-ref/"
+    href="/package-first/capabilities-and-entity-ref/"
     description="The underlying mechanism that Package Contracts wrap."
   />
   <LinkCard
     title="Lower-level Seams"
-    href="/slingshot/package-first/lower-level-seams/"
+    href="/package-first/lower-level-seams/"
     description="Overrides and manual wiring beneath generated package and entity behavior."
   />
 </CardGrid>
@@ -171,22 +171,22 @@ Reach for these only when the primary path is overkill, when working with legacy
 
 For auth, persistence, queues, search, or any infrastructure with async bootstrap and
 registrar registrations, write a `SlingshotPlugin` instead of a package. It's a parallel
-first-class authoring tier — see [Plugin Interface](/slingshot/authoring/plugin-interface/)
-and [Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the full
+first-class authoring tier — see [Plugin Interface](/authoring/plugin-interface/)
+and [Composing an App](/composing-an-app/#when-to-use-which) for the full
 distinction.
 
 ## Where entities fit
 
 If your package owns data (posts, users, orders, comments), define an entity inside it.
-The [Entity System](/slingshot/entity-system/) generates CRUD routes and operations from
+The [Entity System](/entity-system/) generates CRUD routes and operations from
 a single definition.
 
 ## Next in your journey
 
 The pages in this section build on each other in this order:
 
-1. **[definePackage](/slingshot/package-first/define-package/)** — declare a package and the modules it owns.
-2. **[Domains and Routes](/slingshot/package-first/domain-and-route/)** — typed custom routes inside the package.
-3. **[Package Contracts](/slingshot/package-first/contracts/)** — declare the package's typed public surface so other packages can consume it.
+1. **[definePackage](/package-first/define-package/)** — declare a package and the modules it owns.
+2. **[Domains and Routes](/package-first/domain-and-route/)** — typed custom routes inside the package.
+3. **[Package Contracts](/package-first/contracts/)** — declare the package's typed public surface so other packages can consume it.
 
-After that, return to **[Composing an App](/slingshot/composing-an-app/)** for the full reading order — events, plugins, and the per-route layer come next.
+After that, return to **[Composing an App](/composing-an-app/)** for the full reading order — events, plugins, and the per-route layer come next.

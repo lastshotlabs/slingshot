@@ -134,7 +134,7 @@ onDeadLetter: (job, err, services) => {
 The third argument is the framework `HookServices` accessor. When the queue is
 constructed inside your own plugin's `setupMiddleware`, build the bag once with
 `buildHookServices()` and pass `getHookServices: () => services` alongside
-`onDeadLetter`. See [HookServices](/slingshot/app-authoring/hook-services/) for
+`onDeadLetter`. See [HookServices](/app-authoring/hook-services/) for
 the late-binding pattern. Callback errors are caught and logged — they never
 abort the queue.
 
@@ -148,7 +148,7 @@ abort the queue.
 
 ## Go deeper
 
-- [Package docs](/slingshot/packages/slingshot-webhooks/) — full API reference
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — declaring deliverable events
-- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — the other client-facing event transport
-- [Internals: Event Bus](/slingshot/internals/event-bus/) — transport contract and adapter details
+- [Package docs](/packages/slingshot-webhooks/) — full API reference
+- [Events and the Event Bus](/app-authoring/events-and-the-event-bus/) — declaring deliverable events
+- [Server-Sent Events](/app-authoring/server-sent-events/) — the other client-facing event transport
+- [Internals: Event Bus](/internals/event-bus/) — transport contract and adapter details

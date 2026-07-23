@@ -56,7 +56,7 @@ es.onmessage = event => {
 That is it. No WebSocket server, no rooms, no connection management. The event bus does the
 heavy lifting.
 
-See [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) for the full setup
+See [Server-Sent Events](/app-authoring/server-sent-events/) for the full setup
 including auth, scoping, and filtering.
 
 ## WebSockets: bidirectional communication
@@ -111,7 +111,7 @@ ws.send(JSON.stringify({ text: 'Hello everyone' }));
 Bun's built-in pub/sub handles rooms. Clients subscribe to named rooms and publish to them
 without any external dependencies.
 
-See [WebSockets](/slingshot/app-authoring/websockets/) for rooms, presence, auth guards,
+See [WebSockets](/app-authoring/websockets/) for rooms, presence, auth guards,
 entity channels, and scaling.
 
 ## How they relate to events
@@ -130,19 +130,19 @@ over another wire."
 - **WebSockets** need explicit planning. Bun's pub/sub is in-process — for multi-instance
   deployments, add a Redis transport.
 
-Read [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) when you move beyond a single
+Read [Horizontal Scaling](/guides/horizontal-scaling/) when you move beyond a single
 instance.
 
 ## Next in your journey
 
 Realtime is online. Most apps also have work that should run _outside_ the request cycle — emails, exports, retries, scheduled cleanup:
 
-- **[Jobs and Orchestration](/slingshot/core-features/jobs-and-orchestration/)** — durable background work, retries, and multi-step workflows.
+- **[Jobs and Orchestration](/core-features/jobs-and-orchestration/)** — durable background work, retries, and multi-step workflows.
 
 ## Go deeper into realtime
 
-- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — full SSE authoring guide
-- [WebSockets](/slingshot/app-authoring/websockets/) — rooms, presence, entity channels, scaling
-- [WebSockets Guide](/slingshot/guides/websockets/) — advanced entity-channel and scaling patterns
-- [Realtime with SSE Example](/slingshot/examples/realtime-sse/) — complete working example
-- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — multi-instance transport setup
+- [Server-Sent Events](/app-authoring/server-sent-events/) — full SSE authoring guide
+- [WebSockets](/app-authoring/websockets/) — rooms, presence, entity channels, scaling
+- [WebSockets Guide](/guides/websockets/) — advanced entity-channel and scaling patterns
+- [Realtime with SSE Example](/examples/realtime-sse/) — complete working example
+- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance transport setup

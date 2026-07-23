@@ -89,7 +89,7 @@ Throwing `new PostNotPublishedError(id)` produces a typed `409` with the canonic
 `ValidationError` is the framework's subclass of `HttpError` for input validation. You
 rarely throw it directly — Zod validation throws it for you when a request body, query,
 or params fails to parse. It maps to `400` with the structured `issues` payload described
-in [Validation](/slingshot/app-authoring/validation/).
+in [Validation](/app-authoring/validation/).
 
 If you ever need to throw it manually (e.g., cross-field validation that Zod can't
 express):
@@ -190,6 +190,6 @@ describe('GET /posts/:id', () => {
 
 ## What's next
 
-- [Validation](/slingshot/app-authoring/validation/) — input parsing and `400` responses
-- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — the route DSL
-- [Testing](/slingshot/guides/testing/) — full test setup with `createApp`
+- [Validation](/app-authoring/validation/) — input parsing and `400` responses
+- [Routes and Handlers](/app-authoring/routes-and-handlers/) — the route DSL
+- [Testing](/guides/testing/) — full test setup with `createApp`

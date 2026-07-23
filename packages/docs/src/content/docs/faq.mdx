@@ -368,7 +368,7 @@ Each plugin and package declares which adapter it uses for each concern. The con
 
 ## How do I handle file uploads?
 
-See the [File Uploads](/slingshot/guides/file-uploads/) guide for the full walkthrough. The short version: Slingshot uses Bun's native multipart parser:
+See the [File Uploads](/guides/file-uploads/) guide for the full walkthrough. The short version: Slingshot uses Bun's native multipart parser:
 
 ```typescript
 router.post('/upload', async c => {
@@ -443,4 +443,4 @@ function createErrorHandlerPlugin(): SlingshotPlugin {
 
 For domain-specific errors (validation failures, auth errors), Slingshot's plugins throw typed `HttpException` subclasses. You can discriminate on `err instanceof HttpException` in the error handler to return different shapes per error type.
 
-See the [Error Handling](/slingshot/guides/error-handling/) guide for a full reference on error types and response customization.
+See the [Error Handling](/guides/error-handling/) guide for a full reference on error types and response customization.

@@ -123,7 +123,7 @@ const Task = defineEntity('Task', {
 Now every generated route requires a valid session. Anonymous requests get a `401`.
 
 <Aside type="tip">
-  You can set auth per-route too. See [Route Policy](/slingshot/entity-system/route-policy/) for
+  You can set auth per-route too. See [Route Policy](/entity-system/route-policy/) for
   fine-grained control over auth, permissions, middleware, and rate limits on each generated route.
 </Aside>
 
@@ -141,7 +141,7 @@ entity({
 ```
 
 Your entity definition stays the same. Only the adapter changes. See
-[Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) for the full
+[Storage and Adapter Wiring](/entity-system/storage-and-adapter-wiring/) for the full
 setup including connection config.
 
 ## What you get built in
@@ -156,13 +156,13 @@ setup including connection config.
 
 You can read and write data. The next concern is who is allowed to:
 
-- **[Security: Auth and Permissions](/slingshot/core-features/auth/)** — identify the actor making the request, then control what they can do.
+- **[Security: Auth and Permissions](/core-features/auth/)** — identify the actor making the request, then control what they can do.
 
 ## Go deeper into data
 
-- [Entity System](/slingshot/entity-system/) — the full authoring story
-- [defineEntity](/slingshot/entity-system/define-entity/) — fields, indexes, timestamps, and conventions
-- [Operations](/slingshot/entity-system/operations/) — lookups, transitions, and aggregates
-- [Route Policy](/slingshot/entity-system/route-policy/) — per-route auth, permissions, and middleware
-- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — backend setup and swapping
-- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customizing generated behavior
+- [Entity System](/entity-system/) — the full authoring story
+- [defineEntity](/entity-system/define-entity/) — fields, indexes, timestamps, and conventions
+- [Operations](/entity-system/operations/) — lookups, transitions, and aggregates
+- [Route Policy](/entity-system/route-policy/) — per-route auth, permissions, and middleware
+- [Storage and Adapter Wiring](/entity-system/storage-and-adapter-wiring/) — backend setup and swapping
+- [Generated Routes, Overrides, and Extra Routes](/entity-system/generated-routes-overrides-and-extra-routes/) — customizing generated behavior

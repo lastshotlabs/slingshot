@@ -154,7 +154,7 @@ run in a separate Node.js process from the Slingshot app — the framework
 references aren't reachable there. If a task needs framework state under
 Temporal, do the read at the workflow level (where hooks run in-process) and
 thread the data into the task's typed input. See
-[HookServices](/slingshot/app-authoring/hook-services/) for the full contract.
+[HookServices](/app-authoring/hook-services/) for the full contract.
 
 ## Common use cases
 
@@ -168,12 +168,12 @@ thread the data into the task's typed input. See
 
 Your app reads, writes, identifies, authorizes, streams, and runs background work. The journey ends with shipping it:
 
-- **[Production](/slingshot/guides/production-readiness/)** — readiness checklist, deployment, runtime selection, secrets, and horizontal scaling.
+- **[Production](/guides/production-readiness/)** — readiness checklist, deployment, runtime selection, secrets, and horizontal scaling.
 
 ## Go deeper into orchestration
 
-- [Orchestration Overview](/slingshot/orchestration/overview/) — architecture and concepts
-- [Orchestration Guide](/slingshot/orchestration/guide/) — detailed task and workflow authoring
-- [Tasks and Workflows](/slingshot/orchestration/tasks-and-workflows/) — full API reference
-- [Adapters](/slingshot/orchestration/adapters/) — adapter setup and configuration
-- [Orchestration Example](/slingshot/examples/orchestration/) — complete working app
+- [Orchestration Overview](/orchestration/overview/) — architecture and concepts
+- [Orchestration Guide](/orchestration/guide/) — detailed task and workflow authoring
+- [Tasks and Workflows](/orchestration/tasks-and-workflows/) — full API reference
+- [Adapters](/orchestration/adapters/) — adapter setup and configuration
+- [Orchestration Example](/examples/orchestration/) — complete working app

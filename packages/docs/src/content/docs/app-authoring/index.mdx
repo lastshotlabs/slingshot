@@ -8,7 +8,7 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 Every Slingshot app starts at the app root. This is where you assemble your packages, set
 config, and start the server.
 
-If you have not built anything yet, start with the [Quick Start](/slingshot/quick-start/).
+If you have not built anything yet, start with the [Quick Start](/quick-start/).
 Come back here when you want to understand what `defineApp(...)` actually does.
 
 ## The app root
@@ -98,49 +98,49 @@ The top-level config covers everything your app needs:
 | `jobs`         | Orchestration adapter                                 |
 | `multiTenancy` | Tenant resolver and isolation settings                |
 
-See [App Config](/slingshot/app-authoring/app-config/) for the full reference.
+See [App Config](/app-authoring/app-config/) for the full reference.
 
 ## Learn this section
 
 <CardGrid>
   <LinkCard
     title="createServer and createApp"
-    href="/slingshot/app-authoring/create-server-and-create-app/"
+    href="/app-authoring/create-server-and-create-app/"
     description="What the assembly step does, what the server adds, and when to use the imperative APIs."
   />
   <LinkCard
     title="App Config"
-    href="/slingshot/app-authoring/app-config/"
+    href="/app-authoring/app-config/"
     description="Security, database, events, WebSockets, secrets, and more."
   />
   <LinkCard
     title="Starter App"
-    href="/slingshot/app-authoring/starter-app/"
+    href="/app-authoring/starter-app/"
     description="A complete starter app with entities, operations, and route policy."
   />
   <LinkCard
     title="Packages vs Plugins"
-    href="/slingshot/composing-an-app/#when-to-use-which"
+    href="/composing-an-app/#when-to-use-which"
     description="The two first-class authoring tiers — when to reach for definePackage vs SlingshotPlugin."
   />
   <LinkCard
     title="Context and Request Model"
-    href="/slingshot/app-authoring/context-and-request-model/"
+    href="/app-authoring/context-and-request-model/"
     description="How to access config, events, and request state in handlers."
   />
   <LinkCard
     title="Middleware"
-    href="/slingshot/app-authoring/middleware/"
+    href="/app-authoring/middleware/"
     description="Global and per-package middleware chains."
   />
   <LinkCard
     title="OpenAPI and Validation"
-    href="/slingshot/app-authoring/openapi-and-validation/"
+    href="/app-authoring/openapi-and-validation/"
     description="Generated API docs and request/response validation."
   />
   <LinkCard
     title="Runtime and Infrastructure"
-    href="/slingshot/app-authoring/runtime-and-infrastructure/"
+    href="/app-authoring/runtime-and-infrastructure/"
     description="DB connections, uploads, logging, metrics, tracing, and secrets."
   />
 </CardGrid>
@@ -149,12 +149,12 @@ See [App Config](/slingshot/app-authoring/app-config/) for the full reference.
 
 You understand the app root and runtime layer. The canonical journey continues into per-route concerns:
 
-1. **[Authoring Routes](/slingshot/authoring-routes/)** — every concern that applies to a single route: validation, DTO mapping, idempotency, exception handling.
-2. **[Working with Data](/slingshot/core-features/data-and-entities/)** — when a route should be generated from an entity model.
-3. **[Security](/slingshot/core-features/auth/)** — auth and permissions.
+1. **[Authoring Routes](/authoring-routes/)** — every concern that applies to a single route: validation, DTO mapping, idempotency, exception handling.
+2. **[Working with Data](/core-features/data-and-entities/)** — when a route should be generated from an entity model.
+3. **[Security](/core-features/auth/)** — auth and permissions.
 
 Adjacent reference:
 
-- [Package-First Authoring](/slingshot/package-first/) — feature module composition (revisit if you skipped here from Quick Start).
-- [Entity System](/slingshot/entity-system/) — the full entity authoring story.
-- [Examples](/slingshot/examples/) — complete apps to study.
+- [Package-First Authoring](/package-first/) — feature module composition (revisit if you skipped here from Quick Start).
+- [Entity System](/entity-system/) — the full entity authoring story.
+- [Examples](/examples/) — complete apps to study.

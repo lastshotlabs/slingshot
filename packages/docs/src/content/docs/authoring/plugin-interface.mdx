@@ -8,9 +8,9 @@ import { Aside } from '@astrojs/starlight/components';
 `SlingshotPlugin` is the framework-level plugin authoring contract. Use it for auth,
 persistence, queues, search, and other infrastructure that needs async bootstrap, registrar
 registrations, or conditional middleware. It's a parallel first-class authoring tier to
-[`definePackage`](/slingshot/package-first/define-package/) — pick by the shape of what
+[`definePackage`](/package-first/define-package/) — pick by the shape of what
 you're building, not by perceived level. See
-[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the decision guide.
+[Composing an App](/composing-an-app/#when-to-use-which) for the decision guide.
 
 The type lives in `@lastshotlabs/slingshot-core`.
 
@@ -271,8 +271,8 @@ When the framework does call lifecycle methods, it invokes them on the plugin in
 
 ## See also
 
-- [SlingshotContext](/slingshot/authoring/context/) - reading and writing instance-scoped runtime state
-- [CoreRegistrar](/slingshot/authoring/registrar/) - the registrar contract and what it publishes
-- [Event Bus](/slingshot/authoring/event-bus/) - emitting and subscribing to events
-- [Internals: Plugin Lifecycle](/slingshot/internals/plugin-lifecycle/) - deep dive into boot ordering and phase execution
-- [Observability & Distributed Tracing](/slingshot/guides/observability/) - plugin lifecycle spans and `createChildSpan` for request-level tracing
+- [SlingshotContext](/authoring/context/) - reading and writing instance-scoped runtime state
+- [CoreRegistrar](/authoring/registrar/) - the registrar contract and what it publishes
+- [Event Bus](/authoring/event-bus/) - emitting and subscribing to events
+- [Internals: Plugin Lifecycle](/internals/plugin-lifecycle/) - deep dive into boot ordering and phase execution
+- [Observability & Distributed Tracing](/guides/observability/) - plugin lifecycle spans and `createChildSpan` for request-level tracing

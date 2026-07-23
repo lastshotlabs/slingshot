@@ -8,7 +8,7 @@ tweaking, the framework exposes seams at every level so you can override one pie
 abandoning the rest.
 
 For framework-level plugin authoring (auth, persistence, queues, custom middleware), see the
-[Plugin Interface](/slingshot/authoring/plugin-interface/) — that is a parallel first-class
+[Plugin Interface](/authoring/plugin-interface/) — that is a parallel first-class
 authoring tier, not a seam below packages.
 
 ## Decision guide
@@ -20,7 +20,7 @@ authoring tier, not a seam below packages.
 | Full control over entity storage construction        | Manual adapter wiring                                                          |
 | Custom system field names for an existing database   | Entity `systemFields` config                                                   |
 | Custom storage conventions (Redis keys, table names) | Entity `conventions` config                                                    |
-| Direct lifecycle control (async bootstrap, teardown) | `SlingshotPlugin` ([Plugin Interface](/slingshot/authoring/plugin-interface/)) |
+| Direct lifecycle control (async bootstrap, teardown) | `SlingshotPlugin` ([Plugin Interface](/authoring/plugin-interface/)) |
 
 ## Executor overrides
 
@@ -50,7 +50,7 @@ entity({
 });
 ```
 
-See [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) for full details.
+See [Generated Routes, Overrides, and Extra Routes](/entity-system/generated-routes-overrides-and-extra-routes/) for full details.
 
 ## Extra routes
 
@@ -118,7 +118,7 @@ entity({
 });
 ```
 
-See [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) for the factories and manual wiring modes.
+See [Storage and Adapter Wiring](/entity-system/storage-and-adapter-wiring/) for the factories and manual wiring modes.
 
 ## Framework-level plugins
 
@@ -126,7 +126,7 @@ See [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wi
 custom middleware. It is a **parallel authoring tier** to `definePackage`, not a seam
 beneath it. If you find yourself needing async bootstrap, conditional middleware, or
 registrar registrations to model a feature, you are writing a plugin and should consult the
-full [Plugin Interface](/slingshot/authoring/plugin-interface/) reference.
+full [Plugin Interface](/authoring/plugin-interface/) reference.
 
 A short example for context:
 
@@ -146,8 +146,8 @@ const metricsPlugin: SlingshotPlugin = {
 };
 ```
 
-See [Plugin Interface](/slingshot/authoring/plugin-interface/) for the full lifecycle and
-[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the package vs plugin
+See [Plugin Interface](/authoring/plugin-interface/) for the full lifecycle and
+[Composing an App](/composing-an-app/#when-to-use-which) for the package vs plugin
 decision guide.
 
 ## Entity system field conventions
@@ -190,11 +190,11 @@ Typical progression for app-side feature work:
 3. **Use capabilities and entityRef** — when packages need to talk to each other
 
 For framework-level work — auth, persistence, queues, custom middleware — start at the
-[Plugin Interface](/slingshot/authoring/plugin-interface/) instead. That's a different tier,
+[Plugin Interface](/authoring/plugin-interface/) instead. That's a different tier,
 not a later step in the same progression.
 
 ## Next
 
-- [Plugin Interface](/slingshot/authoring/plugin-interface/) — `SlingshotPlugin` contract for framework-level plugins
-- [Entity System](/slingshot/entity-system/) — the entity authoring and customization story
-- [Examples](/slingshot/examples/) — complete apps that combine packages, entities, and custom routes
+- [Plugin Interface](/authoring/plugin-interface/) — `SlingshotPlugin` contract for framework-level plugins
+- [Entity System](/entity-system/) — the entity authoring and customization story
+- [Examples](/examples/) — complete apps that combine packages, entities, and custom routes

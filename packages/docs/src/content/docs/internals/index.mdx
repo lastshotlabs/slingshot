@@ -10,27 +10,27 @@ Go deeper than "drop in a plugin and ship." These pages cover how the pieces fit
 <CardGrid>
   <LinkCard
     title="The Plugin Lifecycle"
-    href="/slingshot/internals/plugin-lifecycle/"
+    href="/internals/plugin-lifecycle/"
     description="How plugins boot, in what order, and why the three phases exist. What happens between createServer() and your first request."
   />
   <LinkCard
     title="Context and Registrar"
-    href="/slingshot/internals/context-registrar/"
+    href="/internals/context-registrar/"
     description="SlingshotContext, the WeakMap-backed per-app state container, and how CoreRegistrar lets packages share capabilities without importing each other."
   />
   <LinkCard
     title="The Event Bus"
-    href="/slingshot/internals/event-bus/"
+    href="/internals/event-bus/"
     description="InProcessAdapter internals, client-safe event filtering, the drain() contract for test isolation, and how SSE bridges to the bus."
   />
   <LinkCard
     title="Reflect Symbol DI"
-    href="/slingshot/internals/reflect-di/"
+    href="/internals/reflect-di/"
     description="How cross-cutting concerns (entity registration, search sync, search client resolution) are injected via Reflect symbols on StoreInfra — without function arguments."
   />
   <LinkCard
     title="Persistence Resolution"
-    href="/slingshot/internals/persistence/"
+    href="/internals/persistence/"
     description="RepoFactories, resolveRepo(), and how the framework dispatches to the right adapter at startup without any runtime branching in your business logic."
   />
 </CardGrid>

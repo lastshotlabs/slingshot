@@ -99,7 +99,7 @@ defineApp({
 });
 ```
 
-`packages` is the canonical surface — see [Packages](/slingshot/package-first/define-package/).
+`packages` is the canonical surface — see [Packages](/package-first/define-package/).
 `plugins` is for integrations like auth, organizations, webhooks, search. `routesDir` is for
 top-level routes that don't belong to any package, or for quick experiments.
 
@@ -175,7 +175,7 @@ defineApp({
 Plugin-tier factories go in `plugins:` and feature packages authored with `definePackage`
 go in `packages:`. Both are typed objects with `name` + lifecycle hooks. The framework
 topo-sorts them by declared `dependencies` and runs `setupMiddleware`, `setupRoutes`, and
-`setupPost` in that order. See [Plugin Interface](/slingshot/authoring/plugin-interface/).
+`setupPost` in that order. See [Plugin Interface](/authoring/plugin-interface/).
 
 ## Event bus
 
@@ -233,8 +233,8 @@ defineApp({
 });
 ```
 
-WebSocket and SSE are first-class. See [WebSockets](/slingshot/app-authoring/websockets/)
-and [Server-Sent Events](/slingshot/app-authoring/server-sent-events/).
+WebSocket and SSE are first-class. See [WebSockets](/app-authoring/websockets/)
+and [Server-Sent Events](/app-authoring/server-sent-events/).
 
 ## Multi-tenancy
 
@@ -280,8 +280,8 @@ root `/docs` becomes a version selector.
 
 ## What's next
 
-- [Routes and Handlers](/slingshot/app-authoring/routes-and-handlers/) — write a route
-- [Packages](/slingshot/package-first/define-package/) — organize features
-- [Plugin Interface](/slingshot/authoring/plugin-interface/) — write a `SlingshotPlugin` for auth, persistence, queues, or other framework-level infrastructure
-- [Lower-level Seams](/slingshot/package-first/lower-level-seams/) — overrides and manual wiring inside the package model
-- [Entities](/slingshot/entity-system/define-entity/) — declare a data model
+- [Routes and Handlers](/app-authoring/routes-and-handlers/) — write a route
+- [Packages](/package-first/define-package/) — organize features
+- [Plugin Interface](/authoring/plugin-interface/) — write a `SlingshotPlugin` for auth, persistence, queues, or other framework-level infrastructure
+- [Lower-level Seams](/package-first/lower-level-seams/) — overrides and manual wiring inside the package model
+- [Entities](/entity-system/define-entity/) — declare a data model

@@ -4,7 +4,7 @@ description: The underlying mechanism that Package Contracts wrap — useful for
 ---
 
 :::caution[Prefer Package Contracts for cross-package surfaces]
-For any package consumed by another package, the recommended pattern is a **[Package Contract](/slingshot/package-first/contracts/)** — a provider-owned object that bundles capabilities and explicitly narrowed entity refs together with boot-time validation, exposure enforcement, and source-located errors.
+For any package consumed by another package, the recommended pattern is a **[Package Contract](/package-first/contracts/)** — a provider-owned object that bundles capabilities and explicitly narrowed entity refs together with boot-time validation, exposure enforcement, and source-located errors.
 
 This page documents the underlying mechanism that contracts wrap. Read it when you're working with legacy code, when a contract is overkill (e.g., a single in-app capability), or when you want to understand what `definePackageContract` is actually composing.
 :::
@@ -284,7 +284,7 @@ const orderPackage = definePackage({
 
 ## When to use which
 
-When a package contract exists, prefer the contract-bound forms (`Matches.capability(...)`, `Matches.publicEntities({...})`) over free-floating `defineCapability(...)` and `entityRef(...)`. The table below applies to the underlying choice itself; the recommended way to organize that choice is a [Package Contract](/slingshot/package-first/contracts/).
+When a package contract exists, prefer the contract-bound forms (`Matches.capability(...)`, `Matches.publicEntities({...})`) over free-floating `defineCapability(...)` and `entityRef(...)`. The table below applies to the underlying choice itself; the recommended way to organize that choice is a [Package Contract](/package-first/contracts/).
 
 | Dependency is...                         | Use        |
 | ---------------------------------------- | ---------- |
@@ -294,7 +294,7 @@ When a package contract exists, prefer the contract-bound forms (`Matches.capabi
 
 ## Next
 
-- [Package Contracts](/slingshot/package-first/contracts/) — the recommended way to organize capabilities and entity refs once a package has a public surface
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — the other way to decouple packages
-- [Lower-level Seams](/slingshot/package-first/lower-level-seams/) — overrides and manual wiring when capabilities and entityRef aren't enough
-- [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — how entity adapters resolve across backends
+- [Package Contracts](/package-first/contracts/) — the recommended way to organize capabilities and entity refs once a package has a public surface
+- [Events and the Event Bus](/app-authoring/events-and-the-event-bus/) — the other way to decouple packages
+- [Lower-level Seams](/package-first/lower-level-seams/) — overrides and manual wiring when capabilities and entityRef aren't enough
+- [Entity System: Storage and Adapter Wiring](/entity-system/storage-and-adapter-wiring/) — how entity adapters resolve across backends

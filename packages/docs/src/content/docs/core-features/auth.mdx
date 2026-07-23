@@ -179,7 +179,7 @@ Auth fires lifecycle hooks at well-defined moments:
 Each hook receives the relevant identifiers plus a `HookContext` that carries
 request metadata (`ip`, `userAgent`, `requestId`) and a `services?: HookServices`
 accessor for reading entities, resolving capabilities, and emitting events. See
-[HookServices](/slingshot/app-authoring/hook-services/) for the full contract.
+[HookServices](/app-authoring/hook-services/) for the full contract.
 
 ```typescript
 // @skip-typecheck
@@ -310,10 +310,10 @@ automatically because they read from `c.get('actor')`.
 
 Auth tells you _who_ the actor is. The next step is _what_ they're allowed to do:
 
-- **[Permissions](/slingshot/core-features/permissions/)** — resource-level access control built on top of the actor model.
+- **[Permissions](/core-features/permissions/)** — resource-level access control built on top of the actor model.
 
 ## Go deeper into auth
 
-- [Auth Setup Example](/slingshot/examples/with-auth/) — end-to-end auth walkthrough with OAuth, MFA, and passkeys
-- [SaaS Foundations](/slingshot/examples/saas-foundations/) — auth + organizations + permissions for multi-tenant
-- [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/) — current package stability expectations
+- [Auth Setup Example](/examples/with-auth/) — end-to-end auth walkthrough with OAuth, MFA, and passkeys
+- [SaaS Foundations](/examples/saas-foundations/) — auth + organizations + permissions for multi-tenant
+- [Maturity and Package Status](/core-features/maturity-and-package-status/) — current package stability expectations

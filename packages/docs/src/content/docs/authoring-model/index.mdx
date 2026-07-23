@@ -116,7 +116,7 @@ levels of a hierarchy. Pick by what you are building:
   conditional middleware. Almost every plugin you import is one.
 
 Neither is a workaround for the other. See
-[Composing an App](/slingshot/composing-an-app/#when-to-use-which) for the full decision
+[Composing an App](/composing-an-app/#when-to-use-which) for the full decision
 guide.
 
 ## Learn each layer
@@ -124,22 +124,22 @@ guide.
 <CardGrid>
   <LinkCard
     title="App Roots and Runtime"
-    href="/slingshot/app-authoring/"
+    href="/app-authoring/"
     description="defineApp, createApp, config, context, middleware, and the assembly step."
   />
   <LinkCard
     title="Package-First Authoring"
-    href="/slingshot/package-first/"
+    href="/package-first/"
     description="definePackage, domains, routes, and Package Contracts (the recommended cross-package surface)."
   />
   <LinkCard
     title="Plugin Interface"
-    href="/slingshot/authoring/plugin-interface/"
+    href="/authoring/plugin-interface/"
     description="SlingshotPlugin contract for framework-level plugins — lifecycle hooks, registrar, async bootstrap."
   />
   <LinkCard
     title="Entity System"
-    href="/slingshot/entity-system/"
+    href="/entity-system/"
     description="defineEntity, operations, route policy, storage backends, and generated routes."
   />
 </CardGrid>
@@ -148,7 +148,7 @@ guide.
 
 When generated package or entity behavior needs tweaking:
 
-- [Route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize one generated route
-- [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated ones
-- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — bring your own storage
-- [Lower-level seams guide](/slingshot/package-first/lower-level-seams/) — decision guide for what to override
+- [Route overrides](/entity-system/generated-routes-overrides-and-extra-routes/) — customize one generated route
+- [Extra routes](/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated ones
+- [Manual adapter wiring](/entity-system/storage-and-adapter-wiring/#manual) — bring your own storage
+- [Lower-level seams guide](/package-first/lower-level-seams/) — decision guide for what to override

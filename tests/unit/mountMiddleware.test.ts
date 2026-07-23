@@ -130,6 +130,20 @@ describe('mountFrameworkMiddleware', () => {
     expect(res.status).toBe(200);
   });
 
+  it('sets a one-year HSTS policy by default', async () => {
+    const app = makeApp();
+    await mountFrameworkMiddleware(app, {
+      security: minimalSecurity,
+      isProd: true,
+      logging: { onLog: () => {} },
+    });
+    app.get('/test', c => c.json({ ok: true }));
+    const res = await app.request('/test');
+    expect(res.headers.get('strict-transport-security')).toBe(
+      'max-age=31536000; includeSubDomains',
+    );
+  });
+
   it('sets Permissions-Policy custom header (lines 145, 149-154)', async () => {
     const app = makeApp();
     app.get('/test', c => c.json({ ok: true }));

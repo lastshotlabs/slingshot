@@ -158,7 +158,11 @@ export async function mountFrameworkMiddleware(
   if (securityConfig.headers?.permissionsPolicy) {
     headerOpts['Permissions-Policy'] = securityConfig.headers.permissionsPolicy;
   }
-  app.use(secureHeaders());
+  app.use(
+    secureHeaders({
+      strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+    }),
+  );
   if (Object.keys(headerOpts).length > 0) {
     app.use(async (c, next) => {
       await next();

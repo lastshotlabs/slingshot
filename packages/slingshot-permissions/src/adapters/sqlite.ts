@@ -348,9 +348,7 @@ export function createSqlitePermissionsAdapter(
             params.push(tenantId);
             return 'tenant_id = ?';
           };
-          cascadeLevels.push(
-            `(${tenantCond()} AND resource_type IS NULL AND resource_id IS NULL)`,
-          );
+          cascadeLevels.push(`(${tenantCond()} AND resource_type IS NULL AND resource_id IS NULL)`);
           if (resourceType !== undefined) {
             const rtLevel = tenantCond();
             params.push(resourceType);

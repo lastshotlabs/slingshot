@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { createPollsPackage } from '../../src/plugin';
 import { Poll } from '../../src/entities/poll';
+import { createPollsPackage } from '../../src/plugin';
 
 describe('policy state isolation', () => {
   it('publishes participant and admin permission roles', () => {

@@ -27,6 +27,7 @@ Social OAuth login plugin for Slingshot
 - Public OAuth login initiation is protected by CSRF because the package mounts `POST /auth/:provider` instead of legacy `GET` initiators.
 - Session-bound provider linking, unlinking, and OAuth re-auth routes must fail closed when the account becomes suspended or no longer satisfies required email verification. Do not rely on identify middleware alone for this.
 - OAuth callback continuations must not complete provider linking or mint re-auth proof for stale suspended sessions.
+- Sign in with Apple identity tokens are authenticated data, not merely encoded data: verify the Apple JWKS signature, RS256 algorithm, issuer, client audience, expiry, issued-at time, subject, and the server-generated nonce before reading `sub` or `email`.
 
 ## Gotchas
 

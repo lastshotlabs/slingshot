@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type StorageAdapter, assertMountPath } from '@lastshotlabs/slingshot-core';
+import type { AssetBeforeUploadHook } from './types';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
@@ -115,6 +116,10 @@ const imageConfigSchema = z.object({
  * @internal
  */
 export const assetsPluginConfigSchema = z.object({
+  beforeUpload: z
+    .custom<AssetBeforeUploadHook>(v => typeof v === 'function')
+    .optional()
+    .describe('Pre-persist upload guard; throw to reject.'),
   mountPath: z
     .string()
     .min(1)

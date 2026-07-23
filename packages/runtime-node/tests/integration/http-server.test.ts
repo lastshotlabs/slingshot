@@ -4,7 +4,7 @@
  * Starts an actual Node HTTP server via the runtime, sends real HTTP
  * requests using fetch(), and verifies the full round-trip. No mocks.
  */
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'vitest';
 import { nodeRuntime } from '../../src/index';
 
 describe('runtime-node HTTP server integration', () => {

@@ -290,7 +290,7 @@ export function createAiPackage(rawConfig: AiPackageConfigInput): SlingshotPacka
         // be forced to install it.
         try {
           const [{ OrchestrationRuntimeCap }, { resolveCapabilityValue }] = await Promise.all([
-            import('@lastshotlabs/slingshot-orchestration'),
+            import('@lastshotlabs/slingshot-orchestration/public'),
             import('@lastshotlabs/slingshot-core'),
           ]);
           const resolved = resolveCapabilityValue(getContext(app), OrchestrationRuntimeCap);

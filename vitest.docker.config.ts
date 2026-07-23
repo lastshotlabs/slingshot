@@ -90,6 +90,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/node-docker/**/*.test.ts'],
+    // Some checkouts do not contain Node-specific Docker tests. The Bun-backed
+    // Docker suite still has meaningful coverage and must not be reported as a
+    // failure merely because this optional shard is empty.
+    passWithNoTests: true,
     globals: true,
   },
 });

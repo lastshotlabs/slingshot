@@ -552,15 +552,13 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
           try {
             const production = isProd();
             const cookieHeader = req.headers.get('cookie');
-            // The `token` query param is accepted here because this resolver only
-            // runs for WS/SSE upgrade requests, where browsers cannot set headers.
-            // Explicit credentials must outrank the ambient browser cookie. A
-            // multi-pane cockpit shares cookies across every iframe but gives
-            // each WebSocket its own query token.
+            // Never accept bearer credentials in URLs: query strings are commonly
+            // retained by proxies, access logs, telemetry, and browser history.
+            // Browser upgrades authenticate with the HttpOnly cookie; non-browser
+            // clients can use Authorization or the explicit user-token header.
             const token =
               req.headers.get(HEADER_USER_TOKEN) ??
               readBearerToken(req.headers.get('authorization')) ??
-              new URL(req.url).searchParams.get('token') ??
               readAuthCookieHeaderValue(cookieHeader, COOKIE_TOKEN, production, runtime.config);
             if (!token) return ANONYMOUS_ACTOR;
             const payload = await verifyToken(token, runtime.config, runtime.signing);
@@ -621,9 +619,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               }
             }
 
-            const suspensionStatus = await getSuspended(runtime.adapter, userId).catch(() => ({
-              suspended: false,
-            }));
+            // Fail closed on suspension lookup errors. The resolver's outer catch
+            // returns ANONYMOUS_ACTOR, including for WebSocket/SSE upgrades.
+            const suspensionStatus = await getSuspended(runtime.adapter, userId);
             if (suspensionStatus.suspended) return ANONYMOUS_ACTOR;
 
             try {

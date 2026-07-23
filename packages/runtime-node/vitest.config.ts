@@ -7,23 +7,15 @@ const packageRoot = dirname(fileURLToPath(import.meta.url));
 /**
  * Vitest config for the runtime-node package.
  *
- * Why a separate runner from `bun test`:
- * The SQLite test suite under `tests/node-runtime/nodeRuntime.test.ts`
- * exercises the better-sqlite3 native addon, which is not supported under
- * Bun (https://github.com/oven-sh/bun/issues/4290). Those tests must run in
- * a real Node.js process — vitest provides that here.
- *
- * The `test` script runs `bun test` first (covering everything that works
- * under Bun) and then this vitest pass to fill the SQLite gap.
+ * The adapter targets Node.js and uses Node-native HTTP, WebSocket, argon2,
+ * and better-sqlite3 behavior. Run its entire suite in a real Node process so
+ * upgrades and native integrations are tested in the supported runtime.
  */
 export default defineConfig({
   root: packageRoot,
   test: {
     environment: 'node',
-    include: [
-      'tests/node-runtime/nodeRuntime.test.ts',
-      'tests/node-runtime/node-sqlite-edge.test.ts',
-    ],
+    include: ['tests/**/*.test.ts'],
     globals: true,
   },
 });

@@ -101,7 +101,7 @@ export function buildIncomingDispatch(
 
         // Volatile broadcast — exclude sender
         ctx.publish(
-          roomId,
+          `messages:${roomId}:live`,
           'chat.typing',
           { userId: ctx.actorId, roomId, room: roomId },
           { volatile: true, exclude: new Set([ctx.socketId]) },

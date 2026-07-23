@@ -18,11 +18,12 @@ function buildApp(mutedUntil?: string | null) {
   return app;
 }
 
-const post = (app: ReturnType<typeof buildApp>) => app.request('/messages', {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ roomId: 'room-1', body: 'hello' }),
-});
+const post = (app: ReturnType<typeof buildApp>) =>
+  app.request('/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ roomId: 'room-1', body: 'hello' }),
+  });
 
 describe('timeoutGuard middleware', () => {
   test('rejects a timed-out member with an exact LCD countdown', async () => {
@@ -43,7 +44,11 @@ describe('timeoutGuard middleware', () => {
   });
 
   test('allows requests without a resolvable actor or room', async () => {
-    const memberAdapter = { findMember: async () => { throw new Error('not called'); } } as unknown as RoomMemberAdapter;
+    const memberAdapter = {
+      findMember: async () => {
+        throw new Error('not called');
+      },
+    } as unknown as RoomMemberAdapter;
     const app = new Hono();
     app.use('*', createTimeoutGuardMiddleware({ memberAdapter }));
     app.post('/messages', c => c.json({ ok: true }));

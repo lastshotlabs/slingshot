@@ -3,6 +3,7 @@ import { verifyToken } from '../../src/lib/jwt';
 import {
   assertLoginEmailVerified,
   createSessionForUser,
+  deleteAccount,
   emitLoginSuccess,
   login,
   logout,
@@ -499,5 +500,30 @@ describe('assertLoginEmailVerified', () => {
     await runtime.adapter.setEmailVerified?.(user.id, false);
 
     await expect(assertLoginEmailVerified(user.id, runtime)).resolves.toBeUndefined();
+  });
+});
+
+describe('deleteAccount', () => {
+  test('does not bypass password verification when the public user profile omits email', async () => {
+    const runtime = makeTestRuntime();
+    const passwordHash = await runtime.password.hash('correct-password');
+    const user = await runtime.adapter.create('username-only', passwordHash);
+    const originalGetUser = runtime.adapter.getUser?.bind(runtime.adapter);
+    runtime.adapter = new Proxy(runtime.adapter, {
+      get(target, property, receiver) {
+        if (property === 'getUser') {
+          return async (userId: string) => {
+            const record = await originalGetUser?.(userId);
+            return record ? { ...record, email: undefined } : null;
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await expect(deleteAccount(user.id, runtime, 'wrong-password')).rejects.toThrow(
+      'Invalid password',
+    );
+    expect(await originalGetUser?.(user.id)).not.toBeNull();
   });
 });

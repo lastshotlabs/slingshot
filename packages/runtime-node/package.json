@@ -33,22 +33,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ --cache",
-    "test": "bun run test:bun && bun run test:vitest",
-    "test:bun": "bun test tests/*.test.ts tests/integration tests/node-runtime/websocket.test.ts tests/node-runtime/internals.test.ts",
+    "test": "bun run test:vitest",
     "coverage": "bun test --coverage",
     "test:vitest": "vitest run --config vitest.config.ts",
-    "test:integration": "bun test tests/integration/",
+    "test:integration": "vitest run --config vitest.config.ts tests/integration/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
-    "@hono/node-server": ">=1.19.13",
+    "@hono/node-server": ">=2.0.5 <3",
     "argon2": ">=0.31",
     "better-sqlite3": ">=9.0",
     "fast-glob": ">=3.0",
-    "ws": ">=8.0"
+    "ws": ">=8.20.1 <9"
   },
   "peerDependenciesMeta": {
     "@hono/node-server": {
@@ -68,9 +67,10 @@
     }
   },
   "devDependencies": {
-    "@hono/node-server": "1.19.13",
+    "@hono/node-server": "2.0.11",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ws": "^8.18.1",
+    "ws": "8.21.1",
     "typescript": "*"
   },
   "engines": {

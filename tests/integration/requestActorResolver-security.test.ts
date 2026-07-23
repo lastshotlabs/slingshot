@@ -80,7 +80,7 @@ describe('auth RequestActorResolver upgrade security', () => {
     ).toBe(userId);
   });
 
-  test('explicit query token overrides a different ambient cookie during upgrade auth', async () => {
+  test('ignores URL query tokens and authenticates with the ambient cookie', async () => {
     const app = await createTestApp();
     const cookieRes = await app.request(
       '/auth/register',
@@ -100,8 +100,8 @@ describe('auth RequestActorResolver upgrade security', () => {
       }),
     );
 
-    expect(actor.id).toBe(explicitSession.userId);
-    expect(actor.id).not.toBe(cookieSession.userId);
+    expect(actor.id).toBe(cookieSession.userId);
+    expect(actor.id).not.toBe(explicitSession.userId);
   });
 
   test('resolves M2M bearer tokens as service-account actors during upgrade auth', async () => {
@@ -161,11 +161,11 @@ describe('auth RequestActorResolver upgrade security', () => {
       ).id,
     ).toBe(userId);
 
-    // Browsers cannot set headers on WebSocket connects, so the resolver (which
-    // only runs for WS/SSE upgrade requests) accepts the `token` query param.
+    // Bearer credentials in URLs are ignored because query strings leak into
+    // proxy logs, telemetry, browser history, and referrers.
     expect(
       (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
-    ).toBe(userId);
+    ).toBeNull();
 
     await runtime.adapter.setSuspended?.(userId, true, 'security hold');
 

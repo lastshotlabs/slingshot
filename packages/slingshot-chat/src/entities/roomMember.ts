@@ -124,7 +124,13 @@ export const RoomMember = defineEntity('RoomMember', {
       leave: { auth: 'userAuth' },
       updatePreferences: { auth: 'userAuth', path: 'preferences' },
     },
-    middleware: { dmRoomGuard: true, roomBanGuard: true, memberGrant: true, memberGrantRevoke: true, memberInviteNotify: true },
+    middleware: {
+      dmRoomGuard: true,
+      roomBanGuard: true,
+      memberGrant: true,
+      memberGrantRevoke: true,
+      memberInviteNotify: true,
+    },
   },
 });
 

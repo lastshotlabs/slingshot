@@ -67,14 +67,9 @@ describe('GET /_snapshot/image — SSRF protection', () => {
     const cache = createMemoryImageCache();
 
     app.get('/uploads/test.png', c =>
-      c.body(
-        Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z4YQAAAAASUVORK5CYII=',
-          'base64',
-        ),
-        200,
-        { 'content-type': 'image/png' },
-      ),
+      c.body('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>', 200, {
+        'content-type': 'image/svg+xml',
+      }),
     );
 
     buildImageRouter(

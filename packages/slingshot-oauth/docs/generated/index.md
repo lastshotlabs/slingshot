@@ -39,7 +39,8 @@ bun add @lastshotlabs/slingshot-oauth
 
 - `@lastshotlabs/slingshot-auth`: `workspace:*`
 - `arctic`: `>=3.0`
-- `hono`: `>=4.12.14 <5`
+- `hono`: `>=4.12.18 <5`
+- `jose`: `>=6.0 <7`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

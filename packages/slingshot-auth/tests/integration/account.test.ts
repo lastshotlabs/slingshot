@@ -575,6 +575,8 @@ describe('POST /auth/logout', () => {
       const setCookieHeaders = res.headers.getSetCookie();
       expect(setCookieHeaders.some(header => header.includes('__Host-token='))).toBe(true);
       expect(setCookieHeaders.some(header => header.includes('__Host-refresh_token='))).toBe(true);
+      expect(setCookieHeaders.every(header => header.includes('HttpOnly'))).toBe(true);
+      expect(setCookieHeaders.every(header => header.includes('SameSite=Lax'))).toBe(true);
 
       const meRes = await app.request('/auth/me', {
         headers: { Cookie: `__Host-token=${token}` },

@@ -89,10 +89,23 @@ export const ChatInteractionsPeerCap = Chat.capability<ChatInteractionsPeer>('in
 
 /** Narrow mutation seam for application-owned room moderation policy. */
 export interface ChatModerationPeer {
-  moderateDeleteMessage(roomId: string, messageId: string): Promise<{ id: string; roomId: string; authorId?: string | null } | null>;
-  banMember(input: { roomId: string; userId: string; bannedBy: string; reason?: string; expiresAt?: string | null }): Promise<{ id: string; roomId: string; userId: string }>;
+  moderateDeleteMessage(
+    roomId: string,
+    messageId: string,
+  ): Promise<{ id: string; roomId: string; authorId?: string | null } | null>;
+  banMember(input: {
+    roomId: string;
+    userId: string;
+    bannedBy: string;
+    reason?: string;
+    expiresAt?: string | null;
+  }): Promise<{ id: string; roomId: string; userId: string }>;
   unbanMember(roomId: string, userId: string, liftedBy: string): Promise<boolean>;
-  listRoomBans(roomId: string): Promise<ReadonlyArray<{ id: string; userId: string; reason?: string | null; expiresAt?: string | null }>>;
+  listRoomBans(
+    roomId: string,
+  ): Promise<
+    ReadonlyArray<{ id: string; userId: string; reason?: string | null; expiresAt?: string | null }>
+  >;
 }
 
 export const ChatModerationPeerCap = Chat.capability<ChatModerationPeer>('moderationPeer');

@@ -204,6 +204,20 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
         );
       }
       if (connections && Object.keys(connections.providers ?? {}).length > 0) {
+        if (process.env['NODE_ENV'] === 'production') {
+          if (runtime.dataEncryptionKeys.length === 0) {
+            throw new Error(
+              '[slingshot-oauth] Provider connections require SLINGSHOT_DATA_ENCRYPTION_KEY in production because access and refresh tokens are stored.',
+            );
+          }
+          for (const [provider, providerConfig] of Object.entries(connections.providers)) {
+            if (new URL(providerConfig.redirectUri).protocol !== 'https:') {
+              throw new Error(
+                `[slingshot-oauth] Provider connection "${provider}" redirectUri must use HTTPS in production.`,
+              );
+            }
+          }
+        }
         app.route('/', createConnectionsRouter(app, connections, runtime, postRedirect));
       }
     },

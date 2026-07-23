@@ -94,6 +94,7 @@ describe('config-safe bootstrap', () => {
       event: 'chat.typing',
       userId: 'user-1',
       roomId: room.id,
+      room: room.id,
     });
   });
 });

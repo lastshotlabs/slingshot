@@ -27,7 +27,7 @@ import type { VerificationTokenRepository } from './lib/emailVerification';
 import type { AuthLogger } from './lib/logger';
 import type { MagicLinkRepository } from './lib/magicLink';
 import type { MfaChallengeRepository } from './lib/mfaChallenge';
-import type { OAuthProviders, OAuthStateStore } from './lib/oauth';
+import type { ConfiguredOAuthProvider, OAuthProviders, OAuthStateStore } from './lib/oauth';
 import type { OAuthCodeRepository } from './lib/oauthCode';
 import type { OAuthReauthRepository } from './lib/oauthReauth';
 import type { ProviderConnectionStore } from './lib/providerConnections';
@@ -74,6 +74,8 @@ export interface AuthRuntimeContext {
   readonly dataEncryptionKeys: readonly DataEncryptionKey[];
   readonly oauth: {
     readonly providers: OAuthProviders;
+    /** Provider client IDs used to validate OIDC identity-token audiences. */
+    readonly providerClientIds?: Readonly<Partial<Record<ConfiguredOAuthProvider, string>>>;
     readonly stateStore: OAuthStateStore;
     /**
      * Per-user third-party token storage for slingshot-oauth's `connections`

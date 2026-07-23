@@ -34,6 +34,8 @@ export type {
   PresignedUrlConfig,
   StorageAdapterRef,
   UpdateAssetInput,
+  AssetBeforeUploadInput,
+  AssetBeforeUploadHook,
 } from './types';
 
 /**

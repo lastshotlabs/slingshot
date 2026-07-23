@@ -39,9 +39,9 @@ import { Pin, pinOperations } from './pin';
 import { ReadReceipt, readReceiptOperations } from './readReceipt';
 import { Reminder, reminderOperations } from './reminder';
 import { Room, roomOperations } from './room';
+import { RoomBan } from './roomBan';
 import { RoomInvite, roomInviteOperations } from './roomInvite';
 import { RoomMember, roomMemberOperations } from './roomMember';
-import { RoomBan } from './roomBan';
 import {
   type ChatAdapterRefs,
   type ChatPermissionsAdapter,
@@ -49,8 +49,8 @@ import {
   applyClaimDueRemindersMethod,
   applyClaimDueScheduledMessagesMethod,
   applyEditedAtTransform,
-  applyMessageTombstoneTransform,
   applyInviteSlotMethods,
+  applyMessageTombstoneTransform,
   asAdapter,
   createClaimDueRemindersHandler,
   createClaimDueScheduledMessagesHandler,
@@ -238,6 +238,20 @@ export function buildChatEntityModules(args: BuildChatEntityModulesArgs) {
   // Adapter transforms compose innermost → outermost: editedAt first, then
   // cipher.
   const messageOverrides: EntityRouteExecutorOverrides = {
+    update:
+      ({ entityAdapter }) =>
+      async ctx => {
+        const existing = ctx.existingRecord as { deletedAt?: string | null } | undefined;
+        if (existing?.deletedAt) {
+          return ctx.respond.json({ error: 'Deleted messages cannot be edited' }, 403);
+        }
+        const id = (ctx.params as Record<string, string>).id;
+        if (!id) return ctx.respond.notFound();
+        const result = await entityAdapter.update(id, ctx.input, ctx.filter);
+        if (!result) return ctx.respond.notFound();
+        ctx.setOpResult('update', result);
+        return ctx.respond.json(result as Record<string, unknown>);
+      },
     operations: {
       forwardMessage: wrapHandler(forwardMessage),
       claimDueScheduledMessages: wrapHandler(claimDueScheduledMessages),

@@ -112,6 +112,16 @@ describe('POST /auth/magic-link/request', () => {
     expect(body1.message).toBe(body2.message);
   });
 
+  test('applies the same minimum response-time floor to unknown identifiers', async () => {
+    const startedAt = performance.now();
+    const res = await jsonPost('/auth/magic-link/request', {
+      identifier: 'timing-probe@example.com',
+    });
+
+    expect(res.status).toBe(200);
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(140);
+  });
+
   test('emits auth:delivery.magic_link event for registered email', async () => {
     const hash = await Bun.password.hash('SomePass123!');
     await runtime.adapter.create('alice@example.com', hash);

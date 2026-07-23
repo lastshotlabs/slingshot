@@ -4,6 +4,7 @@ import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import {
   createMemoryProviderConnectionStore,
   createSqliteProviderConnectionStore,
+  withEncryptedProviderConnections,
 } from '../../src/lib/providerConnections';
 import type { ProviderConnectionStore } from '../../src/lib/providerConnections';
 
@@ -96,4 +97,20 @@ test('sqlite schema init is idempotent across store instances on one db', async 
   const second = createSqliteProviderConnectionStore(db);
   const fetched = await second.get('user-1', 'spotify');
   expect(fetched?.accessToken).toBe('access-1');
+});
+
+test('encryption wrapper never persists provider bearer credentials in plaintext', async () => {
+  const raw = createMemoryProviderConnectionStore();
+  const encrypted = withEncryptedProviderConnections(raw, [
+    { keyId: 'test-key', key: Buffer.alloc(32, 7) },
+  ]);
+
+  const created = await encrypted.upsert(base);
+  expect(created.accessToken).toBe('access-1');
+  expect(created.refreshToken).toBe('refresh-1');
+
+  const stored = await raw.get('user-1', 'spotify');
+  expect(stored?.accessToken).not.toContain('access-1');
+  expect(stored?.refreshToken).not.toContain('refresh-1');
+  expect((await encrypted.get('user-1', 'spotify'))?.accessToken).toBe('access-1');
 });

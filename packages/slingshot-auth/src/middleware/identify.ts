@@ -251,9 +251,10 @@ export const createIdentifyMiddleware =
 
               if (resolvedUserId) {
                 if (authConfig.checkSuspensionOnIdentify) {
-                  const suspensionStatus = await getSuspended(authRuntime.adapter, sub).catch(
-                    () => ({ suspended: false }),
-                  );
+                  // Fail closed when the suspension store cannot be read. The outer
+                  // token-resolution catch converts the request to anonymous; treating
+                  // an outage as "not suspended" would let blocked accounts authenticate.
+                  const suspensionStatus = await getSuspended(authRuntime.adapter, sub);
                   if (suspensionStatus.suspended) {
                     resolvedUserId = null;
                     resolvedSessionId = null;
@@ -279,6 +280,14 @@ export const createIdentifyMiddleware =
         }
       } catch (err) {
         if (err instanceof HttpError) throw err;
+        // Some checks run after the signed token and session have tentatively
+        // populated identity. Any later failure (notably suspension lookup)
+        // must erase that partial state or the request would fail open.
+        resolvedUserId = null;
+        resolvedSessionId = null;
+        resolvedRoles = null;
+        resolvedClientId = null;
+        resolvedTokenPayload = null;
         log('[identify] invalid token — unauthenticated');
       }
     } else {

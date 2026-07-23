@@ -68,6 +68,9 @@ function withAbortableTimeout<T>(
   });
 }
 
+/** @internal Test hook for deterministic timeout and abort-signal coverage. */
+export const withAbortableTimeoutForTests = withAbortableTimeout;
+
 /**
  * Apply common Sharp pipeline configuration: resize and format conversion.
  */

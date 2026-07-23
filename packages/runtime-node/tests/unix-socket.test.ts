@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { nodeRuntime } from '../src/index';
 
 // Verifies that RuntimeServerOptions.unix binds the HTTP server on a Unix

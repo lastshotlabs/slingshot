@@ -454,7 +454,18 @@ export const notificationOperations = defineOperations(Notification, {
           typeof create['id'] === 'string' && (create['id'] as string).length > 0
             ? (create['id'] as string)
             : crypto.randomUUID();
-        const record: Record<string, unknown> = { ...create, id };
+        // Custom operations bypass the generated create parser, so materialize
+        // schema defaults required by the current physical table. Older
+        // notification tables predate the `seen` column and remain supported.
+        const hasSeenColumn = database
+          .query<{ name: string }>(`PRAGMA table_info(${TABLE})`)
+          .all()
+          .some(column => column.name === 'seen');
+        const record: Record<string, unknown> = {
+          ...(hasSeenColumn ? { seen: false } : {}),
+          ...create,
+          id,
+        };
         const columns = Object.keys(record);
         const snakeColumns = columns.map(c => c.replace(/([A-Z])/g, '_$1').toLowerCase());
         const placeholders = columns.map(() => '?').join(', ');

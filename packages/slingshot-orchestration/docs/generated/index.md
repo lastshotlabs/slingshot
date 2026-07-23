@@ -25,6 +25,7 @@ bun add @lastshotlabs/slingshot-orchestration
 
 - `.`
 - `./errors`
+- `./public`
 - `./testing`
 
 ## Package Scripts

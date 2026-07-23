@@ -1,4 +1,5 @@
 import { checkBreachedPassword } from '@auth/lib/breachedPassword';
+import { normalizeEmail } from '@auth/lib/normalizeEmail';
 import { checkPasswordNotReused, recordPasswordChange } from '@auth/lib/passwordHistory';
 import { consumeResetToken, createResetToken } from '@auth/lib/resetPassword';
 import { createPasswordSchema } from '@auth/schemas/auth';
@@ -124,10 +125,11 @@ export const createPasswordResetRouter = (
     async c => {
       const ip = getClientIp(c);
       const { email } = c.req.valid('json');
+      const normalizedEmail = normalizeEmail(email);
       // Rate-limit by both IP and email to prevent distributed email-bombing
       const ipLimited = await runtime.rateLimit.trackAttempt(`forgot:ip:${ip}`, forgotOpts);
       const emailLimited = await runtime.rateLimit.trackAttempt(
-        `forgot:email:${email}`,
+        `forgot:email:${normalizedEmail}`,
         forgotOpts,
       );
       if (ipLimited || emailLimited) {
@@ -136,7 +138,7 @@ export const createPasswordResetRouter = (
       // Constant-time response: always wait a minimum duration so an attacker cannot
       // distinguish "email found" from "email not found" via response timing.
       const floor = new Promise<void>(r => setTimeout(r, 150));
-      const user = await adapter.findByEmail(email);
+      const user = await adapter.findByEmail(normalizedEmail);
       // Fire-and-forget: the response does not wait for token creation or email sending.
       const msg = {
         message: 'If that email is registered, a password reset link has been sent.',
@@ -147,14 +149,17 @@ export const createPasswordResetRouter = (
             const token = await createResetToken(
               runtime.repos.resetToken,
               user.id,
-              email,
+              normalizedEmail,
               runtime.config,
             );
-            publishAuthEvent(runtime.events, 'auth:delivery.password_reset', { email, token });
+            publishAuthEvent(runtime.events, 'auth:delivery.password_reset', {
+              email: normalizedEmail,
+              token,
+            });
             publishAuthEvent(
               runtime.events,
               'auth:password.reset.requested',
-              { userId: user.id, email },
+              { userId: user.id, email: normalizedEmail },
               { userId: user.id, actorId: user.id, requestTenantId: getRequestTenantId(c) },
             );
           } catch (err) {

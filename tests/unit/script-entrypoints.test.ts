@@ -287,7 +287,8 @@ describe('script entrypoints', () => {
     ).toBe(0);
     expect(runtimeNodeCalls).toHaveLength(2);
     expect(runtimeNodeCalls[0]?.cmd[0]).toBe(process.execPath);
-    expect(runtimeNodeCalls[0]?.cmd[1]).toBe('test');
+    expect(runtimeNodeCalls[0]?.cmd[1]).toBe('x');
+    expect(runtimeNodeCalls[0]?.cmd).toContain('packages/runtime-node/vitest.config.ts');
     expect(runtimeNodeCalls[1]?.cmd.slice(0, 4)).toEqual([process.execPath, 'x', 'vitest', 'run']);
     expect(readFileSync(join(tempDir, 'runtime-node-coverage', 'lcov.info'), 'utf8')).toContain(
       'SF:packages/runtime-node/src/index.ts',

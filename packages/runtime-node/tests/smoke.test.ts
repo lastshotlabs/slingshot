@@ -1,9 +1,8 @@
 import { execSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { nodeRuntime } from '../src/index';
 
 // Per-package layout for runtime-node tests:
@@ -75,19 +74,9 @@ describe('runtime-node smoke', () => {
 
   test('runtime.readFile rethrows non-ENOENT errors', async () => {
     const runtime = nodeRuntime();
-    const readSpy = spyOn(fsPromises, 'readFile').mockImplementation(async () => {
-      const err = new Error('permission denied') as NodeJS.ErrnoException;
-      err.code = 'EACCES';
-      throw err;
+    await expect(runtime.readFile(tempDir)).rejects.toMatchObject({
+      code: 'EISDIR',
     });
-
-    try {
-      await expect(runtime.readFile(join(tempDir, 'forbidden.txt'))).rejects.toMatchObject({
-        code: 'EACCES',
-      });
-    } finally {
-      readSpy.mockRestore();
-    }
   });
 
   test('fs.readFile returns null for ENOENT', async () => {

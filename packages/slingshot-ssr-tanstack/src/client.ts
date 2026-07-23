@@ -68,9 +68,9 @@ interface SsrLoaderContext {
 
 /** Hydration-window source of loader data that a host SSR renderer computed. */
 export interface SsrLoaderDataSource {
-  consume(href: string):
-    | { readonly found: true; readonly data: unknown }
-    | { readonly found: false };
+  consume(
+    href: string,
+  ): { readonly found: true; readonly data: unknown } | { readonly found: false };
 }
 
 /**
@@ -82,10 +82,7 @@ export interface SsrLoaderDataSource {
  * so the source remains readable for the hydration window. The host removes it
  * after hydration; later navigations then use the normal `_data=1` protocol.
  */
-export function createSsrLoaderDataSource(
-  href: string,
-  data: unknown,
-): SsrLoaderDataSource {
+export function createSsrLoaderDataSource(href: string, data: unknown): SsrLoaderDataSource {
   return {
     consume(candidate: string) {
       if (candidate !== href) return { found: false };

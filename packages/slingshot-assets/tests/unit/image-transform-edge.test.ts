@@ -8,7 +8,7 @@
  */
 import { Buffer } from 'node:buffer';
 import { describe, expect, test } from 'bun:test';
-import { transformImage } from '../../src/image/transform';
+import { transformImage, withAbortableTimeoutForTests } from '../../src/image/transform';
 import {
   ImageInputTooLargeError,
   ImageSourceBlockedError,
@@ -208,19 +208,15 @@ describe('transformImage format and quality boundaries', () => {
 });
 
 describe('transformImage timeout', () => {
-  test('very short timeout on transformImage can trigger ImageTransformTimeoutError for slow input', async () => {
-    // Using a 1ms timeout with a valid image should be fast enough for
-    // a 1x1 PNG, but we verify the rejection shape.
+  test('a stalled transform task is aborted and rejects with ImageTransformTimeoutError', async () => {
+    let signal: AbortSignal | undefined;
     await expect(
-      transformImage(tinyPngBuffer(), 'image/png', {
-        width: 50,
-        format: 'original',
-        quality: 75,
-        maxWidth: 500,
-        maxHeight: 500,
-        timeoutMs: 1,
-      }),
+      withAbortableTimeoutForTests(currentSignal => {
+        signal = currentSignal;
+        return new Promise<ArrayBuffer>(() => {});
+      }, 1),
     ).rejects.toThrow(ImageTransformTimeoutError);
+    expect(signal?.aborted).toBe(true);
   });
 });
 

@@ -42,13 +42,13 @@ bun add @lastshotlabs/slingshot-auth
 - `@lastshotlabs/slingshot-postgres`: `workspace:*`
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `>=3.0`
-- `hono`: `>=4.12.14 <5`
+- `hono`: `>=4.12.18 <5`
 - `ioredis`: `>=5 <6`
 - `jose`: `>=6.0`
 - `mongoose`: `>=9.0 <10`
 - `otpauth`: `>=9.0 <10`
 - `pg`: `^8.20.0`
-- `samlify`: `^2.8`
+- `samlify`: `>=2.13.0 <3`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

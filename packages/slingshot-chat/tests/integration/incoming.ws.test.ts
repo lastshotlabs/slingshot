@@ -63,7 +63,7 @@ describe('buildIncomingDispatch', () => {
 
       expect(publisher.calls).toHaveLength(1);
       const call = publisher.calls[0];
-      expect(call.room).toBe(room.id);
+      expect(call.room).toBe(`messages:${room.id}:live`);
       expect(call.event).toBe('chat.typing');
       expect(call.opts?.volatile).toBe(true);
       expect(call.opts?.exclude).toEqual(new Set(['socket-123']));

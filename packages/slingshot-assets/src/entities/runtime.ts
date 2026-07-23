@@ -335,7 +335,10 @@ export function createUploadHandler(deps: AssetsHandlerDeps) {
     if (BLOCKED_MIME_TYPES.has(mimeType)) {
       throw new HTTPException(400, { message: 'File type not allowed.' });
     }
-    if (config.allowedMimeTypes?.length && !config.allowedMimeTypes.some(pattern => mimeMatches(mimeType, pattern))) {
+    if (
+      config.allowedMimeTypes?.length &&
+      !config.allowedMimeTypes.some(pattern => mimeMatches(mimeType, pattern))
+    ) {
       throw new HTTPException(400, { message: `File type "${mimeType}" not allowed.` });
     }
 
@@ -347,13 +350,31 @@ export function createUploadHandler(deps: AssetsHandlerDeps) {
     }
     const maxFileSize = config.maxFileSize ?? 10 * 1024 * 1024;
     if (bytes.byteLength > maxFileSize) {
-      throw new HTTPException(413, { message: `File exceeds maximum size of ${maxFileSize} bytes.` });
+      throw new HTTPException(413, {
+        message: `File exceeds maximum size of ${maxFileSize} bytes.`,
+      });
     }
 
-    const key = generateUploadKeyFromFilename(filename, { userId, tenantId }, {
-      keyPrefix: config.keyPrefix,
-      tenantScopedKeys: config.tenantScopedKeys,
-    });
+    // Pre-persist guard hook: apps can scan content or enforce per-user quotas
+    // here and reject (by throwing) before the file is stored.
+    if (config.beforeUpload) {
+      await config.beforeUpload({
+        userId,
+        tenantId: tenantId ?? null,
+        filename: filename ?? null,
+        mimeType,
+        bytes,
+      });
+    }
+
+    const key = generateUploadKeyFromFilename(
+      filename,
+      { userId, tenantId },
+      {
+        keyPrefix: config.keyPrefix,
+        tenantScopedKeys: config.tenantScopedKeys,
+      },
+    );
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);
     const stored = await storage.put(key, new Blob([body], { type: mimeType }), {

@@ -301,6 +301,49 @@ export async function bootstrapAuth(
   const primaryField = authConfig.primaryField ?? 'email';
   const oauthProviders = authConfig.oauth?.providers;
 
+  if (isProd() && oauthProviders) {
+    for (const [provider, providerConfig] of Object.entries(oauthProviders)) {
+      if (!providerConfig.redirectUri) continue;
+      const redirect = new URL(providerConfig.redirectUri);
+      if (redirect.protocol !== 'https:') {
+        throw new Error(
+          `[slingshot-auth] OAuth redirectUri for ${provider} must use HTTPS in production`,
+        );
+      }
+      if (provider === 'gitlab' && 'baseUrl' in providerConfig && providerConfig.baseUrl) {
+        const baseUrl = new URL(providerConfig.baseUrl);
+        if (baseUrl.protocol !== 'https:') {
+          throw new Error('[slingshot-auth] GitLab OAuth baseUrl must use HTTPS in production');
+        }
+      }
+    }
+  }
+
+  if (isProd()) {
+    const staticBearerConfig = config.security?.bearerTokens;
+    const staticBearerTokens =
+      typeof staticBearerConfig === 'string'
+        ? [staticBearerConfig]
+        : Array.isArray(staticBearerConfig)
+          ? staticBearerConfig.map(entry => (typeof entry === 'string' ? entry : entry.token))
+          : [];
+    const scimBearerConfig = authConfig.scim?.bearerTokens;
+    const scimBearerTokens =
+      typeof scimBearerConfig === 'string' ? [scimBearerConfig] : (scimBearerConfig ?? []);
+    for (const token of [...staticBearerTokens, ...scimBearerTokens]) {
+      if (token.length < 32) {
+        throw new Error(
+          '[slingshot-auth] Static and SCIM bearer tokens must be at least 32 characters in production',
+        );
+      }
+    }
+    if (new Set(staticBearerTokens).size !== staticBearerTokens.length) {
+      throw new Error(
+        '[slingshot-auth] Duplicate static bearer tokens are not allowed because client identity would be ambiguous',
+      );
+    }
+  }
+
   if (emailVerification && primaryField !== 'email') {
     throw new Error(
       `[slingshot-auth] "emailVerification" is only supported when primaryField is "email". Either set primaryField to "email" or remove emailVerification.`,
@@ -323,7 +366,7 @@ export async function bootstrapAuth(
   {
     const { validateAdapterCapabilities } = await import('./lib/validateAdapter');
     validateAdapterCapabilities(authAdapter, {
-      hasOAuthProviders: Array.isArray(oauthProviders) && oauthProviders.length > 0,
+      hasOAuthProviders: !!oauthProviders && Object.keys(oauthProviders).length > 0,
       hasMfa: !!authConfig.mfa,
       hasMfaWebAuthn: !!authConfig.mfa?.webauthn,
       hasRoles: (authConfig.roles?.length ?? 0) > 0 && !authConfig.defaultRole,
@@ -355,6 +398,14 @@ export async function bootstrapAuth(
           'MFA configured without a data-encryption key; TOTP secrets are stored in plaintext',
         );
       }
+    }
+  }
+
+  if (isProd() && oauthProviders && Object.keys(oauthProviders).length > 0) {
+    if (dataEncryptionKeys.length === 0) {
+      throw new Error(
+        '[slingshot-auth] OAuth in production requires SLINGSHOT_DATA_ENCRYPTION_KEY so one-time authorization-code payloads are encrypted at rest.',
+      );
     }
   }
 
@@ -599,7 +650,8 @@ export async function bootstrapAuth(
   };
 
   const oauthStateStore = resolveRepo(oauthStateFactories, stores.oauthState, storeInfra);
-  const { providerConnectionFactories } = await import('./lib/providerConnections');
+  const { providerConnectionFactories, withEncryptedProviderConnections } =
+    await import('./lib/providerConnections');
   // Provider connections support memory/sqlite backends today. Unsupported
   // backends must NOT fail the whole auth bootstrap — the store stays
   // undefined and slingshot-oauth's `connections` feature (the only consumer)
@@ -608,10 +660,9 @@ export async function bootstrapAuth(
     | import('./lib/providerConnections').ProviderConnectionStore
     | undefined;
   try {
-    providerConnectionStore = resolveRepo(
-      providerConnectionFactories,
-      stores.oauthState,
-      storeInfra,
+    providerConnectionStore = withEncryptedProviderConnections(
+      resolveRepo(providerConnectionFactories, stores.oauthState, storeInfra),
+      dataEncryptionKeys,
     );
   } catch {
     providerConnectionStore = undefined;
@@ -754,6 +805,12 @@ export async function bootstrapAuth(
       getDummyHash,
       oauth: {
         providers: resolvedOAuthProviders,
+        providerClientIds: Object.fromEntries(
+          Object.entries(oauthProviders ?? {}).map(([provider, providerConfig]) => [
+            provider,
+            providerConfig.clientId,
+          ]),
+        ),
         stateStore: oauthStateStore,
         connectionStore: providerConnectionStore,
       },

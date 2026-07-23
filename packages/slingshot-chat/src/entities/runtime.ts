@@ -34,9 +34,9 @@ import type {
   ReadReceiptAdapter,
   ReminderAdapter,
   RoomAdapter,
+  RoomBanAdapter,
   RoomInviteAdapter,
   RoomMemberAdapter,
-  RoomBanAdapter,
   UpdateMessageInput,
 } from '../types';
 
@@ -81,9 +81,11 @@ export function createUpdateMemberPreferencesHandler(refs: ChatAdapterRefs) {
     if (!roomId || !['all', 'mentions', 'none'].includes(String(notifyOn))) {
       throw new HTTPException(400, { message: 'roomId and a valid notifyOn are required' });
     }
-    const member = await refs.members?.findMember({ roomId, userId });
+    const members = refs.members;
+    if (!members) throw new HTTPException(404, { message: 'room membership not found' });
+    const member = await members.findMember({ roomId, userId });
     if (!member) throw new HTTPException(404, { message: 'room membership not found' });
-    return refs.members!.update(member.id, { notifyOn: notifyOn as 'all' | 'mentions' | 'none' });
+    return members.update(member.id, { notifyOn: notifyOn as 'all' | 'mentions' | 'none' });
   };
 }
 
@@ -122,6 +124,11 @@ export function applyEditedAtTransform(messageAdapter: MessageAdapter): BareEnti
 export function applyMessageTombstoneTransform(messageAdapter: MessageAdapter): BareEntityAdapter {
   return {
     ...messageAdapter,
+    update: async (id: string, input: unknown) => {
+      const existing = await messageAdapter.getById(id);
+      if (!existing || existing.deletedAt) return null;
+      return messageAdapter.update(id, input as UpdateMessageInput);
+    },
     delete: async (id: string) => {
       const existing = await messageAdapter.getById(id);
       if (!existing) return false;

@@ -1,5 +1,5 @@
 import { request } from 'node:http';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { nodeRuntime, runtimeNodeInternals } from '../src/index';
 
 const { parseContentLength } = runtimeNodeInternals;

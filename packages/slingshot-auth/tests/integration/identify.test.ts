@@ -469,6 +469,44 @@ describe('session fingerprint binding', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suspension lookup failure
+// ---------------------------------------------------------------------------
+
+describe('suspension lookup failure', () => {
+  test('fails closed and treats the session as unauthenticated', async () => {
+    const { id: userId } = await runtime.adapter.create('store-outage@example.com', 'hash');
+    const sessionId = 'sess-suspension-store-outage';
+    const token = await signToken(
+      { sub: userId, sid: sessionId },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+    await runtime.repos.session.createSession(userId, token, sessionId, undefined, runtime.config);
+    runtime.adapter = new Proxy(runtime.adapter, {
+      get(target, property, receiver) {
+        if (property === 'getSuspended') {
+          return async () => {
+            throw new Error('suspension store unavailable');
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const res = await buildApp().request('/test', {
+      headers: { 'x-user-token': token },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      actorId: null,
+      sessionId: null,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Middleware always calls next()
 // ---------------------------------------------------------------------------
 

@@ -143,9 +143,11 @@ export function clearAuthCookie(
   const path = config.authCookie.path ?? '/';
   const domain = config.authCookie.domain;
   const secure = config.authCookie.secure ?? isProduction;
-  deleteCookie(c, secureName, { path, domain, secure });
+  const sameSite = config.authCookie.sameSite ?? 'Lax';
+  const options = { path, domain, secure, sameSite, httpOnly: true as const };
+  deleteCookie(c, secureName, options);
   if (secureName !== baseName) {
-    deleteCookie(c, baseName, { path, domain, secure });
+    deleteCookie(c, baseName, options);
   }
 }
 

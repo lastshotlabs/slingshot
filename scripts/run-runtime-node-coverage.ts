@@ -31,6 +31,7 @@ export async function runRuntimeNodeCoverage(
   coverageDir = 'coverage/runtime-node',
 ): Promise<number> {
   const runsDir = mkdtempSync(join(tmpdir(), 'slingshot-runtime-node-coverage-'));
+  const packageVitestCoverageDir = join(runsDir, 'package-vitest');
   const vitestCoverageDir = join(runsDir, 'vitest');
   const artifacts: string[] = [];
   let exitCode = 0;
@@ -38,17 +39,32 @@ export async function runRuntimeNodeCoverage(
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
 
-  const packageTests = (await collectFiles('packages/runtime-node/tests/**/*.test.ts')).filter(
-    file => !file.includes('/tests/node-runtime/'),
-  );
+  const packageTests = await collectFiles('packages/runtime-node/tests/**/*.test.ts');
   const nodeTests = await collectFiles('tests/node-runtime/**/*.test.ts');
 
   if (packageTests.length > 0) {
     const code = await runCommand(
-      'runtime-node:bun-smoke',
-      [process.execPath, 'test', ...packageTests],
+      'runtime-node:package-vitest',
+      [
+        process.execPath,
+        'x',
+        'vitest',
+        'run',
+        '--config',
+        'packages/runtime-node/vitest.config.ts',
+        '--coverage.enabled',
+        '--coverage.provider',
+        'v8',
+        '--coverage.reporter',
+        'text',
+        '--coverage.reporter',
+        'lcov',
+        '--coverage.reportsDirectory',
+        packageVitestCoverageDir,
+      ],
       spawnFn,
     );
+    artifacts.push(join(packageVitestCoverageDir, 'lcov.info'));
     if (code !== 0 && exitCode === 0) {
       exitCode = code;
     }

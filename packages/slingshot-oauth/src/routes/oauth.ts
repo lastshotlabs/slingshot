@@ -1,4 +1,3 @@
-import { decodeIdToken } from 'arctic';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import {
@@ -30,6 +29,7 @@ import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { COOKIE_REFRESH_TOKEN, COOKIE_TOKEN } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { verifyAppleIdentityToken } from '../lib/appleIdentityToken';
 import { encodeStateWithContext, parseStateContext } from '../state-context';
 
 /**
@@ -796,10 +796,12 @@ export const createOAuthRouter = (
       }),
       async c => {
         const nonce = generateState();
+        const appleNonce = generateState();
         const returnTo = resolveStartReturnTo(c);
         const state = encodeStateWithContext(nonce, returnTo ? { returnTo } : {});
-        await storeOAuthState(state);
+        await storeOAuthState(state, appleNonce);
         const url = getApple().createAuthorizationURL(state, ['name', 'email']);
+        url.searchParams.set('nonce', appleNonce);
         return c.redirect(url.toString());
       },
     );
@@ -834,9 +836,12 @@ export const createOAuthRouter = (
 
         const stored = await consumeOAuthState(state);
         if (!stored) return errorResponse(c, 'Invalid or expired state', 400);
+        const appleNonce = requireCodeVerifier(stored.codeVerifier);
 
         const tokens = await getApple().validateAuthorizationCode(code);
-        const claims = decodeIdToken(tokens.idToken()) as { sub: string; email?: string };
+        const clientId = runtime.oauth.providerClientIds?.apple;
+        if (!clientId) return errorResponse(c, 'OAuth provider not configured', 500);
+        const claims = await verifyAppleIdentityToken(tokens.idToken(), clientId, appleNonce);
 
         const linkResponse = await finishProviderLink(c, stored.linkUserId, 'apple', claims.sub);
         if (linkResponse) return linkResponse;
@@ -891,12 +896,14 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
+        const appleNonce = generateState();
         const userId = requireUserId(c);
         const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
+        await storeOAuthState(state, appleNonce, encodeOAuthLinkContext(userId, sessionId));
         const url = getApple().createAuthorizationURL(state, ['name', 'email']);
+        url.searchParams.set('nonce', appleNonce);
         return c.redirect(url.toString());
       },
     );

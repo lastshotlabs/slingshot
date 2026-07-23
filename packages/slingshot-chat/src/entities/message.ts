@@ -329,7 +329,7 @@ export const messageOperations = defineOperations(Message, {
   /** Database-level full-text search within a room. */
   searchMessages: op.search({
     fields: ['body'],
-    filter: { roomId: 'param:roomId' },
+    filter: { roomId: 'param:roomId', deletedAt: null },
     paginate: true,
   }),
 

@@ -16,9 +16,9 @@
  *
  * @internal
  */
+import { HTTPException } from 'hono/http-exception';
 import type { StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
-import { HTTPException } from 'hono/http-exception';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
   BareEntityAdapter,
@@ -34,8 +34,8 @@ import {
   applyAssetTtlTransform,
   createPresignDownloadHandler,
   createPresignUploadHandler,
-  createUploadHandler,
   createServeImageHandler,
+  createUploadHandler,
 } from './runtime';
 
 type EntityFactoryCreator = typeof createEntityFactories;

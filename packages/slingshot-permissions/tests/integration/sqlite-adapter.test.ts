@@ -146,9 +146,17 @@ describe('Permissions SQLite adapter', () => {
     });
 
     test('filters single-tenant grants with an explicit null tenantId', async () => {
-      await adapter.createGrant(makeGrant({ tenantId: null, resourceType: 'chat:room', resourceId: 'room-1' }));
-      await adapter.createGrant(makeGrant({ tenantId: 'tenant-a', resourceType: 'chat:room', resourceId: 'room-1' }));
-      const grants = await adapter.getGrantsForSubject('user-1', 'user', { tenantId: null, resourceType: 'chat:room', resourceId: 'room-1' });
+      await adapter.createGrant(
+        makeGrant({ tenantId: null, resourceType: 'chat:room', resourceId: 'room-1' }),
+      );
+      await adapter.createGrant(
+        makeGrant({ tenantId: 'tenant-a', resourceType: 'chat:room', resourceId: 'room-1' }),
+      );
+      const grants = await adapter.getGrantsForSubject('user-1', 'user', {
+        tenantId: null,
+        resourceType: 'chat:room',
+        resourceId: 'room-1',
+      });
       expect(grants).toHaveLength(1);
       expect(grants[0]?.tenantId).toBeNull();
     });

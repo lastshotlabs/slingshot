@@ -57,9 +57,32 @@ export interface ImageConfig {
 }
 
 /**
+ * Context passed to a `beforeUpload` guard: the resolved uploader and the fully
+ * decoded file, BEFORE it is persisted. The hook may inspect `bytes` (e.g. for
+ * malware scanning) or enforce per-user quotas, and reject by throwing —
+ * ideally an `HTTPException` so the status/message reach the client.
+ */
+export interface AssetBeforeUploadInput {
+  readonly userId: string;
+  readonly tenantId: string | null;
+  readonly filename: string | null;
+  readonly mimeType: string;
+  readonly bytes: Uint8Array;
+}
+
+/** Pre-persist upload guard. Throw to reject the upload. */
+export type AssetBeforeUploadHook = (input: AssetBeforeUploadInput) => void | Promise<void>;
+
+/**
  * Configuration for `createAssetsPackage()`.
  */
 export interface AssetsPluginConfig {
+  /**
+   * Optional guard invoked after built-in validation (mime, size) but BEFORE
+   * the file is stored. Use it to scan content, enforce per-user storage
+   * quotas, etc. Throw (ideally an HTTPException) to reject.
+   */
+  readonly beforeUpload?: AssetBeforeUploadHook;
   /** URL prefix for all asset routes. Defaults to `'/assets'`. */
   readonly mountPath?: string;
   /** Storage adapter instance (code) or declarative built-in adapter ref. */

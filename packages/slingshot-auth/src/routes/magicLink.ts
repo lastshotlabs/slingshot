@@ -167,6 +167,10 @@ export const createMagicLinkRouter = (
         return errorResponse(c, 'Too many requests. Try again later.', 429);
       }
       const msg = { message: 'If an account exists, a sign-in link has been sent.' };
+      // Equalize the externally observable response floor for existing and
+      // non-existing identifiers. The adapter lookup itself is otherwise a
+      // measurable account-enumeration oracle even though the body is generic.
+      const responseFloor = new Promise<void>(resolve => setTimeout(resolve, 150));
 
       // Find user — enumeration-safe: same response regardless of existence
       const findFn = (id: string) =>
@@ -192,6 +196,7 @@ export const createMagicLinkRouter = (
         })();
       }
 
+      await responseFloor;
       return c.json(msg, 200);
     },
   );

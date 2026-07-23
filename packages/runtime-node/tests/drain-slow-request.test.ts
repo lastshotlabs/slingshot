@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { nodeRuntime } from '../src/index';
 
 // Verifies the runtime's graceful drain: a fetch handler that takes 2 s to

@@ -51,7 +51,14 @@ const op: FieldUpdateOpConfig = {
 describe('fieldUpdateSqlite — bind serialization by field type', () => {
   test('json field binds a JSON string, not a raw object (attachEmbeds regression)', async () => {
     const { raw, db } = makeDb();
-    const exec = fieldUpdateSqlite(op, config, db as never, 'threads', () => {}, r => r);
+    const exec = fieldUpdateSqlite(
+      op,
+      config,
+      db as never,
+      'threads',
+      () => {},
+      r => r,
+    );
 
     const embeds = [{ url: 'https://example.com', title: 'Example', type: 'link' }];
     await exec({ id: 't1' }, { embeds });
@@ -64,7 +71,14 @@ describe('fieldUpdateSqlite — bind serialization by field type', () => {
 
   test('string[]/boolean/date fields bind sqlite-storable values', async () => {
     const { raw, db } = makeDb();
-    const exec = fieldUpdateSqlite(op, config, db as never, 'threads', () => {}, r => r);
+    const exec = fieldUpdateSqlite(
+      op,
+      config,
+      db as never,
+      'threads',
+      () => {},
+      r => r,
+    );
 
     const when = new Date('2026-07-22T12:00:00Z');
     await exec({ id: 't1' }, { tagIds: ['a', 'b'], pinned: true, lastActivityAt: when });
@@ -83,7 +97,14 @@ describe('fieldUpdateSqlite — bind serialization by field type', () => {
   test('null clears a json field without stringifying', async () => {
     const { raw, db } = makeDb();
     raw.run("UPDATE threads SET embeds = '[]' WHERE id = 't1'");
-    const exec = fieldUpdateSqlite(op, config, db as never, 'threads', () => {}, r => r);
+    const exec = fieldUpdateSqlite(
+      op,
+      config,
+      db as never,
+      'threads',
+      () => {},
+      r => r,
+    );
 
     await exec({ id: 't1' }, { embeds: null });
 

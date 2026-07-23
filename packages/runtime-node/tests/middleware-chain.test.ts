@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { nodeRuntime, runtimeNodeInternals } from '../src/index';
 
 describe('runtime-node server — request handling edge cases', () => {

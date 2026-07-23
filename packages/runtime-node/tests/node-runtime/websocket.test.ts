@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'vitest';
 import { WebSocket as WsClient } from 'ws';
 import type { NodeRuntimeServerInstance } from '../../src/index';
 import {

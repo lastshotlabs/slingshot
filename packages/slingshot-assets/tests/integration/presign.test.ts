@@ -44,7 +44,9 @@ describe('presign upload and download routes', () => {
         stored.push({ key, size: opts?.size });
         return {};
       },
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async delete() {},
     };
     const { app, state } = await createAssetsTestApp({

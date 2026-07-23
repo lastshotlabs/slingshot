@@ -56,21 +56,17 @@ function packageSuites(): TestCommandSuite[] {
     .sort((a, b) => a.localeCompare(b));
 
   return entries
-    .filter(name => existsSync(join(packagesDir, name, 'tests')))
+    .filter(
+      name =>
+        existsSync(join(packagesDir, name, 'tests')) &&
+        // The Node adapter is tested by Vitest in a real Node.js process via
+        // the root test:node command. Running its server/WebSocket tests under
+        // Bun does not exercise the supported runtime and breaks upgrades.
+        name !== 'runtime-node',
+    )
     .map(name => {
       const testsPath = normalizePath(join('packages', name, 'tests'));
       let testFiles = collectPackageTestFiles(join(packagesDir, name, 'tests'));
-      if (name === 'runtime-node') {
-        // SQLite tests exercise better-sqlite3, which is unsupported under
-        // Bun. They run under Vitest via packages/runtime-node/vitest.config.ts.
-        // Other files in tests/node-runtime (websocket.test.ts, internals.test.ts)
-        // are bun:test-compatible and run as part of the primary suite.
-        testFiles = testFiles.filter(
-          file =>
-            !file.includes('/tests/node-runtime/nodeRuntime.test.ts') &&
-            !file.includes('/tests/node-runtime/node-sqlite-edge.test.ts'),
-        );
-      }
       // worker.test.ts and tests/unit/activities-codec.test.ts use top-level
       // mock.module() that leaks into co-process tests; each is emitted as its
       // own suite below so they run in isolated bun processes.
@@ -200,6 +196,16 @@ export const rootCoverageIgnoredGlobs = [
   'coverage/**',
   'dist/**',
   'packages/**',
+  // Executable CLI/script entrypoints perform process-level work when loaded;
+  // their underlying helpers are covered through command and script tests.
+  'scripts/check-unsafe-full-adapter.ts',
+  'src/cli/commands/dev.ts',
+  'src/cli/commands/migrate/apply.ts',
+  'src/cli/commands/migrate/dev.ts',
+  'src/cli/commands/migrate/generate.ts',
+  'src/cli/commands/migrate/reset.ts',
+  'src/cli/commands/migrate/status.ts',
+  'src/cli/dev-runner.ts',
   '.tmp/**',
   '.tmp-generated-*/**',
 ];

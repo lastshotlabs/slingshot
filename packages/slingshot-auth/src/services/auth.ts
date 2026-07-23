@@ -754,17 +754,12 @@ export const deleteAccount = async (
     throw new HttpError(501, 'Auth adapter does not support deleteUser');
   }
 
-  // Verify password for credential accounts
+  // Verify directly against the authenticated user's record. Looking the user
+  // up again by email fails open for username/phone accounts and for adapters
+  // whose public profile omits email.
   if (password) {
-    const user = adapter.getUser ? await adapter.getUser(userId) : null;
-    const email = user?.email;
-    if (email) {
-      const found = await (adapter.findByIdentifier
-        ? adapter.findByIdentifier(email)
-        : adapter.findByEmail(email));
-      if (found && !(await runtime.password.verify(password, found.passwordHash))) {
-        throw new HttpError(401, 'Invalid password');
-      }
+    if (!(await adapter.verifyPassword(userId, password))) {
+      throw new HttpError(401, 'Invalid password');
     }
   } else if (adapter.hasPassword && (await adapter.hasPassword(userId))) {
     throw new HttpError(400, 'Password is required to delete a credential account');

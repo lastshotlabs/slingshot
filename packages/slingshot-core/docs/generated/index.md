@@ -39,7 +39,7 @@ bun add @lastshotlabs/slingshot-core
 - `@asteasolutions/zod-to-openapi`: `>=7.0`
 - `@faker-js/faker`: `>=10.0`
 - `@hono/zod-openapi`: `>=0.18`
-- `undici`: `>=6.0 <8`
+- `undici`: `>=7.28.0 <9`
 
 ## Peer Dependencies
 

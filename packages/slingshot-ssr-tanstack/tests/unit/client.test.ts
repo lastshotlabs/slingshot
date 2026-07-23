@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import {
-  SsrLoaderError,
-  createSsrLoaderDataSource,
-  fetchSsrLoader,
-} from '../../src/client';
+import { SsrLoaderError, createSsrLoaderDataSource, fetchSsrLoader } from '../../src/client';
 
 const originalFetch = globalThis.fetch;
 

@@ -84,6 +84,10 @@ export interface MfaChallengeData {
   webauthnChallenge?: string;
   /** Session ID bound to this challenge. Present only for `'reauth'` purpose challenges. */
   sessionId?: string;
+  /** Challenge creation time (epoch ms). Lets callers compute the remaining window. */
+  createdAt: number;
+  /** Resend counter carried through restores so the resend cap survives failed attempts. */
+  resendCount: number;
 }
 
 interface MfaChallengeRecord {
@@ -784,7 +788,52 @@ export const consumeMfaChallenge = async (
     purpose: record.purpose,
     emailOtpHash: record.emailOtpHash,
     webauthnChallenge: record.webauthnChallenge,
+    createdAt: record.createdAt,
+    resendCount: record.resendCount,
   };
+};
+
+/**
+ * Re-arm a login challenge after a FAILED verification attempt.
+ *
+ * `consumeChallenge` is atomic read-and-delete (replay protection), which
+ * means a single mistyped TOTP code or one failed WebAuthn assertion used to
+ * burn the whole challenge: every subsequent attempt answered "Invalid or
+ * expired MFA token" and the user had to restart password login. This
+ * restores the SAME record under the SAME token hash with the REMAINING
+ * lifetime — the absolute expiry set at creation never extends, and the
+ * successful-verification path still consumes exactly once, so replay
+ * protection is intact. Brute force stays bounded by the per-IP
+ * `mfa-verify` rate limit and the fixed challenge window.
+ *
+ * @returns `true` when the challenge was restored (the client may retry with
+ *   the same `mfaToken`); `false` when the window has effectively closed and
+ *   the user must sign in again.
+ */
+export const restoreMfaChallengeAfterFailedAttempt = async (
+  repo: MfaChallengeRepository,
+  token: string,
+  data: MfaChallengeData,
+  config?: AuthResolvedConfig,
+): Promise<boolean> => {
+  const ttl = config?.mfa?.challengeTtlSeconds ?? 300;
+  const remainingMs = data.createdAt + ttl * 1000 - Date.now();
+  // Under a couple of seconds left there is no realistic retry — let it die.
+  if (remainingMs < 2000) return false;
+  await repo.createChallenge(
+    sha256(token),
+    {
+      userId: data.userId,
+      purpose: data.purpose,
+      emailOtpHash: data.emailOtpHash,
+      webauthnChallenge: data.webauthnChallenge,
+      sessionId: data.sessionId,
+      createdAt: data.createdAt,
+      resendCount: data.resendCount,
+    },
+    Math.ceil(remainingMs / 1000),
+  );
+  return true;
 };
 
 export const replaceMfaChallengeOtp = async (
@@ -926,5 +975,7 @@ export const consumeReauthChallenge = async (
     emailOtpHash: record.emailOtpHash,
     webauthnChallenge: record.webauthnChallenge,
     sessionId: record.sessionId,
+    createdAt: record.createdAt,
+    resendCount: record.resendCount,
   };
 };

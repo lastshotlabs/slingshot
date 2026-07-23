@@ -85,6 +85,14 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
   );
   const enabledPlatforms = new Set(config.enabledPlatforms);
 
+  // Hoisted formatter registry. Consumers (e.g. slingshot-community) register
+  // push formatters from THEIR setupPost — which can run BEFORE push's own
+  // setupPost in dependency order. Building the registry at factory scope lets
+  // those early registrations land; the router constructed in setupPost reads
+  // from this same instance. (Previously this lived in setupPost and any earlier
+  // registerFormatter threw "used before setupPost completed".)
+  const formatters = compilePushFormatters(config.formatters ?? {});
+
   // Closure-owned adapter refs populated by the entity modules' `onAdapter`
   // callbacks during bootstrap. Sharing a single adapter instance per entity
   // between the entity routes and the package's imperative router/route work
@@ -143,12 +151,9 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
   // reads `runtimeStateRef` lazily on every call.
   const formatterRegistryImpl: PushFormatterRegistry = {
     registerFormatter(type, formatter) {
-      if (!runtimeStateRef) {
-        throw new Error(
-          '[slingshot-push] formatter registry used before setupPost completed; resolve PushFormatterRegistryCap from setupPost or later.',
-        );
-      }
-      runtimeStateRef.registerFormatter(type, formatter);
+      // Writes to the hoisted registry directly, so registration works at any
+      // lifecycle phase (including a consumer's setupPost before push's own).
+      formatters.register(type, formatter);
     },
   };
   const formatterRegistryView: PushFormatterRegistry = Object.freeze(formatterRegistryImpl);
@@ -273,6 +278,38 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
           await next();
         });
       };
+
+      // Register (or refresh) a device push subscription. Upsert by
+      // (userId, tenantId, deviceId) — see entities/pushSubscription. This is the
+      // missing half of the web-push flow: the browser registers its
+      // PushSubscription here BEFORE joining any topic, and topic-subscribe then
+      // resolves the device via findByDevice. `platformData` carries the
+      // platform-specific payload (web: `{ platform, endpoint, keys }`).
+      app.post(`${config.mountPath}/subscriptions`, requireUserAuth, async c => {
+        const userId = getActorId(c);
+        if (!userId || !subscriptionsRef) return c.json({ error: 'Unauthorized' }, 401);
+        const tenantId = getActorTenantId(c) ?? '';
+        const body = (await c.req.json().catch(() => null)) as {
+          deviceId?: string;
+          platform?: string;
+          platformData?: unknown;
+          locale?: string;
+          appVersion?: string;
+        } | null;
+        if (!body?.deviceId || !body?.platform || body.platformData == null) {
+          return c.json({ error: 'deviceId, platform, and platformData are required' }, 400);
+        }
+        const record = await subscriptionsRef.upsertByDevice({
+          userId,
+          tenantId,
+          deviceId: body.deviceId,
+          platform: body.platform,
+          platformData: body.platformData,
+          ...(body.locale ? { locale: body.locale } : {}),
+          ...(body.appVersion ? { appVersion: body.appVersion } : {}),
+        });
+        return c.json({ ok: true, id: record.id }, 201);
+      });
 
       app.post(`${config.mountPath}/topics/:topicName/subscribe`, requireUserAuth, async c => {
         const userId = getActorId(c);
@@ -449,7 +486,8 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
           : {}),
       });
       routerRef = router;
-      const formatters = compilePushFormatters(config.formatters ?? {});
+      // `formatters` is hoisted to factory scope (see above) so early consumer
+      // registrations are preserved — do not re-create it here.
 
       const state: PushPluginState = {
         config,

@@ -79,7 +79,7 @@ bun add @lastshotlabs/slingshot
 - `test:e2e:postgres`: `TEST_BACKEND=postgres bun run test:e2e:ci`
 - `test:e2e:sqlite`: `TEST_BACKEND=sqlite bun run test:e2e:ci`
 - `test:isolated`: `bun test tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/saml-login-parity.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/webhooks-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-ioredis.test.ts && bun test tests/isolated/webhooks-bullmq-missing-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-missing-ioredis.test.ts && bun test tests/isolated/ai-missing-sdk.test.ts && bun test tests/isolated/passkey-e2e.test.ts && bun test tests/isolated/ssr-windows-path-resolution.test.ts && bun test tests/isolated/temporal-activities-hook-errors.test.ts`
-- `test:node`: `vitest run --config vitest.config.ts`
+- `test:node`: `vitest run --config vitest.config.ts && vitest run --config packages/runtime-node/vitest.config.ts`
 - `test:root`: `bun scripts/run-root-tests.ts`
 - `typecheck`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.typecheck.json --pretty false`
 - `typecheck:root`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.root.typecheck.json --pretty false`
@@ -94,7 +94,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `@lastshotlabs/slingshot-organizations`: `workspace:*`
-- `@oclif/core`: `^4.10.2`
+- `@oclif/core`: `^4.13.0`
 - `@opentelemetry/api`: `^1.9.1`
 - `@scalar/hono-api-reference`: `0.10.0`
 
@@ -124,12 +124,12 @@ bun add @lastshotlabs/slingshot
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `^3.7.0`
 - `bullmq`: `>=5 <6`
-- `hono`: `>=4.12.14 <5`
+- `hono`: `>=4.12.18 <5`
 - `ioredis`: `>=5 <6`
 - `jose`: `6.2.0`
 - `mongoose`: `>=9.0 <10`
 - `otpauth`: `>=9.0 <10`
-- `samlify`: `^2.8`
+- `samlify`: `>=2.13.0 <3`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

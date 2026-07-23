@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test, vi } from 'vitest';
 import { runtimeNodeInternals } from '../../src/index';
 
 const {
@@ -148,7 +148,7 @@ describe('attachNodeRequestListener', () => {
   });
 
   test('does not call server.on() when neither arg is a function', () => {
-    const onSpy = mock(() => {});
+    const onSpy = vi.fn(() => {});
     const server = { on: onSpy };
     attachNodeRequestListener(server, {});
     expect(onSpy).not.toHaveBeenCalled();

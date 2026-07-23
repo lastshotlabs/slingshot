@@ -22,7 +22,11 @@ export function createTimeoutGuardMiddleware(deps: {
     const minutes = Math.floor(remaining / 60);
     const seconds = String(remaining % 60).padStart(2, '0');
     return c.json(
-      { error: `YOU'RE BENCHED — ${minutes}:${seconds}`, code: 'ROOM_MEMBER_TIMEOUT', remainingSeconds: remaining },
+      {
+        error: `YOU'RE BENCHED — ${minutes}:${seconds}`,
+        code: 'ROOM_MEMBER_TIMEOUT',
+        remainingSeconds: remaining,
+      },
       429,
       { 'Retry-After': String(remaining) },
     );

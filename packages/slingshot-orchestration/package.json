@@ -10,6 +10,11 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
+    "./public": {
+      "bun": "./dist/src/public.js",
+      "types": "./dist/src/public.d.ts",
+      "import": "./dist/src/public.js"
+    },
     "./testing": {
       "bun": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts",

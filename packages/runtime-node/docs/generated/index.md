@@ -32,9 +32,8 @@ bun add @lastshotlabs/slingshot-runtime-node
 - `build`: `tsc -p tsconfig.build.json`
 - `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
-- `test`: `bun run test:bun && bun run test:vitest`
-- `test:bun`: `bun test tests/*.test.ts tests/integration tests/node-runtime/websocket.test.ts tests/node-runtime/internals.test.ts`
-- `test:integration`: `bun test tests/integration/`
+- `test`: `bun run test:vitest`
+- `test:integration`: `vitest run --config vitest.config.ts tests/integration/`
 - `test:vitest`: `vitest run --config vitest.config.ts`
 - `typecheck`: `tsc --noEmit`
 
@@ -44,11 +43,11 @@ bun add @lastshotlabs/slingshot-runtime-node
 
 ## Peer Dependencies
 
-- `@hono/node-server`: `>=1.19.13`
+- `@hono/node-server`: `>=2.0.5 <3`
 - `argon2`: `>=0.31`
 - `better-sqlite3`: `>=9.0`
 - `fast-glob`: `>=3.0`
-- `ws`: `>=8.0`
+- `ws`: `>=8.20.1 <9`
 
 ## Related Docs
 

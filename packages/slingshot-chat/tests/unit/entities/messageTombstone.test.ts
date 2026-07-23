@@ -7,7 +7,10 @@ describe('message tombstone transform', () => {
     let update: Record<string, unknown> | undefined;
     const adapter = {
       getById: async () => ({ id: 'm1', roomId: 'r1', body: 'secret' }),
-      update: async (_id: string, input: Record<string, unknown>) => { update = input; return { id: 'm1', roomId: 'r1', ...input }; },
+      update: async (_id: string, input: Record<string, unknown>) => {
+        update = input;
+        return { id: 'm1', roomId: 'r1', ...input };
+      },
     } as unknown as MessageAdapter;
     const transformed = applyMessageTombstoneTransform(adapter) as unknown as MessageAdapter;
     expect(await transformed.delete('m1')).toBe(true);
@@ -17,7 +20,13 @@ describe('message tombstone transform', () => {
 
   test('returns false without updating when the row is absent', async () => {
     let updated = false;
-    const adapter = { getById: async () => null, update: async () => { updated = true; return null; } } as unknown as MessageAdapter;
+    const adapter = {
+      getById: async () => null,
+      update: async () => {
+        updated = true;
+        return null;
+      },
+    } as unknown as MessageAdapter;
     const transformed = applyMessageTombstoneTransform(adapter) as unknown as MessageAdapter;
     expect(await transformed.delete('missing')).toBe(false);
     expect(updated).toBe(false);

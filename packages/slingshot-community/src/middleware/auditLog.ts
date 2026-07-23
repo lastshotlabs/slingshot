@@ -31,10 +31,11 @@ export function createAuditLogMiddleware(deps: {
       const principal = c.get('communityPrincipal') as CommunityPrincipal | undefined;
       let containerId: string | undefined;
       try {
-        const body = await c.res.clone().json() as Record<string, unknown>;
-        const entity = body.data && typeof body.data === 'object'
-          ? body.data as Record<string, unknown>
-          : body;
+        const body = (await c.res.clone().json()) as Record<string, unknown>;
+        const entity =
+          body.data && typeof body.data === 'object'
+            ? (body.data as Record<string, unknown>)
+            : body;
         if (typeof entity.containerId === 'string') containerId = entity.containerId;
       } catch {
         // Empty/non-JSON success responses still produce an audit entry; they

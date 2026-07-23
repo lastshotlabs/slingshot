@@ -46,17 +46,21 @@ If these responsibilities move between phases, treat that as an architectural ch
 - Production boot must fail if `auth.jwt.issuer` or `auth.jwt.audience` is missing. Token-boundary hardening is not optional in production.
 - Production boot must also require an explicit `signing.sessionBinding` choice. Leave it undefined and startup should fail instead of silently accepting replayable session tokens.
 - Production boot must require an explicit `security.trustProxy` choice whenever auth is enabled. Leaving it undefined should not silently weaken IP-based abuse controls behind a reverse proxy.
+- Production OAuth callbacks and custom provider base URLs must use HTTPS, and OAuth one-time-code payloads must have a configured data-encryption key because they temporarily contain live session credentials. Long-lived provider-connection access and refresh tokens are AES-GCM encrypted at rest with rotation-aware data-encryption keys.
+- Production static and SCIM bearer credentials must be at least 32 characters; duplicate static bearer credentials are rejected because they make client identity ambiguous.
 - Security middleware that protects auth behavior belongs early in the chain.
 - Optional features should fail clearly when configured but not installed, as the OAuth path already does.
 - Session-backed user resolution must stay consistent with token verification and stored session state, especially for WebSocket and SSE flows.
+- WebSocket and SSE actor resolution rejects bearer credentials in URL query strings; use the HttpOnly cookie or an authorization/user-token header.
 - Standalone mode must remain explicit about runtime dependencies instead of silently depending on global Bun behavior.
 - Suspension checks must run on authenticated requests by default, and refresh token rotation must not mint fresh credentials for suspended or newly-unverified accounts.
+- Any error after tentative token/session resolution must clear the partial actor state. Suspension-store outages fail closed for both ordinary HTTP and WebSocket/SSE upgrade authentication.
 - Auth session cookies must use the hardened `__Host-` name whenever the configured cookie scope qualifies for it, and login, refresh, OAuth exchange, and logout flows must all use the same effective cookie names.
 - Step-up and reauth-challenge endpoints must also fail closed for suspended or newly-unverified accounts instead of strengthening a stale session.
 - Destructive MFA management routes must also fail closed for suspended or newly-unverified accounts instead of weakening a stale session.
 - Session-bound account and session mutation routes such as `PATCH /auth/me`, `DELETE /auth/me`, `POST /auth/set-password`, and `DELETE /auth/sessions/:sessionId` must also fail closed for suspended or newly-unverified accounts instead of trusting a stale authenticated session.
 - SAML login creates a normal authenticated session, but it must not automatically mark the session as locally MFA-fresh unless Slingshot has explicit proof of the required authentication context.
-- Magic-link delivery throttling must protect both the requester IP and the submitted identifier so the route cannot be used for distributed inbox flooding.
+- Magic-link delivery throttling must protect both the requester IP and the normalized submitted identifier so the route cannot be used for distributed inbox flooding, and responses use a minimum timing floor to reduce account enumeration.
 
 ## Actor Identity Model
 

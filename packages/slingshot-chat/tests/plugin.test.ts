@@ -21,9 +21,9 @@ describe('createChatPackage', () => {
     expect(typeof pkg.setupPost).toBe('function');
   });
 
-  it('declares all 10 chat entities', () => {
+  it('declares all 11 chat entities', () => {
     const pkg = createChatPackage({ storeType: 'memory' });
-    expect(pkg.entities).toHaveLength(10);
+    expect(pkg.entities).toHaveLength(11);
     const entityNames = pkg.entities.map(e => e.entityName).sort();
     expect(entityNames).toEqual(
       [
@@ -35,6 +35,7 @@ describe('createChatPackage', () => {
         'ReadReceipt',
         'Reminder',
         'Room',
+        'RoomBan',
         'RoomInvite',
         'RoomMember',
       ].sort(),

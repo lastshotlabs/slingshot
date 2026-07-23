@@ -95,6 +95,37 @@ describe('POST /auth/refresh', () => {
     expect(typeof body.userId).toBe('string');
   });
 
+  test('refreshes an IP-bound session when the runtime cannot resolve a socket IP', async () => {
+    runtime.signing = {
+      ...runtime.signing,
+      sessionBinding: { fields: ['ip', 'ua'], onMismatch: 'reject' },
+    };
+    app = buildApp(runtime);
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'BoundBrowser/1.0',
+    };
+    const hash = await Bun.password.hash('StrongP@ss1!');
+    await runtime.adapter.create('bound-refresh@example.com', hash);
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify({
+        email: 'bound-refresh@example.com',
+        password: 'StrongP@ss1!',
+      }),
+    });
+    expect(loginRes.status).toBe(200);
+    const login = (await loginRes.json()) as { refreshToken: string };
+
+    const res = await app.request('/auth/refresh', {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify({ refreshToken: login.refreshToken }),
+    });
+    expect(res.status).toBe(200);
+  });
+
   // 2. New access token is a valid JWT string
   test('returns a valid JWT access token on refresh', async () => {
     const login = await registerAndLogin(runtime, app);

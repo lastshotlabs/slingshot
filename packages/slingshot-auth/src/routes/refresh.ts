@@ -133,7 +133,7 @@ export const createRefreshRouter = (
         return errorResponse(c, 'Refresh token is required', 401);
       }
       const result = await AuthService.refresh(rt, runtime, {
-        ipAddress: ip,
+        ipAddress: ip !== 'unknown' ? ip : undefined,
         userAgent: c.req.header('user-agent') ?? undefined,
       });
       setAuthCookie(

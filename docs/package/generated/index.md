@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `0.2.1`
+- Version: `0.2.2`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.

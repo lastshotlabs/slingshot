@@ -7,6 +7,28 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 Most Slingshot defaults are safe. What they don't know is your threat model. Here's every security knob worth tuning before you ship to production.
 
+## Configuration validation
+
+`createAuthPlugin()` validates schema-owned configuration strictly. Unknown keys abort startup
+instead of being ignored, because silently dropping a misspelled security option can restore a
+weaker default without the operator noticing.
+
+When upgrading an existing application, run it once in a non-production environment and resolve
+every `Unrecognized key` startup error. The error includes the full configuration path. Common
+invalid aliases include:
+
+| Invalid key                       | Supported configuration                                  |
+| --------------------------------- | -------------------------------------------------------- |
+| `passwordPolicy.requireUppercase` | `passwordPolicy.requireLetter`                           |
+| `passwordPolicy.requireLowercase` | `passwordPolicy.requireLetter`                           |
+| `passwordPolicy.requireNumber`    | `passwordPolicy.requireDigit`                            |
+| `refreshTokens.ttlSeconds`        | `refreshTokens.accessTokenExpiry` / `refreshTokenExpiry` |
+| `refreshTokens.reuseDetection`    | Rotation is built in; configure `rotationGraceSeconds`   |
+| `auth.deleteAccount`              | `auth.accountDeletion`                                   |
+
+Do not catch and suppress plugin configuration errors during startup. A rejected configuration
+means the requested security policy was not applied.
+
 ## JWT signing
 
 Every JWT issued by `slingshot-auth` signs with this secret. All sessions depend on it.

@@ -921,4 +921,4 @@ export interface AuthStandaloneRuntime {
  * };
  * const plugin = createAuthPlugin(config);
  */
-export interface AuthPluginConfig extends AuthPluginConfigBase {}
+export type AuthPluginConfig = AuthPluginConfigBase;

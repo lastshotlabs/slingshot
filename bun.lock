@@ -134,7 +134,7 @@
     },
     "packages/runtime-bun": {
       "name": "@lastshotlabs/slingshot-runtime-bun",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -144,7 +144,7 @@
     },
     "packages/runtime-edge": {
       "name": "@lastshotlabs/slingshot-runtime-edge",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "devDependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-ssr": "workspace:*",
@@ -160,7 +160,7 @@
     },
     "packages/runtime-node": {
       "name": "@lastshotlabs/slingshot-runtime-node",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -181,7 +181,7 @@
     },
     "packages/slingshot-admin": {
       "name": "@lastshotlabs/slingshot-admin",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -192,7 +192,7 @@
     },
     "packages/slingshot-ai": {
       "name": "@lastshotlabs/slingshot-ai",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -211,7 +211,7 @@
     },
     "packages/slingshot-assets": {
       "name": "@lastshotlabs/slingshot-assets",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -249,7 +249,7 @@
     },
     "packages/slingshot-auth": {
       "name": "@lastshotlabs/slingshot-auth",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -281,7 +281,7 @@
     },
     "packages/slingshot-billing": {
       "name": "@lastshotlabs/slingshot-billing",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -294,7 +294,7 @@
     },
     "packages/slingshot-bullmq": {
       "name": "@lastshotlabs/slingshot-bullmq",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -310,7 +310,7 @@
     },
     "packages/slingshot-chat": {
       "name": "@lastshotlabs/slingshot-chat",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -336,7 +336,7 @@
     },
     "packages/slingshot-community": {
       "name": "@lastshotlabs/slingshot-community",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -359,7 +359,7 @@
     },
     "packages/slingshot-core": {
       "name": "@lastshotlabs/slingshot-core",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@asteasolutions/zod-to-openapi": ">=7.0",
         "@faker-js/faker": ">=10.0",
@@ -376,7 +376,7 @@
     },
     "packages/slingshot-deep-links": {
       "name": "@lastshotlabs/slingshot-deep-links",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "zod": ">=4.0 <5",
@@ -387,14 +387,14 @@
     },
     "packages/slingshot-embeds": {
       "name": "@lastshotlabs/slingshot-embeds",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
     },
     "packages/slingshot-emoji": {
       "name": "@lastshotlabs/slingshot-emoji",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -416,7 +416,7 @@
     },
     "packages/slingshot-entity": {
       "name": "@lastshotlabs/slingshot-entity",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -428,7 +428,7 @@
     },
     "packages/slingshot-game-engine": {
       "name": "@lastshotlabs/slingshot-game-engine",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -440,14 +440,14 @@
     },
     "packages/slingshot-gifs": {
       "name": "@lastshotlabs/slingshot-gifs",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
     },
     "packages/slingshot-image": {
       "name": "@lastshotlabs/slingshot-image",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "devDependencies": {
         "@types/node": "^20.0.0",
       },
@@ -462,7 +462,7 @@
     },
     "packages/slingshot-infra": {
       "name": "@lastshotlabs/slingshot-infra",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "yaml": "^2.7.0",
@@ -483,7 +483,7 @@
     },
     "packages/slingshot-interactions": {
       "name": "@lastshotlabs/slingshot-interactions",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -496,7 +496,7 @@
     },
     "packages/slingshot-kafka": {
       "name": "@lastshotlabs/slingshot-kafka",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -510,7 +510,7 @@
     },
     "packages/slingshot-m2m": {
       "name": "@lastshotlabs/slingshot-m2m",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -526,7 +526,7 @@
     },
     "packages/slingshot-mail": {
       "name": "@lastshotlabs/slingshot-mail",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -547,7 +547,7 @@
     },
     "packages/slingshot-notifications": {
       "name": "@lastshotlabs/slingshot-notifications",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -559,7 +559,7 @@
     },
     "packages/slingshot-oauth": {
       "name": "@lastshotlabs/slingshot-oauth",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -573,7 +573,7 @@
     },
     "packages/slingshot-oidc": {
       "name": "@lastshotlabs/slingshot-oidc",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -586,7 +586,7 @@
     },
     "packages/slingshot-orchestration": {
       "name": "@lastshotlabs/slingshot-orchestration",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -598,7 +598,7 @@
     },
     "packages/slingshot-orchestration-bullmq": {
       "name": "@lastshotlabs/slingshot-orchestration-bullmq",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -611,7 +611,7 @@
     },
     "packages/slingshot-orchestration-engine": {
       "name": "@lastshotlabs/slingshot-orchestration-engine",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "better-sqlite3": "^12.8.0",
@@ -622,7 +622,7 @@
     },
     "packages/slingshot-orchestration-temporal": {
       "name": "@lastshotlabs/slingshot-orchestration-temporal",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -641,7 +641,7 @@
     },
     "packages/slingshot-organizations": {
       "name": "@lastshotlabs/slingshot-organizations",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -658,7 +658,7 @@
     },
     "packages/slingshot-permissions": {
       "name": "@lastshotlabs/slingshot-permissions",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -673,7 +673,7 @@
     },
     "packages/slingshot-polls": {
       "name": "@lastshotlabs/slingshot-polls",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -685,7 +685,7 @@
     },
     "packages/slingshot-postgres": {
       "name": "@lastshotlabs/slingshot-postgres",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -701,7 +701,7 @@
     },
     "packages/slingshot-push": {
       "name": "@lastshotlabs/slingshot-push",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -725,7 +725,7 @@
     },
     "packages/slingshot-scim": {
       "name": "@lastshotlabs/slingshot-scim",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -737,7 +737,7 @@
     },
     "packages/slingshot-search": {
       "name": "@lastshotlabs/slingshot-search",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -749,7 +749,7 @@
     },
     "packages/slingshot-ssg": {
       "name": "@lastshotlabs/slingshot-ssg",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "bin": {
         "slingshot-ssg": "./dist/src/cli.js",
       },
@@ -763,7 +763,7 @@
     },
     "packages/slingshot-ssr": {
       "name": "@lastshotlabs/slingshot-ssr",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -775,7 +775,7 @@
     },
     "packages/slingshot-ssr-tanstack": {
       "name": "@lastshotlabs/slingshot-ssr-tanstack",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",
@@ -791,7 +791,7 @@
     },
     "packages/slingshot-webhooks": {
       "name": "@lastshotlabs/slingshot-webhooks",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-gifs
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-gifs`
-- Version: `0.2.1`
+- Version: `0.2.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: GIF search proxy for Slingshot — swappable providers (Giphy, Tenor), server-side API key

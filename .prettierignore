@@ -9,3 +9,4 @@ packages/docs/dist
 bun.lock
 package-lock.json
 **/__tmp_*__/
+security/pentest-target/reports/

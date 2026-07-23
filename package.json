@@ -5,7 +5,7 @@
     "packages/*",
     "!packages/docs"
   ],
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.",
   "repository": {
     "type": "git",

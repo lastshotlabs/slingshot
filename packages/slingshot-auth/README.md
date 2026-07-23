@@ -46,6 +46,7 @@ If these responsibilities move between phases, treat that as an architectural ch
 ## Important Invariants
 
 - Auth owns startup validation of signing configuration and should fail loudly when secrets or required runtime dependencies are missing.
+- Auth configuration is strict at every schema-owned level. Unknown keys abort startup instead of being discarded and silently restoring a weaker default.
 - Production boot must fail if `auth.jwt.issuer` or `auth.jwt.audience` is missing. Token-boundary hardening is not optional in production.
 - Production boot must also require an explicit `signing.sessionBinding` choice. Leave it undefined and startup should fail instead of silently accepting replayable session tokens.
 - Production boot must require an explicit `security.trustProxy` choice whenever auth is enabled. Leaving it undefined should not silently weaken IP-based abuse controls behind a reverse proxy.
@@ -64,6 +65,47 @@ If these responsibilities move between phases, treat that as an architectural ch
 - Session-bound account and session mutation routes such as `PATCH /auth/me`, `DELETE /auth/me`, `POST /auth/set-password`, and `DELETE /auth/sessions/:sessionId` must also fail closed for suspended or newly-unverified accounts instead of trusting a stale authenticated session.
 - SAML login creates a normal authenticated session, but it must not automatically mark the session as locally MFA-fresh unless Slingshot has explicit proof of the required authentication context.
 - Magic-link delivery throttling must protect both the requester IP and the normalized submitted identifier so the route cannot be used for distributed inbox flooding, and responses use a minimum timing floor to reduce account enumeration.
+
+## Upgrading to strict configuration validation
+
+Auth configuration now fails startup when a schema-owned object contains an unknown key. This
+is intentionally stricter than earlier releases, which allowed Zod to discard unknown nested
+keys. That behavior could make an application appear hardened while a misspelled setting had no
+effect.
+
+Review auth configuration before upgrading, especially `auth.refreshTokens`,
+`auth.passwordPolicy`, `auth.sessionPolicy`, `auth.accountDeletion`, `auth.rateLimit`,
+`auth.mfa`, `auth.jwt`, `db`, and `security`. Startup errors include the complete path and the
+unrecognized key.
+
+Use the documented field names:
+
+```ts
+createAuthPlugin({
+  auth: {
+    passwordPolicy: {
+      minLength: 12,
+      requireLetter: true,
+      requireDigit: true,
+      requireSpecial: true,
+    },
+    refreshTokens: {
+      accessTokenExpiry: 900,
+      refreshTokenExpiry: 2_592_000,
+      rotationGraceSeconds: 0,
+    },
+    accountDeletion: {
+      requireVerification: true,
+      requirePasswordConfirmation: true,
+    },
+  },
+});
+```
+
+For example, `requireUppercase`, `requireNumber`, `ttlSeconds`, `reuseDetection`, and a
+top-level `deleteAccount` object are not auth configuration fields and now stop the application
+with an actionable validation error. Provider maps, adapter instances, callbacks, and standalone
+runtime dependencies remain supported extension points.
 
 ## Actor Identity Model
 

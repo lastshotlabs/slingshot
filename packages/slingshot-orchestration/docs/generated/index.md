@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-orchestr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-orchestration`
-- Version: `0.2.1`
+- Version: `0.2.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Slingshot plugin, context helpers, and HTTP routes for the portable orchestration runtime

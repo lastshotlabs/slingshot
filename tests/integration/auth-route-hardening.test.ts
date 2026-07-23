@@ -186,7 +186,7 @@ describe('POST /auth/reauth/challenge', () => {
 
 describe('POST /auth/step-up — verifyAnyFactor', () => {
   test('verifies TOTP factor successfully', async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token, secret } = await registerAndSetupMfa(app, 'stepup-totp@example.com');
 
     const code = generateTotpCode(secret);
@@ -199,7 +199,7 @@ describe('POST /auth/step-up — verifyAnyFactor', () => {
   });
 
   test('rejects invalid TOTP code', async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token } = await registerAndSetupMfa(app, 'stepup-totp-bad@example.com');
 
     const res = await app.request('/auth/step-up', {
@@ -211,7 +211,7 @@ describe('POST /auth/step-up — verifyAnyFactor', () => {
   });
 
   test('verifies password factor successfully', async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token } = await registerAndSetupMfa(app, 'stepup-pw@example.com');
 
     const res = await app.request('/auth/step-up', {
@@ -223,7 +223,7 @@ describe('POST /auth/step-up — verifyAnyFactor', () => {
   });
 
   test('rejects wrong password', async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token } = await registerAndSetupMfa(app, 'stepup-pw-bad@example.com');
 
     const res = await app.request('/auth/step-up', {
@@ -241,7 +241,7 @@ describe('POST /auth/step-up — verifyAnyFactor', () => {
 
 describe('Recovery code boundary in verifyAnyFactor', () => {
   test("recovery code works when method is explicitly 'recovery'", async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token, recoveryCodes } = await registerAndSetupMfa(
       app,
       'recovery-boundary@example.com',
@@ -256,7 +256,7 @@ describe('Recovery code boundary in verifyAnyFactor', () => {
   });
 
   test("recovery code is NOT tried when method is 'totp'", async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token, recoveryCodes } = await registerAndSetupMfa(
       app,
       'recovery-totp-boundary@example.com',
@@ -273,7 +273,7 @@ describe('Recovery code boundary in verifyAnyFactor', () => {
   });
 
   test('recovery code is single-use', async () => {
-    const app = await buildMfaApp({ stepUp: { enabled: true } });
+    const app = await buildMfaApp({ stepUp: { maxAge: 300 } });
     const { token, recoveryCodes } = await registerAndSetupMfa(
       app,
       'recovery-single-use@example.com',

@@ -1,5 +1,31 @@
 # @lastshotlabs/slingshot
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-auth@0.2.3
+  - @lastshotlabs/slingshot-core@0.2.3
+  - @lastshotlabs/slingshot-organizations@0.2.2
+  - @lastshotlabs/slingshot-admin@0.2.2
+  - @lastshotlabs/slingshot-bullmq@0.2.2
+  - @lastshotlabs/slingshot-community@0.2.3
+  - @lastshotlabs/slingshot-deep-links@0.2.2
+  - @lastshotlabs/slingshot-entity@0.2.3
+  - @lastshotlabs/slingshot-interactions@0.2.2
+  - @lastshotlabs/slingshot-kafka@0.2.2
+  - @lastshotlabs/slingshot-mail@0.2.2
+  - @lastshotlabs/slingshot-notifications@0.2.2
+  - @lastshotlabs/slingshot-orchestration@0.2.2
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.2
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.2
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.2
+  - @lastshotlabs/slingshot-permissions@0.2.2
+  - @lastshotlabs/slingshot-postgres@0.2.2
+  - @lastshotlabs/slingshot-push@0.2.2
+  - @lastshotlabs/slingshot-webhooks@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

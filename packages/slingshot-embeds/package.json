@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-embeds",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "URL unfurling for Slingshot — fetches OG metadata server-side for link previews",
   "license": "MIT",
   "type": "module",

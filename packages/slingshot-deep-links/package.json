@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-deep-links",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Universal links, Android app links, and fallback redirects for Slingshot",
   "license": "MIT",
   "type": "module",

@@ -113,7 +113,8 @@ describe('event bus — listener error isolation', () => {
     await new Promise(r => setTimeout(r, 10));
 
     expect(consoleSpy).toHaveBeenCalled();
-    const loggedMessage = consoleSpy.mock.calls[0][0] as string;
+    expect(consoleSpy.mock.calls[0][0]).toBe('%s');
+    const loggedMessage = consoleSpy.mock.calls[0][1] as string;
     expect(loggedMessage).toContain('auth:login.success');
 
     consoleSpy.mockRestore();

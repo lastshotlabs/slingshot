@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-billing
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-billing`
-- Version: `0.2.0`
+- Version: `0.2.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Provider-abstracted billing for Slingshot: subscriptions, trials, donations, and an app-agnostic entitlement surface

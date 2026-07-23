@@ -390,10 +390,7 @@ describe('session fingerprint binding', () => {
   test('matches a creation-time fingerprint when socket IP is unavailable', async () => {
     const app = buildFingerprintApp('reject');
     const { userId, sessionId, token } = await createAuthenticatedSession();
-    await runtime.repos.session.setSessionFingerprint(
-      sessionId,
-      sha256(':TestBrowser/1.0'),
-    );
+    await runtime.repos.session.setSessionFingerprint(sessionId, sha256(':TestBrowser/1.0'));
 
     const res = await app.request('/test', {
       headers: {

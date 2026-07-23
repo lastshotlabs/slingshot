@@ -1,5 +1,16 @@
 # @lastshotlabs/slingshot-chat
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.2.3
+  - @lastshotlabs/slingshot-entity@0.2.3
+  - @lastshotlabs/slingshot-notifications@0.2.2
+  - @lastshotlabs/slingshot-permissions@0.2.2
+  - @lastshotlabs/slingshot-push@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

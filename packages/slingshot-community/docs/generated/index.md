@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-communit
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-community`
-- Version: `0.2.1`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Community forum plugin for Slingshot — containers, threads, replies, reactions, moderation

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-ai",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Multi-provider LLM capability for Slingshot — generation, structured output, moderation, cost tracking",
   "license": "MIT",
   "type": "module",

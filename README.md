@@ -25,6 +25,25 @@ you get:
 
 You don't build the framework. You declare an app.
 
+## Registry setup
+
+`@lastshotlabs/*` packages are published to **GitHub Packages**, not the public npm
+registry. They're public, but GitHub still requires authentication to install them.
+One-time setup:
+
+1. Create a GitHub [personal access token](https://github.com/settings/tokens/new)
+   with the **`read:packages`** scope.
+2. Add to your project's `.npmrc` (or `~/.npmrc`):
+
+   ```ini
+   @lastshotlabs:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+   ```
+
+3. Export the token where you install: `export GITHUB_TOKEN=ghp_…` (do the same in CI).
+
+The default registry stays npmjs.org, so your other dependencies are unaffected.
+
 ## Install
 
 ```bash

@@ -1255,12 +1255,23 @@ export function createMemoryAuthAdapter(
     },
 
     memoryDelCachePattern(pattern: string): void {
-      // Convert glob * to a regex
-      const regex = new RegExp(
-        '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$',
-      );
       for (const key of _cache.keys()) {
-        if (regex.test(key)) _cache.delete(key);
+        const parts = pattern.split('*');
+        let offset = 0;
+        let matches = !pattern.startsWith('*');
+        if (matches && !key.startsWith(parts[0])) continue;
+        matches = true;
+        for (const [index, part] of parts.entries()) {
+          if (!part) continue;
+          const found = key.indexOf(part, index === 0 ? 0 : offset);
+          if (found < 0 || (index === 0 && found !== 0)) {
+            matches = false;
+            break;
+          }
+          offset = found + part.length;
+        }
+        if (matches && !pattern.endsWith('*') && offset !== key.length) matches = false;
+        if (matches) _cache.delete(key);
       }
     },
 

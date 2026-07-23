@@ -87,6 +87,36 @@ describe('bootstrapAuth postgres wiring', () => {
     ).toBe(false);
   });
 
+  test('rejects unknown auth config keys instead of silently disabling protections', () => {
+    const cases = [
+      { deleteAccount: { requirePasswordConfirmation: true } },
+      { auth: { deleteAccount: { requirePasswordConfirmation: true } } },
+      { auth: { refreshTokens: { ttlSeconds: 3600 } } },
+      { auth: { refreshTokens: { reuseDetection: true } } },
+      { auth: { sessionPolicy: { idleTimout: 300 } } },
+      { security: { bearerAuth: { bypas: ['/health'] } } },
+      { db: { postgresPool: { statementTimoutMs: 1_000 } } },
+    ];
+
+    for (const config of cases) {
+      const result = authPluginConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    }
+  });
+
+  test('preserves standalone runtime dependencies through strict validation', () => {
+    const runtime = {
+      password: {
+        hash: async (value: string) => value,
+        verify: async (value: string, hash: string) => value === hash,
+      },
+    };
+
+    const parsed = authPluginConfigSchema.parse({ runtime });
+
+    expect(parsed.runtime).toBe(runtime);
+  });
+
   test('uses the shared postgres connector for standalone auth bootstrap', async () => {
     const bootstrapAuth = await loadBootstrapAuth();
     const bus = makeEventBus();

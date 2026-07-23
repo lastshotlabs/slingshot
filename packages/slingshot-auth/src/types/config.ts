@@ -289,13 +289,13 @@ const rateLimitBucketSchema = z
     windowMs: positiveIntSchema.optional(),
     max: positiveIntSchema.optional(),
   })
-  .loose();
+  .strict();
 const oauthReauthConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
     promptType: z.enum(['login', 'consent', 'select_account']).optional(),
   })
-  .loose();
+  .strict();
 const oauthConfigSchema = z
   .object({
     providers: z
@@ -307,14 +307,14 @@ const oauthConfigSchema = z
     allowedRedirectUrls: z.array(httpUrlSchema).optional(),
     reauth: oauthReauthConfigSchema.optional(),
   })
-  .loose();
+  .strict();
 const emailVerificationConfigSchema = z
   .object({
     required: z.boolean().optional(),
     tokenExpiry: positiveIntSchema.optional(),
   })
-  .loose();
-const passwordResetConfigSchema = z.object({ tokenExpiry: positiveIntSchema.optional() }).loose();
+  .strict();
+const passwordResetConfigSchema = z.object({ tokenExpiry: positiveIntSchema.optional() }).strict();
 const magicLinkConfigSchema = z
   .object({
     ttlSeconds: positiveIntSchema.optional(),
@@ -322,7 +322,7 @@ const magicLinkConfigSchema = z
     tokenLocation: z.enum(['fragment', 'query']).optional(),
     store: z.enum(['memory', 'redis', 'sqlite', 'mongo']).optional(),
   })
-  .loose();
+  .strict();
 const passwordPolicyConfigSchema = z
   .object({
     minLength: positiveIntSchema.max(128).optional(),
@@ -331,7 +331,7 @@ const passwordPolicyConfigSchema = z
     requireSpecial: z.boolean().optional(),
     preventReuse: nonNegativeIntSchema.optional(),
   })
-  .loose();
+  .strict();
 const authRateLimitConfigSchema = z
   .object({
     login: rateLimitBucketSchema.optional(),
@@ -358,10 +358,10 @@ const authRateLimitConfigSchema = z
           .optional(),
         onDetected: credentialStuffingDetectedHandlerSchema.optional(),
       })
-      .loose()
+      .strict()
       .optional(),
   })
-  .loose();
+  .strict();
 const sessionPolicyConfigSchema = z
   .object({
     maxSessions: positiveIntSchema.optional(),
@@ -372,7 +372,7 @@ const sessionPolicyConfigSchema = z
     idleTimeout: positiveIntSchema.optional(),
     onPasswordChange: z.enum(['revoke_others', 'revoke_all_and_reissue', 'none']).optional(),
   })
-  .loose();
+  .strict();
 const accountDeletionConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -383,14 +383,14 @@ const accountDeletionConfigSchema = z
     requireVerification: z.boolean().optional(),
     requirePasswordConfirmation: z.boolean().optional(),
   })
-  .loose();
+  .strict();
 const refreshTokenConfigSchema = z
   .object({
     accessTokenExpiry: positiveIntSchema.optional(),
     refreshTokenExpiry: positiveIntSchema.optional(),
     rotationGraceSeconds: nonNegativeIntSchema.optional(),
   })
-  .loose();
+  .strict();
 const mfaConfigSchema = z
   .object({
     issuer: nonEmptyStringSchema.optional(),
@@ -401,7 +401,7 @@ const mfaConfigSchema = z
     challengeTtlSeconds: positiveIntSchema.optional(),
     emailOtp: z
       .object({ codeLength: positiveIntSchema.min(4).max(10).optional() })
-      .loose()
+      .strict()
       .optional(),
     webauthn: z
       .object({
@@ -416,11 +416,11 @@ const mfaConfigSchema = z
         allowPasswordlessLogin: z.boolean().optional(),
         passkeyMfaBypass: z.boolean().optional(),
       })
-      .loose()
+      .strict()
       .optional(),
     required: z.boolean().optional(),
   })
-  .loose();
+  .strict();
 const jwtConfigSchema = z
   .object({
     issuer: nonEmptyStringSchema.optional(),
@@ -428,7 +428,7 @@ const jwtConfigSchema = z
     algorithm: z.enum(['HS256', 'RS256']).optional(),
     clockTolerance: nonNegativeIntSchema.optional(),
   })
-  .loose();
+  .strict();
 const breachedPasswordConfigSchema = z
   .object({
     block: z.boolean().optional(),
@@ -436,8 +436,8 @@ const breachedPasswordConfigSchema = z
     timeout: positiveIntSchema.optional(),
     onApiFailure: z.enum(['allow', 'block']).optional(),
   })
-  .loose();
-const stepUpConfigSchema = z.object({ maxAge: positiveIntSchema.optional() }).loose();
+  .strict();
+const stepUpConfigSchema = z.object({ maxAge: positiveIntSchema.optional() }).strict();
 const m2mConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -445,17 +445,17 @@ const m2mConfigSchema = z
     scopes: z.array(nonEmptyStringSchema).optional(),
     recheckClientOnUse: z.boolean().optional(),
   })
-  .loose();
+  .strict();
 const oidcKeySchema = z
   .object({
     privateKey: nonEmptyStringSchema,
     publicKey: nonEmptyStringSchema,
     kid: nonEmptyStringSchema.optional(),
   })
-  .loose();
+  .strict();
 const oidcPreviousKeySchema = z
   .object({ publicKey: nonEmptyStringSchema, kid: nonEmptyStringSchema.optional() })
-  .loose();
+  .strict();
 const oidcConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -466,7 +466,7 @@ const oidcConfigSchema = z
     tokenEndpoint: httpUrlSchema.optional(),
     authorizationEndpoint: httpUrlSchema.optional(),
   })
-  .loose();
+  .strict();
 const samlConfigSchema = z
   .object({
     entityId: nonEmptyStringSchema,
@@ -481,25 +481,25 @@ const samlConfigSchema = z
         lastName: nonEmptyStringSchema.optional(),
         groups: nonEmptyStringSchema.optional(),
       })
-      .loose()
+      .strict()
       .optional(),
     onLogin: samlLoginHandlerSchema.optional(),
     postLoginRedirect: redirectTargetSchema.optional(),
   })
-  .loose();
+  .strict();
 const scimConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
     bearerTokens: z.union([nonEmptyStringSchema, z.array(nonEmptyStringSchema).min(1)]),
     userMapping: z
       .object({ userName: z.enum(['email', 'username']).optional() })
-      .loose()
+      .strict()
       .optional(),
     onDeprovision: z
       .union([z.enum(['suspend', 'delete']), scimDeprovisionHandlerSchema])
       .optional(),
   })
-  .loose();
+  .strict();
 const authCookieConfigSchema = z
   .object({
     sameSite: z.enum(['Strict', 'Lax', 'None']).optional(),
@@ -508,7 +508,7 @@ const authCookieConfigSchema = z
     path: z.string().startsWith('/').optional(),
     maxAge: positiveIntSchema.optional(),
   })
-  .loose();
+  .strict();
 const csrfCookieConfigSchema = authCookieConfigSchema;
 
 const authDbConfigSchema = z
@@ -548,6 +548,7 @@ const authDbConfigSchema = z
         keepAlive: z.boolean().optional(),
         keepAliveInitialDelayMillis: nonNegativeIntSchema.optional(),
       })
+      .strict()
       .optional()
       .describe('Postgres pool sizing and timeout options passed through to pg.Pool.'),
     postgresMigrations: z
@@ -575,7 +576,7 @@ const authDbConfigSchema = z
         'Built-in auth adapter backend. One of: mongo, sqlite, memory, postgres. Omit to use the standalone default.',
       ),
   })
-  .loose();
+  .strict();
 
 const authSecurityConfigSchema = z
   .object({
@@ -614,7 +615,7 @@ const authSecurityConfigSchema = z
                 'Path patterns that bypass bearer-token authentication. Omit to require bearer auth on all configured routes.',
               ),
           })
-          .loose(),
+          .strict(),
       ])
       .optional()
       .describe(
@@ -625,24 +626,26 @@ const authSecurityConfigSchema = z
         nonEmptyStringSchema,
         z.array(nonEmptyStringSchema),
         z.array(
-          z.object({
-            clientId: nonEmptyStringSchema.describe(
-              'Client identifier associated with the bearer token.',
-            ),
-            token: nonEmptyStringSchema.describe(
-              'Static bearer token value presented by the client.',
-            ),
-            description: z
-              .string()
-              .optional()
-              .describe(
-                'Human-readable label for the token. Omit to store the token without a description.',
+          z
+            .object({
+              clientId: nonEmptyStringSchema.describe(
+                'Client identifier associated with the bearer token.',
               ),
-            revoked: z
-              .boolean()
-              .optional()
-              .describe('Whether the token is revoked. Omit to treat the token as active.'),
-          }),
+              token: nonEmptyStringSchema.describe(
+                'Static bearer token value presented by the client.',
+              ),
+              description: z
+                .string()
+                .optional()
+                .describe(
+                  'Human-readable label for the token. Omit to store the token without a description.',
+                ),
+              revoked: z
+                .boolean()
+                .optional()
+                .describe('Whether the token is revoked. Omit to treat the token as active.'),
+            })
+            .strict(),
         ),
       ])
       .optional()
@@ -663,158 +666,162 @@ const authSecurityConfigSchema = z
         'Allowed origins used for auth CORS and CSRF origin checks. Omit to use the app default CORS policy.',
       ),
   })
-  .loose();
+  .strict();
 
 // AuthConfig has many deeply nested sub-configs — use z.custom for most
-const authConfigSchema = z.object({
-  enabled: z
-    .boolean()
-    .optional()
-    .describe(
-      'Whether auth routes are registered. Omit to use the plugin default, or set false to disable auth routes.',
-    ),
-  adapter: z
-    .custom<AuthAdapter>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AuthAdapter instance',
-    })
-    .optional()
-    .describe(
-      'Explicit auth adapter instance. Omit to let the plugin create a built-in adapter from db settings.',
-    ),
-  roles: z
-    .array(z.string())
-    .optional()
-    .describe(
-      'Available application roles managed by the auth plugin. Omit to use the built-in role defaults.',
-    ),
-  defaultRole: z
-    .string()
-    .optional()
-    .describe(
-      'Role assigned to newly created users by default. Omit to use the plugin default role assignment.',
-    ),
-  oauth: oauthConfigSchema
-    .optional()
-    .describe(
-      'OAuth provider configuration for social login flows. Omit to disable OAuth providers.',
-    ),
-  primaryField: z
-    .enum(['email', 'username', 'phone'])
-    .optional()
-    .describe(
-      'Primary login identifier field. One of: email, username, phone. Omit to use the plugin default.',
-    ),
-  emailVerification: emailVerificationConfigSchema
-    .optional()
-    .describe(
-      'Email-verification behavior for newly registered users. Omit to use the plugin default verification flow.',
-    ),
-  passwordReset: passwordResetConfigSchema
-    .optional()
-    .describe(
-      'Password-reset behavior and token settings. Omit to use the plugin default password-reset flow.',
-    ),
-  passwordPolicy: passwordPolicyConfigSchema
-    .optional()
-    .describe(
-      'Password policy requirements enforced during credential changes. Omit to use the plugin default policy.',
-    ),
-  rateLimit: authRateLimitConfigSchema
-    .optional()
-    .describe(
-      'Rate-limiting configuration for auth endpoints. Omit to use the plugin default auth rate limits.',
-    ),
-  sessionPolicy: sessionPolicyConfigSchema
-    .optional()
-    .describe(
-      'Session issuance and lifetime policy for authenticated users. Omit to use the plugin default session policy.',
-    ),
-  accountDeletion: accountDeletionConfigSchema
-    .optional()
-    .describe(
-      'Account-deletion behavior for self-service user deletion flows. Omit to use the plugin default deletion behavior.',
-    ),
-  refreshTokens: refreshTokenConfigSchema
-    .optional()
-    .describe(
-      'Refresh-token issuance and rotation settings. Omit to use the plugin default refresh-token behavior.',
-    ),
-  mfa: mfaConfigSchema
-    .optional()
-    .describe(
-      'Multi-factor authentication configuration. Omit to use the plugin default MFA behavior.',
-    ),
-  jwt: jwtConfigSchema
-    .optional()
-    .describe(
-      'JWT issuance and verification configuration. Omit to use the plugin default JWT behavior.',
-    ),
-  checkSuspensionOnIdentify: z
-    .boolean()
-    .optional()
-    .describe(
-      'Whether user suspension is checked on every authenticated request. Omit to use the default of true.',
-    ),
-  breachedPasswordCheck: breachedPasswordConfigSchema
-    .optional()
-    .describe(
-      'Breached-password detection configuration. Omit to use the plugin default breached-password behavior.',
-    ),
-  stepUp: stepUpConfigSchema
-    .optional()
-    .describe(
-      'Step-up authentication requirements for sensitive operations. Omit to use the plugin default step-up behavior.',
-    ),
-  m2m: m2mConfigSchema
-    .optional()
-    .describe(
-      'Machine-to-machine authentication configuration. Omit to disable M2M auth features.',
-    ),
-  oidc: oidcConfigSchema
-    .optional()
-    .describe('OIDC provider configuration. Omit to disable OIDC support.'),
-  saml: samlConfigSchema
-    .optional()
-    .describe('SAML provider configuration. Omit to disable SAML support.'),
-  scim: scimConfigSchema
-    .optional()
-    .describe('SCIM provisioning configuration. Omit to disable SCIM support.'),
-  lockout: z
-    .custom<LockoutConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a LockoutConfig object',
-    })
-    .optional()
-    .describe(
-      'Account lockout policy for repeated authentication failures. Omit to use the plugin default lockout behavior.',
-    ),
-  cookieConfig: authCookieConfigSchema
-    .optional()
-    .describe(
-      'Cookie configuration for auth session cookies. Omit to use the plugin default cookie settings.',
-    ),
-  csrfCookieConfig: csrfCookieConfigSchema
-    .optional()
-    .describe(
-      'Cookie configuration for CSRF cookies. Omit to use the plugin default CSRF cookie settings.',
-    ),
-  concealRegistration: z
-    .custom<ConcealRegistrationConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a ConcealRegistrationConfig object',
-    })
-    .optional()
-    .describe(
-      'Registration-concealment behavior for anti-enumeration flows. Omit to use the plugin default concealment behavior.',
-    ),
-  magicLink: magicLinkConfigSchema
-    .optional()
-    .describe('Magic-link authentication configuration. Omit to disable magic-link login.'),
-  hooks: z
-    .custom<AuthHooksConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AuthHooksConfig object',
-    })
-    .optional()
-    .describe('Lifecycle hooks for auth events and flows. Omit to register no custom auth hooks.'),
-});
+const authConfigSchema = z
+  .object({
+    enabled: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether auth routes are registered. Omit to use the plugin default, or set false to disable auth routes.',
+      ),
+    adapter: z
+      .custom<AuthAdapter>(v => v == null || typeof v === 'object', {
+        message: 'Expected an AuthAdapter instance',
+      })
+      .optional()
+      .describe(
+        'Explicit auth adapter instance. Omit to let the plugin create a built-in adapter from db settings.',
+      ),
+    roles: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Available application roles managed by the auth plugin. Omit to use the built-in role defaults.',
+      ),
+    defaultRole: z
+      .string()
+      .optional()
+      .describe(
+        'Role assigned to newly created users by default. Omit to use the plugin default role assignment.',
+      ),
+    oauth: oauthConfigSchema
+      .optional()
+      .describe(
+        'OAuth provider configuration for social login flows. Omit to disable OAuth providers.',
+      ),
+    primaryField: z
+      .enum(['email', 'username', 'phone'])
+      .optional()
+      .describe(
+        'Primary login identifier field. One of: email, username, phone. Omit to use the plugin default.',
+      ),
+    emailVerification: emailVerificationConfigSchema
+      .optional()
+      .describe(
+        'Email-verification behavior for newly registered users. Omit to use the plugin default verification flow.',
+      ),
+    passwordReset: passwordResetConfigSchema
+      .optional()
+      .describe(
+        'Password-reset behavior and token settings. Omit to use the plugin default password-reset flow.',
+      ),
+    passwordPolicy: passwordPolicyConfigSchema
+      .optional()
+      .describe(
+        'Password policy requirements enforced during credential changes. Omit to use the plugin default policy.',
+      ),
+    rateLimit: authRateLimitConfigSchema
+      .optional()
+      .describe(
+        'Rate-limiting configuration for auth endpoints. Omit to use the plugin default auth rate limits.',
+      ),
+    sessionPolicy: sessionPolicyConfigSchema
+      .optional()
+      .describe(
+        'Session issuance and lifetime policy for authenticated users. Omit to use the plugin default session policy.',
+      ),
+    accountDeletion: accountDeletionConfigSchema
+      .optional()
+      .describe(
+        'Account-deletion behavior for self-service user deletion flows. Omit to use the plugin default deletion behavior.',
+      ),
+    refreshTokens: refreshTokenConfigSchema
+      .optional()
+      .describe(
+        'Refresh-token issuance and rotation settings. Omit to use the plugin default refresh-token behavior.',
+      ),
+    mfa: mfaConfigSchema
+      .optional()
+      .describe(
+        'Multi-factor authentication configuration. Omit to use the plugin default MFA behavior.',
+      ),
+    jwt: jwtConfigSchema
+      .optional()
+      .describe(
+        'JWT issuance and verification configuration. Omit to use the plugin default JWT behavior.',
+      ),
+    checkSuspensionOnIdentify: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether user suspension is checked on every authenticated request. Omit to use the default of true.',
+      ),
+    breachedPasswordCheck: breachedPasswordConfigSchema
+      .optional()
+      .describe(
+        'Breached-password detection configuration. Omit to use the plugin default breached-password behavior.',
+      ),
+    stepUp: stepUpConfigSchema
+      .optional()
+      .describe(
+        'Step-up authentication requirements for sensitive operations. Omit to use the plugin default step-up behavior.',
+      ),
+    m2m: m2mConfigSchema
+      .optional()
+      .describe(
+        'Machine-to-machine authentication configuration. Omit to disable M2M auth features.',
+      ),
+    oidc: oidcConfigSchema
+      .optional()
+      .describe('OIDC provider configuration. Omit to disable OIDC support.'),
+    saml: samlConfigSchema
+      .optional()
+      .describe('SAML provider configuration. Omit to disable SAML support.'),
+    scim: scimConfigSchema
+      .optional()
+      .describe('SCIM provisioning configuration. Omit to disable SCIM support.'),
+    lockout: z
+      .custom<LockoutConfig>(v => v == null || typeof v === 'object', {
+        message: 'Expected a LockoutConfig object',
+      })
+      .optional()
+      .describe(
+        'Account lockout policy for repeated authentication failures. Omit to use the plugin default lockout behavior.',
+      ),
+    cookieConfig: authCookieConfigSchema
+      .optional()
+      .describe(
+        'Cookie configuration for auth session cookies. Omit to use the plugin default cookie settings.',
+      ),
+    csrfCookieConfig: csrfCookieConfigSchema
+      .optional()
+      .describe(
+        'Cookie configuration for CSRF cookies. Omit to use the plugin default CSRF cookie settings.',
+      ),
+    concealRegistration: z
+      .custom<ConcealRegistrationConfig>(v => v == null || typeof v === 'object', {
+        message: 'Expected a ConcealRegistrationConfig object',
+      })
+      .optional()
+      .describe(
+        'Registration-concealment behavior for anti-enumeration flows. Omit to use the plugin default concealment behavior.',
+      ),
+    magicLink: magicLinkConfigSchema
+      .optional()
+      .describe('Magic-link authentication configuration. Omit to disable magic-link login.'),
+    hooks: z
+      .custom<AuthHooksConfig>(v => v == null || typeof v === 'object', {
+        message: 'Expected an AuthHooksConfig object',
+      })
+      .optional()
+      .describe(
+        'Lifecycle hooks for auth events and flows. Omit to register no custom auth hooks.',
+      ),
+  })
+  .strict();
 
 /**
  * Zod schema for the full `AuthPluginConfig` object.
@@ -870,8 +877,16 @@ export const authPluginConfigSchema = z
       .describe(
         'Application name inserted into auth UI and email templates. Omit to use the runtime default app name.',
       ),
+    runtime: z
+      .custom<AuthStandaloneRuntime>(v => v == null || typeof v === 'object', {
+        message: 'Expected standalone runtime dependencies',
+      })
+      .optional()
+      .describe(
+        'Standalone runtime dependencies. Omit when the full framework injects runtime services.',
+      ),
   })
-  .loose();
+  .strict();
 
 type AuthPluginConfigBase = z.infer<typeof authPluginConfigSchema>;
 
@@ -906,10 +921,4 @@ export interface AuthStandaloneRuntime {
  * };
  * const plugin = createAuthPlugin(config);
  */
-export interface AuthPluginConfig extends AuthPluginConfigBase {
-  /**
-   * Standalone runtime dependencies.
-   * Ignored when using the full framework (framework injects these via SlingshotFrameworkConfig).
-   */
-  runtime?: AuthStandaloneRuntime;
-}
+export interface AuthPluginConfig extends AuthPluginConfigBase {}

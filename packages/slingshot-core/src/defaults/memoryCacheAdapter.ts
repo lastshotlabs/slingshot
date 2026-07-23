@@ -86,11 +86,21 @@ export function createMemoryCacheAdapter(): CacheAdapter {
      * prefer more targeted single-key `del()` calls when the key is known exactly.
      */
     delPattern(pattern: string): Promise<void> {
-      const regex = new RegExp(
-        '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$',
-      );
       for (const key of store.keys()) {
-        if (regex.test(key)) store.delete(key);
+        const parts = pattern.split('*');
+        let offset = 0;
+        let matches = !pattern.startsWith('*') || parts[0] === '';
+        for (const [index, part] of parts.entries()) {
+          if (!part) continue;
+          const found = key.indexOf(part, index === 0 ? 0 : offset);
+          if (found < 0 || (index === 0 && !pattern.startsWith('*') && found !== 0)) {
+            matches = false;
+            break;
+          }
+          offset = found + part.length;
+        }
+        if (matches && !pattern.endsWith('*') && offset !== key.length) matches = false;
+        if (matches) store.delete(key);
       }
       return Promise.resolve();
     },

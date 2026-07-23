@@ -172,7 +172,9 @@ export function decryptField(ciphertext: string, keyConfig: DataEncryptionKey[])
   const iv = Buffer.from(ivB64, 'base64url');
   const ct = Buffer.from(ctB64, 'base64url');
   const tag = Buffer.from(tagB64, 'base64url');
-  const decipher = createDecipheriv('aes-256-gcm', keyEntry.key, iv);
+  if (iv.length !== 12) throw new Error('decryptField: invalid IV length');
+  if (tag.length !== 16) throw new Error('decryptField: invalid authentication tag length');
+  const decipher = createDecipheriv('aes-256-gcm', keyEntry.key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([decipher.update(ct), decipher.final()]);
 

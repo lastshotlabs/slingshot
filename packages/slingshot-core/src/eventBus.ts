@@ -261,7 +261,7 @@ export class InProcessAdapter implements SlingshotEventBus {
       } catch (err) {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
         if (this.logger) this.logger.error(msg, { event, error: err });
-        else console.error(msg, err);
+        else console.error('%s', msg, err);
         continue;
       }
       const p = Promise.resolve(result);
@@ -269,7 +269,7 @@ export class InProcessAdapter implements SlingshotEventBus {
       p.catch((err: unknown) => {
         const msg = `[SlingshotEventBus] listener error on event "${event}"`;
         if (this.logger) this.logger.error(msg, { event, error: err });
-        else console.error(msg, err);
+        else console.error('%s', msg, err);
       }).finally(() => {
         this.pendingHandlers.delete(p);
       });

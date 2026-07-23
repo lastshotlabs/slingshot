@@ -126,6 +126,22 @@ describe('encryptField / decryptField', () => {
     const tampered = `${parts[0]}.${parts[1]}.${parts[2]}.${tamperedTag}`;
     expect(() => decryptField(tampered, [key1])).toThrow();
   });
+
+  test('decryptField rejects truncated GCM authentication tags', () => {
+    const parts = encryptField('secret-data', [key1]).split('.');
+    const truncatedTag = Buffer.from(parts[3], 'base64url').subarray(0, 8).toString('base64url');
+    expect(() =>
+      decryptField(`${parts[0]}.${parts[1]}.${parts[2]}.${truncatedTag}`, [key1]),
+    ).toThrow('invalid authentication tag length');
+  });
+
+  test('decryptField rejects non-96-bit GCM IVs', () => {
+    const parts = encryptField('secret-data', [key1]).split('.');
+    const shortIv = Buffer.from(parts[1], 'base64url').subarray(0, 8).toString('base64url');
+    expect(() => decryptField(`${parts[0]}.${shortIv}.${parts[2]}.${parts[3]}`, [key1])).toThrow(
+      'invalid IV length',
+    );
+  });
 });
 
 describe('isEncryptedField', () => {

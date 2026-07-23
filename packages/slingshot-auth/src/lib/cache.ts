@@ -79,9 +79,27 @@ interface MemoryCacheEntry {
   expiresAt: number;
 }
 
-function globToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-  return new RegExp(`^${escaped.replace(/\*/g, '.*')}$`);
+function matchesGlob(value: string, pattern: string): boolean {
+  let valueIndex = 0;
+  let patternIndex = 0;
+  let starIndex = -1;
+  let retryValueIndex = 0;
+  while (valueIndex < value.length) {
+    if (patternIndex < pattern.length && pattern[patternIndex] === value[valueIndex]) {
+      valueIndex++;
+      patternIndex++;
+    } else if (patternIndex < pattern.length && pattern[patternIndex] === '*') {
+      starIndex = patternIndex++;
+      retryValueIndex = valueIndex;
+    } else if (starIndex !== -1) {
+      patternIndex = starIndex + 1;
+      valueIndex = ++retryValueIndex;
+    } else {
+      return false;
+    }
+  }
+  while (patternIndex < pattern.length && pattern[patternIndex] === '*') patternIndex++;
+  return patternIndex === pattern.length;
 }
 
 function globToSqlLike(pattern: string): string {
@@ -133,9 +151,8 @@ export function createMemoryCacheAdapter(): ICacheAdapter {
       store.delete(key);
     },
     async delPattern(pattern) {
-      const regex = globToRegex(pattern);
       for (const key of store.keys()) {
-        if (regex.test(key)) store.delete(key);
+        if (matchesGlob(key, pattern)) store.delete(key);
       }
     },
     isReady() {

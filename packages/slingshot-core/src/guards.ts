@@ -54,7 +54,10 @@ function resolveDotPath(value: unknown, path: string): unknown {
   let current: unknown = value;
   for (const part of path.split('.')) {
     if (current === null || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
+    if (part === '__proto__' || part === 'prototype' || part === 'constructor') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return undefined;
+    // Read-only traversal; prototype keys are blocked and inherited properties are rejected above.
+    current = (current as Record<string, unknown>)[part]; // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop
   }
   return current;
 }

@@ -167,8 +167,8 @@ but the resolver's return value remains stable across both passes.
 
 ## Related Reading
 
-- [Config-Driven Domain example](/examples/config-driven-domain/) - runnable entity -> operations -> plugin -> app composition in `examples/config-driven-domain/`
-- [Config-Driven Workflow](/config-driven/workflow/) - recommended implementation order from entity through docs
+- [Config-Driven Domain example](https://lastshotlabs.github.io/slingshot/examples/config-driven-domain/) - runnable entity -> operations -> plugin -> app composition in `examples/config-driven-domain/`
+- [Config-Driven Workflow](https://lastshotlabs.github.io/slingshot/config-driven/workflow/) - recommended implementation order from entity through docs
 - `docs/specs/completed/config-driven-packages.md`
 - `docs/specs/completed/community-config-rewrite.md`
 - `packages/slingshot-core/docs/human/index.md`

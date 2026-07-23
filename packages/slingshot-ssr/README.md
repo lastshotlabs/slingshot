@@ -116,4 +116,4 @@ The highest-leverage decisions are usually:
 
 ## Source-Backed Examples
 
-- [Content Platform example](/examples/content-platform/) - SSR, draft mode, metadata, and ISR-oriented composition in `examples/content-platform/`
+- [Content Platform example](https://lastshotlabs.github.io/slingshot/examples/content-platform/) - SSR, draft mode, metadata, and ISR-oriented composition in `examples/content-platform/`

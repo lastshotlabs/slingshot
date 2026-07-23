@@ -336,9 +336,29 @@ export async function runBuild(): Promise<number> {
   return 0;
 }
 
+const DOCS_SITE_BASE = 'https://lastshotlabs.github.io/slingshot';
+
+/**
+ * Rewrite doc-relative links into absolute docs-site URLs.
+ *
+ * The human guides are Starlight docs pages, so their internal links are
+ * root-absolute paths (e.g. `/authoring-model/` or `/slingshot/package-first/`)
+ * that only resolve inside the docs site. When rendered into a standalone
+ * package README they must become fully-qualified URLs, otherwise npm and
+ * GitHub resolve them against their own hosts and they 404. Some source links
+ * already include the `/slingshot` base and some don't; normalize both.
+ */
+export function absolutizeDocLinks(markdown: string): string {
+  return markdown.replace(/\]\((\/[^)]+)\)/g, (_match, target: string) => {
+    const path = target.replace(/^\/slingshot(?=\/|$)/, '');
+    return `](${DOCS_SITE_BASE}${path})`;
+  });
+}
+
 export function renderPackageReadme(humanGuide: string, packageName: string): string {
   const withoutFrontmatter = humanGuide.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trimStart();
-  return `# ${packageName}\n\nInstall with Bun:\n\n\`\`\`sh\nbun add ${packageName}\n\`\`\`\n\n${withoutFrontmatter}`;
+  const body = absolutizeDocLinks(withoutFrontmatter);
+  return `# ${packageName}\n\nInstall with Bun:\n\n\`\`\`sh\nbun add ${packageName}\n\`\`\`\n\n${body}`;
 }
 
 if (import.meta.main) {

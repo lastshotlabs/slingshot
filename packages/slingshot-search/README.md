@@ -78,4 +78,4 @@ you need fully custom resolution.
 
 ## Source-Backed Examples
 
-- [Content Platform example](/examples/content-platform/) - search composed with assets, SSR, and edge runtime in `examples/content-platform/`
+- [Content Platform example](https://lastshotlabs.github.io/slingshot/examples/content-platform/) - search composed with assets, SSR, and edge runtime in `examples/content-platform/`

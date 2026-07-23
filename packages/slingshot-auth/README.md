@@ -109,9 +109,9 @@ This pattern is important because it keeps packages like admin, community, and m
 
 ## Related Reading
 
-- [Auth Setup example](https://lastshotlabs.github.io/slingshot/examples/with-auth/) - runnable baseline in `examples/with-auth/`
-- [Collaboration Workspace example](https://lastshotlabs.github.io/slingshot/examples/collaboration-workspace/) - auth composed with chat, community, polls, and media in `examples/collaboration-workspace/`
-- [Content Platform example](https://lastshotlabs.github.io/slingshot/examples/content-platform/) - auth composed with SSR, search, and assets in `examples/content-platform/`
+- [Auth Setup example](https://slingshot.lastshotlabs.com/examples/with-auth/) - runnable baseline in `examples/with-auth/`
+- [Collaboration Workspace example](https://slingshot.lastshotlabs.com/examples/collaboration-workspace/) - auth composed with chat, community, polls, and media in `examples/collaboration-workspace/`
+- [Content Platform example](https://slingshot.lastshotlabs.com/examples/content-platform/) - auth composed with SSR, search, and assets in `examples/content-platform/`
 - `docs/specs/completed/config-driven-packages.md`
 - `packages/slingshot-core/docs/human/index.md`
 - `packages/slingshot-community/docs/human/index.md`

@@ -147,9 +147,9 @@ names or ID generation strategy.
 
 ## Related Reading
 
-- [Config-Driven Domain example](https://lastshotlabs.github.io/slingshot/examples/config-driven-domain/) - core contracts expressed through entity and plugin assembly in `examples/config-driven-domain/`
-- [Collaboration Workspace example](https://lastshotlabs.github.io/slingshot/examples/collaboration-workspace/) - cross-package composition across auth, permissions, community, chat, and media in `examples/collaboration-workspace/`
-- [Content Platform example](https://lastshotlabs.github.io/slingshot/examples/content-platform/) - runtime, assets, search, and SSR composition in `examples/content-platform/`
+- [Config-Driven Domain example](https://slingshot.lastshotlabs.com/examples/config-driven-domain/) - core contracts expressed through entity and plugin assembly in `examples/config-driven-domain/`
+- [Collaboration Workspace example](https://slingshot.lastshotlabs.com/examples/collaboration-workspace/) - cross-package composition across auth, permissions, community, chat, and media in `examples/collaboration-workspace/`
+- [Content Platform example](https://slingshot.lastshotlabs.com/examples/content-platform/) - runtime, assets, search, and SSR composition in `examples/content-platform/`
 - `docs/specs/completed/config-driven-packages.md`
 - `docs/specs/completed/ws-config-driven-channels.md`
 - `packages/slingshot-entity/docs/human/index.md`

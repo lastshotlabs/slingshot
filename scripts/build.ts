@@ -336,7 +336,7 @@ export async function runBuild(): Promise<number> {
   return 0;
 }
 
-const DOCS_SITE_BASE = 'https://lastshotlabs.github.io/slingshot';
+const DOCS_SITE_BASE = 'https://slingshot.lastshotlabs.com';
 
 /**
  * Rewrite doc-relative links into absolute docs-site URLs.

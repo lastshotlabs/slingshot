@@ -109,7 +109,7 @@ The `slingshot-permissions` and `slingshot-notifications` registrations must com
 
 Slingshot's general authoring model — `defineApp`, `definePackage`, `definePackageContract` —
 is documented in
-[Authoring Model](https://lastshotlabs.github.io/slingshot/authoring-model/) and [Package-First](https://lastshotlabs.github.io/slingshot/package-first/).
+[Authoring Model](https://slingshot.lastshotlabs.com/authoring-model/) and [Package-First](https://slingshot.lastshotlabs.com/package-first/).
 The patterns below are how that model applies to community.
 
 ### Consume community from another package
@@ -342,9 +342,9 @@ surface.
 
 ## Source-Backed Examples
 
-- [Forum App](https://lastshotlabs.github.io/slingshot/examples/forum-app/) — auth + community + permissions + notifications
+- [Forum App](https://slingshot.lastshotlabs.com/examples/forum-app/) — auth + community + permissions + notifications
   in `examples/forum-app/`
-- [Collaboration Workspace](https://lastshotlabs.github.io/slingshot/examples/collaboration-workspace/) — community alongside
+- [Collaboration Workspace](https://slingshot.lastshotlabs.com/examples/collaboration-workspace/) — community alongside
   chat, polls, interactions, embeds, and push in `examples/collaboration-workspace/`
 
 ## Key Files

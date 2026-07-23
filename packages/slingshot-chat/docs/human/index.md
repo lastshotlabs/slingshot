@@ -115,7 +115,7 @@ The `slingshot-permissions` and `slingshot-notifications` registrations must com
 
 Slingshot's general authoring model — `defineApp`, `definePackage`, `definePackageContract` —
 is documented in
-[Authoring Model](/slingshot/authoring-model/) and [Package-First](/slingshot/package-first/).
+[Authoring Model](/authoring-model/) and [Package-First](/package-first/).
 The patterns below are how that model applies to chat.
 
 ### Consume chat from another package
@@ -356,7 +356,7 @@ present).
 
 ## Source-Backed Examples
 
-- [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) — chat alongside
+- [Collaboration Workspace](/examples/collaboration-workspace/) — chat alongside
   community, polls, interactions, embeds, and push in `examples/collaboration-workspace/`
 
 ## Key Files

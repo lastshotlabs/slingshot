@@ -1,12 +1,12 @@
 import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 
-const docsSite = process.env.DOCS_SITE_URL ?? 'https://lastshotlabs.github.io';
+const docsSite = process.env.DOCS_SITE_URL ?? 'https://slingshot.lastshotlabs.com';
 const spawnBlocked = process.env.SLINGSHOT_DOCS_SPAWN_BLOCKED === '1';
 
 export default defineConfig({
   site: docsSite,
-  base: '/slingshot',
+  base: '/',
   vite: {
     ...(spawnBlocked
       ? {

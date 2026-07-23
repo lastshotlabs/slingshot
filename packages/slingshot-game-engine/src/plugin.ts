@@ -108,8 +108,17 @@ export function createGameEnginePackage(
   // Closure-owned active runtimes map (Rule 3).
   const activeRuntimes = new Map<string, SessionRuntime>();
 
-  // Default replay store (in-memory). Can be replaced via config.
-  const replayStore = createInMemoryReplayStore();
+  // Replay store. Defaults to the in-memory implementation — per-process, lost
+  // on restart — which is right for development and for consumers that only
+  // read the log while the session is live. A consumer building anything
+  // durable on it supplies `replay.store: { factory }`.
+  //
+  // The factory is invoked exactly once, here, per package instance (Rule 3 —
+  // closure-owned state, no singletons).
+  const replayStore =
+    config.replay.store === 'memory'
+      ? createInMemoryReplayStore()
+      : config.replay.store.factory();
 
   // Cleanup state
   const cleanupState = createCleanupState(config.cleanup);
@@ -617,7 +626,15 @@ export function createGameEnginePackage(
         },
         async deleteSession(id: string) {
           destroySessionRuntime(activeRuntimes, id);
-          await replayStore.deleteReplayEntries(id);
+          // Replay entries are deleted with the session UNLESS the consumer
+          // asked to keep them. For the in-memory default that deletion is just
+          // hygiene; for a durable store it would destroy the history the store
+          // exists to hold, `cleanup.completedTtl` (4h) after the game ended.
+          // With `retainOnCleanup: true` the consumer owns their lifecycle —
+          // nothing else will ever delete them.
+          if (!config.replay.retainOnCleanup) {
+            await replayStore.deleteReplayEntries(id);
+          }
         },
       });
 

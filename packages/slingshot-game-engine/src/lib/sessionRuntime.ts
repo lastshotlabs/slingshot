@@ -245,6 +245,25 @@ export interface SessionRuntime {
   /** Pending replay entries not yet flushed. */
   readonly pendingReplayEntries: ReplayEntry[];
 
+  /**
+   * Whether a coalescing flush is already queued for this microtask turn.
+   *
+   * Entries produced by one processing cycle (an input can emit several — a
+   * channel input, a phase exit, a phase entry, a score change) batch into a
+   * single `appendReplayEntries` call rather than one write per entry.
+   */
+  replayFlushScheduled: boolean;
+
+  /**
+   * Serializing chain for replay writes.
+   *
+   * Batches MUST reach the store in sequence order — a durable store that
+   * received batch 2 before batch 1 would produce a replay that cannot be
+   * deterministically reconstructed. Each flush chains onto the previous one
+   * rather than racing it.
+   */
+  replayFlushChain: Promise<void>;
+
   /** See {@link SessionRuntimeDeps.persistState}. */
   readonly persistState?: (snapshot: PersistedRuntimeState) => Promise<void>;
 
@@ -510,6 +529,58 @@ export function refreshHandlerContext(runtime: SessionRuntime): SessionRuntime['
 
 function appendReplay(runtime: SessionRuntime, entry: ReplayEntry): void {
   runtime.pendingReplayEntries.push(entry);
+  scheduleReplayFlush(runtime);
+}
+
+/**
+ * Queue a replay flush for the end of the current microtask turn.
+ *
+ * Entries used to accumulate for the ENTIRE session and flush exactly once, in
+ * `endGameFlow`. That made the log a liability rather than a record: a crash or
+ * redeploy mid-session lost every entry, a session that was abandoned (and so
+ * never reached `endGameFlow`) was never written at all, and a long session grew
+ * the buffer without bound. It also quietly broke the `ReplayStore` contract,
+ * which states that entries must be persisted durably before an input is
+ * considered committed.
+ *
+ * Coalescing on the microtask queue keeps the batching that made the old
+ * approach cheap — all entries emitted by one processing cycle land in a single
+ * `appendReplayEntries` call — without deferring durability to the end of the game.
+ */
+function scheduleReplayFlush(runtime: SessionRuntime): void {
+  if (runtime.replayFlushScheduled) return;
+  runtime.replayFlushScheduled = true;
+  queueMicrotask(() => {
+    runtime.replayFlushScheduled = false;
+    void flushReplayEntries(runtime);
+  });
+}
+
+/**
+ * Flush buffered replay entries to the store, in order.
+ *
+ * Safe to call at any time and safe to call concurrently: writes are serialized
+ * through `runtime.replayFlushChain` so batches reach the store in sequence
+ * order. Awaiting the returned promise guarantees everything buffered *at call
+ * time* has been handed to the store.
+ *
+ * A store failure is logged and swallowed — a persistence problem must not take
+ * the live game down with it — but the entries are dropped rather than retried,
+ * so a store that throws will leave gaps in the log.
+ */
+export function flushReplayEntries(runtime: SessionRuntime): Promise<void> {
+  runtime.replayFlushChain = runtime.replayFlushChain.then(async () => {
+    if (runtime.pendingReplayEntries.length === 0) return;
+    // Take the buffer, so entries produced while this write is in flight queue
+    // up for the next flush instead of being dropped by a blanket reset.
+    const batch = runtime.pendingReplayEntries.splice(0, runtime.pendingReplayEntries.length);
+    try {
+      await runtime.replayStore.appendReplayEntries(runtime.sessionId, batch);
+    } catch (e: unknown) {
+      runtime.log.error('Failed to flush replay entries', e);
+    }
+  });
+  return runtime.replayFlushChain;
 }
 
 /** Stable key for a player's input-sequence dedup cache. */
@@ -778,6 +849,8 @@ export async function createSessionRuntime(
     handlerContext,
     sequenceCache: new Map(),
     pendingReplayEntries: [],
+    replayFlushScheduled: false,
+    replayFlushChain: Promise.resolve(),
     persistState: deps.persistState,
     persistenceTail: Promise.resolve(),
   };
@@ -2071,7 +2144,7 @@ export async function handleSubscribeConnection(
 // ── §5.10.8 Game End Flow ────────────────────────────────────────
 
 export async function endGameFlow(runtime: SessionRuntime, winResult: WinResult): Promise<void> {
-  const { sessionId, gameDef, timerState, scoreState, replaySeq, replayStore } = runtime;
+  const { sessionId, gameDef, timerState, scoreState, replaySeq } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
 
   // Step 1: Stop game loop
@@ -2108,15 +2181,13 @@ export async function endGameFlow(runtime: SessionRuntime, winResult: WinResult)
     }),
   );
 
-  // Step 7: Flush replay
-  if (runtime.pendingReplayEntries.length > 0) {
-    await replayStore
-      .appendReplayEntries(sessionId, runtime.pendingReplayEntries)
-      .catch((e: unknown) => {
-        runtime.log.error('Failed to flush replay entries', e);
-      });
-    runtime.pendingReplayEntries.length = 0;
-  }
+  // Step 7: Flush replay.
+  //
+  // Entries are already being flushed continuously as they are produced (see
+  // `scheduleReplayFlush`); this awaits the tail so the session is not
+  // broadcast as completed while its own completion entry is still unwritten.
+  // It is no longer the only time the log reaches the store.
+  await flushReplayEntries(runtime);
 
   // Step 8: Broadcast
   runtime.publish(sessionRoom(sessionId), {

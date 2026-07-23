@@ -82,7 +82,7 @@ export const createWsUpgradeHandler =
     const credentialPresented = hasPresentedCredential(req);
     let resolved: Actor;
     try {
-      resolved = await resolveRequestActor(req, actorResolver ?? null);
+      resolved = await resolveRequestActor(withQueryTokenAsHeader(req), actorResolver ?? null);
     } catch (error) {
       if (!credentialPresented) throw error;
       return Response.json({ error: 'Invalid or unavailable credentials' }, { status: 401 });
@@ -108,6 +108,51 @@ export const createWsUpgradeHandler =
     });
     return upgraded ? undefined : Response.json({ error: 'Upgrade failed' }, { status: 400 });
   };
+
+/**
+ * Re-present a `?token=` query credential as the standard user-token header.
+ *
+ * **Browsers cannot set headers on a WebSocket connect.** That is the whole
+ * reason the query-param strategy exists, and it is what clients configured
+ * with `ws.auth.strategy: 'query-param'` send.
+ *
+ * `hasPresentedCredential()` counts that query token as a credential, but actor
+ * resolvers read headers and cookies — so the resolver never saw it, returned
+ * anonymous, and the handler below rejected the upgrade as
+ * "Invalid or expired credentials". A token the same server had just issued and
+ * which REST accepted happily was refused on the socket, leaving authenticated
+ * clients in a permanent reconnect loop while anonymous ones connected fine.
+ *
+ * The rewrite is scoped to the WS upgrade path deliberately. Widening the shared
+ * REST resolver to read tokens out of URLs would put credentials into access
+ * logs, referrers, and browser history for every ordinary request — a real
+ * security regression to fix a socket-only problem.
+ *
+ * A request that already carries a header or cookie credential is returned
+ * untouched, so an explicit header always wins over a URL parameter.
+ */
+function withQueryTokenAsHeader(req: Request): Request {
+  if (req.headers.get(HEADER_USER_TOKEN)?.trim()) return req;
+  if (/^Bearer\s+\S+/i.test(req.headers.get('authorization')?.trim() ?? '')) return req;
+  if (req.headers.get('cookie')?.includes(`${COOKIE_TOKEN}=`)) return req;
+
+  let queryToken: string | null = null;
+  try {
+    queryToken = new URL(req.url).searchParams.get('token')?.trim() ?? null;
+  } catch {
+    return req;
+  }
+  if (!queryToken) return req;
+
+  const headers = new Headers(req.headers);
+  headers.set(HEADER_USER_TOKEN, queryToken);
+  return new Request(req.url, {
+    method: req.method,
+    headers,
+    // An upgrade request carries no body; copying one would consume the stream
+    // the caller still needs for `server.upgrade()`.
+  });
+}
 
 function hasPresentedCredential(req: Request): boolean {
   const headerToken = req.headers.get(HEADER_USER_TOKEN)?.trim();

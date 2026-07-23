@@ -7,6 +7,34 @@
  * @internal
  */
 import { z } from 'zod';
+import type { ReplayStore } from '../types/adapters';
+
+const ReplayConfigSchema = z.object({
+  store: z
+    .union([
+      z.literal('memory'),
+      z.object({
+        factory: z
+          .custom<() => ReplayStore>(
+            value => typeof value === 'function',
+            'replay.store.factory must be a function returning a ReplayStore.',
+          )
+          .describe('Factory invoked once per package instance to build the ReplayStore.'),
+      }),
+    ])
+    .default('memory')
+    .describe(
+      "Where replay entries are written. 'memory' (default) is per-process and lost on " +
+        'restart; { factory } supplies a durable ReplayStore. Default: memory.',
+    ),
+  retainOnCleanup: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Whether replay entries survive session cleanup. Durable stores usually want true, ' +
+        'otherwise the history is deleted with the session. Default: false.',
+    ),
+});
 
 const CleanupConfigSchema = z.object({
   completedTtl: z
@@ -125,7 +153,7 @@ const RecoveryConfigSchema = z.object({
     .describe('Message TTL in seconds. Default: 3600.'),
 });
 
-/** Zod schema validating the game engine package config: mount path, WS endpoint, cleanup, disconnect, rate-limit, heartbeat, recovery, and disabled routes. */
+/** Zod schema validating the game engine package config: mount path, WS endpoint, replay, cleanup, disconnect, rate-limit, heartbeat, recovery, and disabled routes. */
 export const GameEnginePluginConfigSchema = z.object({
   mountPath: z
     .string()
@@ -133,6 +161,10 @@ export const GameEnginePluginConfigSchema = z.object({
     .default('/game')
     .describe('Mount path for game engine REST routes. Default: /game.'),
   wsEndpoint: z.string().default('game').describe("WS endpoint name. Default: 'game'."),
+  replay: ReplayConfigSchema.default({
+    store: 'memory',
+    retainOnCleanup: false,
+  }).describe('Replay log storage and retention.'),
   cleanup: CleanupConfigSchema.default({
     completedTtl: 4 * 60 * 60 * 1000,
     abandonedTtl: 60 * 60 * 1000,

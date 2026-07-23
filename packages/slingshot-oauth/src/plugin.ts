@@ -102,10 +102,28 @@ function isAllowedAbsoluteRedirect(value: string, allowedRedirectUrls: readonly 
   });
 }
 
-function validatePostRedirect(postRedirect: string, allowedRedirectUrls: readonly string[]): void {
+export function validatePostRedirect(
+  postRedirect: string,
+  allowedRedirectUrls: readonly string[],
+): void {
   const parsed = redirectTargetSchema.safeParse(postRedirect);
   if (!parsed.success) {
     throw new Error(`[slingshot-oauth] Invalid postRedirect: ${parsed.error.issues[0]?.message}`);
+  }
+  if (process.env['NODE_ENV'] === 'production') {
+    const insecureAllowedRedirect = allowedRedirectUrls.find(
+      value => new URL(value).protocol !== 'https:',
+    );
+    if (insecureAllowedRedirect) {
+      throw new Error(
+        `[slingshot-oauth] allowedRedirectUrls must use HTTPS in production: '${insecureAllowedRedirect}'.`,
+      );
+    }
+    if (!isRelativeRedirect(postRedirect) && new URL(postRedirect).protocol !== 'https:') {
+      throw new Error(
+        '[slingshot-oauth] Absolute postRedirect values must use HTTPS in production.',
+      );
+    }
   }
   if (isRelativeRedirect(postRedirect)) return;
   if (allowedRedirectUrls.length === 0) {

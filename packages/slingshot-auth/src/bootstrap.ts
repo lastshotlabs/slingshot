@@ -162,6 +162,30 @@ export async function bootstrapAuth(
     authTrace: runtimeInfra?.logging?.authTrace,
     logger: runtimeInfra?.logger,
   });
+
+  if (isProd()) {
+    for (const [name, cookieConfig] of [
+      ['auth', authConfig.cookieConfig],
+      ['CSRF', authConfig.csrfCookieConfig],
+    ] as const) {
+      if (cookieConfig?.secure === false) {
+        throw new Error(`[slingshot-auth] ${name} cookies cannot set secure:false in production`);
+      }
+    }
+  }
+
+  for (const [name, cookieConfig] of [
+    ['auth', authConfig.cookieConfig],
+    ['CSRF', authConfig.csrfCookieConfig],
+  ] as const) {
+    const effectiveSecure = cookieConfig?.secure ?? isProd();
+    if (cookieConfig?.sameSite === 'None' && !effectiveSecure) {
+      throw new Error(
+        `[slingshot-auth] ${name} cookies with SameSite=None must also set secure:true`,
+      );
+    }
+  }
+
   if (!runtimeInfra?.password) {
     throw new Error(
       '[slingshot-auth] RuntimePassword is required. Pass it via runtimeInfra.password.',

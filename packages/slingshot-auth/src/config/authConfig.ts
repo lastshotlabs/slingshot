@@ -145,8 +145,8 @@ export interface PasswordPolicyConfig {
  * Set via `AuthConfig.cookieConfig`.
  *
  * @remarks
- * In production, `secure` defaults to `true` (HTTPS-only). Override only when
- * your environment terminates TLS at a load balancer and does not forward HTTPS.
+ * In production, `secure` is always required (HTTPS-only), including when TLS
+ * terminates at a load balancer. `SameSite=None` also requires `secure: true`.
  */
 export interface AuthCookieConfig {
   sameSite?: 'Strict' | 'Lax' | 'None';

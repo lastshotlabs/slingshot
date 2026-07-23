@@ -63,3 +63,41 @@ describe('bootstrapAuth OIDC production safety', () => {
     ).rejects.toThrow('auth.oidc.signingKey is required in production');
   });
 });
+
+describe('bootstrapAuth cookie production safety', () => {
+  test.each([
+    ['auth', { cookieConfig: { secure: false } }],
+    ['CSRF', { csrfCookieConfig: { secure: false } }],
+  ] as const)('rejects secure:false for %s cookies in production', async (_name, auth) => {
+    process.env.NODE_ENV = 'production';
+    const bus = makeEventBus();
+
+    await expect(
+      bootstrapAuth(
+        { auth } as AuthPluginConfig,
+        bus,
+        makeEvents(() => bus),
+        undefined,
+        runtimeInfra(),
+      ),
+    ).rejects.toThrow(/cookies cannot set secure:false in production/);
+  });
+
+  test.each([
+    ['auth', { cookieConfig: { sameSite: 'None' as const, secure: false } }],
+    ['CSRF', { csrfCookieConfig: { sameSite: 'None' as const, secure: false } }],
+  ] as const)('rejects SameSite=None without Secure for %s cookies', async (_name, auth) => {
+    process.env.NODE_ENV = 'test';
+    const bus = makeEventBus();
+
+    await expect(
+      bootstrapAuth(
+        { auth } as AuthPluginConfig,
+        bus,
+        makeEvents(() => bus),
+        undefined,
+        runtimeInfra(),
+      ),
+    ).rejects.toThrow(/cookies with SameSite=None must also set secure:true/);
+  });
+});

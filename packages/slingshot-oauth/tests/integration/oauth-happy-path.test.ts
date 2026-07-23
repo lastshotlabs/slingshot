@@ -8,7 +8,7 @@
  *   - Redirect target after successful OAuth login
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { createOAuthPlugin, oauthPluginConfigSchema } from '../../src/plugin';
+import { createOAuthPlugin, oauthPluginConfigSchema, validatePostRedirect } from '../../src/plugin';
 import { createOAuthRouter } from '../../src/routes/oauth';
 import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 
@@ -292,6 +292,37 @@ describe('OAuth postRedirect schema validation', () => {
       allowedRedirectUrls: ['data:text/html,<h1>evil</h1>'],
     });
     expect(result.success).toBe(false);
+  });
+
+  test('rejects an absolute HTTP postRedirect in production', () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(() =>
+        validatePostRedirect('http://app.example.com/callback', [
+          'http://app.example.com/callback',
+        ]),
+      ).toThrow(/must use HTTPS in production/);
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
+  test('rejects HTTP allowedRedirectUrls in production', () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(() =>
+        validatePostRedirect('/callback', [
+          'https://app.example.com/callback',
+          'http://staging.example.com/callback',
+        ]),
+      ).toThrow(/allowedRedirectUrls must use HTTPS in production/);
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
   });
 });
 

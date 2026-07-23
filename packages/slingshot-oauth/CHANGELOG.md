@@ -1,5 +1,16 @@
 # @lastshotlabs/slingshot-oauth
 
+## 0.2.3
+
+### Patch Changes
+
+- Require HTTPS for absolute OAuth post-login redirects and redirect allowlist entries in
+  production. This prevents interception of the single-use authorization code appended to the
+  callback URL.
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-auth@0.2.4
+
 ## 0.2.2
 
 ### Patch Changes

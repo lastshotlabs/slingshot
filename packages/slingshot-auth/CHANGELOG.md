@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-auth
 
+## 0.2.4
+
+### Patch Changes
+
+- Fail production bootstrap when auth or CSRF cookies explicitly disable `Secure`, and require
+  `Secure` whenever `SameSite=None` is configured. This prevents session and refresh-cookie
+  transport downgrades and matches modern browser and Auth0 cookie requirements.
+
 ## 0.2.3
 
 ### Patch Changes

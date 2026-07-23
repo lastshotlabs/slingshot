@@ -352,6 +352,17 @@ export async function publishPackage(
   if (result.exitCode !== 0) {
     const stderr = result.stderr.trim();
     const stdout = result.stdout.trim();
+    // Registry read-after-write lag can make the skip-existing probe miss a
+    // version that is in fact already published; npm then rejects the publish
+    // with "cannot publish over the previously published versions". That means
+    // the version is present, so treat it as an idempotent skip instead of
+    // failing the whole release partway through.
+    if (/cannot publish over the previously published versions/i.test(`${stderr}\n${stdout}`)) {
+      console.log(
+        `[publish] Skipping ${pkg.name}@${pkg.version}; already present on ${options.target}.`,
+      );
+      return;
+    }
     throw new Error(
       `[publish] ${pkg.name}@${pkg.version} failed.\n${stderr || stdout || 'npm publish returned a non-zero exit code.'}`,
     );

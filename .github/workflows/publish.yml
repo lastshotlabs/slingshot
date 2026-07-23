@@ -50,3 +50,19 @@ jobs:
         run: bun scripts/publish.ts --target=github --publish --skip-existing
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure npm for the public registry
+        # The `@lastshotlabs` scope mapping — not publishConfig — is what decides
+        # where `npm publish` sends a scoped package, so it must be repointed at
+        # npmjs rather than merely removed. This overwrites the GitHub Packages
+        # npmrc written above, which is why it runs after that publish step.
+        run: |
+          echo "@lastshotlabs:registry=https://registry.npmjs.org" > $HOME/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> $HOME/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to public npm
+        run: bun scripts/publish.ts --target=npm --publish --skip-existing
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

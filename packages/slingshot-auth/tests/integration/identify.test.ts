@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
-import { COOKIE_TOKEN, getActor } from '@lastshotlabs/slingshot-core';
+import { COOKIE_TOKEN, getActor, sha256 } from '@lastshotlabs/slingshot-core';
 import { signToken } from '../../src/lib/jwt';
 import { createIdentifyMiddleware } from '../../src/middleware/identify';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
@@ -385,6 +385,24 @@ describe('session fingerprint binding', () => {
     });
     const body = await res.json();
     expect(body.actorId).toBe(userId);
+  });
+
+  test('matches a creation-time fingerprint when socket IP is unavailable', async () => {
+    const app = buildFingerprintApp('reject');
+    const { userId, sessionId, token } = await createAuthenticatedSession();
+    await runtime.repos.session.setSessionFingerprint(
+      sessionId,
+      sha256(':TestBrowser/1.0'),
+    );
+
+    const res = await app.request('/test', {
+      headers: {
+        'x-user-token': token,
+        'user-agent': 'TestBrowser/1.0',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).actorId).toBe(userId);
   });
 
   test('matching fingerprint on subsequent request — authenticated', async () => {

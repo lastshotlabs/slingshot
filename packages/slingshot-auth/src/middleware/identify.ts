@@ -28,7 +28,13 @@ function computeFingerprint(
   fields: Array<'ip' | 'ua' | 'accept-language'>,
 ): string {
   const parts = fields.map(f => {
-    if (f === 'ip') return getClientIp(c);
+    if (f === 'ip') {
+      const ip = getClientIp(c);
+      // Session creation stores an unavailable socket address as an empty
+      // component. Use the same canonical value during verification so runtimes
+      // without requestIP support do not reject a freshly issued session.
+      return ip === 'unknown' ? '' : ip;
+    }
     if (f === 'ua') return c.req.header('user-agent') ?? '';
     return c.req.header('accept-language') ?? '';
   });

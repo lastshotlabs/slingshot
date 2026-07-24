@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-entity
 
+## 0.2.5
+
+### Patch Changes
+
+- Fix `op.transition` silently doing nothing on Postgres. `transitionPostgres`
+  numbered its WHERE placeholders match-first but pushed the bind values
+  from-first, so every transition ran as `WHERE id = '<from-state>' AND status =
+'<uuid>'` and updated zero rows while returning HTTP 200 with a null body.
+  SQLite was unaffected.
+
 ## 0.2.3
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @lastshotlabs/slingshot
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-entity@0.2.5
+  - @lastshotlabs/slingshot-community@0.2.5
+  - @lastshotlabs/slingshot-interactions@0.2.3
+  - @lastshotlabs/slingshot-notifications@0.2.4
+  - @lastshotlabs/slingshot-organizations@0.2.3
+  - @lastshotlabs/slingshot-push@0.2.3
+  - @lastshotlabs/slingshot-webhooks@0.2.3
+
 ## 0.2.2
 
 ### Patch Changes

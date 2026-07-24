@@ -1,5 +1,11 @@
 # @lastshotlabs/slingshot-ssr-tanstack
 
+## 0.2.3
+
+### Patch Changes
+
+- @lastshotlabs/slingshot-ssr@0.2.4
+
 ## 0.2.2
 
 ### Patch Changes

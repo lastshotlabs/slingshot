@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-emoji
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-entity@0.2.5
+
 ## 0.2.2
 
 ### Patch Changes

@@ -1,5 +1,5 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, fromPgRow, op, storageName } from '@lastshotlabs/slingshot-entity';
 import type { NotificationPreferenceRecord } from '../types';
 
 function extractMemoryRow(value: Record<string, unknown>): Record<string, unknown> {
@@ -65,6 +65,13 @@ export const NotificationPreference = defineEntity('NotificationPreference', {
 /**
  * Notification preference named operations.
  */
+/**
+ * The physical Postgres table for `NotificationPreference`, resolved through
+ * the same helper the postgres adapter uses so raw SQL cannot drift from the
+ * table the adapter provisions (`slingshot_notification_preferences`).
+ */
+const PG_TABLE = storageName(NotificationPreference, 'postgres');
+
 export const notificationPreferenceOperations = defineOperations(NotificationPreference, {
   listByUser: op.lookup({
     fields: { userId: 'param:actor.id' },
@@ -128,11 +135,19 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
         const client = pool as {
           query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
         };
+        // Same contract as the sqlite branch: the adapter provisions
+        // `slingshot_notification_preferences` with snake_case columns, so the
+        // raw SQL must use those names and the rows must be mapped back to the
+        // camelCase record shape.
         const result = await client.query(
-          'SELECT * FROM "NotificationPreference" WHERE "userId" = $1',
+          `SELECT * FROM ${PG_TABLE} WHERE user_id = $1`,
           [userId],
         );
-        return result.rows as NotificationPreferenceRecord[];
+        return result.rows.map(row =>
+          materializePreferenceRecord(
+            fromPgRow(row as Record<string, unknown>, NotificationPreference.fields),
+          ),
+        );
       },
     mongo:
       collection =>

@@ -1,6 +1,6 @@
 import { createConsoleLogger, defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
+import { defineOperations, fromPgRow, op, storageName, toPgRow } from '@lastshotlabs/slingshot-entity';
 import type { NotificationRecord } from '../types';
 
 const logger: Logger = createConsoleLogger({
@@ -244,6 +244,26 @@ export const Notification = defineEntity('Notification', {
     },
   },
 });
+
+/**
+ * The physical Postgres table for `Notification`, resolved through the same
+ * helper the postgres adapter uses so a raw-SQL handler can never drift from
+ * the table the adapter actually provisions (`slingshot_notifications`, with
+ * snake_case columns). Hand-written `"Notification"`/`"userId"` SQL used to
+ * live here and failed against every real Postgres deployment.
+ */
+const PG_TABLE = storageName(Notification, 'postgres');
+
+/**
+ * Map a raw Postgres row (snake_case columns, native `pg` driver types) to a
+ * `NotificationRecord`. Same reason as {@link sqliteRowToNotification}: the
+ * entity wiring layer does not pass `fromRow` to `op.custom` factories, so
+ * handlers must map their own rows. `fromPgRow` handles the column-name and
+ * per-type conversion; `materializeNotificationRecord` applies record defaults.
+ */
+function pgRowToNotification(row: Record<string, unknown>): NotificationRecord {
+  return materializeNotificationRecord(fromPgRow(row, Notification.fields));
+}
 
 /**
  * Notification named operations.
@@ -547,7 +567,7 @@ export const notificationOperations = defineOperations(Notification, {
         try {
           await conn.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
           const existingResult = await conn.query(
-            'SELECT * FROM "Notification" WHERE "userId" = $1 AND "dedupKey" = $2 AND read = false LIMIT 1 FOR UPDATE',
+            `SELECT * FROM ${PG_TABLE} WHERE user_id = $1 AND dedup_key = $2 AND read = false LIMIT 1 FOR UPDATE`,
             [userId, dedupKey],
           );
           const existing = existingResult.rows[0];
@@ -562,14 +582,12 @@ export const notificationOperations = defineOperations(Notification, {
                 : 1;
             const nextData = { ...rawData, count: currentCount + 1 };
             const updated = await conn.query(
-              'UPDATE "Notification" SET data = $1 WHERE id = $2 RETURNING *',
-              [nextData, existing['id']],
+              `UPDATE ${PG_TABLE} SET data = $1 WHERE id = $2 RETURNING *`,
+              [JSON.stringify(nextData), existing['id']],
             );
             await conn.query('COMMIT');
             return {
-              record: materializeNotificationRecord(
-                updated.rows[0] ?? { ...existing, data: nextData },
-              ),
+              record: pgRowToNotification(updated.rows[0] ?? { ...existing, data: nextData }),
               created: false,
             };
           }
@@ -578,11 +596,15 @@ export const notificationOperations = defineOperations(Notification, {
               ? (create['id'] as string)
               : crypto.randomUUID();
           const record = { ...create, id };
-          const columns = Object.keys(record);
+          // The adapter's columns are snake_case and its `data` column is
+          // JSONB — `toPgRow` performs both conversions, so the insert matches
+          // what `createPostgresEntityAdapter` would have written itself.
+          const row = toPgRow(record as Record<string, unknown>, Notification.fields);
+          const columns = Object.keys(row);
           const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-          const values = columns.map(c => (record as Record<string, unknown>)[c]);
+          const values = columns.map(c => row[c]);
           await conn.query(
-            `INSERT INTO "Notification" (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+            `INSERT INTO ${PG_TABLE} (${columns.join(', ')}) VALUES (${placeholders})`,
             values,
           );
           await conn.query('COMMIT');
@@ -720,21 +742,25 @@ export const notificationOperations = defineOperations(Notification, {
         let rows: unknown[];
         if (cursor) {
           const result = await client.query(
-            'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 AND ("deliverAt", "id") > (SELECT "deliverAt", "id" FROM "Notification" WHERE "id" = $2) ORDER BY "deliverAt" ASC, "id" ASC LIMIT $3',
+            `SELECT * FROM ${PG_TABLE} WHERE dispatched = false AND deliver_at IS NOT NULL AND deliver_at <= $1 AND (deliver_at, id) > (SELECT deliver_at, id FROM ${PG_TABLE} WHERE id = $2) ORDER BY deliver_at ASC, id ASC LIMIT $3`,
             [now, cursor, limit + 1],
           );
           rows = result.rows;
         } else {
           const result = await client.query(
-            'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2',
+            `SELECT * FROM ${PG_TABLE} WHERE dispatched = false AND deliver_at IS NOT NULL AND deliver_at <= $1 ORDER BY deliver_at ASC, id ASC LIMIT $2`,
             [now, limit + 1],
           );
           rows = result.rows;
         }
         const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+        const records = pageRows.map(row =>
+          pgRowToNotification(row as Record<string, unknown>),
+        );
         return {
-          records: (hasMore ? rows.slice(0, limit) : rows) as NotificationRecord[],
-          nextCursor: hasMore ? ((rows[limit - 1] as Record<string, unknown>).id as string) : null,
+          records,
+          nextCursor: hasMore ? (records[records.length - 1]?.id ?? null) : null,
         };
       },
     mongo:
@@ -824,7 +850,7 @@ export const notificationOperations = defineOperations(Notification, {
           query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
         };
         const result = await client.query(
-          'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)',
+          `SELECT COUNT(*)::int AS count FROM ${PG_TABLE} WHERE dispatched = false AND (deliver_at IS NULL OR deliver_at <= $1)`,
           [now],
         );
         const row = result.rows[0] as { count?: number | string } | undefined;
@@ -876,7 +902,7 @@ export const notificationOperations = defineOperations(Notification, {
       async ({ id, dispatchedAt }) => {
         const client = pool as { query(sql: string, params: unknown[]): Promise<unknown> };
         await client.query(
-          'UPDATE "Notification" SET dispatched = true, "dispatchedAt" = $1 WHERE id = $2',
+          `UPDATE ${PG_TABLE} SET dispatched = true, dispatched_at = $1 WHERE id = $2`,
           [dispatchedAt, id],
         );
       },

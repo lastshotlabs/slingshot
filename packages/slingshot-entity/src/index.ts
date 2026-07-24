@@ -40,6 +40,8 @@ export {
   applyOnUpdate,
   encodeCursor,
   decodeCursor,
+  toPgRow,
+  fromPgRow,
 } from './configDriven/index';
 /** Runtime-generated schema bundle produced from resolved entity config. */
 export type { GeneratedSchemas } from './configDriven/index';

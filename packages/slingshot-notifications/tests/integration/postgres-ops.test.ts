@@ -1,9 +1,43 @@
 import { describe, expect, test } from 'bun:test';
-import { notificationOperations } from '../../src/entities/notification';
-import { notificationPreferenceOperations } from '../../src/entities/preference';
+import { toPgRow } from '@lastshotlabs/slingshot-entity';
+import { Notification, notificationOperations } from '../../src/entities/notification';
+import {
+  NotificationPreference,
+  notificationPreferenceOperations,
+} from '../../src/entities/preference';
 import type { NotificationPreferenceRecord, NotificationRecord } from '../../src/types';
 
 type PgQueryResult = { rows: unknown[] };
+
+/**
+ * The physical table names the postgres entity adapter provisions. Spelled out
+ * literally rather than derived so a rename in the naming helper has to be
+ * acknowledged here too — these strings are the contract this suite exists to
+ * pin down.
+ */
+const NOTIFICATIONS_TABLE = 'slingshot_notifications';
+const PREFERENCES_TABLE = 'slingshot_notification_preferences';
+
+/**
+ * Render a domain record the way a real Postgres row arrives: snake_case
+ * columns and driver-native values (`jsonb` comes back already parsed, which is
+ * why `data` is un-stringified after `toPgRow`).
+ *
+ * The previous version of this fake returned the camelCase domain records
+ * untouched, so it happily answered `"userId"` queries against a `"Notification"`
+ * table — neither of which exists. That is precisely how the handlers shipped
+ * broken against every real Postgres deployment while this suite stayed green.
+ */
+function asPgRow(
+  record: Record<string, unknown>,
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  const row = toPgRow(record, fields as never);
+  if (typeof row['data'] === 'string') {
+    row['data'] = JSON.parse(row['data'] as string);
+  }
+  return row;
+}
 
 function requirePostgresFactory<T>(
   config: { postgres?: ((pool: unknown) => T) | undefined },
@@ -26,16 +60,20 @@ class FakeNotificationsPostgresPool {
   query(sql: string, params: unknown[]): Promise<PgQueryResult> {
     this.queries.push(sql);
 
-    if (sql === 'SELECT * FROM "NotificationPreference" WHERE "userId" = $1') {
+    if (sql === `SELECT * FROM ${PREFERENCES_TABLE} WHERE user_id = $1`) {
       const userId = String(params[0]);
       return Promise.resolve({
-        rows: this.preferences.filter(row => row.userId === userId),
+        rows: this.preferences
+          .filter(row => row.userId === userId)
+          .map(row =>
+            asPgRow(row as unknown as Record<string, unknown>, NotificationPreference.fields),
+          ),
       });
     }
 
     if (
       sql ===
-      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2'
+      `SELECT * FROM ${NOTIFICATIONS_TABLE} WHERE dispatched = false AND deliver_at IS NOT NULL AND deliver_at <= $1 ORDER BY deliver_at ASC, id ASC LIMIT $2`
     ) {
       const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const limit = Number(params[1]);
@@ -46,13 +84,14 @@ class FakeNotificationsPostgresPool {
             new Date(left.deliverAt ?? 0).getTime() - new Date(right.deliverAt ?? 0).getTime() ||
             left.id.localeCompare(right.id),
         )
-        .slice(0, limit);
+        .slice(0, limit)
+        .map(row => asPgRow(row as unknown as Record<string, unknown>, Notification.fields));
       return Promise.resolve({ rows });
     }
 
     if (
       sql ===
-      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 AND ("deliverAt", "id") > (SELECT "deliverAt", "id" FROM "Notification" WHERE "id" = $2) ORDER BY "deliverAt" ASC, "id" ASC LIMIT $3'
+      `SELECT * FROM ${NOTIFICATIONS_TABLE} WHERE dispatched = false AND deliver_at IS NOT NULL AND deliver_at <= $1 AND (deliver_at, id) > (SELECT deliver_at, id FROM ${NOTIFICATIONS_TABLE} WHERE id = $2) ORDER BY deliver_at ASC, id ASC LIMIT $3`
     ) {
       const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const cursor = String(params[1]);
@@ -76,13 +115,14 @@ class FakeNotificationsPostgresPool {
             new Date(left.deliverAt ?? 0).getTime() - new Date(right.deliverAt ?? 0).getTime() ||
             left.id.localeCompare(right.id),
         )
-        .slice(0, limit);
+        .slice(0, limit)
+        .map(row => asPgRow(row as unknown as Record<string, unknown>, Notification.fields));
       return Promise.resolve({ rows });
     }
 
     if (
       sql ===
-      'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)'
+      `SELECT COUNT(*)::int AS count FROM ${NOTIFICATIONS_TABLE} WHERE dispatched = false AND (deliver_at IS NULL OR deliver_at <= $1)`
     ) {
       const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const count = this.notifications.filter(
@@ -93,7 +133,9 @@ class FakeNotificationsPostgresPool {
       return Promise.resolve({ rows: [{ count }] });
     }
 
-    if (sql === 'UPDATE "Notification" SET dispatched = true, "dispatchedAt" = $1 WHERE id = $2') {
+    if (
+      sql === `UPDATE ${NOTIFICATIONS_TABLE} SET dispatched = true, dispatched_at = $1 WHERE id = $2`
+    ) {
       const dispatchedAt = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const id = String(params[1]);
       const row = this.notifications.find(entry => entry.id === id);
@@ -156,7 +198,7 @@ describe('slingshot-notifications postgres handlers', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.id).toBe('pref-1');
-    expect(pool.queries).toContain('SELECT * FROM "NotificationPreference" WHERE "userId" = $1');
+    expect(pool.queries).toContain(`SELECT * FROM ${PREFERENCES_TABLE} WHERE user_id = $1`);
   });
 
   test('listPendingDispatch postgres handler filters, sorts, and limits due notifications', async () => {
@@ -260,7 +302,7 @@ describe('slingshot-notifications postgres handlers', () => {
     // Only 2 eligible rows with limit=2 — no more pages.
     expect(result.nextCursor).toBeNull();
     expect(pool.queries).toContain(
-      'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC, "id" ASC LIMIT $2',
+      `SELECT * FROM ${NOTIFICATIONS_TABLE} WHERE dispatched = false AND deliver_at IS NOT NULL AND deliver_at <= $1 ORDER BY deliver_at ASC, id ASC LIMIT $2`,
     );
   });
 
@@ -499,7 +541,7 @@ describe('slingshot-notifications postgres handlers', () => {
     // n-future and n-already-dispatched are excluded.
     expect(count).toBe(3);
     expect(pool.queries).toContain(
-      'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)',
+      `SELECT COUNT(*)::int AS count FROM ${NOTIFICATIONS_TABLE} WHERE dispatched = false AND (deliver_at IS NULL OR deliver_at <= $1)`,
     );
   });
 
@@ -538,7 +580,7 @@ describe('slingshot-notifications postgres handlers', () => {
     expect(notification.dispatched).toBe(true);
     expect(notification.dispatchedAt).toEqual(dispatchedAt);
     expect(pool.queries).toContain(
-      'UPDATE "Notification" SET dispatched = true, "dispatchedAt" = $1 WHERE id = $2',
+      `UPDATE ${NOTIFICATIONS_TABLE} SET dispatched = true, dispatched_at = $1 WHERE id = $2`,
     );
   });
 });

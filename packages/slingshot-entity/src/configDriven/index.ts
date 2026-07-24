@@ -48,7 +48,7 @@
  * - **Schema generation**: `generateSchemas`, `GeneratedSchemas`
  * - **Operations**: `defineOperations`, `op`, all `*OpConfig` types, `ResolvedOperations`
  * - **Field utilities**: `toSnakeCase`, `toCamelCase`, `applyDefaults`, `applyOnUpdate`,
- *   `encodeCursor`, `decodeCursor`
+ *   `encodeCursor`, `decodeCursor`, `toPgRow`, `fromPgRow`
  */
 
 // Entity factory orchestrator
@@ -98,4 +98,6 @@ export {
   applyOnUpdate,
   encodeCursor,
   decodeCursor,
+  toPgRow,
+  fromPgRow,
 } from './fieldUtils';

@@ -55,7 +55,7 @@ If these responsibilities move between phases, treat that as an architectural ch
 - Security middleware that protects auth behavior belongs early in the chain.
 - Optional features should fail clearly when configured but not installed, as the OAuth path already does.
 - Session-backed user resolution must stay consistent with token verification and stored session state, especially for WebSocket and SSE flows.
-- WebSocket and SSE actor resolution rejects bearer credentials in URL query strings; use the HttpOnly cookie or an authorization/user-token header.
+- Ordinary HTTP and SSE actor resolution rejects bearer credentials in URL query strings. Browser WebSocket upgrades may use the explicitly configured query-parameter strategy because the WebSocket API cannot set authorization headers; the upgrade handler confines that translation to the socket boundary and preserves explicit header or cookie credentials as higher precedence.
 - Standalone mode must remain explicit about runtime dependencies instead of silently depending on global Bun behavior.
 - Suspension checks must run on authenticated requests by default, and refresh token rotation must not mint fresh credentials for suspended or newly-unverified accounts.
 - Any error after tentative token/session resolution must clear the partial actor state. Suspension-store outages fail closed for both ordinary HTTP and WebSocket/SSE upgrade authentication.

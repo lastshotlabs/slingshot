@@ -15,10 +15,9 @@ const ReplayConfigSchema = z.object({
       z.literal('memory'),
       z.object({
         factory: z
-          .custom<() => ReplayStore>(
-            value => typeof value === 'function',
-            'replay.store.factory must be a function returning a ReplayStore.',
-          )
+          .custom<
+            () => ReplayStore
+          >(value => typeof value === 'function', 'replay.store.factory must be a function returning a ReplayStore.')
           .describe('Factory invoked once per package instance to build the ReplayStore.'),
       }),
     ])

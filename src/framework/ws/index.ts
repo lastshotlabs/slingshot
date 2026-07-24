@@ -134,9 +134,9 @@ export const createWsUpgradeHandler =
 function withQueryTokenAsHeader(req: Request): Request {
   if (req.headers.get(HEADER_USER_TOKEN)?.trim()) return req;
   if (/^Bearer\s+\S+/i.test(req.headers.get('authorization')?.trim() ?? '')) return req;
-  if (req.headers.get('cookie')?.includes(`${COOKIE_TOKEN}=`)) return req;
+  if (hasSessionCookie(req)) return req;
 
-  let queryToken: string | null = null;
+  let queryToken: string | null;
   try {
     queryToken = new URL(req.url).searchParams.get('token')?.trim() ?? null;
   } catch {
@@ -144,14 +144,11 @@ function withQueryTokenAsHeader(req: Request): Request {
   }
   if (!queryToken) return req;
 
-  const headers = new Headers(req.headers);
-  headers.set(HEADER_USER_TOKEN, queryToken);
-  return new Request(req.url, {
-    method: req.method,
-    headers,
-    // An upgrade request carries no body; copying one would consume the stream
-    // the caller still needs for `server.upgrade()`.
-  });
+  // Keep the original Request object. The standalone server attaches client IP
+  // and trust-proxy metadata to it with symbols before actor resolution; cloning
+  // the Request would silently discard those values and break session binding.
+  req.headers.set(HEADER_USER_TOKEN, queryToken);
+  return req;
 }
 
 function hasPresentedCredential(req: Request): boolean {
@@ -164,6 +161,10 @@ function hasPresentedCredential(req: Request): boolean {
   const queryToken = new URL(req.url).searchParams.get('token')?.trim();
   if (queryToken) return true;
 
+  return hasSessionCookie(req);
+}
+
+function hasSessionCookie(req: Request): boolean {
   const cookie = req.headers.get('cookie');
   return Boolean(
     cookie

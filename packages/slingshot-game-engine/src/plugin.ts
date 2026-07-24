@@ -116,9 +116,7 @@ export function createGameEnginePackage(
   // The factory is invoked exactly once, here, per package instance (Rule 3 —
   // closure-owned state, no singletons).
   const replayStore =
-    config.replay.store === 'memory'
-      ? createInMemoryReplayStore()
-      : config.replay.store.factory();
+    config.replay.store === 'memory' ? createInMemoryReplayStore() : config.replay.store.factory();
 
   // Cleanup state
   const cleanupState = createCleanupState(config.cleanup);

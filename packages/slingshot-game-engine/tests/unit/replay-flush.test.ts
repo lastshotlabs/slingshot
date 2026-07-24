@@ -97,10 +97,10 @@ function createRecordingStore(): ReplayStore & {
 }
 
 const silentLog = {
-  debug() {},
-  info() {},
-  warn() {},
-  error() {},
+  debug(..._args: unknown[]) {},
+  info(..._args: unknown[]) {},
+  warn(..._args: unknown[]) {},
+  error(..._args: unknown[]) {},
 };
 
 async function createRuntimeWith(store: ReplayStore, log = silentLog) {
@@ -209,8 +209,8 @@ describe('replay flush cadence', () => {
 
     const runtime = await createRuntimeWith(exploding, {
       ...silentLog,
-      error(message: string) {
-        errors.push(message);
+      error(...args: unknown[]) {
+        if (typeof args[0] === 'string') errors.push(args[0]);
       },
     });
 

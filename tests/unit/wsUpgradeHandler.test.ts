@@ -118,6 +118,53 @@ describe('createWsUpgradeHandler', () => {
     expect(upgradeCalled).toBe(false);
   });
 
+  it('presents a query token to the resolver without losing client IP metadata', async () => {
+    let resolvedHeader: string | null = null;
+    let resolvedIp: string | null = null;
+    const resolver = {
+      resolveActor: async (req: Request) => {
+        resolvedHeader = req.headers.get('x-user-token');
+        resolvedIp = getClientIpFromRequest(req, false);
+        return {
+          ...ANONYMOUS_ACTOR,
+          id: 'user-42',
+          kind: 'user' as const,
+        };
+      },
+    };
+    const handler = createWsUpgradeHandler(createMockServer(), '/ws', resolver);
+
+    const result = await handler(new Request('http://localhost/ws?token=valid-token'));
+
+    expect(result).toBeUndefined();
+    expect(resolvedHeader as string | null).toBe('valid-token');
+    expect(resolvedIp as string | null).toBe('127.0.0.1');
+  });
+
+  it('does not mistake a similarly named cookie for the session cookie', async () => {
+    let resolvedHeader: string | null = null;
+    const resolver = {
+      resolveActor: async (req: Request) => {
+        resolvedHeader = req.headers.get('x-user-token');
+        return {
+          ...ANONYMOUS_ACTOR,
+          id: 'user-42',
+          kind: 'user' as const,
+        };
+      },
+    };
+    const handler = createWsUpgradeHandler(createMockServer(), '/ws', resolver);
+
+    const result = await handler(
+      new Request('http://localhost/ws?token=valid-token', {
+        headers: { cookie: 'not_token=unrelated' },
+      }),
+    );
+
+    expect(result).toBeUndefined();
+    expect(resolvedHeader as string | null).toBe('valid-token');
+  });
+
   it('rejects a presented credential when the resolver has a transient failure', async () => {
     const resolver = {
       resolveActor: async () => {

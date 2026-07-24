@@ -229,7 +229,15 @@ export function transitionPostgres(
       }
     }
 
+    // Placeholder numbering and value order must advance together: the match
+    // columns claim $n first, so their values go in first. Pushing the `from`
+    // guard ahead of them silently swaps the two — `WHERE id = 'draft' AND
+    // status = '<uuid>'` matches nothing, so every transition became a 200 that
+    // wrote no row. Postgres-only; the SQLite branch below already orders these
+    // correctly, which is why the SQLite-backed suites never caught it.
     const whereParts = matchEntries.map(([f]) => `${toSnakeCase(f)} = $${++pIdx}`);
+    for (const [f] of matchEntries) values.push(resolved[f]);
+
     const allowedFrom = fromValues(op);
     if (allowedFrom.length === 1) {
       whereParts.push(`${col} = $${++pIdx}`);
@@ -239,7 +247,6 @@ export function transitionPostgres(
       whereParts.push(`${col} IN (${placeholders.join(', ')})`);
       values.push(...allowedFrom);
     }
-    for (const [f] of matchEntries) values.push(resolved[f]);
 
     const result = await pool.query(
       `UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereParts.join(' AND ')} RETURNING *`,

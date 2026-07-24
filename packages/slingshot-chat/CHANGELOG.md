@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-chat
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-permissions@0.2.3
+
 ## 0.2.4
 
 ### Patch Changes

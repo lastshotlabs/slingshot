@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-permissions
 
+## 0.2.3
+
+### Patch Changes
+
+- Stop importing `mongoose` at module load. The Mongo permissions adapter built its
+  schema at import time, so merely importing the package required an optional peer
+  — breaking any consumer that does not use Mongo. The schema is now built when the
+  adapter is constructed.
+
 ## 0.2.2
 
 ### Patch Changes

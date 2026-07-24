@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-permissions@0.2.3
+  - @lastshotlabs/slingshot-interactions@0.2.4
+
 ## 0.2.5
 
 ### Patch Changes

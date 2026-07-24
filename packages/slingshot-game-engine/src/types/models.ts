@@ -677,7 +677,7 @@ export type ServerToClientMessage =
   | {
       type: 'game:timer.updated';
       sessionId: string;
-      phaseEndsAt: number;
+      phaseEndsAt: number | null;
     }
   | { type: 'game:session.started'; sessionId: string }
   | { type: 'game:session.paused'; sessionId: string }
@@ -794,10 +794,16 @@ export interface ProcessHandlerContext {
   getChannelInputs(channelName: string): Map<string, { input: unknown; submittedAt: number }>;
 
   // Timer control
+  /**
+   * Replace the current phase timeout with a duration measured from now.
+   * Pass `null` to hold the phase indefinitely until it is re-armed or
+   * advanced explicitly.
+   */
+  setPhaseDeadline(timeoutMs: number | null): void;
   extendTimer(ms: number): void;
   resetTimer(ms: number): void;
   getTimeRemaining(): number;
-  getPhaseEndsAt(): number;
+  getPhaseEndsAt(): number | null;
 
   // RNG
   random: SeededRng;

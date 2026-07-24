@@ -134,7 +134,8 @@ class FakeNotificationsPostgresPool {
     }
 
     if (
-      sql === `UPDATE ${NOTIFICATIONS_TABLE} SET dispatched = true, dispatched_at = $1 WHERE id = $2`
+      sql ===
+      `UPDATE ${NOTIFICATIONS_TABLE} SET dispatched = true, dispatched_at = $1 WHERE id = $2`
     ) {
       const dispatchedAt = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const id = String(params[1]);

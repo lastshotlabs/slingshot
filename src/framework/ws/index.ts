@@ -37,6 +37,12 @@ export type SocketData<T extends object = object> = {
   endpoint: string;
   /** Session ID assigned on open when connection recovery is configured. */
   sessionId?: string;
+  /**
+   * Internal first-message authenticator captured at upgrade time. It retains
+   * the original Request's client-IP and trust-proxy metadata while keeping
+   * credentials out of the WebSocket URL.
+   */
+  authenticate?: (token: string) => Promise<Actor>;
 } & T;
 
 type BaseSocketData = SocketData;
@@ -93,6 +99,23 @@ export const createWsUpgradeHandler =
     // Freeze the actor at the boundary (Rule 10) — downstream WS handlers
     // receive an immutable identity. ANONYMOUS_ACTOR is already pre-frozen.
     const actor = Object.isFrozen(resolved) ? resolved : Object.freeze(resolved);
+    const authenticate =
+      actorResolver == null
+        ? undefined
+        : async (token: string): Promise<Actor> => {
+            const previous = req.headers.get(HEADER_USER_TOKEN);
+            req.headers.set(HEADER_USER_TOKEN, token);
+            try {
+              const next = await resolveRequestActor(req, actorResolver);
+              if (next.kind === 'anonymous' || !next.id) {
+                throw new Error('Invalid or expired credentials');
+              }
+              return Object.isFrozen(next) ? next : Object.freeze(next);
+            } finally {
+              if (previous === null) req.headers.delete(HEADER_USER_TOKEN);
+              else req.headers.set(HEADER_USER_TOKEN, previous);
+            }
+          };
     // requestTenantId is set to null at upgrade time — tenant middleware does not run
     // on WS upgrade. Consumers that need request-tenant scope on a socket should wrap
     // this handler with their own tenant resolver and merge into `data` before calling
@@ -104,10 +127,63 @@ export const createWsUpgradeHandler =
         requestTenantId: null,
         rooms: new Set(),
         endpoint,
+        ...(authenticate ? { authenticate } : {}),
       },
     });
     return upgraded ? undefined : Response.json({ error: 'Upgrade failed' }, { status: 400 });
   };
+
+/**
+ * Consume Snapshot's `{type:"auth",token}` first-message authentication frame.
+ *
+ * Authentication is a one-way anonymous-to-authenticated transition and must
+ * happen before room membership, preventing a live socket from swapping the
+ * identity under existing subscriptions.
+ */
+export async function handleFirstMessageAuth(
+  ws: {
+    data: SocketData;
+    send(message: string): unknown;
+  },
+  raw: string | Buffer,
+): Promise<boolean> {
+  let value: unknown;
+  try {
+    value = JSON.parse(typeof raw === 'string' ? raw : Buffer.from(raw).toString());
+  } catch {
+    return false;
+  }
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    (value as Record<string, unknown>)['type'] !== 'auth'
+  ) {
+    return false;
+  }
+
+  const token = (value as Record<string, unknown>)['token'];
+  if (typeof token !== 'string' || token.trim().length === 0) {
+    ws.send(JSON.stringify({ event: 'auth:error', code: 'INVALID_CREDENTIALS' }));
+    return true;
+  }
+  if (ws.data.actor.kind !== 'anonymous' || ws.data.rooms.size > 0) {
+    ws.send(JSON.stringify({ event: 'auth:error', code: 'IDENTITY_ALREADY_BOUND' }));
+    return true;
+  }
+  if (!ws.data.authenticate) {
+    ws.send(JSON.stringify({ event: 'auth:error', code: 'AUTH_UNAVAILABLE' }));
+    return true;
+  }
+
+  try {
+    ws.data.actor = await ws.data.authenticate(token.trim());
+    delete ws.data.authenticate;
+    ws.send(JSON.stringify({ event: 'auth:authenticated' }));
+  } catch {
+    ws.send(JSON.stringify({ event: 'auth:error', code: 'INVALID_CREDENTIALS' }));
+  }
+  return true;
+}
 
 /**
  * Re-present a `?token=` query credential as the standard user-token header.

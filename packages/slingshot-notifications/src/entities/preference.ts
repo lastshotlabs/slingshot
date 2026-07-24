@@ -63,15 +63,15 @@ export const NotificationPreference = defineEntity('NotificationPreference', {
 });
 
 /**
- * Notification preference named operations.
- */
-/**
  * The physical Postgres table for `NotificationPreference`, resolved through
  * the same helper the postgres adapter uses so raw SQL cannot drift from the
  * table the adapter provisions (`slingshot_notification_preferences`).
  */
 const PG_TABLE = storageName(NotificationPreference, 'postgres');
 
+/**
+ * Notification preference lookups and delivery-resolution operations.
+ */
 export const notificationPreferenceOperations = defineOperations(NotificationPreference, {
   listByUser: op.lookup({
     fields: { userId: 'param:actor.id' },
@@ -139,10 +139,7 @@ export const notificationPreferenceOperations = defineOperations(NotificationPre
         // `slingshot_notification_preferences` with snake_case columns, so the
         // raw SQL must use those names and the rows must be mapped back to the
         // camelCase record shape.
-        const result = await client.query(
-          `SELECT * FROM ${PG_TABLE} WHERE user_id = $1`,
-          [userId],
-        );
+        const result = await client.query(`SELECT * FROM ${PG_TABLE} WHERE user_id = $1`, [userId]);
         return result.rows.map(row =>
           materializePreferenceRecord(
             fromPgRow(row as Record<string, unknown>, NotificationPreference.fields),

@@ -89,6 +89,14 @@ The most important decisions are:
 - `wsRateLimit`: tune for your expected input frequency
 - `disableRoutes`: suppress parts of the default REST route surface
 
+Game handlers can change a live phase deadline through `ProcessHandlerContext`.
+Use `setPhaseDeadline(null)` to hold the phase indefinitely, then
+`setPhaseDeadline(durationMs)` to re-arm it from the current time. The engine
+cancels/replaces the authoritative phase timer and broadcasts
+`game:timer.updated` with the new `phaseEndsAt` (or `null`), keeping every
+client countdown synchronized. `extendTimer(ms)` and `resetTimer(ms)` remain
+available for incremental and duration-only changes.
+
 If you need to change behavior, start in:
 
 - `src/plugin.ts` for package lifecycle, route registration, WS wiring, and sweep startup

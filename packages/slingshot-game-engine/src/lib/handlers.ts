@@ -44,7 +44,14 @@ import {
   setScore,
 } from './scoring';
 import type { MutableTimerState } from './timers';
-import { createTimer, extendTimer, getTimeRemaining, getTimersByType, resetTimer } from './timers';
+import {
+  cancelTimer,
+  createTimer,
+  extendTimer,
+  getTimeRemaining,
+  getTimersByType,
+  resetTimer,
+} from './timers';
 import type { MutableTurnState } from './turns';
 import {
   completeTurnCycle,
@@ -353,6 +360,36 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
     },
 
     // Timer control
+    setPhaseDeadline(timeoutMs: number | null): void {
+      if (timeoutMs !== null && (!Number.isFinite(timeoutMs) || timeoutMs < 0)) {
+        throw new RangeError('setPhaseDeadline timeoutMs must be a finite non-negative number');
+      }
+
+      if (phaseState.phaseTimerId) {
+        cancelTimer(timerState, phaseState.phaseTimerId);
+        phaseState.phaseTimerId = null;
+      }
+
+      if (timeoutMs !== null) {
+        phaseState.phaseTimerId = createTimer(
+          timerState,
+          sessionId,
+          'phase',
+          timeoutMs,
+          'phaseTimeout',
+          requestAdvancePhase,
+        );
+      }
+
+      publish(sessionRoom(sessionId), {
+        type: 'game:timer.updated',
+        sessionId,
+        phaseEndsAt:
+          phaseState.phaseTimerId === null
+            ? null
+            : (timerState.timers.get(phaseState.phaseTimerId)?.endsAt ?? null),
+      });
+    },
     extendTimer(ms: number): void {
       const phaseTimers = getTimersByType(timerState, 'phase');
       if (phaseTimers.length > 0) {
@@ -399,9 +436,9 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
       if (phaseTimers.length === 0) return 0;
       return getTimeRemaining(timerState, phaseTimers[0].id);
     },
-    getPhaseEndsAt(): number {
+    getPhaseEndsAt(): number | null {
       const phaseTimers = getTimersByType(timerState, 'phase');
-      if (phaseTimers.length === 0) return 0;
+      if (phaseTimers.length === 0) return null;
       return phaseTimers[0].endsAt;
     },
 

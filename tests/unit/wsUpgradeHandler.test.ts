@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { ANONYMOUS_ACTOR, type Actor, getClientIpFromRequest } from '@lastshotlabs/slingshot-core';
-import { createWsUpgradeHandler } from '../../src/framework/ws/index';
+import { createWsUpgradeHandler, handleFirstMessageAuth } from '../../src/framework/ws/index';
 
 function createMockServer(overrides?: {
   requestIP?: (req: Request) => { address: string } | null;
@@ -189,5 +189,73 @@ describe('createWsUpgradeHandler', () => {
 
     await handler(req);
     expect(getClientIpFromRequest(req, false)).toBe('unknown');
+  });
+
+  it('authenticates an anonymous socket from the first message using upgrade metadata', async () => {
+    let capturedData: any = null;
+    let authIp: string | null = null;
+    const resolver = {
+      resolveActor: async (req: Request) => {
+        const token = req.headers.get('x-user-token');
+        if (!token) return ANONYMOUS_ACTOR;
+        authIp = getClientIpFromRequest(req, false);
+        return { ...ANONYMOUS_ACTOR, id: 'user-42', kind: 'user' as const };
+      },
+    };
+    const server = createMockServer({
+      upgrade: (_req: Request, opts: any) => {
+        capturedData = opts.data;
+        return true;
+      },
+    });
+    await createWsUpgradeHandler(server, '/ws', resolver)(new Request('http://localhost/ws'));
+    const sent: string[] = [];
+    const ws = { data: capturedData, send: (message: string) => sent.push(message) };
+
+    expect(
+      await handleFirstMessageAuth(ws, JSON.stringify({ type: 'auth', token: 'valid-token' })),
+    ).toBe(true);
+    expect(ws.data.actor).toMatchObject({ id: 'user-42', kind: 'user' });
+    expect(Object.isFrozen(ws.data.actor)).toBe(true);
+    expect(authIp as string | null).toBe('127.0.0.1');
+    expect(sent).toEqual([JSON.stringify({ event: 'auth:authenticated' })]);
+  });
+
+  it('refuses first-message identity swaps and authentication after room membership', async () => {
+    const sent: string[] = [];
+    const authenticated = {
+      data: {
+        id: 'socket-1',
+        actor: Object.freeze({ ...ANONYMOUS_ACTOR, id: 'user-1', kind: 'user' as const }),
+        requestTenantId: null,
+        rooms: new Set<string>(),
+        endpoint: '/ws',
+        authenticate: async () => ({
+          ...ANONYMOUS_ACTOR,
+          id: 'user-2',
+          kind: 'user' as const,
+        }),
+      },
+      send: (message: string) => sent.push(message),
+    };
+    await handleFirstMessageAuth(
+      authenticated,
+      JSON.stringify({ type: 'auth', token: 'replacement' }),
+    );
+
+    const joined = {
+      ...authenticated,
+      data: {
+        ...authenticated.data,
+        actor: ANONYMOUS_ACTOR,
+        rooms: new Set(['private:user-1']),
+      },
+    };
+    await handleFirstMessageAuth(joined, JSON.stringify({ type: 'auth', token: 'late' }));
+
+    expect(sent).toEqual([
+      JSON.stringify({ event: 'auth:error', code: 'IDENTITY_ALREADY_BOUND' }),
+      JSON.stringify({ event: 'auth:error', code: 'IDENTITY_ALREADY_BOUND' }),
+    ]);
   });
 });

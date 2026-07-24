@@ -13,7 +13,7 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
-- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ai`, `slingshot-billing`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
+- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration-engine`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ai`, `slingshot-billing`, `slingshot-ssr`, `slingshot-ssr-tanstack`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-postgres`
 - **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
@@ -79,6 +79,9 @@ Adapters and runtime backends (not authored as packages or plugins themselves):
 `slingshot-postgres`, `slingshot-bullmq`, `slingshot-kafka`, `slingshot-orchestration-engine`,
 `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-ssg`.
 
+SSR adapters: `slingshot-ssr` provides the canonical route/rendering contract;
+`slingshot-ssr-tanstack` adapts TanStack file routes and server companions to it.
+
 Runtime packages: `packages/runtime-bun/`, `packages/runtime-node/`, `packages/runtime-edge/`
 
 Documentation package: `packages/docs/` (Astro site, workspace sync, API generation)
@@ -99,6 +102,7 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 | Code generation   | `packages/slingshot-entity/src/generate.ts`           | Pure entity code generation entry point                                                           |
 | App config helper | `src/defineApp.ts`                                    | `defineApp()` typed identity helper for `app.config.ts`                                           |
 | CLI entry         | `src/cli/commands/start.ts`                           | `slingshot start` — discovers `app.config.ts` and boots                                           |
+| TanStack SSR      | `packages/slingshot-ssr-tanstack/src/`                | TanStack route scanning, server companions, loader reuse, client helpers, and Vite integration    |
 
 ## Bootstrap Flow
 

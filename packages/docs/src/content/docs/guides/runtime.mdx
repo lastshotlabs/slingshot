@@ -159,6 +159,10 @@ bootstrap config far enough for plugin wiring and context setup, while `createSe
 owns transport startup, upgrade handling, and host-specific websocket wiring.
 That split lets tests exercise plugin WebSocket registration without opening
 a listener, while Bun and Node still consume the exact same endpoint draft when the server boots.
+For clients that cannot attach credentials to the upgrade request, the server boundary also consumes
+the optional first `{ "type": "auth", "token": "..." }` message before normal rate limiting,
+room membership, or event dispatch. The actor resolver still receives the original upgrade request
+metadata, and authentication cannot replace an existing actor or occur after joining a room.
 
 ## Switching runtimes
 

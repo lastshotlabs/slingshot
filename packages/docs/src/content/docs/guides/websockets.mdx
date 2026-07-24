@@ -158,12 +158,15 @@ export async function wsRoomSubscribe(
 ## Connecting from the browser
 
 Browser WebSocket clients cannot set custom request headers. Prefer same-origin session cookies
-for browser connections; keep long-lived bearer tokens out of the URL.
+for browser connections. Token-mode clients can authenticate without putting a
+long-lived bearer token in the URL by sending an auth frame as their first
+message:
 
 ```typescript
 const ws = new WebSocket('wss://api.example.com/ws/chat?room=general');
 
 ws.onopen = () => {
+  ws.send(JSON.stringify({ type: 'auth', token }));
   ws.send(JSON.stringify({ text: 'Hello everyone' }));
 };
 
@@ -177,6 +180,15 @@ ws.onclose = () => {
   setTimeout(connect, 1000);
 };
 ```
+
+The default Slingshot upgrade handler accepts the anonymous connection, resolves
+the first-message token through the same actor resolver used by HTTP and upgrade
+authentication, freezes the resolved actor, and replies with
+`{"event":"auth:authenticated"}`. The transition is allowed only while the
+socket is anonymous and has not joined any rooms; an authenticated or subscribed
+socket cannot swap identities. Invalid credentials produce an `auth:error`
+frame. If your client waits for acknowledgment, subscribe and send protected
+events after `auth:authenticated`.
 
 ## Multiple endpoints
 

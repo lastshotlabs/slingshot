@@ -14,7 +14,11 @@ import {
   startHeartbeat,
   stopHeartbeat,
 } from '@framework/ws/heartbeat';
-import { type SocketData, createWsUpgradeHandler } from '@framework/ws/index';
+import {
+  type SocketData,
+  createWsUpgradeHandler,
+  handleFirstMessageAuth,
+} from '@framework/ws/index';
 import { wsEndpointKey } from '@framework/ws/namespace';
 import { trackSocket, untrackSocket } from '@framework/ws/presence';
 import { checkRateLimit, cleanupRateLimitBucket } from '@framework/ws/rateLimit';
@@ -421,6 +425,13 @@ export const createServer = async <T extends object = object>(
         const size = typeof message === 'string' ? message.length : message.byteLength;
         if (size > maxSize) {
           socket.close(1009, 'Message too large');
+          return;
+        }
+        const previousActorId = socket.data.actor.id;
+        if (await handleFirstMessageAuth(socket, message)) {
+          if (ep.presence && socket.data.actor.id !== previousActorId) {
+            trackSocket(wsState, socket.data.id, socket.data.actor.id);
+          }
           return;
         }
         const rl = ep.rateLimit;

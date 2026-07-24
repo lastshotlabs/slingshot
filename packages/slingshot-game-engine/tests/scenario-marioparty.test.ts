@@ -164,6 +164,7 @@ function makeMockCtx(overrides?: Partial<ProcessHandlerContext>): ProcessHandler
       complete: false,
     }),
     getChannelInputs: () => new Map(),
+    setPhaseDeadline: () => {},
     extendTimer: () => {},
     resetTimer: () => {},
     getTimeRemaining: () => 0,

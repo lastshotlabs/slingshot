@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-oauth
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-oauth`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Social OAuth login plugin for Slingshot

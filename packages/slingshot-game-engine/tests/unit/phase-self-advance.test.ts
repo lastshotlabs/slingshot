@@ -90,6 +90,50 @@ const base = {
 } as const;
 
 describe('phase self-advance from onEnter', () => {
+  test('a handler can hold and re-arm a live phase deadline', async () => {
+    const published: unknown[] = [];
+    let handlerContext: any;
+    const game = defineGame({
+      ...base,
+      name: 'handler-controlled-phase-deadline',
+      phases: {
+        wait: { next: 'landed', advance: 'timeout', timeout: NEVER, onEnter: 'capture' },
+        landed: { next: null, advance: 'manual' },
+      },
+      handlers: {
+        capture: (ctx: any): undefined => {
+          handlerContext = ctx;
+        },
+      },
+    });
+
+    const activeRuntimes = new Map<string, SessionRuntime>();
+    activeRuntimeMaps.push(activeRuntimes);
+    const runtime = await createSessionRuntime('session-1', game, {}, [makePlayer()], 1234, {
+      publish(_room, message) {
+        published.push(message);
+      },
+      replayStore: createInMemoryReplayStore(),
+      log: { debug() {}, info() {}, warn() {}, error() {} },
+      activeRuntimes,
+    });
+    if (!runtime) throw new Error('Expected createSessionRuntime() to create a runtime.');
+
+    handlerContext.setPhaseDeadline(null);
+    expect(runtime.phaseState.phaseTimerId).toBeNull();
+    expect(handlerContext.getPhaseEndsAt()).toBeNull();
+    expect(published.at(-1)).toMatchObject({
+      type: 'game:timer.updated',
+      phaseEndsAt: null,
+    });
+
+    handlerContext.setPhaseDeadline(20);
+    expect(runtime.phaseState.phaseTimerId).not.toBeNull();
+    expect(handlerContext.getPhaseEndsAt()).toBeGreaterThan(Date.now());
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(runtime.phaseState.currentPhase).toBe('landed');
+  });
+
   test('a handler can arm an untimed phase and its new timer advances the phase', async () => {
     const published: unknown[] = [];
     const game = defineGame({

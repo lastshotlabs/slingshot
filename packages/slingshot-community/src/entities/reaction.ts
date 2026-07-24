@@ -48,10 +48,9 @@ export const Reaction = defineEntity('Reaction', {
     // set (id + userId + value) to render per-emoji counts, mark the current
     // user's own reactions, and resolve the row id for DELETE. Public to
     // match `Thread.get` (`auth: 'none'`): reaction visibility follows the
-    // content it decorates. NOTE: reads are not yet routed through
-    // `targetVisibilityGuard` — reactions on private-container content are
-    // fetchable by target id. Acceptable for public-community deployments;
-    // guard lands with read-side visibility work.
+    // content it decorates. `targetVisibilityGuard` resolves the thread/reply
+    // before the lookup so private-container content cannot be enumerated by
+    // target id.
     create: {
       // Client allowlist — `userId` is server-injected via dataScope;
       // `createdAt`/`id` auto. Update is disabled — no need for an update
@@ -97,7 +96,7 @@ export const Reaction = defineEntity('Reaction', {
     },
 
     operations: {
-      listByTarget: { auth: 'none' },
+      listByTarget: { auth: 'none', middleware: ['targetVisibilityGuard'] },
       getUserReaction: { auth: 'userAuth' },
       updateScore: { auth: 'userAuth' },
     },

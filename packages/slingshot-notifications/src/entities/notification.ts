@@ -1,6 +1,12 @@
 import { createConsoleLogger, defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-import { defineOperations, fromPgRow, op, storageName, toPgRow } from '@lastshotlabs/slingshot-entity';
+import {
+  defineOperations,
+  fromPgRow,
+  op,
+  storageName,
+  toPgRow,
+} from '@lastshotlabs/slingshot-entity';
 import type { NotificationRecord } from '../types';
 
 const logger: Logger = createConsoleLogger({
@@ -755,9 +761,7 @@ export const notificationOperations = defineOperations(Notification, {
         }
         const hasMore = rows.length > limit;
         const pageRows = hasMore ? rows.slice(0, limit) : rows;
-        const records = pageRows.map(row =>
-          pgRowToNotification(row as Record<string, unknown>),
-        );
+        const records = pageRows.map(row => pgRowToNotification(row as Record<string, unknown>));
         return {
           records,
           nextCursor: hasMore ? (records[records.length - 1]?.id ?? null) : null,

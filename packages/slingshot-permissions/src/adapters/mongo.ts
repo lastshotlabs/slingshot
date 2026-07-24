@@ -1,4 +1,14 @@
-import { Schema } from 'mongoose';
+// TYPE-ONLY. A value import here would pull `mongoose` into the module graph of
+// anyone importing this package's index, which re-exports this file — making an
+// OPTIONAL peer mandatory. That is exactly what happened: a Postgres-only app
+// installing from the registry died at boot with "Cannot find package
+// 'mongoose'", and installing it instead crashed Bun inside bson. The schema is
+// now built from the connection's own Mongoose instance, so nothing is required
+// until someone actually constructs the Mongo adapter. slingshot-auth already
+// documents this rule ("Passed explicitly to avoid optional-dep resolution
+// issues"); this adapter simply did not follow it.
+import { createRequire } from 'node:module';
+import type { Schema as MongooseSchema } from 'mongoose';
 import { validateGrant } from '@lastshotlabs/slingshot-core';
 import type {
   EvaluationScope,
@@ -135,7 +145,12 @@ export interface GrantsModel {
  */
 export interface MongoConnectionLike {
   model(name: string, schema: object): GrantsModel;
+  /** The Mongoose instance behind this connection — the source of `Schema`. */
+  readonly base?: { readonly Schema: SchemaCtor };
 }
+
+/** Constructor shape for `mongoose.Schema`, supplied by the caller's Mongoose. */
+type SchemaCtor = new (definition: object, options?: object) => MongooseSchema<GrantDoc>;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -153,30 +168,58 @@ export interface MongoConnectionLike {
  * explicitly. `updatedAt` is not tracked because grants are never updated in place;
  * they are revoked via a `$set` on `revokedAt`.
  */
-const grantSchema = new Schema<GrantDoc>(
-  {
-    _id: { type: String },
-    subjectId: { type: String, required: true },
-    subjectType: { type: String, required: true },
-    tenantId: { type: String, default: null },
-    resourceType: { type: String, default: null },
-    resourceId: { type: String, default: null },
-    roles: [{ type: String }],
-    effect: { type: String, required: true, enum: ['allow', 'deny'] },
-    grantedBy: { type: String, required: true },
-    grantedAt: { type: Date, default: Date.now },
-    reason: { type: String, default: null },
-    expiresAt: { type: Date, default: null },
-    revokedBy: { type: String, default: null },
-    revokedAt: { type: Date, default: null },
-    revokedReason: { type: String, default: null },
-  },
-  { timestamps: false, autoIndex: false },
-);
+/**
+ * Get the `Schema` constructor without importing `mongoose` at module load.
+ *
+ * Prefers the Mongoose instance that owns the connection (`conn.base`), so the
+ * schema is always built by the same Mongoose the caller is using. Falls back to
+ * a LAZY require for connection-likes that do not expose `base` — that resolution
+ * happens only when someone actually builds the Mongo adapter, by which point
+ * mongoose is necessarily installed.
+ */
+function resolveSchemaCtor(conn: MongoConnectionLike): SchemaCtor {
+  if (conn.base?.Schema) return conn.base.Schema;
+  try {
+    const require_ = createRequire(import.meta.url);
+    return (require_('mongoose') as { Schema: SchemaCtor }).Schema;
+  } catch (cause) {
+    throw new Error(
+      '[slingshot-permissions] createMongoPermissionsAdapter could not resolve mongoose. ' +
+        'Pass a connection from `mongoose.createConnection` (which exposes `base`), ' +
+        'or install mongoose — it is an OPTIONAL peer and is only needed by this adapter.',
+      { cause },
+    );
+  }
+}
 
-grantSchema.index({ subjectType: 1, subjectId: 1, tenantId: 1 });
-grantSchema.index({ resourceType: 1, resourceId: 1 });
-grantSchema.index({ tenantId: 1 });
+function buildGrantSchema(SchemaCtor: SchemaCtor): MongooseSchema<GrantDoc> {
+  const grantSchema = new SchemaCtor(
+    {
+      _id: { type: String },
+      subjectId: { type: String, required: true },
+      subjectType: { type: String, required: true },
+      tenantId: { type: String, default: null },
+      resourceType: { type: String, default: null },
+      resourceId: { type: String, default: null },
+      roles: [{ type: String }],
+      effect: { type: String, required: true, enum: ['allow', 'deny'] },
+      grantedBy: { type: String, required: true },
+      grantedAt: { type: Date, default: Date.now },
+      reason: { type: String, default: null },
+      expiresAt: { type: Date, default: null },
+      revokedBy: { type: String, default: null },
+      revokedAt: { type: Date, default: null },
+      revokedReason: { type: String, default: null },
+    },
+    { timestamps: false, autoIndex: false },
+  );
+
+  grantSchema.index({ subjectType: 1, subjectId: 1, tenantId: 1 });
+  grantSchema.index({ resourceType: 1, resourceId: 1 });
+  grantSchema.index({ tenantId: 1 });
+
+  return grantSchema;
+}
 
 // ---------------------------------------------------------------------------
 // Lean doc → domain type
@@ -248,7 +291,7 @@ export type PermissionsMongoAdapter = TestablePermissionsAdapter;
  * ```
  */
 export function createMongoPermissionsAdapter(conn: MongoConnectionLike): PermissionsMongoAdapter {
-  const Grant: GrantsModel = conn.model('PermissionGrant', grantSchema);
+  const Grant: GrantsModel = conn.model('PermissionGrant', buildGrantSchema(resolveSchemaCtor(conn)));
 
   return {
     async createGrant(grant: Omit<PermissionGrant, 'id' | 'grantedAt'>): Promise<string> {

@@ -641,9 +641,9 @@ export function buildReadonlyHandlerContext(deps: HandlerContextDeps): ReadonlyH
       if (phaseTimers.length === 0) return 0;
       return getTimeRemaining(timerState, phaseTimers[0].id);
     },
-    getPhaseEndsAt(): number {
+    getPhaseEndsAt(): number | null {
       const phaseTimers = getTimersByType(timerState, 'phase');
-      if (phaseTimers.length === 0) return 0;
+      if (phaseTimers.length === 0) return null;
       return phaseTimers[0].endsAt;
     },
 

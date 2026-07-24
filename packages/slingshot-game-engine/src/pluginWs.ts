@@ -108,10 +108,11 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     subscribe: (room: string) => void,
     ack: (data: unknown) => void,
     publish: (room: string, data: unknown) => void,
+    socketId?: string,
   ) => {
     const runtime = activeRuntimes.get(sessionId);
     if (!runtime) return;
-    return handleReconnectFlow(runtime, userId, subscribe, ack, publish);
+    return handleReconnectFlow(runtime, userId, subscribe, ack, publish, socketId);
   };
 
   // Wire restoreConnection callback (#4) — subscribe treated as reconnect.
@@ -119,10 +120,11 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     sessionId: string,
     userId: string,
     publish: (room: string, data: unknown) => void,
+    socketId?: string,
   ): Promise<boolean> => {
     const runtime = activeRuntimes.get(sessionId);
     if (!runtime) return false;
-    return handleSubscribeConnection(runtime, userId, publish);
+    return handleSubscribeConnection(runtime, userId, publish, socketId);
   };
 
   const incomingHandlers = buildIncomingDispatch({
@@ -272,12 +274,20 @@ export function wireWsEndpoint(deps: PluginWsDeps): void {
     const userId = wsData.data.actor.id;
     if (!userId) return;
 
+    // WHICH socket closed matters. A player who locked their phone and woke it
+    // holds a stale socket and a live one at the same time, and the stale one's
+    // close arrives LAST — so an unqualified disconnect here tore presence down
+    // on a player who was sitting right there, subscribed, waiting for a turn
+    // the game had stopped dealing them. `handleDisconnect` only acts when this
+    // was the player's last socket.
+    const socketId = wsData.data.id;
+
     // Await disconnect handling so cleanup completes before the socket is fully released.
     // Also iterate all runtimes — a user may be in multiple sessions.
     const disconnectPromises: Promise<void>[] = [];
     for (const [, runtime] of activeRuntimes) {
       if (runtime.players.has(userId)) {
-        disconnectPromises.push(handleDisconnect(runtime, userId));
+        disconnectPromises.push(handleDisconnect(runtime, userId, socketId));
       }
     }
     await Promise.allSettled(disconnectPromises);

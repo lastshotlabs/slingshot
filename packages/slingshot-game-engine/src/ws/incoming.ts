@@ -83,6 +83,7 @@ export interface IncomingDispatchDeps {
     subscribe: (room: string) => void,
     ack: (data: unknown) => void,
     publish: (room: string, data: unknown) => void,
+    socketId?: string,
   ): Promise<void>;
 
   /**
@@ -99,6 +100,7 @@ export interface IncomingDispatchDeps {
     sessionId: string,
     userId: string,
     publish: (room: string, data: unknown) => void,
+    socketId?: string,
   ): Promise<boolean>;
 
   /**
@@ -175,8 +177,11 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
         // their live connection state and broadcast `game:player.reconnected`
         // when a runtime is active. Snapshot delivery stays below so behavior is
         // identical whether or not a runtime is live.
-        await deps.restoreConnection?.(sessionId, ctx.actorId, (room, data) =>
-          ctx.publish(room, data),
+        await deps.restoreConnection?.(
+          sessionId,
+          ctx.actorId,
+          (room, data) => ctx.publish(room, data),
+          ctx.socketId,
         );
 
         // Send state snapshot
@@ -266,6 +271,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
           (room: string) => ctx.subscribe(room),
           (data: unknown) => ctx.ack(data),
           (room: string, data: unknown) => ctx.publish(room, data),
+          ctx.socketId,
         );
       },
     },

@@ -892,7 +892,19 @@ export interface ReadonlyHandlerContext {
   getChannelInputs(channelName: string): Map<string, { input: unknown; submittedAt: number }>;
 
   getTimeRemaining(): number;
-  getPhaseEndsAt(): number;
+  /**
+   * Epoch ms at which the current phase's timer expires, or `null` when the
+   * phase is untimed (or being held indefinitely by `setPhaseDeadline(null)`).
+   *
+   * This used to be declared `number` here and `number | null` on
+   * {@link ProcessHandlerContext}, with the readonly implementation returning
+   * `0` for "no timer". Two costs: `0` is a real-looking timestamp that reads
+   * as 1970 and makes `endsAt - Date.now()` hugely negative, and the narrower
+   * return made a `ProcessHandlerContext` un-assignable to a
+   * `ReadonlyHandlerContext` — so a game could not pass its own handler
+   * context to a function taking the readonly view.
+   */
+  getPhaseEndsAt(): number | null;
 
   random: SeededRng;
 

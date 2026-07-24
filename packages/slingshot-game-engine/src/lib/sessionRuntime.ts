@@ -239,6 +239,29 @@ export interface SessionRuntime {
 
   handlerContext: ReturnType<typeof buildProcessHandlerContext>;
 
+  /**
+   * The live SOCKETS each player currently holds on this session, keyed by
+   * user id.
+   *
+   * Presence is a per-USER boolean but a close event is per-SOCKET, and a
+   * player routinely holds two at once: a phone that locks does not always
+   * deliver its close, so the client opens a fresh socket on wake while the
+   * stale one is still registered server-side. Without this set the stale
+   * socket's eventual close (a client `reconnect()`, or the heartbeat sweeper
+   * terminating it seconds-to-minutes later) marked the player DISCONNECTED
+   * while their new socket sat live and subscribed — and nothing ever set it
+   * back, because a subscribed client has no reason to subscribe again.
+   *
+   * That is the live "presence dies mid-game while phones are connected" bug:
+   * the game skipped every player whose socket had churned and funnelled every
+   * turn onto the one seat that never did. It is invisible in the database,
+   * because `connected` is never persisted from the runtime.
+   *
+   * {@link handleDisconnect} therefore only tears presence down when the
+   * closing socket was the player's LAST one.
+   */
+  readonly playerSockets: Map<string, Set<string>>;
+
   /** Per-session per-player sequence dedup cache. */
   readonly sequenceCache: Map<string, Map<number, InputAck>>;
 
@@ -847,6 +870,7 @@ export async function createSessionRuntime(
     onRulesApplied: deps.onRulesApplied,
     getHookServices: deps.getHookServices,
     handlerContext,
+    playerSockets: new Map(),
     sequenceCache: new Map(),
     pendingReplayEntries: [],
     replayFlushScheduled: false,
@@ -1841,13 +1865,80 @@ export async function processInputPipeline(
 
 // ── §5.10.6 Disconnect Flow ──────────────────────────────────────
 
-export async function handleDisconnect(runtime: SessionRuntime, userId: string): Promise<void> {
+/**
+ * Record that `userId` holds a live socket on this session.
+ *
+ * Called from every path that establishes presence — `game:subscribe` and
+ * `game:reconnect`. See {@link SessionRuntime.playerSockets} for why presence
+ * has to be counted per socket rather than per user.
+ *
+ * A caller with no socket identity (a test driver, a REST-side control) passes
+ * `undefined` and registers nothing: the legacy last-close-wins behavior is
+ * preserved for transports that cannot name their sockets.
+ */
+export function registerPlayerSocket(
+  runtime: SessionRuntime,
+  userId: string,
+  socketId: string | undefined,
+): void {
+  if (!socketId) return;
+  const sockets = runtime.playerSockets.get(userId);
+  if (sockets) {
+    sockets.add(socketId);
+    return;
+  }
+  runtime.playerSockets.set(userId, new Set([socketId]));
+}
+
+/**
+ * Drop a closing socket from a player's live set.
+ *
+ * @returns `true` when the player still holds another live socket — i.e. the
+ *   close must NOT tear presence down.
+ */
+function releasePlayerSocket(
+  runtime: SessionRuntime,
+  userId: string,
+  socketId: string | undefined,
+): boolean {
+  const sockets = runtime.playerSockets.get(userId);
+  if (!sockets) return false;
+  if (socketId) sockets.delete(socketId);
+  if (sockets.size > 0) return true;
+  runtime.playerSockets.delete(userId);
+  return false;
+}
+
+/**
+ * Handle a socket closing for `userId`.
+ *
+ * `socketId` names the socket that closed. When the player still holds another
+ * live socket this returns without touching presence — see
+ * {@link SessionRuntime.playerSockets}. Omitting `socketId` keeps the original
+ * unconditional behavior, for transports and tests that have no socket id.
+ */
+export async function handleDisconnect(
+  runtime: SessionRuntime,
+  userId: string,
+  socketId?: string,
+): Promise<void> {
   const { sessionId, gameDef, timerState, disconnectState, phaseState, replaySeq } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
 
   // Step 1: Mark player disconnected
   const player = runtime.players.get(userId);
   if (!player) return;
+
+  // A stale socket closing behind a live one is NOT a disconnect. This is the
+  // whole point of tracking sockets: the close for a phone's pre-lock socket
+  // routinely lands after that same phone has already re-subscribed.
+  if (releasePlayerSocket(runtime, userId, socketId)) {
+    runtime.log.debug(
+      `Socket ${socketId} closed for player ${userId} in session ${sessionId}; ` +
+        `presence held — the player still has a live socket.`,
+    );
+    return;
+  }
 
   player.connected = false;
   player.disconnectedAt = new Date();
@@ -1970,6 +2061,7 @@ export async function handleReconnectFlow(
   subscribe: (room: string) => void,
   ack: (data: unknown) => void,
   publish: (room: string, data: unknown) => void,
+  socketId?: string,
 ): Promise<void> {
   const { sessionId, gameDef, disconnectState, timerState, afkState, replaySeq } = runtime;
   const hookError = createHookErrorHandler(sessionId, runtime.log);
@@ -1977,6 +2069,8 @@ export async function handleReconnectFlow(
   // Step 1: Mark player reconnected
   const player = runtime.players.get(userId);
   if (!player) return;
+
+  registerPlayerSocket(runtime, userId, socketId);
 
   const wasDisconnected = !player.connected || player.disconnectedAt !== null;
   const disconnectedForMs = player.disconnectedAt
@@ -2093,10 +2187,13 @@ export async function handleSubscribeConnection(
   runtime: SessionRuntime,
   userId: string,
   publish: (room: string, data: unknown) => void,
+  socketId?: string,
 ): Promise<boolean> {
   const { sessionId, gameDef, disconnectState, timerState, afkState, replaySeq } = runtime;
   const player = runtime.players.get(userId);
   if (!player) return false;
+
+  registerPlayerSocket(runtime, userId, socketId);
 
   // A (re)subscribe is a new socket whose input sequence restarts at 1 (#1).
   resetSequenceCache(runtime, userId);
@@ -2228,5 +2325,6 @@ export function destroySessionRuntime(
     stopGameLoop(runtime.gameLoopState);
   }
   cancelAllTimers(runtime.timerState);
+  runtime.playerSockets.clear();
   activeRuntimes.delete(sessionId);
 }

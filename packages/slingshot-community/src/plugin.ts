@@ -66,7 +66,8 @@ import { probeEmbedsPeer } from './peers/embeds';
 import { CommunityInteractionsPeerCap } from './public';
 import type { CommunityInteractionsPeer } from './public';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
-import type { CommunityPluginConfig } from './types/config';
+import type { CommunityPluginConfig, ScoringConfig } from './types/config';
+import { createUpdateScoreHandler } from './operations/updateScore';
 import { communityPluginConfigSchema } from './types/config';
 import { COMMUNITY_PLUGIN_STATE_KEY, CommunityPluginStateRef } from './types/state';
 
@@ -161,11 +162,10 @@ export function createCommunityPackage(
     validatePluginConfig('slingshot-community', rawConfig, communityPluginConfigSchema),
   );
 
-  // The `scoring` config is parsed and frozen here purely for validation —
-  // the dormant reaction `updateScore` op.custom in the entity has no HTTP
-  // route and no caller, so no runtime wiring consumes it. Read it once to
-  // make the dependence on `DEFAULT_SCORING_CONFIG` explicit.
-  void (config.scoring ?? DEFAULT_SCORING_CONFIG);
+  // Drives `updateScore`, which `subscribeBusHandlers` runs on every
+  // reaction add/remove. This used to be read purely for validation while the
+  // operation sat dormant with no caller — see the scoring subscriber below.
+  const scoring = config.scoring ?? DEFAULT_SCORING_CONFIG;
 
   // Closure-owned adapter refs populated by each entity module's
   // `wiring.buildAdapter` during bootstrap (Rule 3 — no globals).
@@ -567,6 +567,7 @@ export function createCommunityPackage(
         app,
         refs,
         builder,
+        scoring,
       });
 
       // ─── Push formatter registration (optional integration) ─────────────────
@@ -639,9 +640,54 @@ function subscribeBusHandlers(args: {
   app: PluginSetupContext['app'];
   refs: CommunityAdapterRefs;
   builder: import('@lastshotlabs/slingshot-core').NotificationBuilder;
+  scoring: ScoringConfig;
 }): void {
-  const { bus, events, app, refs, builder } = args;
+  const { bus, events, app, refs, builder, scoring } = args;
   if (!hasBusOn(bus)) return;
+
+  // ─── Reaction → target score + reactionSummary ──────────────────────────
+  //
+  // `createUpdateScoreHandler` existed, was documented as being called "from
+  // the community plugin's bus event handler after a reaction is created or
+  // deleted, and from `reactionBuildAdapter`" — and neither caller was ever
+  // written. `reactionBuildAdapter` does not exist anywhere in this package.
+  // The result was that `thread.score` and `thread.reactionSummary` stayed 0
+  // and `{}` forever no matter how many reactions a thread collected, so any
+  // consumer sorting by score got an inert sort that looked like it worked,
+  // and any feed wanting counts had to fetch reactions per row.
+  const updateScore = createUpdateScoreHandler({
+    listReactions: params => {
+      if (!refs.reaction) return Promise.resolve({ items: [] });
+      return refs.reaction.listByTarget(params);
+    },
+    fetchTarget: async ({ targetId, targetType }) => {
+      if (targetType === 'thread') return (await refs.thread?.getById(targetId)) ?? null;
+      if (targetType === 'reply') return (await refs.reply?.getById(targetId)) ?? null;
+      return null;
+    },
+    updateTarget: async ({ targetId, targetType, score, reactionSummary }) => {
+      const data = { score, reactionSummary };
+      if (targetType === 'thread') await refs.thread?.update(targetId, data);
+      else if (targetType === 'reply') await refs.reply?.update(targetId, data);
+    },
+    scoring,
+  });
+
+  const rescore = async (payload: unknown) => {
+    const { targetId, targetType } = payload as { targetId?: string; targetType?: string };
+    if (!targetId || (targetType !== 'thread' && targetType !== 'reply')) return;
+    try {
+      await updateScore({ targetId, targetType });
+    } catch {
+      // A rescore failure must not fail the reaction that triggered it. The
+      // next reaction on the same target recomputes from scratch — the handler
+      // aggregates the full row set rather than incrementing, so it is
+      // self-healing.
+    }
+  };
+
+  bus.on('community:reaction.added', rescore);
+  bus.on('community:reaction.removed', rescore);
 
   // Reply-created → thread author notification.
   bus.on('community:reply.created', async payload => {

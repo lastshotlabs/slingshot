@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-ai
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-entity@0.2.6
+
 ## 0.3.3
 
 ### Patch Changes

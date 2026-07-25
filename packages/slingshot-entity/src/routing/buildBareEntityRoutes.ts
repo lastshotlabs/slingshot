@@ -530,11 +530,18 @@ function defaultGeneratedExecutor(
       if (!id) {
         return exec.respond.notFound();
       }
+      // Read the record BEFORE deleting it. The op result is what a configured
+      // `event.payload` resolves its fields from, and this used to publish
+      // `{ id }` — so every delete event across the framework arrived with an
+      // empty payload and no subscriber could act on it. Found via
+      // `community:reaction.removed`, which declares
+      // targetId/targetType/containerId/userId and delivered none of them.
+      const removed = await adapter.getById(id, exec.filter);
       const ok = await adapter.delete(id, exec.filter);
       if (!ok) {
         return exec.respond.notFound();
       }
-      exec.setOpResult('delete', { id });
+      exec.setOpResult('delete', { ...(removed ?? {}), id });
       return exec.respond.noContent();
     };
   }
@@ -1679,9 +1686,13 @@ export function buildBareEntityRoutes<
           filter = resolution.bindings;
         }
 
-        // Post-fetch policy pass for delete — need to fetch the record first.
+        // Read the record BEFORE deleting. Two callers need it: the post-fetch
+        // policy pass, and the event payload — `applyRouteConfig` resolves a
+        // configured `event.payload` from `__opResult`, which this handler
+        // never set, so every delete event published an empty object. One read
+        // serves both.
+        const existing = await adapter.getById(id, filter);
         if (policyConfig && policyResolver && policyAppliesToOp(policyConfig, 'delete')) {
-          const existing = await adapter.getById(id, filter);
           if (!existing) return c.json({ error: 'Not found' }, 404) as never;
           await resolvePolicy({
             c,
@@ -1697,6 +1708,7 @@ export function buildBareEntityRoutes<
         const ok = await adapter.delete(id, filter);
         if (!ok) return c.json({ error: 'Not found' }, 404) as never;
         c.set('__opName' as never, 'delete' as never);
+        c.set('__opResult' as never, { ...(existing ?? {}), id } as never);
         return c.body(null, 204);
       },
       deletePath,

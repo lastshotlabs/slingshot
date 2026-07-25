@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-game-engine
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-entity@0.2.6
+
 ## 0.2.5
 
 ### Patch Changes

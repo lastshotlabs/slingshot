@@ -1,5 +1,39 @@
 # @lastshotlabs/slingshot-community
 
+## 0.2.7
+
+### Patch Changes
+
+- Delete events carry the deleted record; reaction changes rescore their target
+
+  **slingshot-entity — every delete event published an empty payload.** A route
+  with `event: { key: '…', payload: ['targetId', …] }` on `delete` resolves those
+  fields from the op result, and neither delete handler supplied the record: the
+  config-driven executor set `{ id }`, and the bare handler set nothing at all.
+  So subscribers received `{}` and could not act on a deletion. Both paths now
+  read the record before deleting and publish it. The bare handler reuses the
+  read the post-fetch policy pass was already doing, so a delete with a policy
+  configured costs no extra query.
+
+  **slingshot-community — `updateScore` had no caller.** Its own docstring said
+  it ran "from the community plugin's bus event handler after a reaction is
+  created or deleted, and from `reactionBuildAdapter`"; the former was never
+  written and the latter does not exist in the package. `thread.score` and
+  `thread.reactionSummary` therefore stayed `0` and `{}` however many reactions a
+  thread collected, so any consumer sorting by score got an inert sort that
+  looked like it worked. `community:reaction.added` / `.removed` now invoke the
+  existing handler, and the `scoring` config that was parsed purely for
+  validation is finally used.
+
+  Note for consumers on the emoji vocabulary: `emojiWeights` defaults to `{}`, so
+  emoji reactions are counted in `reactionSummary` but contribute `0` to `score`
+  until you weight them — e.g. `scoring: { emojiWeights: { '👍': 1 } }`.
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-entity@0.2.6
+  - @lastshotlabs/slingshot-notifications@0.2.5
+  - @lastshotlabs/slingshot-push@0.2.4
+
 ## 0.2.6
 
 ### Patch Changes

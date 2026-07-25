@@ -316,6 +316,9 @@ export async function createHarness(opts?: {
   containerCreation?: 'admin' | 'user';
   grantAll?: boolean;
   usePluginStatePermissions?: boolean;
+  /** Passed straight through to the package — lets a test weight emoji so the
+   *  net score actually moves (weights default to {}, i.e. emoji score 0). */
+  scoring?: Parameters<typeof createCommunityPackage>[0]['scoring'];
 }): Promise<CommunityHarness> {
   const userId = opts?.userId ?? 'user-1';
   const evaluator = createEvaluator();
@@ -332,6 +335,7 @@ export async function createHarness(opts?: {
   const permissionsState = { evaluator, registry, adapter: permAdapter };
   const pkg = createCommunityPackage({
     containerCreation: opts?.containerCreation ?? 'user',
+    ...(opts?.scoring ? { scoring: opts.scoring } : {}),
   });
 
   const app = new Hono<AppEnv>();

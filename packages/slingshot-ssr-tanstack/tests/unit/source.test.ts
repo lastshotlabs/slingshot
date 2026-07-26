@@ -123,3 +123,85 @@ describe('createTanStackRouteSource (companion-file convention)', () => {
     expect(source.resolve('/')).not.toBeNull();
   });
 });
+
+describe('convention components (loading / error / not-found / forbidden / unauthorized)', () => {
+  const CONVENTION = `export default function NotFound() { return null; }`;
+
+  it('resolves a co-located not-found file onto the match', () => {
+    const dir = mkRoutes({
+      '__root.tsx': ROUTE_NO_COMPANION,
+      'u/$handle.tsx': ROUTE('Profile'),
+      'u/$handle.server.ts': SERVER('profile'),
+      'u/not-found.tsx': CONVENTION,
+    });
+    const source = createTanStackRouteSource({ routesDirectory: dir });
+    source.init();
+    const match = source.resolve('/u/jdd');
+    expect(match).not.toBeNull();
+    expect(match!.notFoundFilePath?.endsWith('u/not-found.tsx')).toBe(true);
+  });
+
+  it('INHERITS a not-found file from an ancestor directory', () => {
+    // The whole point: one 404 at the routes root covers every leaf. Before
+    // this the adapter reported null and the renderer fell back to a
+    // plain-text `Not Found` body no matter what the app shipped.
+    const dir = mkRoutes({
+      '__root.tsx': ROUTE_NO_COMPANION,
+      'not-found.tsx': CONVENTION,
+      'c/$slug/$threadId.tsx': ROUTE('Thread'),
+      'c/$slug/$threadId.server.ts': SERVER('thread'),
+    });
+    const source = createTanStackRouteSource({ routesDirectory: dir });
+    source.init();
+    const match = source.resolve('/c/general/abc');
+    expect(match!.notFoundFilePath?.endsWith('not-found.tsx')).toBe(true);
+  });
+
+  it('a nearer convention file wins over an ancestor', () => {
+    const dir = mkRoutes({
+      '__root.tsx': ROUTE_NO_COMPANION,
+      'not-found.tsx': CONVENTION,
+      'c/not-found.tsx': CONVENTION,
+      'c/$slug/$threadId.tsx': ROUTE('Thread'),
+      'c/$slug/$threadId.server.ts': SERVER('thread'),
+    });
+    const source = createTanStackRouteSource({ routesDirectory: dir });
+    source.init();
+    const match = source.resolve('/c/general/abc');
+    expect(match!.notFoundFilePath?.endsWith('c/not-found.tsx')).toBe(true);
+  });
+
+  it('resolves all five signal conventions, and the index form', () => {
+    const dir = mkRoutes({
+      '__root.tsx': ROUTE_NO_COMPANION,
+      'loading.tsx': CONVENTION,
+      'error.tsx': CONVENTION,
+      'not-found/index.tsx': CONVENTION,
+      'forbidden.tsx': CONVENTION,
+      'unauthorized.tsx': CONVENTION,
+      'index.tsx': ROUTE('Home'),
+      'index.server.ts': SERVER('home'),
+    });
+    const source = createTanStackRouteSource({ routesDirectory: dir });
+    source.init();
+    const m = source.resolve('/')!;
+    expect(m.loadingFilePath).not.toBeNull();
+    expect(m.errorFilePath).not.toBeNull();
+    expect(m.notFoundFilePath?.endsWith(path.join('not-found', 'index.tsx'))).toBe(true);
+    expect(m.forbiddenFilePath).not.toBeNull();
+    expect(m.unauthorizedFilePath).not.toBeNull();
+  });
+
+  it('stays null when the app ships no convention files, and never escapes the routes root', () => {
+    const dir = mkRoutes({
+      '__root.tsx': ROUTE_NO_COMPANION,
+      'index.tsx': ROUTE('Home'),
+      'index.server.ts': SERVER('home'),
+    });
+    const source = createTanStackRouteSource({ routesDirectory: dir });
+    source.init();
+    const m = source.resolve('/')!;
+    expect(m.notFoundFilePath).toBeNull();
+    expect(m.errorFilePath).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 {
   "name": "@lastshotlabs/slingshot-ssr-tanstack",
-  "version": "0.2.5",
-  "description": "TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps",
+  "version": "0.2.6",
+  "description": "TanStack Router route source for slingshot-ssr \u2014 single-source routes for SSR + CSR apps",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -27,7 +27,7 @@
     "directory": "packages/slingshot-ssr-tanstack"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   },
   "files": [

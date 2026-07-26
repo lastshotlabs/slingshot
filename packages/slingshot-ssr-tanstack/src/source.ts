@@ -33,6 +33,8 @@
 // The `ssr` export is what marks a route as SSR-eligible. Files without it are
 // CSR-only and the route source returns `null` for those URLs (the caller
 // falls through to its SPA-fallback behavior).
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { SsrRouteChain, SsrRouteMatch, SsrRouteSource } from '@lastshotlabs/slingshot-ssr';
 import {
   clearTanStackModuleCache,
@@ -107,6 +109,9 @@ export function createTanStackRouteSource(config: TanStackRouteSourceConfig): Ss
           Object.freeze({
             ...leaf,
             layoutChain: buildLayoutChain(leaf, layouts, rootLayoutPath, rootLayoutServerPath),
+            // Resolved once here rather than per request: this touches the
+            // filesystem, and `resolve()` runs on every SSR navigation.
+            conventions: resolveConventions(leaf.filePath, dir),
           }),
         );
       }
@@ -157,6 +162,93 @@ export function createTanStackRouteSource(config: TanStackRouteSourceConfig): Ss
 /** A scanned leaf with its layout chain attached. */
 interface TanStackRouteEntry extends ScannedRouteFile {
   readonly layoutChain: readonly LayoutEntry[];
+  readonly conventions: ResolvedConventions;
+}
+
+/**
+ * Convention components (`loading`, `error`, `not-found`, `forbidden`,
+ * `unauthorized`) resolved for one route.
+ *
+ * These are what `slingshot-ssr`'s renderer imports when a loader returns the
+ * matching signal. Before this existed the adapter reported `null` for all five,
+ * so a TanStack app got the renderer's last-resort plain-text fallback —
+ * `new Response('Not Found', { status: 404 })` — no matter how many convention
+ * files it shipped. The whole feature was dark for every TanStack consumer.
+ */
+interface ResolvedConventions {
+  readonly loadingFilePath: string | null;
+  readonly errorFilePath: string | null;
+  readonly notFoundFilePath: string | null;
+  readonly forbiddenFilePath: string | null;
+  readonly unauthorizedFilePath: string | null;
+}
+
+const NO_CONVENTIONS: ResolvedConventions = Object.freeze({
+  loadingFilePath: null,
+  errorFilePath: null,
+  notFoundFilePath: null,
+  forbiddenFilePath: null,
+  unauthorizedFilePath: null,
+});
+
+/**
+ * Look up a convention file in one directory. Mirrors the file-based resolver's
+ * form exactly: `{dir}/{name}.{ts,tsx,js}` or `{dir}/{name}/index.{ts,tsx,js}`.
+ */
+function findConventionFile(dir: string, name: string): string | null {
+  for (const ext of ['ts', 'tsx', 'js']) {
+    const direct = join(dir, `${name}.${ext}`);
+    if (existsSync(direct)) return direct;
+    const indexed = join(dir, name, `index.${ext}`);
+    if (existsSync(indexed)) return indexed;
+  }
+  return null;
+}
+
+/**
+ * Resolve one convention by walking from the route's own directory up to the
+ * routes root, nearest match winning.
+ *
+ * This INHERITS, where `slingshot-ssr`'s file-based resolver looks only in the
+ * route's own directory. That is deliberate, and it is the behaviour these
+ * particular conventions want: an app has ONE 404 page, not one per leaf, and a
+ * tree of a dozen route directories should not need a dozen copies of it. It
+ * also matches what authors expect from Next.js's app router, where a
+ * `not-found` file covers its segment and everything beneath it. A co-located
+ * file still wins for the subtree it sits in, so per-section overrides work.
+ *
+ * The walk is bounded by `routesRoot` so a missing file can never escape the
+ * routes directory and start stat-ing the repo (or `/`).
+ */
+function resolveConventionUpwards(
+  startDir: string,
+  routesRoot: string,
+  name: string,
+): string | null {
+  let dir = startDir;
+  // Normalise so the containment check below is a plain prefix comparison.
+  const root = resolve(routesRoot);
+  for (;;) {
+    const hit = findConventionFile(dir, name);
+    if (hit) return hit;
+    if (resolve(dir) === root) return null;
+    const parent = dirname(dir);
+    // dirname('/') === '/' — guard against an unbounded loop if startDir was
+    // somehow outside routesRoot.
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function resolveConventions(routeFilePath: string, routesRoot: string): ResolvedConventions {
+  const startDir = dirname(routeFilePath);
+  return Object.freeze({
+    loadingFilePath: resolveConventionUpwards(startDir, routesRoot, 'loading'),
+    errorFilePath: resolveConventionUpwards(startDir, routesRoot, 'error'),
+    notFoundFilePath: resolveConventionUpwards(startDir, routesRoot, 'not-found'),
+    forbiddenFilePath: resolveConventionUpwards(startDir, routesRoot, 'forbidden'),
+    unauthorizedFilePath: resolveConventionUpwards(startDir, routesRoot, 'unauthorized'),
+  });
 }
 
 interface MatchedEntry {
@@ -217,11 +309,11 @@ function buildMatch(
     params: Object.freeze(params),
     query: emptyQuery, // populated by middleware
     url: new URL(pathname, 'http://localhost'), // placeholder — middleware sets real URL
-    loadingFilePath: null,
-    errorFilePath: null,
-    notFoundFilePath: null,
-    forbiddenFilePath: null,
-    unauthorizedFilePath: null,
+    loadingFilePath: entry.conventions.loadingFilePath,
+    errorFilePath: entry.conventions.errorFilePath,
+    notFoundFilePath: entry.conventions.notFoundFilePath,
+    forbiddenFilePath: entry.conventions.forbiddenFilePath,
+    unauthorizedFilePath: entry.conventions.unauthorizedFilePath,
     templateFilePath: null,
     loadModule: () => loadTanStackRouteModule(entry.filePath, entry.serverFilePath),
   });
@@ -236,11 +328,11 @@ function buildLayoutShell(layout: LayoutEntry, pathname: string): SsrRouteMatch 
     params: emptyParams,
     query: emptyQuery,
     url: new URL(pathname, 'http://localhost'),
-    loadingFilePath: null,
-    errorFilePath: null,
-    notFoundFilePath: null,
-    forbiddenFilePath: null,
-    unauthorizedFilePath: null,
+    // Layout shells carry no conventions of their own: the renderer reads the
+    // signal components off `chain.page`, so resolving them here would be dead
+    // weight on every request. Named rather than five bare nulls so the
+    // omission reads as a decision.
+    ...NO_CONVENTIONS,
     templateFilePath: null,
     loadModule: () => loadTanStackLayoutModule(layout.filePath, layout.serverFilePath),
   });

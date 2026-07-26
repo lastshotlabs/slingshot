@@ -1707,8 +1707,9 @@ export function buildBareEntityRoutes<
 
         const ok = await adapter.delete(id, filter);
         if (!ok) return c.json({ error: 'Not found' }, 404) as never;
+        const removedRecord = { ...(existing ?? {}), id };
         c.set('__opName' as never, 'delete' as never);
-        c.set('__opResult' as never, { ...(existing ?? {}), id } as never);
+        c.set('__opResult' as never, removedRecord as never);
         return c.body(null, 204);
       },
       deletePath,

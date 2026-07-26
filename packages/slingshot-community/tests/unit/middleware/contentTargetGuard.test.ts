@@ -49,7 +49,9 @@ describe('contentTargetGuard middleware', () => {
     const app = new Hono();
     app.use(
       '/reactions/list-by-target/:targetId/:targetType',
-      createContentTargetGuardMiddleware(stubAdapters({ id: 't1', status: 'draft', containerId: 'c1' })),
+      createContentTargetGuardMiddleware(
+        stubAdapters({ id: 't1', status: 'draft', containerId: 'c1' }),
+      ),
     );
     app.get('/reactions/list-by-target/:targetId/:targetType', c => c.json({ items: [] }));
     const res = await app.request('/reactions/list-by-target/t1/thread');
@@ -96,10 +98,7 @@ describe('contentTargetGuard middleware', () => {
     );
     expect(mismatch.status).toBe(400);
 
-    const missing = await app.request(
-      '/reactions',
-      post({ targetId: 't1', targetType: 'thread' }),
-    );
+    const missing = await app.request('/reactions', post({ targetId: 't1', targetType: 'thread' }));
     expect(missing.status).toBe(400);
   });
 

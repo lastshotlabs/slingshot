@@ -62,12 +62,12 @@ import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate'
 import { createRoleAssignmentGuardMiddleware } from './middleware/roleAssignmentGuard';
 import { createSolutionReplyGuardMiddleware } from './middleware/solutionReplyGuard';
 import { createThreadStateGuardMiddleware } from './middleware/threadStateGuard';
+import { createUpdateScoreHandler } from './operations/updateScore';
 import { probeEmbedsPeer } from './peers/embeds';
 import { CommunityInteractionsPeerCap } from './public';
 import type { CommunityInteractionsPeer } from './public';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
 import type { CommunityPluginConfig, ScoringConfig } from './types/config';
-import { createUpdateScoreHandler } from './operations/updateScore';
 import { communityPluginConfigSchema } from './types/config';
 import { COMMUNITY_PLUGIN_STATE_KEY, CommunityPluginStateRef } from './types/state';
 

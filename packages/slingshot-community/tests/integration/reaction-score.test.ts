@@ -108,7 +108,13 @@ describe('reaction → thread score, with the emoji weighted', () => {
     // so any sort by score stays flat.
     harness = await createHarness({
       grantAll: true,
-      scoring: { algorithm: 'net', upvoteWeight: 1, downvoteWeight: 1, hotDecayHours: 12, emojiWeights: { '👍': 1 } },
+      scoring: {
+        algorithm: 'net',
+        upvoteWeight: 1,
+        downvoteWeight: 1,
+        hotDecayHours: 12,
+        emojiWeights: { '👍': 1 },
+      },
     });
     const res = await post(harness.app, '/community/threads', {
       containerId: 'c-score',

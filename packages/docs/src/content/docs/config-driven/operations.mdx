@@ -126,6 +126,55 @@ activeSessions: op.lookup({
 });
 ```
 
+### Optional match fields
+
+A `param:` field whose value the caller **omits** drops that constraint entirely
+rather than matching null — so one operation serves both "all of them" and
+"just these". Passing `null` explicitly still matches null-valued records.
+
+```typescript
+listByTarget: op.lookup({
+  fields: {
+    targetId: 'param:targetId',
+    targetType: 'param:targetType',
+    value: 'param:value', // omit → every value; pass one → filter to it
+  },
+  returns: 'many',
+});
+```
+
+:::caution[An added field changes the route path]
+A lookup's default route appends one `:param` segment per entry in `fields`, so
+adding an optional field silently moves the URL and 404s existing callers. Pin
+the path when the new field should be a **query** param instead:
+
+```typescript
+routes: {
+  operations: {
+    listByTarget: { path: 'list-by-target/:targetId/:targetType' },
+  },
+}
+```
+
+Query parameters are merged into the operation's params at request time, so
+`?value=🔥` reaches the same matcher without appearing in the path.
+:::
+
+### Bounding a `returns: "many"` lookup
+
+Callers may pass a `limit` (as a query parameter or in the body). It is clamped
+to the entity's `pagination.maxLimit`, and the result's `hasMore` reports
+whether more rows matched.
+
+```http
+GET /community/reactions/list-by-target/abc/thread?value=🔥&limit=6
+```
+
+**Omitting `limit` means unbounded, and that is deliberate.** Callers exist that
+must see every matching row to be correct — an aggregate that re-reads all of a
+target's rows to recompute a denormalized total would silently under-count
+behind a default page size. Ask for a bound when you want one.
+
 ---
 
 ## exists

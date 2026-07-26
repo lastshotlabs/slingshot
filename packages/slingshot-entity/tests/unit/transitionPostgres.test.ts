@@ -27,25 +27,23 @@ interface Row {
 
 /** Parses `col = $n` / `col IN ($a, $b)` conjunctions and binds them for real. */
 function createPlaceholderPool(initialRows: Row[]) {
-  const rows = initialRows.map((r) => ({ ...r }));
+  const rows = initialRows.map(r => ({ ...r }));
   const statements: { sql: string; values: unknown[] }[] = [];
 
   function evaluateWhere(clause: string, values: unknown[], row: Row): boolean {
-    return clause
-      .split(/\s+AND\s+/i)
-      .every((term) => {
-        const eq = term.match(/^\s*(\w+)\s*=\s*\$(\d+)\s*$/);
-        if (eq) return row[eq[1]] === values[Number(eq[2]) - 1];
+    return clause.split(/\s+AND\s+/i).every(term => {
+      const eq = term.match(/^\s*(\w+)\s*=\s*\$(\d+)\s*$/);
+      if (eq) return row[eq[1]] === values[Number(eq[2]) - 1];
 
-        const inList = term.match(/^\s*(\w+)\s+IN\s*\(([^)]*)\)\s*$/i);
-        if (inList) {
-          const candidates = inList[2]
-            .split(',')
-            .map((p) => values[Number(p.trim().replace('$', '')) - 1]);
-          return candidates.includes(row[inList[1]]);
-        }
-        throw new Error(`fake pool cannot parse WHERE term: ${term}`);
-      });
+      const inList = term.match(/^\s*(\w+)\s+IN\s*\(([^)]*)\)\s*$/i);
+      if (inList) {
+        const candidates = inList[2]
+          .split(',')
+          .map(p => values[Number(p.trim().replace('$', '')) - 1]);
+        return candidates.includes(row[inList[1]]);
+      }
+      throw new Error(`fake pool cannot parse WHERE term: ${term}`);
+    });
   }
 
   return {
@@ -56,8 +54,8 @@ function createPlaceholderPool(initialRows: Row[]) {
       const parsed = sql.match(/^UPDATE\s+(\S+)\s+SET\s+(.+?)\s+WHERE\s+(.+?)\s+RETURNING \*$/i);
       if (!parsed) throw new Error(`fake pool cannot parse SQL: ${sql}`);
 
-      const assignments = parsed[2].split(',').map((piece) => {
-        const [col, placeholder] = piece.split('=').map((s) => s.trim());
+      const assignments = parsed[2].split(',').map(piece => {
+        const [col, placeholder] = piece.split('=').map(s => s.trim());
         return { col, value: values[Number(placeholder.replace('$', '')) - 1] };
       });
 
@@ -98,10 +96,10 @@ describe('transitionPostgres', () => {
     expect(result, 'the transition returned the updated row').not.toBeNull();
     expect((result as Row).id).toBe('thread-2');
     expect((result as Row).status).toBe('published');
-    expect(pool.rows.find((r) => r.id === 'thread-2')?.status).toBe('published');
+    expect(pool.rows.find(r => r.id === 'thread-2')?.status).toBe('published');
     // The untargeted row must be untouched — a transposed binding would either
     // match nothing or match the wrong row.
-    expect(pool.rows.find((r) => r.id === 'thread-1')?.status).toBe('draft');
+    expect(pool.rows.find(r => r.id === 'thread-1')?.status).toBe('draft');
   });
 
   test('binds each WHERE placeholder to its own column', async () => {
@@ -132,7 +130,9 @@ describe('transitionPostgres', () => {
 
   test('honours a multi-value from-state', async () => {
     const multiOp = { ...publishOp, from: ['draft', 'scheduled'] } as TransitionOpConfig;
-    const pool = createPlaceholderPool([{ id: 'thread-9', status: 'scheduled', published_at: null }]);
+    const pool = createPlaceholderPool([
+      { id: 'thread-9', status: 'scheduled', published_at: null },
+    ]);
     const publish = transitionPostgres(multiOp, pool as never, 'threads', noop, identity);
 
     const result = await publish({ id: 'thread-9' });

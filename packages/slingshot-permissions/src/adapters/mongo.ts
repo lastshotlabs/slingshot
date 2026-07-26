@@ -180,8 +180,8 @@ type SchemaCtor = new (definition: object, options?: object) => MongooseSchema<G
 function resolveSchemaCtor(conn: MongoConnectionLike): SchemaCtor {
   if (conn.base?.Schema) return conn.base.Schema;
   try {
-    const require_ = createRequire(import.meta.url);
-    return (require_('mongoose') as { Schema: SchemaCtor }).Schema;
+    const requireFn = createRequire(import.meta.url);
+    return (requireFn('mongoose') as { Schema: SchemaCtor }).Schema;
   } catch (cause) {
     throw new Error(
       '[slingshot-permissions] createMongoPermissionsAdapter could not resolve mongoose. ' +
@@ -291,7 +291,10 @@ export type PermissionsMongoAdapter = TestablePermissionsAdapter;
  * ```
  */
 export function createMongoPermissionsAdapter(conn: MongoConnectionLike): PermissionsMongoAdapter {
-  const Grant: GrantsModel = conn.model('PermissionGrant', buildGrantSchema(resolveSchemaCtor(conn)));
+  const Grant: GrantsModel = conn.model(
+    'PermissionGrant',
+    buildGrantSchema(resolveSchemaCtor(conn)),
+  );
 
   return {
     async createGrant(grant: Omit<PermissionGrant, 'id' | 'grantedAt'>): Promise<string> {

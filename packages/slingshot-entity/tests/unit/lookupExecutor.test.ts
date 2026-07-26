@@ -126,7 +126,17 @@ describe('lookupMemory — limit', () => {
       fields: { kind: 'param:kind' },
       returns: 'many',
     };
-    return lookupMemory(op, noopConfig, store, () => true, () => true, ['id'], 'asc', defaultLimit, maxLimit);
+    return lookupMemory(
+      op,
+      noopConfig,
+      store,
+      () => true,
+      () => true,
+      ['id'],
+      'asc',
+      defaultLimit,
+      maxLimit,
+    );
   }
 
   it('omitting limit does not bound the result below the backend default', async () => {

@@ -5,7 +5,7 @@
     "packages/*",
     "!packages/docs"
   ],
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.",
   "repository": {
     "type": "git",
@@ -323,7 +323,7 @@
     "yaml": "^2.8.3"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   },
   "engines": {

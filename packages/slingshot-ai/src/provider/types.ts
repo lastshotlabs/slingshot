@@ -114,14 +114,87 @@ export interface AiImagePart {
   readonly data: string;
 }
 
-/** Provider-neutral content accepted by every Slingshot AI request. */
-export type AiContentPart = AiTextPart | AiImagePart;
+/**
+ * A tool the model asked to call. Rides an `assistant` turn.
+ *
+ * `argumentsJson` is the provider's RAW JSON text and is never pre-parsed by an
+ * adapter. The orchestrator parses it and `safeParse`s it against the tool's zod
+ * schema, for the same reason `ProviderResult.structured` is advisory: a vendor
+ * claiming `strict: true` on a function schema is making exactly the claim we
+ * already refuse to take on trust for a response schema.
+ */
+export interface AiToolCallPart {
+  readonly type: 'tool_call';
+  readonly id: string;
+  readonly name: string;
+  readonly argumentsJson: string;
+}
+
+/**
+ * The answer to one tool call. Rides a `user` turn — which is where BOTH
+ * OpenAI's `role: 'tool'` message and Anthropic's `tool_result` content block
+ * normalize to, and the only shape both adapters can render without inventing a
+ * role that one of their wires does not have.
+ *
+ * `name` is not redundant with `id`: Gemini's `functionCall` carries no id at
+ * all and its `functionResponse` is matched by function NAME, so without this
+ * field that adapter physically cannot render a result.
+ */
+export interface AiToolResultPart {
+  readonly type: 'tool_result';
+  readonly id: string;
+  readonly name: string;
+  /** JSON-serializable. Every adapter renders it with `JSON.stringify`. */
+  readonly result: unknown;
+  /** The tool failed, or was never run. The model sees the reason and can react. */
+  readonly isError?: boolean;
+}
+
+/**
+ * Provider-neutral content accepted by every Slingshot AI request.
+ *
+ * Tool calls and results are PARTS, not roles. Adding a `'tool'` role would have
+ * broken three things at once: `messageContentUnits` (the spend estimator) walks
+ * parts, the image-capability scan in `prepare()` walks parts, and Anthropic —
+ * where a tool result is a block inside a user turn — has no such role on its
+ * wire to map onto.
+ */
+export type AiContentPart = AiTextPart | AiImagePart | AiToolCallPart | AiToolResultPart;
 export type AiMessageContent = string | readonly AiContentPart[];
 
 /** A conversation turn. String content remains the concise text-only form. */
 export interface AiMessage {
   readonly role: 'user' | 'assistant';
   readonly content: AiMessageContent;
+}
+
+/** How hard the model is pushed toward using a tool. */
+export type AiToolChoice = 'auto' | 'none' | 'required';
+
+/**
+ * One tool, in the shape a transport needs.
+ *
+ * The orchestrator has already sanitized the JSON Schema (same treatment as
+ * `NormalizedStructured.jsonSchema`), so an adapter sends it as-is.
+ */
+export interface NormalizedTool {
+  readonly name: string;
+  /** Shown to the model. The only thing that makes the tool discoverable. */
+  readonly description: string;
+  readonly jsonSchema: Record<string, unknown>;
+}
+
+/**
+ * A tool call as it came off the wire.
+ *
+ * `argumentsJson` is verbatim provider text — NOT parsed, NOT validated, NOT
+ * repaired. An adapter that pre-parses this is making a policy decision, which
+ * is the one thing a transport must never do.
+ */
+export interface ProviderToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly argumentsJson: string;
 }
 
 /**
@@ -150,6 +223,13 @@ export interface NormalizedRequest {
   readonly effort?: AiEffort;
   readonly thinking?: boolean;
   readonly structured?: NormalizedStructured;
+  /**
+   * Tools the model may call. Present only when the provider declares
+   * `toolUse: true` — the orchestrator throws rather than silently dropping them
+   * on a provider that cannot honor them (the same rule as inline images).
+   */
+  readonly tools?: readonly NormalizedTool[];
+  readonly toolChoice?: AiToolChoice;
   readonly timeoutMs: number;
   /**
    * Stable identifier for the cacheable prefix this request shares with others.
@@ -234,15 +314,46 @@ export interface ProviderResult {
    */
   readonly structured?: unknown;
   readonly stopReason: AiStopReason;
+  /**
+   * Tools the model wants called, in the order it asked for them.
+   *
+   * An adapter that populates this MUST also report `stopReason: 'tool_use'` —
+   * several servers in the OpenAI-compatible family return
+   * `finish_reason: 'stop'` alongside populated `tool_calls`, and the
+   * orchestrator's loop keys off the stop reason. Normalizing that is the
+   * adapter's job, since it is the only layer that can see the discrepancy.
+   */
+  readonly toolCalls?: readonly ProviderToolCall[];
   readonly usage: ProviderUsage;
   /** Provider-native response, for debugging. Never inspected by the orchestrator. */
   readonly raw: unknown;
 }
 
-/** A streamed delta. */
+/**
+ * A streamed delta.
+ *
+ * `tool_call_delta` is INCREMENTAL and advisory: providers dribble a function's
+ * arguments out over many frames, and `argumentsDelta` is one raw fragment of
+ * that JSON. It exists so a trace UI can render "calling get_lift_trend…" the
+ * moment the name lands rather than waiting for the whole call. `name` is filled
+ * in on every event from the adapter's own by-index accumulator, including the
+ * argument-only frames that carry no name on the wire.
+ *
+ * It shares its NAME and SHAPE with the public `AiStreamEvent` variant on
+ * purpose, so the orchestrator forwards it by identity. Two events called
+ * `tool_call` with different shapes on either side of this seam would be a trap
+ * — the validated public `tool_call` carries parsed `args`, and nothing here can
+ * produce those.
+ */
 export type ProviderStreamEvent =
   | { readonly type: 'text'; readonly delta: string }
-  | { readonly type: 'thinking'; readonly delta: string };
+  | { readonly type: 'thinking'; readonly delta: string }
+  | {
+      readonly type: 'tool_call_delta';
+      readonly id: string;
+      readonly name: string;
+      readonly argumentsDelta: string;
+    };
 
 /**
  * A stream of deltas plus the assembled result.

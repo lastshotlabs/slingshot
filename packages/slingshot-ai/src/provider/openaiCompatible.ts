@@ -18,10 +18,13 @@
 import type { AiProviderConfig } from '../config';
 import { AiConfigError, AiProviderError, AiRateLimitError, AiTimeoutError } from '../errors';
 import { createEventQueue } from '../lib/eventQueue';
+import { toolResultWireText } from '../lib/toolContent';
 import { resolveCapabilities } from './capabilities';
 import { type BuildProviderDeps, registerBuiltinProvider } from './registry';
 import type {
+  AiContentPart,
   AiEffort,
+  AiMessage,
   AiProvider,
   AiStopReason,
   ModelPricing,
@@ -30,6 +33,7 @@ import type {
   ProviderResult,
   ProviderStream,
   ProviderStreamEvent,
+  ProviderToolCall,
   ProviderUsage,
 } from './types';
 
@@ -296,14 +300,37 @@ const DEEPSEEK_PRICING: Readonly<Record<string, ModelPricing>> = Object.freeze({
 // Wire types (only the fields we read)
 // ---------------------------------------------------------------------------
 
+/** `tool_calls[]` on a completed message. */
+interface WireToolCall {
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+/**
+ * `tool_calls[]` on a stream delta.
+ *
+ * `index` is the load-bearing field: a streamed call arrives as one frame with
+ * `{index, id, function.name}` and many frames with `{index, function.arguments}`
+ * carrying nothing else. Accumulating by anything other than `index` — by array
+ * position, say — silently interleaves two parallel calls' arguments.
+ */
+interface WireToolCallDelta extends WireToolCall {
+  index?: number;
+}
+
 interface ChatChoice {
   message?: {
     content?: string | null;
     refusal?: string | null;
     /** DeepSeek thinking mode. Sits ALONGSIDE `content` — never part of it. */
     reasoning_content?: string | null;
+    tool_calls?: WireToolCall[] | null;
   };
-  delta?: { content?: string | null; reasoning_content?: string | null };
+  delta?: {
+    content?: string | null;
+    reasoning_content?: string | null;
+    tool_calls?: WireToolCallDelta[] | null;
+  };
   finish_reason?: string | null;
 }
 
@@ -330,10 +357,28 @@ interface ChatResponse {
   usage?: ChatUsage;
 }
 
-function mapStopReason(choice: ChatChoice | undefined): AiStopReason {
+/** `message.tool_calls` → the neutral shape. Arguments stay RAW. */
+function mapToolCalls(calls: readonly WireToolCall[] | null | undefined): ProviderToolCall[] {
+  if (!calls?.length) return [];
+  return calls.map((call, index) => ({
+    id: call.id ?? `call_${index}`,
+    name: call.function?.name ?? '',
+    // Verbatim. Parsing here would be the adapter making a policy decision, and
+    // an unparseable argument string must reach the orchestrator so it can be
+    // handed back to the model as an error it can correct.
+    argumentsJson: call.function?.arguments ?? '{}',
+  }));
+}
+
+function mapStopReason(choice: ChatChoice | undefined, hasToolCalls: boolean): AiStopReason {
   // A refusal on OpenAI is a populated `message.refusal` with null content —
   // read it BEFORE the content, or an explicit refusal reads as an empty answer.
   if (choice?.message?.refusal) return 'refusal';
+  // Several servers in this family — notably local ones — return
+  // `finish_reason: 'stop'` with populated `tool_calls`. The orchestrator's loop
+  // keys off the stop reason, so normalizing the discrepancy is the adapter's
+  // job: it is the only layer that can see both halves.
+  if (hasToolCalls) return 'tool_use';
   switch (choice?.finish_reason) {
     case 'stop':
       return 'end';
@@ -481,6 +526,99 @@ function openAiEffort(effort: AiEffort): string {
 }
 
 // ---------------------------------------------------------------------------
+// Message translation
+// ---------------------------------------------------------------------------
+
+interface WireMessage {
+  role: string;
+  content: unknown;
+  tool_calls?: unknown[];
+  tool_call_id?: string;
+}
+
+/**
+ * Translate one neutral turn into the one-or-more wire messages it becomes.
+ *
+ * This PUSHES rather than maps, because the mapping is not one-to-one: a single
+ * `role: 'user'` turn carrying three `tool_result` parts becomes three
+ * `role: 'tool'` messages on this wire. That asymmetry — a role on one side, a
+ * content part on the other — is exactly why tool results are modelled as parts
+ * and not as a role (Anthropic has no `'tool'` role at all).
+ */
+function pushWireMessages(out: WireMessage[], message: AiMessage): void {
+  if (typeof message.content === 'string') {
+    out.push({ role: message.role, content: message.content });
+    return;
+  }
+
+  const parts = message.content;
+  const toolResults = parts.filter(
+    (part): part is Extract<AiContentPart, { type: 'tool_result' }> => part.type === 'tool_result',
+  );
+  const toolCalls = parts.filter(
+    (part): part is Extract<AiContentPart, { type: 'tool_call' }> => part.type === 'tool_call',
+  );
+  const body = parts.filter(part => part.type === 'text' || part.type === 'image');
+
+  // Tool results FIRST. This wire requires every `role: 'tool'` message to
+  // follow the assistant message that requested it, with nothing in between.
+  for (const result of toolResults) {
+    out.push({
+      role: 'tool',
+      tool_call_id: result.id,
+      content: toolResultWireText(result),
+    });
+  }
+
+  if (body.length === 0 && toolCalls.length === 0) return;
+
+  out.push({
+    role: message.role,
+    // `null`, not `[]`: an assistant turn that is only tool calls has no content,
+    // and some servers in this family reject an empty content array.
+    content:
+      body.length === 0
+        ? null
+        : body.map(part =>
+            part.type === 'text'
+              ? { type: 'text', text: part.text }
+              : {
+                  type: 'image_url',
+                  image_url: { url: `data:${part.mediaType};base64,${part.data}` },
+                },
+          ),
+    ...(toolCalls.length > 0
+      ? {
+          tool_calls: toolCalls.map(call => ({
+            id: call.id,
+            type: 'function',
+            // RAW, exactly as the model produced it. Re-serializing a parsed
+            // form would change the bytes the provider's own cache keys on.
+            function: { name: call.name, arguments: call.argumentsJson },
+          })),
+        }
+      : {}),
+  });
+}
+
+/**
+ * One in-flight streamed tool call.
+ *
+ * `emitted` is how many characters of `args` have already gone out as a
+ * `tool_call_delta`. It exists because arguments can legally arrive BEFORE the
+ * function name (nothing on the wire forbids it), and an event with an empty
+ * name is useless to a trace UI — so those fragments are buffered and flushed in
+ * one delta the moment the name lands.
+ */
+interface StreamingToolCall {
+  id: string;
+  name: string;
+  args: string;
+  emitted: number;
+  announced: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // The adapter
 // ---------------------------------------------------------------------------
 
@@ -601,25 +739,10 @@ function createProvider(
     // are dropped on purpose: this family has no explicit breakpoint concept,
     // and the orchestrator already knows that (capabilities say
     // `promptCaching: 'none' | 'automatic'`), so nothing is being hidden.
-    const messages: { role: string; content: unknown }[] = [];
+    const messages: WireMessage[] = [];
     const systemText = req.system.map(block => block.text).join('\n\n');
     if (systemText) messages.push({ role: 'system', content: systemText });
-    for (const message of req.messages) {
-      messages.push({
-        role: message.role,
-        content:
-          typeof message.content === 'string'
-            ? message.content
-            : message.content.map(part =>
-                part.type === 'text'
-                  ? { type: 'text', text: part.text }
-                  : {
-                      type: 'image_url',
-                      image_url: { url: `data:${part.mediaType};base64,${part.data}` },
-                    },
-              ),
-      });
-    }
+    for (const message of req.messages) pushWireMessages(messages, message);
 
     const payload: Record<string, unknown> = {
       model: req.model,
@@ -644,6 +767,19 @@ function createProvider(
     // is enabled. Not an error — just no effect. If anyone ever adds a
     // temperature knob, it must emit a degradation on a thinking-enabled call, or
     // the caller is being lied to.
+
+    if (req.tools?.length) {
+      payload.tools = req.tools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.jsonSchema,
+        },
+      }));
+      // The vocabulary matches ours exactly, so there is nothing to translate.
+      if (req.toolChoice) payload.tool_choice = req.toolChoice;
+    }
 
     if (req.structured?.mode === 'native') {
       payload.response_format = {
@@ -712,8 +848,10 @@ function createProvider(
       const choice = payload.choices?.[0];
 
       // stop_reason before content, always.
-      const stopReason = mapStopReason(choice);
+      const toolCalls = mapToolCalls(choice?.message?.tool_calls);
+      const stopReason = mapStopReason(choice, toolCalls.length > 0);
       return {
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
         // `reasoning_content` (DeepSeek thinking mode) sits alongside `content`
         // and is deliberately NOT read here. Concatenating it would put the
         // model's chain-of-thought into `text` — which then fails to parse as
@@ -749,6 +887,10 @@ function createProvider(
         let text = '';
         let usage: ChatUsage | undefined;
         let lastChoice: ChatChoice | undefined;
+        // Keyed by the wire's `index`, NOT by array position: a frame carrying
+        // only `{index: 1, function: {arguments: '…'}}` has no other way to say
+        // which of two parallel calls it belongs to.
+        const streamingCalls = new Map<number, StreamingToolCall>();
 
         for (;;) {
           const { done, value } = await reader.read();
@@ -794,16 +936,60 @@ function createProvider(
                 text += delta;
                 queue.push({ type: 'text', delta });
               }
+
+              for (const entry of choice.delta?.tool_calls ?? []) {
+                const index = entry.index ?? 0;
+                const call = streamingCalls.get(index) ?? {
+                  id: '',
+                  name: '',
+                  args: '',
+                  emitted: 0,
+                  announced: false,
+                };
+                if (entry.id) call.id = entry.id;
+                // Appended, not assigned: a server is permitted to chunk the
+                // function name too, and assigning would keep only the last piece.
+                if (entry.function?.name) call.name += entry.function.name;
+                if (entry.function?.arguments) call.args += entry.function.arguments;
+                streamingCalls.set(index, call);
+
+                // Nothing useful to announce until we can name the call.
+                if (!call.id || !call.name) continue;
+                if (!call.announced || call.args.length > call.emitted) {
+                  const argumentsDelta = call.args.slice(call.emitted);
+                  call.emitted = call.args.length;
+                  call.announced = true;
+                  queue.push({
+                    type: 'tool_call_delta',
+                    id: call.id,
+                    name: call.name,
+                    argumentsDelta,
+                  });
+                }
+              }
             }
           }
         }
 
         queue.finish();
+        const toolCalls = [...streamingCalls.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([index, call]) => ({
+            id: call.id || `call_${index}`,
+            name: call.name,
+            argumentsJson: call.args || '{}',
+          }));
         return {
           text,
-          stopReason: mapStopReason(lastChoice),
+          ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          stopReason: mapStopReason(lastChoice, toolCalls.length > 0),
           usage: mapUsageFor(usage),
-          raw: { streamed: true, usage, finishReason: lastChoice?.finish_reason ?? null },
+          raw: {
+            streamed: true,
+            usage,
+            finishReason: lastChoice?.finish_reason ?? null,
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          },
         };
       }
 

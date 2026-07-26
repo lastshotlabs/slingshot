@@ -36,6 +36,7 @@ import type {
 import type {
   AiBackgroundHandle,
   AiClient,
+  AiContentPart,
   AiDegradation,
   AiMessage,
   AiModerator,
@@ -46,12 +47,14 @@ import type {
   AiStream,
   AiStreamEvent,
   AiStructuredRequest,
+  AiToolCallRecord,
   AiUsage,
   AiVerdict,
 } from '../types';
+import { createEventQueue } from './eventQueue';
 import { messageContentUnits } from './messageContent';
 import { createModerator } from './moderation';
-import { computeUsage, estimateMaxCost, resolvePricing } from './pricing';
+import { accumulateUsage, computeUsage, estimateMaxCost, resolvePricing } from './pricing';
 import { createResponseCache, responseCacheKey } from './responseCache';
 import { withRetry } from './retry';
 import type { AiCacheAdapter, AiEventBus, AiUsageStore } from './seams';
@@ -64,6 +67,7 @@ import {
   toJsonSchema,
 } from './structured';
 import { PromptCacheMonitor, type RenderedSystem, renderSystem } from './systemPrompt';
+import { type ResolvedTools, executeToolCall, resolveTools } from './toolLoop';
 import { type UsageRecorder, createUsageRecorder } from './usage';
 
 /** Structural — matches the framework's MetricsEmitter without importing it. */
@@ -203,6 +207,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     request: NormalizedRequest;
     degradations: AiDegradation[];
     rendered: RenderedSystem;
+    tools: ResolvedTools | null;
   } {
     const degradations: AiDegradation[] = [];
     const { capabilities: caps, name } = resolved;
@@ -218,6 +223,20 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         { feature: 'imageInput', provider: name },
       );
     }
+
+    // The images rule, applied to tools. Sending the request WITHOUT the tools
+    // would look completely successful while changing what was asked: the model
+    // would answer from memory a question it was supposed to look up, and
+    // nothing in the result would mention it.
+    if (req.tools?.length && !caps.toolUse) {
+      throw new AiUnsupportedFeatureError(
+        `Provider '${name}' does not support tool calling. Select a tool-capable provider, ` +
+          `declare capabilities: { toolUse: true } if this endpoint genuinely supports it, or ` +
+          `inspect client.capabilitiesOf(provider).toolUse before sending the request.`,
+        { feature: 'toolUse', provider: name },
+      );
+    }
+    const tools = req.tools?.length ? resolveTools(req.tools, { logger, strict }) : null;
 
     const rendered = renderSystem({
       system: req.system,
@@ -319,9 +338,40 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
       // real prefix bytes, so a stale or colliding key costs a cold read, never a
       // wrong answer.
       promptCacheKey: rendered.promptCacheRouteKey,
+      ...(tools ? { tools: tools.normalized } : {}),
+      ...(req.toolChoice ? { toolChoice: req.toolChoice } : {}),
     };
 
-    return { request, degradations, rendered };
+    return { request, degradations, rendered, tools };
+  }
+
+  /**
+   * How many provider calls this tool loop may make.
+   *
+   * `config.tools.maxIterations` is both the default and a HARD CEILING. Asking
+   * for more throws here, before anything is spent, rather than being clamped:
+   * clamping is a shortfall the caller discovers after the money is gone, and a
+   * deployment-level spend ceiling a request can talk its way past is not a
+   * ceiling. This is a deterministic programming error, the same class as
+   * `spend.requireScope` with no `spendScope`.
+   */
+  function resolveMaxIterations(req: AiRequestBase): number {
+    const ceiling = config.tools.maxIterations;
+    const requested = req.maxToolIterations;
+    if (requested === undefined) return ceiling;
+    if (!Number.isInteger(requested) || requested < 1) {
+      throw new AiConfigError(
+        `maxToolIterations must be a positive integer; received ${String(requested)}.`,
+      );
+    }
+    if (requested > ceiling) {
+      throw new AiConfigError(
+        `This request asked for maxToolIterations: ${requested}, but slingshot-ai is configured ` +
+          `with tools.maxIterations: ${ceiling}, which is a hard ceiling. Raise the package ` +
+          `config if the deployment should allow longer tool loops.`,
+      );
+    }
+    return requested;
   }
 
   function estimateRequest(resolved: Resolved, request: NormalizedRequest): number | null {
@@ -481,6 +531,167 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // The tool loop
+  // -------------------------------------------------------------------------
+
+  interface ToolLoopOutcome {
+    /** The LAST iteration's provider result — the source of `stopReason` and `raw`. */
+    readonly result: ProviderResult;
+    /** EVERY iteration's text, concatenated. See `AiResult.value`. */
+    readonly text: string;
+    readonly usage: AiUsage;
+    readonly iterations: number;
+    readonly toolCalls: readonly AiToolCallRecord[];
+  }
+
+  const ZERO_USAGE: AiUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    costUsd: 0,
+    accounting: 'full',
+  };
+
+  /** Text parts of a provider result, as an assistant content part list. */
+  function assistantParts(result: ProviderResult): AiContentPart[] {
+    const parts: AiContentPart[] = [];
+    if (result.text) parts.push({ type: 'text', text: result.text });
+    for (const call of result.toolCalls ?? []) {
+      parts.push({
+        type: 'tool_call',
+        id: call.id,
+        name: call.name,
+        argumentsJson: call.argumentsJson,
+      });
+    }
+    return parts;
+  }
+
+  /**
+   * Run the model until it stops asking for tools.
+   *
+   * The loop wraps whatever `callOnce` does exactly the way `generateStructured`'s
+   * repair loop wraps `callProvider`, and it acquires NO invariants of its own:
+   *
+   *   - every iteration is a fresh provider call, so `callProvider`'s `onAttempt`
+   *     re-enters the PRE-FLIGHT spend guard and the request-scoped reservation
+   *     (invariants 2 / 2b) — N iterations produce N reservations and N
+   *     settlements, on the estimate for THAT iteration's grown message list;
+   *   - `finishUsage` runs per iteration, so the usage LEDGER has one row per
+   *     provider call. That is what makes the prompt-cache claim checkable: the
+   *     system prefix is unchanged across iterations, so iterations 2..n should
+   *     be near-total cache hits, and only the per-call ledger shows it — the
+   *     blended rate hides exactly this;
+   *   - hitting the cap is an `AiDegradation`, never a silent truncation
+   *     (invariant 3);
+   *   - usage adds across iterations while staying disjoint within each one
+   *     (invariant 4b), and one unpriced iteration makes the whole turn's cost
+   *     `null` rather than a partial sum presented as a total (invariant 4).
+   */
+  async function runToolLoop(options: {
+    req: AiRequestBase;
+    resolved: Resolved;
+    base: NormalizedRequest;
+    tools: ResolvedTools;
+    degradations: AiDegradation[];
+    rendered: RenderedSystem;
+    operation: 'generate' | 'stream';
+    /** Execute one iteration. Streaming supplies a driver that also emits deltas. */
+    callOnce: (request: NormalizedRequest, iteration: number) => Promise<ProviderResult>;
+    /** Streaming only: surface each executed call to the caller as it happens. */
+    onEvent?: (event: AiStreamEvent) => void;
+  }): Promise<ToolLoopOutcome> {
+    const { req, resolved, base, tools, degradations, rendered, operation, callOnce, onEvent } =
+      options;
+    const maxIterations = resolveMaxIterations(req);
+
+    let messages: readonly AiMessage[] = req.messages;
+    let usage = ZERO_USAGE;
+    let text = '';
+    const toolCalls: AiToolCallRecord[] = [];
+    let iteration = 0;
+    let result: ProviderResult;
+
+    for (;;) {
+      iteration++;
+      req.signal?.throwIfAborted();
+
+      const iterationStartedAt = Date.now();
+      result = await callOnce({ ...base, messages }, iteration);
+      checkRefusal(result, resolved, degradations);
+
+      // One ledger row, one spend.record, one cache-read observation PER
+      // PROVIDER CALL. Not per turn — the per-call ledger is the only place the
+      // cross-iteration cache behavior is visible.
+      usage = accumulateUsage(
+        usage,
+        finishUsage(
+          resolved,
+          result,
+          iterationStartedAt,
+          operation,
+          req.tags,
+          rendered.breakpointEmitted,
+          rendered.promptCacheKey,
+        ),
+      );
+      text += result.text;
+
+      const calls = result.toolCalls ?? [];
+      if (result.stopReason !== 'tool_use' || calls.length === 0) break;
+
+      if (iteration >= maxIterations) {
+        degrade(
+          degradations,
+          {
+            feature: 'toolUse',
+            requested: 'run the tool loop to completion',
+            applied: `stopped after ${iteration} provider call(s)`,
+            reason:
+              `the model was still requesting tools when maxToolIterations (${maxIterations}) ` +
+              `was reached; the answer is incomplete and the last requested tools were not run`,
+          },
+          resolved.name,
+        );
+        break;
+      }
+
+      // Concurrent, and none of these ever rejects — every failure mode is an
+      // `isError` result the model reads on the next iteration.
+      const executions = await Promise.all(
+        calls.map(call => executeToolCall(call, tools, { signal: req.signal, iteration })),
+      );
+
+      for (const execution of executions) {
+        toolCalls.push(execution.record);
+        onEvent?.({
+          type: 'tool_call',
+          id: execution.record.id,
+          name: execution.record.name,
+          args: execution.record.args,
+        });
+        onEvent?.({
+          type: 'tool_result',
+          id: execution.record.id,
+          name: execution.record.name,
+          ok: execution.record.ok,
+          durationMs: execution.record.durationMs,
+        });
+      }
+
+      messages = [
+        ...messages,
+        { role: 'assistant', content: assistantParts(result) },
+        { role: 'user', content: executions.map(execution => execution.part) },
+      ];
+      req.signal?.throwIfAborted();
+    }
+
+    return { result, text, usage, iterations: iteration, toolCalls };
+  }
+
   async function runModeration(
     req: AiRequestBase,
     value: unknown,
@@ -521,7 +732,9 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   async function generate(req: AiRequestBase): Promise<AiResult<string>> {
     const startedAt = Date.now();
     const resolved = resolve(req);
-    const { request, degradations, rendered } = prepare(req, resolved);
+    const { request, degradations, rendered, tools } = prepare(req, resolved);
+
+    if (tools) return generateWithTools(req, resolved, request, degradations, rendered, tools);
 
     // `cache: false` opts out explicitly; an object opts IN even when the
     // response cache is globally off; omitting it follows the config default.
@@ -573,6 +786,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         cached: 'none',
         latencyMs: Date.now() - startedAt,
         raw: result.raw,
+        toolCalls: [],
+        iterations: 1,
       };
     };
 
@@ -593,6 +808,59 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     return output;
   }
 
+  /**
+   * `generate` with tools.
+   *
+   * Split out because it deliberately does NOT go through the response cache or
+   * in-flight coalescing. `responseCacheKey` is computed from provider, model,
+   * system, messages, maxTokens and spendScope — it cannot see what a tool
+   * returned, so two identical prompts a day apart would share an answer built
+   * from stale facts. Coalescing has the same blindness plus a worse failure:
+   * five concurrent identical requests collapsing into one loop hands four
+   * callers a trace of tool calls their request never made, and — with write
+   * tools — four writes that never happened.
+   *
+   * This does not touch invariant 8: the two caches remain independent of each
+   * other. Both are simply opted out of by the shape of the request.
+   */
+  async function generateWithTools(
+    req: AiRequestBase,
+    resolved: Resolved,
+    request: NormalizedRequest,
+    degradations: AiDegradation[],
+    rendered: RenderedSystem,
+    tools: ResolvedTools,
+  ): Promise<AiResult<string>> {
+    const startedAt = Date.now();
+    const outcome = await runToolLoop({
+      req,
+      resolved,
+      base: request,
+      tools,
+      degradations,
+      rendered,
+      operation: 'generate',
+      callOnce: attempt => callProvider(resolved, attempt, req.signal, req, 'generate'),
+    });
+
+    const moderation = await runModeration(req, outcome.text, outcome.text);
+
+    return {
+      value: outcome.text,
+      stopReason: outcome.result.stopReason,
+      usage: outcome.usage,
+      moderation,
+      degradations,
+      provider: resolved.name,
+      model: resolved.model,
+      cached: 'none',
+      latencyMs: Date.now() - startedAt,
+      raw: outcome.result.raw,
+      toolCalls: outcome.toolCalls,
+      iterations: outcome.iterations,
+    };
+  }
+
   // -------------------------------------------------------------------------
 
   async function generateStructured<T>(req: AiStructuredRequest<T>): Promise<AiResult<T>> {
@@ -600,6 +868,20 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     const resolved = resolve(req);
     const { capabilities: caps } = resolved;
     const schemaName = req.schemaName ?? 'result';
+
+    // A deliberate boundary, not an oversight. A structured request tells the
+    // model to emit ONLY JSON matching a schema — on exactly the turns it is
+    // supposed to be emitting tool calls instead. And nesting a tool loop inside
+    // the repair loop inside the retry layer inside the spend guard produces a
+    // four-way interaction whose failure modes nobody can hold in their head.
+    if (req.tools?.length) {
+      throw new AiConfigError(
+        'generateStructured() does not accept tools: a structured request constrains the model ' +
+          'to emit only schema-matching JSON, which is incompatible with emitting tool calls. ' +
+          'Run the loop with generate() or stream(), then make one generateStructured() call ' +
+          'over what the tools returned.',
+      );
+    }
 
     const jsonSchema = toJsonSchema(req.schema, { logger, strict, name: schemaName });
     const mode = chooseStructuredMode(caps);
@@ -687,6 +969,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
           cached: 'none',
           latencyMs: Date.now() - startedAt,
           raw: result.raw,
+          toolCalls: [],
+          iterations: 1,
         };
       }
 
@@ -728,7 +1012,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
   function stream(req: AiRequestBase): AiStream {
     const startedAt = Date.now();
     const resolved = resolve(req);
-    const { request, degradations, rendered } = prepare(req, resolved);
+    const { request, degradations, rendered, tools } = prepare(req, resolved);
 
     // Streaming and moderation are fundamentally at odds: the deltas reach the
     // user's screen BEFORE there is a complete text to judge. Moderation here
@@ -748,6 +1032,10 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         },
         resolved.name,
       );
+    }
+
+    if (tools) {
+      return streamWithTools(req, resolved, request, degradations, rendered, tools, startedAt);
     }
 
     let finalPromise: Promise<AiResult<string>> | undefined;
@@ -775,6 +1063,8 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         cached: 'none',
         latencyMs: Date.now() - startedAt,
         raw: result.raw,
+        toolCalls: [],
+        iterations: 1,
       };
     };
 
@@ -878,6 +1168,156 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
         finalPromise ??= finishStream();
         return finalPromise;
       },
+    };
+  }
+
+  /**
+   * `stream` with tools.
+   *
+   * One event queue spans the WHOLE turn, not one per iteration, which is what
+   * keeps the streaming invariant true across the loop: concatenating every
+   * `text` delta the caller sees yields `finalResult().value`, because `value`
+   * is every iteration's text concatenated and each iteration's deltas
+   * concatenate to its own text by the adapter's conformance guarantee.
+   *
+   * Two kinds of tool event reach the caller and they are not the same thing:
+   *   - `tool_call_delta` — forwarded live from the transport, raw and
+   *     incremental, so a trace UI can name the call the moment the model does;
+   *   - `tool_call` / `tool_result` — pushed by the loop after validation and
+   *     execution. These are the ones an app may act on.
+   *
+   * Each iteration reserves before its provider call and settles on that
+   * iteration's `finalResult()`, mirroring the single-shot streaming path —
+   * never eagerly, never once for the whole loop.
+   */
+  function streamWithTools(
+    req: AiRequestBase,
+    resolved: Resolved,
+    request: NormalizedRequest,
+    degradations: AiDegradation[],
+    rendered: RenderedSystem,
+    tools: ResolvedTools,
+    startedAt: number,
+  ): AiStream {
+    const queue = createEventQueue<AiStreamEvent>();
+    let finalPromise: Promise<AiResult<string>> | undefined;
+    const streams = resolved.capabilities.streaming;
+
+    if (!streams) {
+      degrade(
+        degradations,
+        {
+          feature: 'streaming',
+          requested: 'incremental',
+          applied: 'single-chunk',
+          reason:
+            'the provider does not stream; each turn of the tool loop arrives as one delta',
+        },
+        resolved.name,
+      );
+    }
+
+    const callOnce = async (attempt: NormalizedRequest): Promise<ProviderResult> => {
+      // A non-streaming provider still gets a correct loop: `callProvider`
+      // handles retry, spend and reservation, and the whole turn's text lands as
+      // a single delta between the tool events.
+      if (!streams) {
+        const result = await callProvider(resolved, attempt, req.signal, req, 'stream');
+        if (result.text) queue.push({ type: 'text', delta: result.text });
+        return result;
+      }
+
+      // The pre-flight guard and the reservation, per iteration — the streaming
+      // path cannot use `callProvider` because the provider hands back a stream
+      // rather than a result, but it owes the same two things.
+      const estimate = estimateRequest(resolved, attempt);
+      spend.check(estimate);
+      const reservation = await reserveScoped(req, resolved, 'stream', estimate);
+
+      let providerStream: ReturnType<AiProvider['stream']>;
+      try {
+        providerStream = resolved.provider.stream(attempt, req.signal);
+      } catch (error) {
+        await reservation?.release();
+        throw error;
+      }
+
+      let result: ProviderResult | undefined;
+      try {
+        for await (const event of providerStream) {
+          // `text`, `thinking` and `tool_call_delta` share their shape with the
+          // public events by design, so this is an identity forward rather than
+          // a mapping that could drift.
+          queue.push(event);
+        }
+        result = await providerStream.finalResult();
+        if (reservation) {
+          await reservation.settle({
+            usage: computeUsage({
+              usage: result.usage,
+              pricing: priceFor(resolved),
+              capabilities: resolved.capabilities,
+            }),
+          });
+        }
+        return result;
+      } catch (error) {
+        if (!result) await reservation?.release();
+        throw error;
+      }
+    };
+
+    const run = async (): Promise<AiResult<string>> => {
+      try {
+        const outcome = await runToolLoop({
+          req,
+          resolved,
+          base: request,
+          tools,
+          degradations,
+          rendered,
+          operation: 'stream',
+          callOnce,
+          onEvent: event => queue.push(event),
+        });
+        const moderation = await runModeration(req, outcome.text, outcome.text);
+        const final: AiResult<string> = {
+          value: outcome.text,
+          stopReason: outcome.result.stopReason,
+          usage: outcome.usage,
+          moderation,
+          degradations,
+          provider: resolved.name,
+          model: resolved.model,
+          cached: 'none',
+          latencyMs: Date.now() - startedAt,
+          raw: outcome.result.raw,
+          toolCalls: outcome.toolCalls,
+          iterations: outcome.iterations,
+        };
+        queue.push({ type: 'done', stopReason: final.stopReason });
+        queue.finish();
+        return final;
+      } catch (error) {
+        // The iterator must see the same failure the promise does, or a caller
+        // who only iterates hangs forever on a turn that already failed.
+        queue.fail(error);
+        throw error;
+      }
+    };
+
+    const start = (): Promise<AiResult<string>> => {
+      finalPromise ??= run();
+      void finalPromise.catch(() => {});
+      return finalPromise;
+    };
+
+    return {
+      async *[Symbol.asyncIterator](): AsyncIterator<AiStreamEvent> {
+        start();
+        yield* queue.drain();
+      },
+      finalResult: () => start(),
     };
   }
 

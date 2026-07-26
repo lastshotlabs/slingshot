@@ -122,6 +122,23 @@ export const aiPackageConfigSchema = z.object({
     })
     .prefault({}),
 
+  tools: z
+    .object({
+      maxIterations: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .default(8)
+        .describe(
+          'Maximum PROVIDER CALLS in one tool loop — the default when a request omits ' +
+            'maxToolIterations, AND the hard ceiling it may not exceed. A request asking for ' +
+            'more throws before any provider call: a deployment-level spend ceiling that a ' +
+            'request can talk its way past is not a ceiling. Hitting it is a degradation.',
+        ),
+    })
+    .prefault({}),
+
   promptCache: z
     .object({
       enabled: z.boolean().default(true),

@@ -9,14 +9,37 @@ export function messageContentText(content: AiMessageContent): string {
     .join('');
 }
 
+/** Size one content part for the pre-flight spend estimate. */
+function partUnits(part: AiContentPart): number {
+  switch (part.type) {
+    case 'text':
+      return part.text.length;
+    case 'image':
+      return Math.ceil(part.data.length * 0.75);
+    case 'tool_call':
+      return part.name.length + part.argumentsJson.length;
+    case 'tool_result':
+      // A tool result is often the LARGEST thing in the conversation — a page of
+      // rows, a computed trend — and the message list grows by one of these on
+      // every loop iteration. An estimator blind to them would under-count
+      // precisely the loop the pre-flight spend guard exists to catch.
+      return part.name.length + safeJsonLength(part.result);
+  }
+}
+
+/** Length of the JSON an adapter would send, without throwing on a cyclic value. */
+function safeJsonLength(value: unknown): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    return String(value).length;
+  }
+}
+
 /** Conservative request-size estimate including decoded inline image bytes. */
 export function messageContentUnits(content: AiMessageContent): number {
   if (typeof content === 'string') return content.length;
-  return content.reduce(
-    (sum, part) =>
-      sum + (part.type === 'text' ? part.text.length : Math.ceil(part.data.length * 0.75)),
-    0,
-  );
+  return content.reduce((sum, part) => sum + partUnits(part), 0);
 }
 
 export function messagesText(messages: readonly AiMessage[]): string {

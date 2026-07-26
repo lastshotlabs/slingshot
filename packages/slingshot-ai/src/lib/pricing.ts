@@ -133,6 +133,44 @@ export function computeUsage(options: {
   return { ...base, costUsd, accounting: capabilities.usageAccounting };
 }
 
+/** How much a usage report is actually known to. Weakest wins when summing. */
+const ACCOUNTING_RANK: Record<AiUsage['accounting'], number> = {
+  none: 0,
+  estimated: 1,
+  partial: 2,
+  full: 3,
+};
+
+/**
+ * Sum two calls' usage into one turn's usage.
+ *
+ * Used by the tool loop, where one `AiResult` covers N provider calls. The four
+ * token counts stay DISJOINT within each call (`computeUsage` is unchanged and
+ * runs per call) and add ACROSS calls, which is exactly what the additive
+ * billing model in `computeUsage` prescribes.
+ *
+ * **An unknown cost poisons the sum.** If either side is `null` the total is
+ * `null`, not the value of the side we happened to know: `costUsd: null` means
+ * UNKNOWN, and a total that silently omits a component is a fabricated number
+ * that reads as authoritative. This is the same rule `AiUsageSummary` implements
+ * with `unpricedCalls`; a single `AiUsage` has no such field, so it must be
+ * honest by being null.
+ */
+export function accumulateUsage(a: AiUsage, b: AiUsage): AiUsage {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    costUsd: a.costUsd === null || b.costUsd === null ? null : a.costUsd + b.costUsd,
+    // Claiming 'full' for a total because the last call happened to be fully
+    // accounted would overstate what the total is known to.
+    accounting: ACCOUNTING_RANK[a.accounting] <= ACCOUNTING_RANK[b.accounting]
+      ? a.accounting
+      : b.accounting,
+  };
+}
+
 /**
  * Worst-case cost of a call that has not happened yet.
  *

@@ -25,17 +25,21 @@
 import type { AiProviderConfig } from '../config';
 import { AiConfigError, AiProviderError, AiRateLimitError, AiTimeoutError } from '../errors';
 import { createEventQueue } from '../lib/eventQueue';
+import { toolResultBody } from '../lib/toolContent';
 import { resolveCapabilities } from './capabilities';
 import { registerBuiltinProvider } from './registry';
 import type { BuildProviderDeps } from './registry';
 import type {
+  AiContentPart,
   AiProvider,
   AiStopReason,
+  AiToolChoice,
   NormalizedRequest,
   ProviderCapabilities,
   ProviderResult,
   ProviderStream,
   ProviderStreamEvent,
+  ProviderToolCall,
   ProviderUsage,
 } from './types';
 
@@ -192,6 +196,59 @@ interface AnthropicSystemBlock {
   cache_control?: { type: 'ephemeral' };
 }
 
+/** `'required'` is called `'any'` here. Everything else matches. */
+function mapToolChoice(choice: AiToolChoice): { type: string } {
+  return { type: choice === 'required' ? 'any' : choice };
+}
+
+/**
+ * One neutral content part → one Anthropic content block.
+ *
+ * A tool result rides a `user` turn here, as a BLOCK — Anthropic has no `'tool'`
+ * role — which is the whole reason tool results are modelled as content parts.
+ */
+function toContentBlock(part: AiContentPart): Record<string, unknown> {
+  switch (part.type) {
+    case 'text':
+      return { type: 'text', text: part.text };
+    case 'image':
+      return {
+        type: 'image',
+        source: { type: 'base64', media_type: part.mediaType, data: part.data },
+      };
+    case 'tool_call':
+      return {
+        type: 'tool_use',
+        id: part.id,
+        name: part.name,
+        // Anthropic takes an OBJECT here, not a JSON string. An unparseable
+        // argument string cannot be replayed to this API at all, so fall back to
+        // an empty object rather than throwing — the orchestrator has already
+        // recorded the parse failure as an error result the model can see.
+        input: parseArgumentsObject(part.argumentsJson),
+      };
+    case 'tool_result':
+      return {
+        type: 'tool_result',
+        tool_use_id: part.id,
+        content: toolResultBody(part.result),
+        // A real flag on this wire, so no `Error:` prefix is needed.
+        ...(part.isError ? { is_error: true } : {}),
+      };
+  }
+}
+
+function parseArgumentsObject(json: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 function buildParams(req: NormalizedRequest): Record<string, unknown> {
   const system: AnthropicSystemBlock[] = req.system.map(block => ({
     type: 'text',
@@ -220,21 +277,18 @@ function buildParams(req: NormalizedRequest): Record<string, unknown> {
     messages: req.messages.map(message => ({
       role: message.role,
       content:
-        typeof message.content === 'string'
-          ? message.content
-          : message.content.map(part =>
-              part.type === 'text'
-                ? { type: 'text', text: part.text }
-                : {
-                    type: 'image',
-                    source: {
-                      type: 'base64',
-                      media_type: part.mediaType,
-                      data: part.data,
-                    },
-                  },
-            ),
+        typeof message.content === 'string' ? message.content : message.content.map(toContentBlock),
     })),
+    ...(req.tools?.length
+      ? {
+          tools: req.tools.map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            input_schema: tool.jsonSchema,
+          })),
+          ...(req.toolChoice ? { tool_choice: mapToolChoice(req.toolChoice) } : {}),
+        }
+      : {}),
     ...(req.thinking ? { thinking: { type: 'adaptive' as const } } : {}),
     ...(Object.keys(outputConfig).length > 0 ? { output_config: outputConfig } : {}),
     // NOTE: no temperature, no top_p, no top_k. They are removed on Opus 4.8 and
@@ -274,8 +328,16 @@ function mapUsage(usage: AnthropicUsage | undefined): ProviderUsage {
   };
 }
 
+interface AnthropicContentBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+}
+
 interface AnthropicMessage {
-  content?: readonly { type: string; text?: string }[];
+  content?: readonly AnthropicContentBlock[];
   stop_reason?: string | null;
   usage?: AnthropicUsage;
 }
@@ -289,14 +351,34 @@ function textOf(message: AnthropicMessage): string {
     .join('');
 }
 
+/** `tool_use` blocks → the neutral shape. `input` is re-serialized, never trusted. */
+function toolCallsOf(message: AnthropicMessage): ProviderToolCall[] {
+  if (!Array.isArray(message.content)) return [];
+  return message.content
+    .filter(block => block.type === 'tool_use')
+    .map((block, index) => ({
+      id: block.id ?? `call_${index}`,
+      name: block.name ?? '',
+      // The SDK hands back a parsed object; the seam is defined in raw JSON so
+      // that one orchestrator code path validates every provider's arguments.
+      // Re-serializing here is what keeps that path single.
+      argumentsJson: JSON.stringify(block.input ?? {}),
+    }));
+}
+
 function toResult(message: AnthropicMessage, textOverride?: string): ProviderResult {
   // stop_reason FIRST. A refusal is a 200 with empty/partial content, so any
   // code that reads content before checking this crashes on the one case it
   // most needs to report.
   const stopReason = mapStopReason(message.stop_reason);
+  const toolCalls = toolCallsOf(message);
   return {
     text: textOverride ?? textOf(message),
-    stopReason,
+    ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    // Anthropic reports `stop_reason: 'tool_use'` reliably, but normalize anyway:
+    // the orchestrator's loop keys off the stop reason, and a result carrying
+    // tool calls that claims it ended is a contradiction no caller can resolve.
+    stopReason: toolCalls.length > 0 ? 'tool_use' : stopReason,
     usage: mapUsage(message.usage),
     raw: message,
   };
@@ -360,11 +442,43 @@ export async function createAnthropicProvider(
             timeout: req.timeoutMs,
           });
 
+          // A streamed tool call announces itself in `content_block_start` (which
+          // carries the id and name) and then arrives as `input_json_delta`
+          // fragments that identify themselves only by block INDEX. Without this
+          // map the fragments have no name to travel under.
+          const openToolBlocks = new Map<number, { id: string; name: string }>();
+
           for await (const rawEvent of sdkStream) {
             const event = rawEvent as {
               type?: string;
-              delta?: { type?: string; text?: string; thinking?: string };
+              index?: number;
+              content_block?: { type?: string; id?: string; name?: string };
+              delta?: {
+                type?: string;
+                text?: string;
+                thinking?: string;
+                partial_json?: string;
+              };
             };
+
+            if (event.type === 'content_block_start') {
+              const block = event.content_block;
+              if (block?.type === 'tool_use') {
+                const open = { id: block.id ?? `call_${event.index ?? 0}`, name: block.name ?? '' };
+                openToolBlocks.set(event.index ?? 0, open);
+                // Announce immediately, with no arguments yet: the name is the
+                // whole point of this event, and it lands here — well before the
+                // arguments finish.
+                queue.push({
+                  type: 'tool_call_delta',
+                  id: open.id,
+                  name: open.name,
+                  argumentsDelta: '',
+                });
+              }
+              continue;
+            }
+
             if (event.type !== 'content_block_delta' || !event.delta) continue;
 
             if (event.delta.type === 'text_delta' && typeof event.delta.text === 'string') {
@@ -375,6 +489,19 @@ export async function createAnthropicProvider(
               typeof event.delta.thinking === 'string'
             ) {
               queue.push({ type: 'thinking', delta: event.delta.thinking });
+            } else if (
+              event.delta.type === 'input_json_delta' &&
+              typeof event.delta.partial_json === 'string'
+            ) {
+              const open = openToolBlocks.get(event.index ?? 0);
+              if (open && event.delta.partial_json.length > 0) {
+                queue.push({
+                  type: 'tool_call_delta',
+                  id: open.id,
+                  name: open.name,
+                  argumentsDelta: event.delta.partial_json,
+                });
+              }
             }
           }
 

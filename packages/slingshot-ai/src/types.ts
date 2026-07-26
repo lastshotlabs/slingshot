@@ -13,6 +13,9 @@ import type {
   AiMessageContent,
   AiStopReason,
   AiTextPart,
+  AiToolCallPart,
+  AiToolChoice,
+  AiToolResultPart,
   ModelPricing,
   ProviderCapabilities,
 } from './provider/types';
@@ -25,6 +28,9 @@ export type {
   AiMessageContent,
   AiStopReason,
   AiTextPart,
+  AiToolCallPart,
+  AiToolChoice,
+  AiToolResultPart,
   ModelPricing,
   ProviderCapabilities,
 };
@@ -73,6 +79,74 @@ export interface AiModerationRequest {
   readonly extract?: (value: unknown) => readonly string[];
 }
 
+// ---------------------------------------------------------------------------
+// Tools
+// ---------------------------------------------------------------------------
+
+/** What the orchestrator hands a tool when it runs it. Deliberately minimal. */
+export interface AiToolContext {
+  /** The caller's signal. A long-running tool should honor it. */
+  readonly signal?: AbortSignal;
+  /** 1-based index of the provider call that produced this tool call. */
+  readonly iteration: number;
+  /** The provider's id for this call. Correlates with the stream events. */
+  readonly toolCallId: string;
+}
+
+/**
+ * A tool the model may call.
+ *
+ * `execute` lives here — the framework runs the loop — because spend re-entry,
+ * the iteration cap and argument validation are the orchestrator's job, and an
+ * app-authored `while` loop around `generate()` cannot do any of the three. The
+ * app still observes every call through `AiStream` events and
+ * `AiResult.toolCalls`, which is what a tool-trace UI needs and all it needs.
+ *
+ * The framework NEVER retries `execute`. Retry policy for a side-effecting app
+ * function is the app's business; the package's retry layer covers the provider
+ * call only.
+ *
+ * A throwing `execute` becomes an `isError` tool result the model can react to.
+ * It does not kill the turn and it does not surface as an exception to the app.
+ */
+export interface AiTool<A = unknown> {
+  readonly name: string;
+  /** Shown to the model. The only thing that makes the tool discoverable. */
+  readonly description: string;
+  /**
+   * Validated in the ORCHESTRATOR with `safeParse`, and converted to the JSON
+   * Schema the model is shown. Never trusted from the provider, for the same
+   * reason `ProviderResult.structured` is advisory.
+   */
+  readonly schema: z.ZodType<A>;
+  /**
+   * Declared as a METHOD, not a `readonly` property, on purpose.
+   *
+   * `readonly execute: (args: A, …) => …` is contravariant in `A` under
+   * `strictFunctionTypes`, so `AiTool<{lift: string}>` would not be assignable to
+   * `AiTool<unknown>` and a heterogeneous `readonly AiTool[]` — the only useful
+   * shape — could not be built without an `any`. Method-shorthand declarations
+   * are checked bivariantly, which is exactly the escape hatch TypeScript
+   * provides for this case, and it costs nothing here because the orchestrator
+   * never assigns an `AiTool` into a narrower one.
+   */
+  execute(args: A, ctx: AiToolContext): Promise<unknown>;
+}
+
+/** What one tool call did, recorded on the result. */
+export interface AiToolCallRecord {
+  readonly id: string;
+  readonly name: string;
+  /**
+   * The VALIDATED arguments when validation succeeded; otherwise whatever the
+   * model's JSON parsed to (or `null`), so the trace is complete either way.
+   */
+  readonly args: unknown;
+  /** `false` for an unknown tool, unparseable arguments, a schema failure, or a throw. */
+  readonly ok: boolean;
+  readonly durationMs: number;
+}
+
 export interface AiRequestBase {
   readonly system?: SystemPrompt;
   readonly messages: readonly AiMessage[];
@@ -101,6 +175,31 @@ export interface AiRequestBase {
   readonly spendScope?: string;
   /** Omit for the config default (on); `false` to explicitly skip. */
   readonly moderation?: AiModerationRequest | false;
+  /**
+   * Tools the model may call. Supported by `generate` and `stream`.
+   *
+   * A provider declaring `toolUse: false` throws rather than silently dropping
+   * them — sending the request without the tools would look successful while
+   * changing its meaning (the model would answer from memory a question it was
+   * supposed to look up). Same rule as inline images.
+   *
+   * Passing tools to `generateStructured` throws: a structured request tells the
+   * model to emit only JSON matching a schema, on exactly the turns it is
+   * supposed to be emitting tool calls instead.
+   */
+  readonly tools?: readonly AiTool[];
+  readonly toolChoice?: AiToolChoice;
+  /**
+   * Maximum PROVIDER CALLS in the tool loop — not tool rounds. With `n` the model
+   * gets at most `n - 1` rounds of tool execution. Provider calls are what cost
+   * money, which is the unit this package measures in.
+   *
+   * Defaults to `config.tools.maxIterations`, which is also a hard ceiling:
+   * asking for more throws `AiConfigError` before any provider call, because a
+   * deployment-level spend ceiling a request can talk its way past is not a
+   * ceiling. Hitting the cap is an `AiDegradation`, never a silent truncation.
+   */
+  readonly maxToolIterations?: number;
 }
 
 /** One provider attempt presented to an app-supplied durable budget controller. */
@@ -165,7 +264,8 @@ export type AiDegradableFeature =
   | 'streaming'
   | 'costAccounting'
   | 'refusalSignal'
-  | 'moderation';
+  | 'moderation'
+  | 'toolUse';
 
 /**
  * A record that you got less than you asked for.
@@ -206,8 +306,23 @@ export interface AiVerdict {
 }
 
 export interface AiResult<T> {
+  /**
+   * On a tool loop this is EVERY assistant text turn, concatenated in order —
+   * not just the last one. The alternative breaks the streaming invariant
+   * outright: deltas the user already watched would be absent from the final
+   * text, which is exactly the streaming-UI-vs-saved-transcript disagreement the
+   * conformance suite exists to prevent.
+   */
   readonly value: T;
+  /** From the LAST iteration. */
   readonly stopReason: AiStopReason;
+  /**
+   * Summed across every iteration of a tool loop. The four token counts stay
+   * disjoint WITHIN each iteration (`computeUsage` is unchanged and runs per
+   * call), then add ACROSS them. If any iteration could not be priced, `costUsd`
+   * is `null` for the whole turn — not the sum of the ones that could, because a
+   * total that silently omits a component is a fabricated number.
+   */
   readonly usage: AiUsage;
   readonly moderation: AiVerdict | null;
   /** Empty ⇒ everything you asked for was honored. Non-empty ⇒ read it. */
@@ -216,16 +331,59 @@ export interface AiResult<T> {
   readonly model: string;
   readonly cached: 'response' | 'none';
   readonly latencyMs: number;
+  /** From the LAST iteration. */
   readonly raw: unknown;
+  /** Every tool call made this turn, in order. Empty when no tools were used. */
+  readonly toolCalls: readonly AiToolCallRecord[];
+  /** Provider calls made for this turn. `1` unless a tool loop ran. */
+  readonly iterations: number;
 }
 
 // ---------------------------------------------------------------------------
 // Streaming
 // ---------------------------------------------------------------------------
 
+/**
+ * `tool_call_delta` and `tool_call` are two different things and neither is
+ * derivable from the other.
+ *
+ * - `tool_call_delta` is passed through LIVE from the transport, one raw
+ *   fragment of the model's argument JSON at a time. It is advisory. Its job is
+ *   latency: the function NAME lands in the first frame, hundreds of
+ *   milliseconds before the arguments finish, so a trace UI can render "calling
+ *   get_lift_trend…" immediately instead of showing nothing. It is emitted for
+ *   calls that later fail validation too, because a trace is a record of what
+ *   the model did.
+ * - `tool_call` is emitted once per call, AFTER `JSON.parse` and
+ *   `schema.safeParse`, with the validated arguments. This is the one an app may
+ *   act on. Half of `{"lift":"squ` is not arguments.
+ *
+ * `tool_result` deliberately carries no return payload: a result can be large,
+ * the app already has it (it wrote the tool), and a stream is the wrong place to
+ * ship a page of rows.
+ */
 export type AiStreamEvent =
   | { readonly type: 'text'; readonly delta: string }
   | { readonly type: 'thinking'; readonly delta: string }
+  | {
+      readonly type: 'tool_call_delta';
+      readonly id: string;
+      readonly name: string;
+      readonly argumentsDelta: string;
+    }
+  | {
+      readonly type: 'tool_call';
+      readonly id: string;
+      readonly name: string;
+      readonly args: unknown;
+    }
+  | {
+      readonly type: 'tool_result';
+      readonly id: string;
+      readonly name: string;
+      readonly ok: boolean;
+      readonly durationMs: number;
+    }
   | { readonly type: 'done'; readonly stopReason: AiStopReason };
 
 export interface AiStream extends AsyncIterable<AiStreamEvent> {

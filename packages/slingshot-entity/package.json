@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-entity",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Config-driven entity CRUD, code generation, and search for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -32,7 +32,7 @@
     "directory": "packages/slingshot-entity"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   },
   "files": [

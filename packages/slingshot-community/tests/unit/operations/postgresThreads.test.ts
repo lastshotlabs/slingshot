@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { storageName } from '@lastshotlabs/slingshot-entity';
+import { Thread } from '../../../src/entities/thread';
 import {
   THREAD_POSTGRES_TABLE,
   clampLimit,
@@ -8,9 +10,26 @@ import {
 
 describe('postgresThreads utilities', () => {
   describe('THREAD_POSTGRES_TABLE', () => {
-    test('is a string constant', () => {
-      expect(typeof THREAD_POSTGRES_TABLE).toBe('string');
-      expect(THREAD_POSTGRES_TABLE).toBe('slingshot_thread');
+    /**
+     * REGRESSION. This constant was `'slingshot_thread'` — a table that does not
+     * exist — so every `listByContainerSorted` request on Postgres returned 500
+     * with `relation "slingshot_thread" does not exist`. That is the operation
+     * behind the `new`, `active`, `hot`, `top` and `controversial` sort presets,
+     * so Top sort was dead on Postgres for every consumer.
+     *
+     * The old test here asserted `typeof === 'string'` and the literal value,
+     * which is a test that CANNOT fail on a wrong name — it just restates
+     * whatever the code says. The integration tests missed it too, because they
+     * drive a stub pool that accepts any SQL. So the name is now checked against
+     * the adapter's OWN derivation, which is the only thing that makes it
+     * true or false.
+     */
+    test('matches the table the entity adapter actually creates', () => {
+      expect(THREAD_POSTGRES_TABLE).toBe(storageName(Thread as never, 'postgres'));
+    });
+
+    test('is the namespaced, pluralised name — not the bare entity name', () => {
+      expect(THREAD_POSTGRES_TABLE).toBe('slingshot_community_threads');
     });
   });
 

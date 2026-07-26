@@ -336,7 +336,7 @@
     },
     "packages/slingshot-community": {
       "name": "@lastshotlabs/slingshot-community",
-      "version": "0.2.8",
+      "version": "0.2.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",

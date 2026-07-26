@@ -34,7 +34,22 @@ function build(config: Partial<AiProviderConfig> = {}, server = mock) {
   );
 }
 
-runProviderConformanceSuite('openai-compatible', () => build());
+/** A backend scripted to actually CALL the conformance tool, so the tool cases bite. */
+const TOOL_FIXTURE = [
+  { id: 'call_fixture_1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
+];
+
+const toolMock = startMockOpenAi({ text: 'Let me check.', toolCalls: TOOL_FIXTURE });
+afterAll(() => toolMock.stop());
+
+// The generic preset declares `toolUse: false` — an arbitrary /chat/completions
+// server may or may not support tools, and over-declaring is the only way to get
+// silently wrong behavior out of this package. The tool cases therefore run
+// against a version that opts IN, which is what a real vLLM or Ollama deployment
+// that does support tools would configure.
+runProviderConformanceSuite('openai-compatible', () => build(), {
+  toolFactory: () => build({ capabilities: { toolUse: true } }, toolMock),
+});
 
 function request(overrides: Partial<NormalizedRequest> = {}): NormalizedRequest {
   return {
@@ -246,6 +261,194 @@ describe('openai-compatible adapter', () => {
     // The mock records bodies, not headers; the contract we assert here is that
     // a keyless provider constructs and calls successfully at all.
     expect(mock.requests.length).toBeGreaterThan(0);
+  });
+});
+
+describe('tool calling on the wire', () => {
+  function tooled(server = toolMock) {
+    return build({ capabilities: { toolUse: true } }, server);
+  }
+
+  const weather = {
+    name: 'get_weather',
+    description: 'Look up the weather.',
+    jsonSchema: { type: 'object', properties: { city: { type: 'string' } } },
+  };
+
+  test('sends tools as function declarations and forwards tool_choice verbatim', async () => {
+    await tooled().generate(request({ tools: [weather], toolChoice: 'required' }));
+
+    const body = toolMock.requests.at(-1)!;
+    expect(body.tools).toEqual([
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Look up the weather.',
+          parameters: { type: 'object', properties: { city: { type: 'string' } } },
+        },
+      },
+    ]);
+    // The vocabulary matches ours exactly, so there is nothing to translate.
+    expect(body.tool_choice).toBe('required');
+  });
+
+  test('a user turn of tool results becomes ONE role:tool message per result', async () => {
+    // The mapping is not one-to-one, which is exactly why tool results are
+    // content parts rather than a role — Anthropic has no such role at all.
+    await tooled().generate(
+      request({
+        tools: [weather],
+        messages: [
+          { role: 'user', content: 'weather?' },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Checking.' },
+              { type: 'tool_call', id: 'c1', name: 'get_weather', argumentsJson: '{"city":"A"}' },
+              { type: 'tool_call', id: 'c2', name: 'get_weather', argumentsJson: '{"city":"B"}' },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'tool_result', id: 'c1', name: 'get_weather', result: { tempC: 1 } },
+              { type: 'tool_result', id: 'c2', name: 'get_weather', result: 'rainy', isError: true },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const messages = toolMock.requests.at(-1)!.messages as Record<string, unknown>[];
+    // system, user, assistant(+tool_calls), tool, tool
+    expect(messages).toHaveLength(5);
+    expect(messages[2]).toMatchObject({
+      role: 'assistant',
+      tool_calls: [
+        { id: 'c1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"A"}' } },
+        { id: 'c2', type: 'function', function: { name: 'get_weather', arguments: '{"city":"B"}' } },
+      ],
+    });
+    expect(messages[3]).toEqual({
+      role: 'tool',
+      tool_call_id: 'c1',
+      content: '{"tempC":1}',
+    });
+    // No `is_error` field exists on this wire, so a failure that is not marked
+    // in the text is indistinguishable from a successful odd-looking result.
+    expect(messages[4]).toEqual({
+      role: 'tool',
+      tool_call_id: 'c2',
+      content: 'Error: rainy',
+    });
+  });
+
+  test('an assistant turn that is only tool calls sends content: null, not []', async () => {
+    await tooled().generate(
+      request({
+        tools: [weather],
+        messages: [
+          { role: 'user', content: 'weather?' },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'tool_call', id: 'c1', name: 'get_weather', argumentsJson: '{}' },
+            ],
+          },
+          {
+            role: 'user',
+            content: [{ type: 'tool_result', id: 'c1', name: 'get_weather', result: 1 }],
+          },
+        ],
+      }),
+    );
+
+    const messages = toolMock.requests.at(-1)!.messages as Record<string, unknown>[];
+    expect(messages[2]!.content).toBeNull();
+  });
+
+  test('forces tool_use even when the server says finish_reason: stop', async () => {
+    // Several servers in this family do exactly this. The orchestrator's loop
+    // keys off the stop reason, so an adapter that passed it through would stop
+    // one iteration early: the model asked, and nobody asked back.
+    const sloppy = startMockOpenAi({
+      stopReason: 'stop',
+      toolCalls: [{ id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' }],
+    });
+    try {
+      const result = await tooled(sloppy).generate(request({ tools: [weather] }));
+      expect(result.stopReason).toBe('tool_use');
+      expect(result.toolCalls?.[0]?.argumentsJson).toBe('{"city":"Berlin"}');
+    } finally {
+      sloppy.stop();
+    }
+  });
+
+  test('accumulates streamed arguments by index across two parallel calls', async () => {
+    // The failure this pins: accumulating by array position instead of by the
+    // wire's `index` interleaves two parallel calls' arguments into nonsense
+    // that still parses.
+    const parallel = startMockOpenAi({
+      text: '',
+      toolCalls: [
+        { id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
+        { id: 'c2', name: 'get_weather', argumentsJson: '{"city":"Lisbon"}' },
+      ],
+    });
+    try {
+      const stream = tooled(parallel).stream(request({ tools: [weather] }));
+      const accumulated = new Map<string, string>();
+      for await (const event of stream) {
+        if (event.type === 'tool_call_delta') {
+          accumulated.set(event.id, (accumulated.get(event.id) ?? '') + event.argumentsDelta);
+        }
+      }
+      const final = await stream.finalResult();
+
+      expect(final.toolCalls?.map(c => c.argumentsJson)).toEqual([
+        '{"city":"Berlin"}',
+        '{"city":"Lisbon"}',
+      ]);
+      expect(accumulated.get('c1')).toBe('{"city":"Berlin"}');
+      expect(accumulated.get('c2')).toBe('{"city":"Lisbon"}');
+    } finally {
+      parallel.stop();
+    }
+  });
+
+  test('reasoning_content still never reaches text when tools are in play', async () => {
+    // Tool support adds a third accumulator to the SSE loop. It must not become
+    // a second path for the model's private deliberation to land in the answer.
+    const reasoning = startMockOpenAi({
+      text: 'Checking.',
+      reasoning: 'The user probably means the city.',
+      toolCalls: [{ id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' }],
+    });
+    try {
+      const stream = tooled(reasoning).stream(request({ tools: [weather] }));
+      let text = '';
+      let thinking = '';
+      for await (const event of stream) {
+        if (event.type === 'text') text += event.delta;
+        if (event.type === 'thinking') thinking += event.delta;
+      }
+      const final = await stream.finalResult();
+
+      expect(text).toBe(final.text);
+      expect(final.text).toBe('Checking.');
+      expect(thinking).toBe('The user probably means the city.');
+      expect(final.text).not.toContain('probably');
+    } finally {
+      reasoning.stop();
+    }
+  });
+
+  test('the generic preset declares toolUse: false — an arbitrary server may not support it', () => {
+    // Over-declaring is the only way to get silently wrong behavior out of this
+    // package. A backend that does support tools opts in via config.
+    expect(build().capabilities.toolUse).toBe(false);
+    expect(build({ capabilities: { toolUse: true } }).capabilities.toolUse).toBe(true);
   });
 });
 

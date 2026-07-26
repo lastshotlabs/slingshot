@@ -55,8 +55,28 @@ function request(overrides: Partial<NormalizedRequest> = {}): NormalizedRequest 
 }
 
 // The contract every adapter must satisfy — same suite as anthropic + openai.
-runProviderConformanceSuite('grok', () => grok());
-runProviderConformanceSuite('deepseek', () => deepseek());
+
+/** A backend scripted to actually CALL the conformance tool, so the tool cases bite. */
+const TOOL_FIXTURE = [
+  { id: 'call_fixture_1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
+];
+const grokToolMock = startMockOpenAi({ text: 'Let me check.', toolCalls: TOOL_FIXTURE });
+const deepseekToolMock = startMockOpenAi({
+  usageDialect: 'deepseek',
+  text: 'Let me check.',
+  toolCalls: TOOL_FIXTURE,
+});
+afterAll(() => {
+  grokToolMock.stop();
+  deepseekToolMock.stop();
+});
+
+runProviderConformanceSuite('grok', () => grok(), {
+  toolFactory: () => grok({}, grokToolMock),
+});
+runProviderConformanceSuite('deepseek', () => deepseek(), {
+  toolFactory: () => deepseek({}, deepseekToolMock),
+});
 
 // ---------------------------------------------------------------------------
 // grok

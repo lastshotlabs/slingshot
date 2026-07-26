@@ -18,10 +18,12 @@ import { CONSERVATIVE_CAPABILITIES } from './provider/capabilities';
 import type {
   AiProvider,
   NormalizedRequest,
+  NormalizedTool,
   ProviderCapabilities,
   ProviderResult,
   ProviderStream,
   ProviderStreamEvent,
+  ProviderToolCall,
 } from './provider/types';
 import type { AiModerator, AiVerdict } from './types';
 
@@ -38,6 +40,13 @@ export type FakeResponse =
       structured?: unknown;
       stopReason?: ProviderResult['stopReason'];
       usage?: Partial<ProviderResult['usage']>;
+      /**
+       * Tool calls to hand back. Supplying any of these also sets
+       * `stopReason: 'tool_use'` unless the response states otherwise, because a
+       * real adapter normalizes that discrepancy and a fake that didn't would
+       * let a broken orchestrator loop pass.
+       */
+      toolCalls?: readonly ProviderToolCall[];
       /** Throw instead of responding — for retry/error-path tests. */
       error?: Error;
     };
@@ -72,15 +81,17 @@ interface NormalizedFakeResponse {
   readonly structured: unknown;
   readonly stopReason: ProviderResult['stopReason'];
   readonly usage: ProviderResult['usage'];
+  readonly toolCalls: readonly ProviderToolCall[];
   readonly error?: Error;
 }
 
 function normalize(response: FakeResponse): NormalizedFakeResponse {
   const source = typeof response === 'string' ? { text: response } : response;
+  const toolCalls = source.toolCalls ?? [];
   const normalized: NormalizedFakeResponse = {
     text: source.text ?? '',
     structured: source.structured,
-    stopReason: source.stopReason ?? 'end',
+    stopReason: source.stopReason ?? (toolCalls.length > 0 ? 'tool_use' : 'end'),
     usage: {
       inputTokens: 10,
       outputTokens: 20,
@@ -88,6 +99,7 @@ function normalize(response: FakeResponse): NormalizedFakeResponse {
       cacheWriteTokens: 0,
       ...source.usage,
     },
+    toolCalls,
     error: source.error,
   };
   return normalized;
@@ -126,6 +138,7 @@ export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeA
     return {
       text: chosen.text,
       structured: chosen.structured,
+      ...(chosen.toolCalls.length > 0 ? { toolCalls: chosen.toolCalls } : {}),
       stopReason: chosen.stopReason,
       usage: chosen.usage,
       raw: { fake: true },
@@ -148,6 +161,23 @@ export function createFakeAiProvider(options: FakeAiProviderOptions = {}): FakeA
           // Deliberately chunked, so the concat invariant is actually exercised.
           for (const word of result.text.split(/(?<=\s)/)) {
             if (word) yield { type: 'text', delta: word };
+          }
+          // Also chunked: a consumer that only works when arguments arrive whole
+          // is a consumer that breaks against every real streaming vendor.
+          for (const call of result.toolCalls ?? []) {
+            const halfway = Math.ceil(call.argumentsJson.length / 2);
+            yield {
+              type: 'tool_call_delta',
+              id: call.id,
+              name: call.name,
+              argumentsDelta: call.argumentsJson.slice(0, halfway),
+            };
+            yield {
+              type: 'tool_call_delta',
+              id: call.id,
+              name: call.name,
+              argumentsDelta: call.argumentsJson.slice(halfway),
+            };
           }
         },
         finalResult: () => resultPromise,
@@ -229,6 +259,26 @@ function baseRequest(overrides: Partial<NormalizedRequest> = {}): NormalizedRequ
   };
 }
 
+const CONFORMANCE_TOOL: NormalizedTool = {
+  name: 'get_weather',
+  description: 'Look up the current weather for a city.',
+  jsonSchema: {
+    type: 'object',
+    properties: { city: { type: 'string' } },
+    required: ['city'],
+    additionalProperties: false,
+  },
+};
+
+function toolRequest(overrides: Partial<NormalizedRequest> = {}): NormalizedRequest {
+  return baseRequest({
+    messages: [{ role: 'user', content: 'What is the weather in Berlin?' }],
+    tools: [CONFORMANCE_TOOL],
+    toolChoice: 'auto',
+    ...overrides,
+  });
+}
+
 /**
  * The provider contract, as executable assertions.
  *
@@ -242,10 +292,25 @@ function baseRequest(overrides: Partial<NormalizedRequest> = {}): NormalizedRequ
  *   - the streaming concat invariant must hold: the deltas ARE the final text.
  *     Anything else means a streaming UI and a saved transcript disagree.
  */
+export interface ConformanceOptions {
+  /**
+   * A provider pointed at a backend scripted to RETURN a tool call.
+   *
+   * Without it the tool cases still run, but against a backend that answers in
+   * prose — so they prove only that tools in a request break nothing. Supplying
+   * this is what makes them assert the round trip. Every adapter declaring
+   * `toolUse: true` should supply it.
+   */
+  readonly toolFactory?: () => AiProvider | Promise<AiProvider>;
+}
+
 export function runProviderConformanceSuite(
   name: string,
   factory: () => AiProvider | Promise<AiProvider>,
+  options: ConformanceOptions = {},
 ): void {
+  const toolFactory = options.toolFactory ?? factory;
+
   describe(`provider conformance: ${name}`, () => {
     test('declares an identity', async () => {
       const provider = await factory();
@@ -316,6 +381,108 @@ export function runProviderConformanceSuite(
       // `null` is the REQUIRED answer for an unknown model. Fabricating a price
       // is how a cost dashboard becomes fiction.
       expect(price === null || typeof price?.inputPerMTok === 'number').toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // Tool calling. Skipped — honestly — by any provider declaring toolUse:false,
+    // exactly as the streaming cases skip on streaming: false.
+    // -----------------------------------------------------------------------
+
+    test('generate() with tool calls reports tool_use and parseable arguments', async () => {
+      const provider = await toolFactory();
+      if (!provider.capabilities.toolUse) return;
+
+      const result = await provider.generate(toolRequest());
+      if (!result.toolCalls?.length) return; // the fixture chose not to call one
+
+      // The orchestrator's loop keys off the STOP REASON. An adapter that
+      // returns tool calls while claiming the turn ended produces a loop that
+      // silently stops one iteration early — the model asked, and nobody asked
+      // back.
+      expect(result.stopReason).toBe('tool_use');
+
+      for (const call of result.toolCalls) {
+        expect(call.id).toBeTruthy();
+        expect(call.name).toBeTruthy();
+        // The ONE obligation on `argumentsJson`: it is JSON, and it is RAW. The
+        // orchestrator validates it — an adapter that pre-parsed it would have
+        // made a policy decision, and an adapter that mangled it would break the
+        // one validation point every provider shares.
+        expect(() => JSON.parse(call.argumentsJson) as unknown).not.toThrow();
+      }
+    });
+
+    test('accepts a conversation containing its own tool calls and their results', async () => {
+      const provider = await factory();
+      if (!provider.capabilities.toolUse) return;
+
+      // This is what every loop iteration after the first looks like: the
+      // adapter is handed back the tool call IT produced, plus a result. An
+      // adapter that can emit a tool call but cannot render one as input has a
+      // loop that dies on iteration two, and nothing else in this suite would
+      // notice.
+      const result = await provider.generate(
+        toolRequest({
+          messages: [
+            { role: 'user', content: 'What is the weather in Berlin?' },
+            {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'Let me look that up.' },
+                {
+                  type: 'tool_call',
+                  id: 'call_conformance_1',
+                  name: 'get_weather',
+                  argumentsJson: '{"city":"Berlin"}',
+                },
+              ],
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  id: 'call_conformance_1',
+                  name: 'get_weather',
+                  result: { tempC: 17 },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      expect(typeof result.text).toBe('string');
+      expect(['end', 'max_tokens', 'refusal', 'tool_use', 'unknown']).toContain(result.stopReason);
+    });
+
+    test('streamed tool arguments concatenate to the final argumentsJson', async () => {
+      const provider = await toolFactory();
+      if (!provider.capabilities.toolUse || !provider.capabilities.streaming) return;
+
+      const stream = provider.stream(toolRequest());
+      const accumulated = new Map<string, string>();
+      let text = '';
+      for await (const event of stream) {
+        if (event.type === 'text') text += event.delta;
+        if (event.type === 'tool_call_delta') {
+          accumulated.set(event.id, (accumulated.get(event.id) ?? '') + event.argumentsDelta);
+          // Every delta names its call, including the argument-only frames that
+          // carry no name on the wire — otherwise a trace UI has fragments it
+          // cannot attribute.
+          expect(event.name).toBeTruthy();
+        }
+      }
+      const final = await stream.finalResult();
+
+      // The streaming invariant, re-asserted WITH tools in the request: adding a
+      // third accumulator to an SSE loop is exactly how text and tool bytes get
+      // crossed.
+      expect(text).toBe(final.text);
+
+      for (const call of final.toolCalls ?? []) {
+        expect(accumulated.get(call.id)).toBe(call.argumentsJson);
+      }
     });
   });
 }

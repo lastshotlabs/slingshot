@@ -31,6 +31,14 @@ export interface MockOptions {
   readonly refusal?: string;
   /** Delay between streamed frames; used to prove deltas are not buffered. */
   readonly streamDelayMs?: number;
+  /**
+   * Return these tool calls, in the server's own dialect.
+   *
+   * `argumentsJson` is chunked across several streamed frames, because an
+   * adapter that only works when arguments arrive whole is an adapter that
+   * breaks against every real vendor.
+   */
+  readonly toolCalls?: readonly { id: string; name: string; argumentsJson: string }[];
 }
 
 /** Chunk text the way a real stream would — several deltas, not one. */
@@ -47,7 +55,8 @@ function chunk(text: string): string[] {
 
 export function startMockAnthropic(options: MockOptions = {}): MockServer {
   const text = options.text ?? 'Hello from the mock.';
-  const stopReason = options.stopReason ?? 'end_turn';
+  const toolCalls = options.toolCalls ?? [];
+  const stopReason = options.stopReason ?? (toolCalls.length > 0 ? 'tool_use' : 'end_turn');
   const requests: Record<string, unknown>[] = [];
   const headers: Record<string, string>[] = [];
 
@@ -56,7 +65,16 @@ export function startMockAnthropic(options: MockOptions = {}): MockServer {
     type: 'message',
     role: 'assistant',
     model: 'claude-opus-4-8',
-    content: content ? [{ type: 'text', text: content }] : [],
+    content: [
+      ...(content ? [{ type: 'text', text: content }] : []),
+      ...toolCalls.map(call => ({
+        type: 'tool_use',
+        id: call.id,
+        name: call.name,
+        // Anthropic hands back a parsed OBJECT here, not a JSON string.
+        input: JSON.parse(call.argumentsJson) as unknown,
+      })),
+    ],
     stop_reason: stopReason,
     stop_sequence: null,
     usage: {
@@ -101,6 +119,11 @@ export function startMockAnthropic(options: MockOptions = {}): MockServer {
         type: 'message_start',
         message: {
           ...message(''),
+          // Explicitly empty: `message_start` opens a message with NO blocks —
+          // the SDK's accumulator builds them from the `content_block_*` frames
+          // that follow, and seeding it with the finished tool_use blocks would
+          // duplicate every one of them.
+          content: [],
           usage: {
             input_tokens: 11,
             output_tokens: 0,
@@ -122,6 +145,25 @@ export function startMockAnthropic(options: MockOptions = {}): MockServer {
         });
       }
       push('content_block_stop', { type: 'content_block_stop', index: 0 });
+      // A streamed tool call: `content_block_start` names it, then
+      // `input_json_delta` frames carry the arguments in pieces that identify
+      // themselves only by block index.
+      toolCalls.forEach((call, position) => {
+        const index = position + 1;
+        push('content_block_start', {
+          type: 'content_block_start',
+          index,
+          content_block: { type: 'tool_use', id: call.id, name: call.name, input: {} },
+        });
+        for (const fragment of chunk(call.argumentsJson)) {
+          push('content_block_delta', {
+            type: 'content_block_delta',
+            index,
+            delta: { type: 'input_json_delta', partial_json: fragment },
+          });
+        }
+        push('content_block_stop', { type: 'content_block_stop', index });
+      });
       push('message_delta', {
         type: 'message_delta',
         delta: { stop_reason: stopReason, stop_sequence: null },
@@ -161,6 +203,9 @@ export function startMockAnthropic(options: MockOptions = {}): MockServer {
 
 export function startMockGemini(options: MockOptions = {}): MockServer {
   const text = options.text ?? 'Hello from Gemini.';
+  // Gemini reports `STOP` even when it emitted function calls — the adapter has
+  // to normalize that, and this mock is where it gets caught not doing so.
+  const toolCalls = options.toolCalls ?? [];
   const finishReason = options.stopReason ?? 'STOP';
   const requests: Record<string, unknown>[] = [];
   const headers: Record<string, string>[] = [];
@@ -184,7 +229,23 @@ export function startMockGemini(options: MockOptions = {}): MockServer {
       const payload = (delta: string, final = false) => ({
         candidates: [
           {
-            content: { role: 'model', parts: [{ text: delta }] },
+            content: {
+              role: 'model',
+              parts: [
+                { text: delta },
+                // Gemini does not stream function arguments incrementally — a
+                // `functionCall` part arrives whole, on the final chunk, and
+                // carries NO id at all.
+                ...(final
+                  ? toolCalls.map(call => ({
+                      functionCall: {
+                        name: call.name,
+                        args: JSON.parse(call.argumentsJson) as unknown,
+                      },
+                    }))
+                  : []),
+              ],
+            },
             ...(final ? { finishReason } : {}),
           },
         ],
@@ -267,7 +328,8 @@ const DEEPSEEK_USAGE = {
 
 export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
   const text = options.text ?? 'Hello from the mock.';
-  const finishReason = options.stopReason ?? 'stop';
+  const toolCalls = options.toolCalls ?? [];
+  const finishReason = options.stopReason ?? (toolCalls.length > 0 ? 'tool_calls' : 'stop');
   const requests: Record<string, unknown>[] = [];
   const headers: Record<string, string>[] = [];
 
@@ -299,6 +361,15 @@ export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
                 content: options.refusal ? null : text,
                 refusal: options.refusal ?? null,
                 ...(options.reasoning ? { reasoning_content: options.reasoning } : {}),
+                ...(toolCalls.length > 0
+                  ? {
+                      tool_calls: toolCalls.map(call => ({
+                        id: call.id,
+                        type: 'function',
+                        function: { name: call.name, arguments: call.argumentsJson },
+                      })),
+                    }
+                  : {}),
               },
               finish_reason: finishReason,
             },
@@ -325,6 +396,41 @@ export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
           })}\n\n`,
         );
       }
+      // A streamed tool call: ONE frame carries `{index, id, function.name}`,
+      // then several carry `{index, function.arguments}` and nothing else. An
+      // adapter accumulating by array position rather than by `index` silently
+      // interleaves two parallel calls' arguments, which is why the name frame
+      // and the argument frames are deliberately separate here.
+      toolCalls.forEach((call, index) => {
+        frames.push(
+          `data: ${JSON.stringify({
+            id: 'chatcmpl-mock',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [{ index, id: call.id, type: 'function', function: { name: call.name } }],
+                },
+                finish_reason: null,
+              },
+            ],
+          })}\n\n`,
+        );
+        for (const fragment of chunk(call.argumentsJson)) {
+          frames.push(
+            `data: ${JSON.stringify({
+              id: 'chatcmpl-mock',
+              choices: [
+                {
+                  index: 0,
+                  delta: { tool_calls: [{ index, function: { arguments: fragment } }] },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          );
+        }
+      });
       frames.push(
         `data: ${JSON.stringify({
           id: 'chatcmpl-mock',

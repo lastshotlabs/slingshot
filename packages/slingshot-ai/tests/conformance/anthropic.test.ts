@@ -31,7 +31,17 @@ function build(server = mock) {
   );
 }
 
-runProviderConformanceSuite('anthropic', () => build());
+
+/** A backend scripted to actually CALL the conformance tool, so the tool cases bite. */
+const TOOL_FIXTURE = [
+  { id: 'call_fixture_1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
+];
+const toolMock = startMockAnthropic({ text: 'Let me check.', toolCalls: TOOL_FIXTURE });
+afterAll(() => toolMock.stop());
+
+runProviderConformanceSuite('anthropic', () => build(), {
+  toolFactory: () => build(toolMock),
+});
 
 function request(overrides: Partial<NormalizedRequest> = {}): NormalizedRequest {
   return {
@@ -190,5 +200,135 @@ describe('anthropic adapter', () => {
     const provider = await build();
     const result = await provider.stream(request()).finalResult();
     expect(result.text).toBe('Hello from the mock.');
+  });
+});
+
+describe('tool calling on the wire', () => {
+  const weather = {
+    name: 'get_weather',
+    description: 'Look up the weather.',
+    jsonSchema: { type: 'object', properties: { city: { type: 'string' } } },
+  };
+
+  test('sends tools with input_schema, and maps required → any', async () => {
+    const provider = await build();
+    await provider.generate(request({ tools: [weather], toolChoice: 'required' }));
+
+    const body = mock.requests.at(-1)!;
+    expect(body.tools).toEqual([
+      {
+        name: 'get_weather',
+        description: 'Look up the weather.',
+        input_schema: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    ]);
+    // Anthropic calls it `any`. Everything else in the vocabulary matches.
+    expect(body.tool_choice).toEqual({ type: 'any' });
+  });
+
+  test('tool results ride a USER turn as blocks — there is no tool role here', async () => {
+    const provider = await build();
+    await provider.generate(
+      request({
+        tools: [weather],
+        messages: [
+          { role: 'user', content: 'weather?' },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Checking.' },
+              { type: 'tool_call', id: 'c1', name: 'get_weather', argumentsJson: '{"city":"A"}' },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'tool_result', id: 'c1', name: 'get_weather', result: { tempC: 1 } },
+              { type: 'tool_result', id: 'c2', name: 'get_weather', result: 'nope', isError: true },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const messages = mock.requests.at(-1)!.messages as { role: string; content: unknown[] }[];
+    expect(messages).toHaveLength(3);
+    expect(messages[1]!.content[1]).toEqual({
+      type: 'tool_use',
+      id: 'c1',
+      name: 'get_weather',
+      // An OBJECT here, not the JSON string the seam carries.
+      input: { city: 'A' },
+    });
+    expect(messages[2]!.role).toBe('user');
+    expect(messages[2]!.content[0]).toEqual({
+      type: 'tool_result',
+      tool_use_id: 'c1',
+      content: '{"tempC":1}',
+    });
+    // A real flag on this wire, so no `Error:` prefix is smuggled into the text.
+    expect(messages[2]!.content[1]).toEqual({
+      type: 'tool_result',
+      tool_use_id: 'c2',
+      content: 'nope',
+      is_error: true,
+    });
+  });
+
+  test('reads tool_use blocks back out, re-serializing input to raw JSON', async () => {
+    const tooling = startMockAnthropic({
+      text: 'Checking.',
+      toolCalls: [{ id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' }],
+    });
+    try {
+      const provider = await build(tooling);
+      const result = await provider.generate(request({ tools: [weather] }));
+
+      expect(result.stopReason).toBe('tool_use');
+      // The seam is defined in RAW JSON so that one orchestrator code path
+      // validates every provider's arguments. Re-serializing is what keeps that
+      // path single.
+      expect(result.toolCalls).toEqual([
+        { id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
+      ]);
+      // Text and tool blocks are separate: the tool call must not land in `text`.
+      expect(result.text).toBe('Checking.');
+    } finally {
+      tooling.stop();
+    }
+  });
+
+  test('streams input_json_delta fragments that reassemble exactly', async () => {
+    const tooling = startMockAnthropic({
+      text: 'Checking.',
+      toolCalls: [{ id: 'c1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' }],
+    });
+    try {
+      const provider = await build(tooling);
+      const stream = provider.stream(request({ tools: [weather] }));
+
+      let text = '';
+      let args = '';
+      let announcements = 0;
+      for await (const event of stream) {
+        if (event.type === 'text') text += event.delta;
+        if (event.type === 'tool_call_delta') {
+          args += event.argumentsDelta;
+          if (event.argumentsDelta === '') announcements++;
+          expect(event.name).toBe('get_weather');
+        }
+      }
+      const final = await stream.finalResult();
+
+      // The name lands in `content_block_start`, before any arguments — which is
+      // the whole reason the delta event exists.
+      expect(announcements).toBe(1);
+      expect(args).toBe('{"city":"Berlin"}');
+      // The streaming invariant, with a third accumulator now in the loop.
+      expect(text).toBe(final.text);
+      expect(final.toolCalls?.[0]?.argumentsJson).toBe('{"city":"Berlin"}');
+    } finally {
+      tooling.stop();
+    }
   });
 });

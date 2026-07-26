@@ -74,6 +74,33 @@ function resolveParam(params: Record<string, unknown>, paramName: string): Resol
 }
 
 /**
+ * Resolve a caller-supplied `limit` for a `returns: 'many'` lookup.
+ *
+ * **Omitting `limit` means unbounded, and that is deliberate.** Callers exist
+ * that must see every matching row to be correct — slingshot-community's
+ * `updateScore` re-lists every reaction on a target to re-aggregate the score
+ * and `reactionSummary`, so silently defaulting to a page size would under-count
+ * scores with no error. A default limit here would be a data-corruption bug, not
+ * a safety net.
+ *
+ * A caller that passes `limit` opts into a bound, clamped to `maxLimit` so a
+ * hostile or careless value cannot ask for an unbounded scan under a different
+ * name. Non-numeric, non-finite, and non-positive values are ignored rather than
+ * throwing — an unparseable limit degrades to today's behaviour.
+ *
+ * @param params - Runtime params for the lookup call.
+ * @param maxLimit - The entity's configured hard upper bound.
+ * @returns The clamped limit, or `undefined` for "no bound".
+ */
+function resolveLimit(params: Record<string, unknown>, maxLimit: number): number | undefined {
+  const raw = params.limit;
+  if (raw === undefined || raw === null) return undefined;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.min(Math.floor(n), maxLimit);
+}
+
+/**
  * Create a lookup executor for the in-memory store.
  *
  * Scans the full store, skipping expired and tenant-invisible entries, then
@@ -143,7 +170,8 @@ export function lookupMemory(
       if (matchesRecord(entry.record, params)) results.push({ ...entry.record });
     }
     results.sort((a, b) => compareForSort(a, b, cursorFields, defaultSortDir));
-    const limit = Math.min(defaultLimit, maxLimit);
+    // Memory has always paged by `defaultLimit`; an explicit caller limit wins.
+    const limit = resolveLimit(params, maxLimit) ?? Math.min(defaultLimit, maxLimit);
     return Promise.resolve({
       items: results.slice(0, limit),
       nextCursor: undefined,
@@ -221,13 +249,18 @@ export function lookupSqlite(
   return params => {
     ensureTable();
     const { where, binds } = buildClause(params);
-    const rows = db
-      .query<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${where}`)
-      .all(...binds);
+    const limit = resolveLimit(params, config.pagination?.maxLimit ?? Number.MAX_SAFE_INTEGER);
+    // Fetch one extra row so `hasMore` is a fact rather than a guess.
+    const sql =
+      limit === undefined
+        ? `SELECT * FROM ${table} WHERE ${where}`
+        : `SELECT * FROM ${table} WHERE ${where} LIMIT ${limit + 1}`;
+    const rows = db.query<Record<string, unknown>>(sql).all(...binds);
+    const hasMore = limit !== undefined && rows.length > limit;
     return Promise.resolve({
-      items: rows.map(r => fromRow(r)),
+      items: (hasMore ? rows.slice(0, limit) : rows).map(r => fromRow(r)),
       nextCursor: undefined,
-      hasMore: false,
+      hasMore,
     });
   };
 }
@@ -297,8 +330,17 @@ export function lookupPostgres(
   return async params => {
     await ensureTable();
     const { where, binds } = buildClause(params);
-    const result = await pool.query(`SELECT * FROM ${table} WHERE ${where}`, binds);
-    return { items: result.rows.map(r => fromRow(r)), nextCursor: undefined, hasMore: false };
+    const limit = resolveLimit(params, config.pagination?.maxLimit ?? Number.MAX_SAFE_INTEGER);
+    // Fetch one extra row so `hasMore` is a fact rather than a guess. The limit
+    // is a clamped integer, never caller text, so interpolating it is safe.
+    const sql =
+      limit === undefined
+        ? `SELECT * FROM ${table} WHERE ${where}`
+        : `SELECT * FROM ${table} WHERE ${where} LIMIT ${limit + 1}`;
+    const result = await pool.query(sql, binds);
+    const hasMore = limit !== undefined && result.rows.length > limit;
+    const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+    return { items: rows.map(r => fromRow(r)), nextCursor: undefined, hasMore };
   };
 }
 
@@ -352,8 +394,12 @@ export function lookupMongo(
   }
 
   return async params => {
-    const docs = await getModel().find(buildQuery(params)).lean();
-    return { items: docs.map(d => fromDoc(d)), nextCursor: undefined, hasMore: false };
+    const limit = resolveLimit(params, config.pagination?.maxLimit ?? Number.MAX_SAFE_INTEGER);
+    const query = getModel().find(buildQuery(params));
+    const docs = await (limit === undefined ? query : query.limit(limit + 1)).lean();
+    const hasMore = limit !== undefined && docs.length > limit;
+    const rows = hasMore ? docs.slice(0, limit) : docs;
+    return { items: rows.map(d => fromDoc(d)), nextCursor: undefined, hasMore };
   };
 }
 
@@ -421,15 +467,25 @@ export function lookupRedis(
   }
 
   return async params => {
+    const limit = resolveLimit(params, config.pagination?.maxLimit ?? Number.MAX_SAFE_INTEGER);
     const allKeys = await scanAllKeys();
     const results: Array<Record<string, unknown>> = [];
+    let hasMore = false;
     for (const key of allKeys) {
       const raw = await redis.get(key);
       if (!raw) continue;
       const record = fromRedisRecord(JSON.parse(raw) as Record<string, unknown>);
       if (!isVisible(record)) continue;
-      if (matchesRecord(record, params)) results.push({ ...record });
+      if (!matchesRecord(record, params)) continue;
+      // Stop scanning once the page is known to be full. Redis lookup is a
+      // full keyspace scan, so an honoured limit bounds the work, not just
+      // the payload.
+      if (limit !== undefined && results.length === limit) {
+        hasMore = true;
+        break;
+      }
+      results.push({ ...record });
     }
-    return { items: results, nextCursor: undefined, hasMore: false };
+    return { items: results, nextCursor: undefined, hasMore };
   };
 }

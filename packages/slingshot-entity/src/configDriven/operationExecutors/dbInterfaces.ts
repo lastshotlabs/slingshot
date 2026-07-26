@@ -80,6 +80,18 @@ export interface PgPool extends PgQueryable {
  *
  * The real Mongoose `Model` satisfies this interface.
  */
+/**
+ * The chainable subset of a Mongoose query that the lookup executor uses.
+ *
+ * `limit()` returns the same shape so it can be chained before `lean()`, which
+ * is what lets a bounded lookup push the bound down to MongoDB rather than
+ * slicing in JS after the full result set has already been fetched.
+ */
+export interface MongoFindQuery {
+  limit(n: number): MongoFindQuery;
+  lean(): Promise<Array<Record<string, unknown>>>;
+}
+
 export interface MongoModel {
   /**
    * Find a single document matching `filter`.
@@ -94,11 +106,12 @@ export interface MongoModel {
   ): { lean(): Promise<Record<string, unknown> | null> };
   /**
    * Find all documents matching `filter`.
-   * Chain `.lean()` to receive plain objects.
+   * Chain `.lean()` to receive plain objects, or `.limit(n).lean()` to bound
+   * the result set server-side.
    *
    * @param filter - MongoDB query filter.
    */
-  find(filter: Record<string, unknown>): { lean(): Promise<Array<Record<string, unknown>>> };
+  find(filter: Record<string, unknown>): MongoFindQuery;
   /**
    * Update the first document matching `filter`.
    *

@@ -65,7 +65,7 @@ export const CommunityEntities = Community.publicEntities({
     'search',
   ]),
   Reply: Community.publicEntity(replyModule).readonly(['getById', 'listByThread', 'search']),
-  Reaction: Community.publicEntity(reactionModule).readonly(['listByTarget', 'getUserReaction']),
+  Reaction: Community.publicEntity(reactionModule).readonly(['listByTarget']),
 });
 
 /**

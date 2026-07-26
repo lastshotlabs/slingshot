@@ -24,6 +24,7 @@ import {
 } from './fieldUtils';
 import { resolveListFilter } from './listFilter';
 import { buildMongoOperations } from './mongoOperationWiring';
+import type { MongoFindQuery } from './operationExecutors/dbInterfaces';
 
 // ---------------------------------------------------------------------------
 // Mongoose type wrappers — keeps mongoose out of the import graph unless used
@@ -502,11 +503,17 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     ...(operations
       ? buildMongoOperations(operations, config, () => {
           const model = getModel();
-          // Adapt MongooseModel to the executor's MongoModelLike interface
-          // MongooseFindQuery has lean() but also sort/skip/limit — executors only need lean()
+          // Adapt MongooseModel to the executor's MongoModelLike interface.
+          // MongooseFindQuery also has sort/skip; executors need lean() and a
+          // chainable limit() so a bounded lookup pushes the bound down to
+          // MongoDB instead of slicing after the fact.
+          const wrapFind = (q: MongooseFindQuery): MongoFindQuery => ({
+            limit: (n: number) => wrapFind(q.limit(n)),
+            lean: () => q.lean(),
+          });
           return {
             findOne: (filter: Record<string, unknown>) => model.findOne(filter),
-            find: (filter: Record<string, unknown>) => ({ lean: () => model.find(filter).lean() }),
+            find: (filter: Record<string, unknown>) => wrapFind(model.find(filter)),
             updateOne: (
               f: Record<string, unknown>,
               u: Record<string, unknown>,

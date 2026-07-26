@@ -139,3 +139,99 @@ describe('reaction → thread score, with the emoji weighted', () => {
     expect(Number((await readThread(harness, threadId)).score ?? 0)).toBe(0);
   });
 });
+
+/**
+ * Stacking — one user holding SEVERAL reactions on one target.
+ *
+ * The unique index used to be `['targetId','targetType','userId']`, which made
+ * this physically impossible: a reader could not hold 👍 and 🔥 on the same
+ * thread because the second insert violated the constraint. `value` is now part
+ * of the key.
+ *
+ * This is the case nobody exercises by hand — a UI built against the old index
+ * passes every manual test as long as the tester only ever picks one emoji, and
+ * fails the first time a real reader stacks two.
+ */
+describe('reaction stacking — several reactions per user per target', () => {
+  let harness: CommunityHarness;
+  let threadId: string;
+
+  beforeEach(async () => {
+    harness = await createHarness({ grantAll: true });
+    const res = await post(harness.app, '/community/threads', {
+      containerId: 'c-score',
+      title: 'Thread for stacking',
+      status: 'published',
+    });
+    threadId = ((await res.json()) as { id: string }).id;
+  });
+
+  afterEach(async () => {
+    await harness.teardown();
+  });
+
+  function react(value: string) {
+    return post(harness.app, '/community/reactions', {
+      targetId: threadId,
+      targetType: 'thread',
+      containerId: 'c-score',
+      type: 'emoji',
+      value,
+    });
+  }
+
+  test('one user can hold two different emoji on one thread', async () => {
+    expect((await react('👍')).status).toBeLessThan(300);
+    expect((await react('🔥')).status).toBeLessThan(300);
+    await settle();
+
+    const thread = await readThread(harness, threadId);
+    const summary = thread.reactionSummary;
+    const parsed = (typeof summary === 'string' ? JSON.parse(summary) : summary) as {
+      emojis?: Record<string, number>;
+    };
+    expect(parsed.emojis?.['👍']).toBe(1);
+    expect(parsed.emojis?.['🔥']).toBe(1);
+  });
+
+  test('the SAME emoji twice is still rejected — stacking is not duplication', async () => {
+    expect((await react('💯')).status).toBeLessThan(300);
+    const dupe = await react('💯');
+    expect(dupe.status).toBeGreaterThanOrEqual(400);
+
+    await settle();
+    const thread = await readThread(harness, threadId);
+    const summary = thread.reactionSummary;
+    const parsed = (typeof summary === 'string' ? JSON.parse(summary) : summary) as {
+      emojis?: Record<string, number>;
+    };
+    // Not 2 — the constraint held and no duplicate row exists.
+    expect(parsed.emojis?.['💯']).toBe(1);
+  });
+
+  test('listByTarget filters by value and honours a limit', async () => {
+    await react('👍');
+    await react('🔥');
+    await settle();
+
+    const all = await get(harness.app, `/community/reactions/list-by-target/${threadId}/thread`);
+    const allBody = (await all.json()) as { items?: unknown[] };
+    expect(allBody.items).toHaveLength(2);
+
+    const onlyFire = await get(
+      harness.app,
+      `/community/reactions/list-by-target/${threadId}/thread?value=${encodeURIComponent('🔥')}`,
+    );
+    const fireBody = (await onlyFire.json()) as { items?: { value?: string }[] };
+    expect(fireBody.items).toHaveLength(1);
+    expect(fireBody.items?.[0]?.value).toBe('🔥');
+
+    const capped = await get(
+      harness.app,
+      `/community/reactions/list-by-target/${threadId}/thread?limit=1`,
+    );
+    const cappedBody = (await capped.json()) as { items?: unknown[]; hasMore?: boolean };
+    expect(cappedBody.items).toHaveLength(1);
+    expect(cappedBody.hasMore).toBe(true);
+  });
+});

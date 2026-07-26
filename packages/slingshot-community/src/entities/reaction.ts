@@ -30,18 +30,30 @@ export const Reaction = defineEntity('Reaction', {
     containerId: field.string({ optional: true }),
     userId: field.string(),
     type: field.enum(['upvote', 'downvote', 'emoji'] as const),
-    value: field.string({ optional: true }),
+    // Defaults to '' rather than being nullable so the unique index below
+    // behaves identically on every backend. Postgres and SQLite treat NULLs as
+    // distinct under a unique index, so an optional `value` would stop
+    // deduplicating vote rows entirely; the memory adapter compares tuples with
+    // `===`, where `undefined === undefined` is true, so it would keep
+    // deduplicating them. Coalescing to '' removes that divergence. Fields with
+    // a literal default stay optional in the create DTO, so clients are
+    // unaffected.
+    value: field.string({ default: '' }),
     createdAt: field.date({ default: 'now' }),
   },
   indexes: [
     index(['targetId', 'targetType']),
-    index(['targetId', 'targetType', 'userId'], { unique: true }),
+    // `value` is part of the key so one user can hold SEVERAL reactions on one
+    // target (👍 and 🔥 on the same thread) — the Slack/Discord stacking model.
+    // Vote rows are unaffected: `upvote` and `downvote` both carry value '', so
+    // they still collide and a user still cannot hold both on one target.
+    index(['targetId', 'targetType', 'userId', 'value'], { unique: true }),
     index(['containerId']),
     index(['userId']),
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    disable: ['get', 'list', 'update', 'getUserReaction', 'updateScore'],
+    disable: ['get', 'list', 'update', 'updateScore'],
     dataScope: { field: 'userId', from: 'ctx:actor.id' },
 
     // Public read of a target's reactions — the client UI needs the full row
@@ -96,8 +108,18 @@ export const Reaction = defineEntity('Reaction', {
     },
 
     operations: {
-      listByTarget: { auth: 'none', middleware: ['targetVisibilityGuard'] },
-      getUserReaction: { auth: 'userAuth' },
+      // The path is PINNED. A lookup op appends one `:param` segment per entry
+      // in `op.fields`, so declaring the optional `value` filter would silently
+      // move this route to `/list-by-target/:targetId/:targetType/:value` and
+      // 404 every existing caller. Pinning keeps `value` a query param
+      // (`?value=🔥`), which is what an OPTIONAL filter should be — the lookup
+      // executor already treats an omitted param as a wildcard, and query
+      // params are merged into the op's params at request time.
+      listByTarget: {
+        auth: 'none',
+        middleware: ['targetVisibilityGuard'],
+        path: 'list-by-target/:targetId/:targetType',
+      },
       updateScore: { auth: 'userAuth' },
     },
     middleware: { targetVisibilityGuard: true },
@@ -114,25 +136,31 @@ export const Reaction = defineEntity('Reaction', {
  * Custom operations for the Reaction entity.
  *
  * - `listByTarget`: all reactions on a specific thread or reply.
- * - `getUserReaction`: the calling user's reaction on a specific target.
  * - `updateScore`: adapter-only op (no HTTP route). Handler injected by
  *   `reactionBuildAdapter` in `plugin.ts`. Aggregates reactions, computes the
  *   configured algorithm's score, and writes `score` + `reactionSummary` to
  *   the target thread or reply.
  */
 export const reactionOperations = defineOperations(Reaction, {
+  /**
+   * All reactions on a thread or reply.
+   *
+   * `value` is optional: omit it for every reaction on the target (what
+   * `updateScore` needs to re-aggregate), or pass an emoji to get only that
+   * emoji's reactors — the read behind a "who reacted with 🔥" tooltip.
+   *
+   * `limit` is optional and, when omitted, unbounded. Reactor lists must pass
+   * one: a popular target can hold thousands of rows and naming five people
+   * must not read all of them. The displayed total comes from the target's
+   * `reactionSummary`, never from counting these rows.
+   */
   listByTarget: op.lookup({
-    fields: { targetId: 'param:targetId', targetType: 'param:targetType' },
-    returns: 'many',
-  }),
-
-  getUserReaction: op.lookup({
     fields: {
       targetId: 'param:targetId',
       targetType: 'param:targetType',
-      userId: 'param:userId',
+      value: 'param:value',
     },
-    returns: 'one',
+    returns: 'many',
   }),
 
   /**

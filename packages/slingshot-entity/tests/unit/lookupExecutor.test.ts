@@ -104,3 +104,60 @@ describe('lookupMemory — param resolution', () => {
     expect(result.items.map(r => r.id).sort()).toEqual(['c1', 'c2']);
   });
 });
+
+/**
+ * `limit` semantics for `returns: 'many'`.
+ *
+ * The load-bearing case is the FIRST test: omitting `limit` must stay
+ * unbounded. slingshot-community's `updateScore` re-lists every reaction on a
+ * target to recompute `score` and `reactionSummary`, so a default page size
+ * here would silently under-count scores on any target past that size — a
+ * data-corruption bug wearing a safety net's clothes.
+ */
+describe('lookupMemory — limit', () => {
+  const manyRecords = Array.from({ length: 25 }, (_, i) => ({
+    id: `r${String(i).padStart(2, '0')}`,
+    kind: 'reaction',
+  }));
+
+  function mkMany(store: Map<string, MemoryEntry>, defaultLimit: number, maxLimit: number) {
+    const op: LookupOpConfig = {
+      kind: 'lookup',
+      fields: { kind: 'param:kind' },
+      returns: 'many',
+    };
+    return lookupMemory(op, noopConfig, store, () => true, () => true, ['id'], 'asc', defaultLimit, maxLimit);
+  }
+
+  it('omitting limit does not bound the result below the backend default', async () => {
+    const exec = mkMany(makeStore(manyRecords), 100, 1000);
+    const result = (await exec({ kind: 'reaction' })) as { items: unknown[]; hasMore: boolean };
+    expect(result.items).toHaveLength(25);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('an explicit limit bounds the page and reports hasMore', async () => {
+    const exec = mkMany(makeStore(manyRecords), 100, 1000);
+    const result = (await exec({ kind: 'reaction', limit: 6 })) as {
+      items: { id: string }[];
+      hasMore: boolean;
+    };
+    expect(result.items).toHaveLength(6);
+    expect(result.hasMore).toBe(true);
+    expect(result.items[0]?.id).toBe('r00');
+  });
+
+  it('clamps an oversized limit to maxLimit', async () => {
+    const exec = mkMany(makeStore(manyRecords), 100, 10);
+    const result = (await exec({ kind: 'reaction', limit: 9999 })) as { items: unknown[] };
+    expect(result.items).toHaveLength(10);
+  });
+
+  it('ignores a non-positive or unparseable limit rather than throwing', async () => {
+    const exec = mkMany(makeStore(manyRecords), 100, 1000);
+    for (const bad of [0, -5, Number.NaN, 'abc']) {
+      const result = (await exec({ kind: 'reaction', limit: bad })) as { items: unknown[] };
+      expect(result.items).toHaveLength(25);
+    }
+  });
+});

@@ -165,9 +165,8 @@ export function accumulateUsage(a: AiUsage, b: AiUsage): AiUsage {
     costUsd: a.costUsd === null || b.costUsd === null ? null : a.costUsd + b.costUsd,
     // Claiming 'full' for a total because the last call happened to be fully
     // accounted would overstate what the total is known to.
-    accounting: ACCOUNTING_RANK[a.accounting] <= ACCOUNTING_RANK[b.accounting]
-      ? a.accounting
-      : b.accounting,
+    accounting:
+      ACCOUNTING_RANK[a.accounting] <= ACCOUNTING_RANK[b.accounting] ? a.accounting : b.accounting,
   };
 }
 

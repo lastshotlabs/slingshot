@@ -1210,8 +1210,7 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
           feature: 'streaming',
           requested: 'incremental',
           applied: 'single-chunk',
-          reason:
-            'the provider does not stream; each turn of the tool loop arrives as one delta',
+          reason: 'the provider does not stream; each turn of the tool loop arrives as one delta',
         },
         resolved.name,
       );

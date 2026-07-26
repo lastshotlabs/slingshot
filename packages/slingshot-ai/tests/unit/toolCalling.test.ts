@@ -124,10 +124,7 @@ describe('the loop', () => {
     const { tool } = recordingTool();
     const provider = createFakeAiProvider({
       capabilities: TOOL_CAPABLE,
-      responses: [
-        { toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] },
-        { text: 'done' },
-      ],
+      responses: [{ toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] }, { text: 'done' }],
     });
     const { client } = build(provider);
 
@@ -138,7 +135,12 @@ describe('the loop', () => {
     expect(second.messages[1]).toEqual({
       role: 'assistant',
       content: [
-        { type: 'tool_call', id: 'call_1', name: 'get_lift_trend', argumentsJson: '{"lift":"squat"}' },
+        {
+          type: 'tool_call',
+          id: 'call_1',
+          name: 'get_lift_trend',
+          argumentsJson: '{"lift":"squat"}',
+        },
       ],
     });
     expect(second.messages[2]).toEqual({
@@ -339,9 +341,9 @@ describe('bounding', () => {
     const provider = createFakeAiProvider({ capabilities: TOOL_CAPABLE, responses: ['ok'] });
     const { client } = build(provider, { tools: { maxIterations: 4 } });
 
-    await expect(
-      client.generate({ ...ask, tools: [tool], maxToolIterations: 40 }),
-    ).rejects.toThrow(AiConfigError);
+    await expect(client.generate({ ...ask, tools: [tool], maxToolIterations: 40 })).rejects.toThrow(
+      AiConfigError,
+    );
     expect(provider.calls).toHaveLength(0);
   });
 });
@@ -444,10 +446,7 @@ describe('usage across iterations', () => {
     const { tool } = recordingTool();
     const provider = createFakeAiProvider({
       capabilities: { ...TOOL_CAPABLE, costAccounting: true, usageAccounting: 'full' },
-      responses: [
-        { toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] },
-        { text: 'done' },
-      ],
+      responses: [{ toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] }, { text: 'done' }],
     });
     const { client, usage } = build(provider);
 
@@ -578,10 +577,7 @@ describe('streaming', () => {
     const { client } = build(
       createFakeAiProvider({
         capabilities: TOOL_CAPABLE,
-        responses: [
-          { toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] },
-          { text: 'done' },
-        ],
+        responses: [{ toolCalls: [call('get_lift_trend', '{"lift":"squat"}')] }, { text: 'done' }],
       }),
     );
 

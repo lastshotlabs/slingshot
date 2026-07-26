@@ -31,7 +31,6 @@ function build(server = mock) {
   );
 }
 
-
 /** A backend scripted to actually CALL the conformance tool, so the tool cases bite. */
 const TOOL_FIXTURE = [
   { id: 'call_fixture_1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },

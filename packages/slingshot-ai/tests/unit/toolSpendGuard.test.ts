@@ -226,7 +226,9 @@ describe('the pre-flight guard', () => {
       },
     });
 
-    await expect(client.generate({ ...ask, tools: [lookup] })).rejects.toThrow(/omitted spendScope/);
+    await expect(client.generate({ ...ask, tools: [lookup] })).rejects.toThrow(
+      /omitted spendScope/,
+    );
     expect(provider.calls).toHaveLength(0);
   });
 });

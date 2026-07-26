@@ -155,16 +155,121 @@ Inspect `client.capabilitiesOf(provider).imageInput` before exposing an upload
 flow. Sending an image to a text-only provider throws
 `AiUnsupportedFeatureError`; images are never silently dropped.
 
+## Tool calling
+
+A tool is data: a name, a description, a zod schema, and an `execute`. Hand a
+list of them to `generate` or `stream` and the model can look something up
+before it answers.
+
+```ts
+const getLiftTrend: AiTool<{ lift: string; weeks: number }> = {
+  name: 'get_lift_trend',
+  description: 'Trend for one lift over the last N weeks.',
+  schema: z.object({ lift: z.string(), weeks: z.number().int() }),
+  async execute({ lift, weeks }) {
+    return analyzeLift(user.id, lift, weeks); // returns computed facts
+  },
+};
+
+const result = await ai.stream({
+  system: coachPrompt,
+  messages: history,
+  spendScope: user.id,
+  tools: [getLiftTrend, getTrainingLoad],
+});
+```
+
+**The framework runs the loop.** It calls the provider, validates the arguments
+the model produced, runs the tool, appends the result, and calls the provider
+again until the model stops asking. It does not hand you a list of calls to run
+yourself — because spend re-entry, the iteration cap and argument validation are
+the orchestrator's job, and an app-authored loop around `generate()` cannot do
+any of the three.
+
+What you get back:
+
+```ts
+result.toolCalls; // [{ id, name, args, ok, durationMs }, …] in order
+result.iterations; // provider calls this turn (1 when no tools were used)
+result.value; // EVERY assistant text turn, concatenated
+```
+
+### The rules
+
+- **Arguments are validated here, not by the provider.** Every call is
+  `JSON.parse`d and then `schema.safeParse`d by the orchestrator before your
+  `execute` sees it. A vendor claiming strict function schemas is making exactly
+  the claim this package already refuses to take on trust for a response schema.
+- **A failing tool does not kill the turn.** An unknown tool name, unparseable
+  arguments, a schema violation, or a throwing `execute` all become an error
+  result the model reads on the next iteration and can react to. None of them
+  raises at your call site; you see them as `toolCalls[].ok === false`.
+- **`execute` is never retried.** Retry policy for a side-effecting function is
+  yours. The package's retry layer covers the provider call only.
+- **Every iteration re-enters the spend guard and your spend controller.** A
+  three-iteration turn is three pre-flight checks, three reservations and three
+  settlements — not one. If you have an `AiSpendController`, it must accumulate
+  across reservations within a turn.
+- **The iteration cap is a ceiling, and hitting it is a degradation.**
+  `tools.maxIterations` (default 8) is both the default and a hard limit; a
+  request asking for more throws before anything is spent. If the model is still
+  asking for tools when the cap is reached, `degradations` gains a `toolUse`
+  entry — the answer is incomplete and says so.
+- **A provider that cannot call tools throws.** `toolUse: false` plus `tools` is
+  `AiUnsupportedFeatureError`, the same rule as images: silently dropping them
+  would look successful while changing what you asked.
+- **The response cache and coalescing are bypassed.** Their keys cannot see what
+  a tool returned.
+- **`generateStructured` does not take tools.** A structured request tells the
+  model to emit only schema-matching JSON on exactly the turns it should be
+  emitting tool calls. Run the loop with `generate`/`stream`, then make one
+  `generateStructured` call over what the tools returned.
+
+### Streaming a tool trace
+
+```ts
+for await (const event of ai.stream({ messages, tools })) {
+  switch (event.type) {
+    case 'text':
+      append(event.delta);
+      break;
+    case 'tool_call_delta':
+      showPending(event.name);
+      break; // early, raw, advisory
+    case 'tool_call':
+      showCall(event.name, event.args);
+      break; // validated
+    case 'tool_result':
+      showOutcome(event.id, event.ok, event.durationMs);
+      break;
+  }
+}
+```
+
+`tool_call_delta` arrives live from the provider while the model is still
+writing its arguments — the function name lands hundreds of milliseconds before
+the arguments finish, which is what lets a trace render immediately. It is
+advisory: half of `{"lift":"squ` is not arguments. `tool_call` fires once per
+call, after validation, and is the one to act on.
+
+`tool_result` deliberately carries no payload — you wrote the tool, so you
+already have it.
+
+Which providers support tools: `anthropic`, `openai`, `grok`, `deepseek` and
+`gemini`. The generic `openai-compatible` preset declares `toolUse: false`,
+because an arbitrary `/chat/completions` server may or may not; a backend that
+does support them opts in with `capabilities: { toolUse: true }`.
+
 ## Providers
 
-| kind                | Backs                                             | Default model       | Structured output      | Prompt caching              | Reasoning          | Cost         |
-| ------------------- | ------------------------------------------------- | ------------------- | ---------------------- | --------------------------- | ------------------ | ------------ |
-| `anthropic`         | the Claude API                                    | `claude-opus-4-8`   | native                 | **explicit** (min 4096 tok) | opt-in             | table        |
-| `openai`            | the OpenAI API                                    | `gpt-5.4-mini`      | native                 | automatic                   | opt-out¹           | table        |
-| `grok`              | xAI (`api.x.ai`)                                  | `grok-4.3`          | native                 | automatic (routing key)     | **always on**²     | **vendor**³  |
-| `deepseek`          | DeepSeek (`api.deepseek.com`)                     | `deepseek-v4-flash` | **json-mode**          | automatic                   | **on by default**⁴ | table        |
-| `gemini`            | Google Gemini GenerateContent                     | `gemini-3.5-flash`  | native                 | none                        | none               | config table |
-| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | _(required)_        | json-mode (declarable) | none (declarable)           | none               | off / `free` |
+| kind                | Backs                                             | Default model       | Structured output      | Prompt caching              | Reasoning          | Tools      | Cost         |
+| ------------------- | ------------------------------------------------- | ------------------- | ---------------------- | --------------------------- | ------------------ | ---------- | ------------ |
+| `anthropic`         | the Claude API                                    | `claude-opus-4-8`   | native                 | **explicit** (min 4096 tok) | opt-in             | yes        | table        |
+| `openai`            | the OpenAI API                                    | `gpt-5.4-mini`      | native                 | automatic                   | opt-out¹           | yes        | table        |
+| `grok`              | xAI (`api.x.ai`)                                  | `grok-4.3`          | native                 | automatic (routing key)     | **always on**²     | yes        | **vendor**³  |
+| `deepseek`          | DeepSeek (`api.deepseek.com`)                     | `deepseek-v4-flash` | **json-mode**          | automatic                   | **on by default**⁴ | yes        | table        |
+| `gemini`            | Google Gemini GenerateContent                     | `gemini-3.5-flash`  | native                 | none                        | none               | yes⁵       | config table |
+| `openai-compatible` | Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, … | _(required)_        | json-mode (declarable) | none (declarable)           | none               | declarable | off / `free` |
 
 `openai`, `grok`, and `deepseek` are presets over the same zero-dependency
 compatible transport. `gemini` is a separate zero-dependency GenerateContent
@@ -203,6 +308,10 @@ derived from that figure: **$0.20/MTok on grok-4.3, $0.50 on grok-4.5.**
 ⁴ DeepSeek's thinking mode defaults to **enabled** — the preset sends `disabled`
 explicitly when you ask for it, because omitting the flag is not the same as
 turning it off.
+⁵ Gemini emits **no id** on a function call and matches a response by function
+NAME, so the adapter synthesizes one. Two concurrent calls to the same tool in one
+turn are therefore indistinguishable on its wire — a limitation of Gemini's API,
+not of this package.
 
 **Vendor-specific knobs: `extraBody`.** This adapter fronts backends whose
 parameters we cannot enumerate. `providers.<name>.extraBody` is merged into every

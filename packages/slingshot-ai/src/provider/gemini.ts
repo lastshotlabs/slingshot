@@ -300,9 +300,7 @@ export function createGeminiProvider(
         // The orchestrator's loop keys off the stop reason, so the adapter — the
         // only layer that can see both — normalizes it.
         stopReason:
-          toolCalls.length > 0
-            ? 'tool_use'
-            : mapStopReason(payload.candidates?.[0]?.finishReason),
+          toolCalls.length > 0 ? 'tool_use' : mapStopReason(payload.candidates?.[0]?.finishReason),
         usage: mapUsage(payload.usageMetadata),
         raw: payload,
       };

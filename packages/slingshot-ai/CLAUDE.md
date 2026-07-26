@@ -32,6 +32,10 @@ inline image parts, but a provider with `imageInput: false` throws before the
 transport call. Sending only the text parts would look successful while changing
 the request's meaning.
 
+**Tools follow the same rule**, for the same reason: `toolUse: false` + `tools`
+throws. Sending the request without them would look completely successful while
+the model answered from memory a question it was supposed to look up.
+
 3. **Nothing degrades silently.** Anything the provider can't honor becomes an
    `AiDegradation` on the result. `degradations.length === 0` must continue to
    mean "everything you asked for was honored", or apps that assert on it are
@@ -140,6 +144,68 @@ hatch you must ask permission from is not one.
    one intent, and should be one call). Do NOT gate coalescing behind
    `responseCache.enabled` — that silently disables it in the default
    configuration, which is the one everybody runs. This was a real bug.
+
+## The tool loop
+
+`lib/client.ts` runs it; `lib/toolLoop.ts` holds the pure half. It acquires **no
+invariants of its own** — it is the existing ones applied to a call shape where
+the MODEL decides how many times to go round, which makes it the third and worst
+shape an accidental bill takes.
+
+- **`execute` lives on the tool** (`AiTool`), which was the design decision. The
+  alternative — surface the calls, let the app loop — is the only version in
+  which spend re-entry, the iteration cap and argument validation are _not_ the
+  orchestrator's job. `ProviderResult.toolCalls` and the `tool_call` /
+  `tool_result` content parts are public, so that alternative can still be built
+  on top later; the reverse is not true.
+- **Tool calls and results are CONTENT PARTS, not roles.** Adding a `'tool'` role
+  would break `messageContentUnits`, the image scan in `prepare()` (both walk
+  parts), and Anthropic — where a tool result is a block inside a _user_ turn and
+  no such role exists on the wire. `AiToolResultPart` carries `name` as well as
+  `id` because Gemini's `functionResponse` matches by NAME and its `functionCall`
+  has no id at all.
+- **Arguments are `JSON.parse`d and `safeParse`d in the orchestrator** (invariant
+  1). `strict: true` on a function schema is exactly the claim we already refuse
+  to trust on a response schema — and this one is about to reach an app's DB
+  write. All four failure modes (unknown tool, bad JSON, schema violation,
+  throwing `execute`) become an `isError` tool result the model reads next
+  iteration. None throws at the app; none ends the turn.
+- **`execute` is never retried.** The retry layer covers the provider call only.
+  Silently re-running a write tool is not a behavior a framework may choose.
+- **`maxToolIterations` counts PROVIDER CALLS**, not tool rounds — provider calls
+  are what cost money. `config.tools.maxIterations` is both the default and a
+  hard ceiling; a request asking for more **throws** rather than being clamped,
+  because a clamp is a shortfall discovered after the money is gone. Hitting the
+  cap is an `AiDegradation` (invariant 3).
+- **`finishUsage` runs per iteration**, so the ledger has one row per provider
+  call. That is what makes the cross-iteration prompt-cache claim checkable: the
+  system prefix is unchanged, so iterations 2..n should be near-total hits, and
+  only the per-call ledger shows it. Iteration 1 is a cold read by construction,
+  so a blended rate over a tool loop is _structurally_ misleading — a broken
+  iteration 2 and a working one look nearly the same. `tests/unit/toolPromptCache.test.ts`
+  asserts against `usage.records()` and shows what the blend would have said.
+- **One unpriced iteration makes the whole turn's `costUsd` null** (invariant 4),
+  not the sum of the priced ones. `accumulateUsage` in `lib/pricing.ts`.
+- **Adapters force `stopReason: 'tool_use'` when tool calls are present.** Several
+  OpenAI-compatible servers return `finish_reason: 'stop'` alongside populated
+  `tool_calls`, and Gemini returns `STOP`. The loop keys off the stop reason, so
+  an adapter passing that through stops one iteration early — the model asked,
+  and nobody asked back. The adapter is the only layer that can see both halves.
+- **The response cache and coalescing are bypassed with tools present.** Their
+  keys cannot see what a tool returned. Invariant 8 is untouched: the two remain
+  independent of each other; both are opted out of by the request's shape.
+- **`generateStructured({ tools })` throws.** A structured request constrains the
+  model to schema-matching JSON on exactly the turns it should be emitting tool
+  calls, and nesting a tool loop inside the repair loop inside retry inside the
+  spend guard is a four-way interaction nobody can hold in their head.
+
+Streaming emits **two** kinds of tool event and they are not interchangeable:
+`tool_call_delta` is forwarded live from the transport, raw and incremental, so a
+trace UI can name the call the moment the model does (the name lands hundreds of
+ms before the arguments finish); `tool_call` fires once after validation with
+parsed `args`, and is the only one an app may act on. Half of `{"lift":"squ` is
+not arguments. The provider-side event shares its name and shape with the public
+one on purpose, so the orchestrator forwards it by identity.
 
 ## Background generation
 

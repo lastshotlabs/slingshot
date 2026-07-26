@@ -15,7 +15,6 @@ const build = () =>
     { apiKey: 'gemini-test-key', logger: silentLogger },
   );
 
-
 /** A backend scripted to actually CALL the conformance tool, so the tool cases bite. */
 const TOOL_FIXTURE = [
   { id: 'call_fixture_1', name: 'get_weather', argumentsJson: '{"city":"Berlin"}' },
@@ -148,7 +147,12 @@ describe('tool calling on the wire', () => {
           {
             role: 'assistant',
             content: [
-              { type: 'tool_call', id: 'call_0', name: 'get_weather', argumentsJson: '{"city":"A"}' },
+              {
+                type: 'tool_call',
+                id: 'call_0',
+                name: 'get_weather',
+                argumentsJson: '{"city":"A"}',
+              },
             ],
           },
           {

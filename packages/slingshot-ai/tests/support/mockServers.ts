@@ -409,7 +409,9 @@ export function startMockOpenAi(options: OpenAiMockOptions = {}): MockServer {
               {
                 index: 0,
                 delta: {
-                  tool_calls: [{ index, id: call.id, type: 'function', function: { name: call.name } }],
+                  tool_calls: [
+                    { index, id: call.id, type: 'function', function: { name: call.name } },
+                  ],
                 },
                 finish_reason: null,
               },

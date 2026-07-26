@@ -313,7 +313,13 @@ describe('tool calling on the wire', () => {
             role: 'user',
             content: [
               { type: 'tool_result', id: 'c1', name: 'get_weather', result: { tempC: 1 } },
-              { type: 'tool_result', id: 'c2', name: 'get_weather', result: 'rainy', isError: true },
+              {
+                type: 'tool_result',
+                id: 'c2',
+                name: 'get_weather',
+                result: 'rainy',
+                isError: true,
+              },
             ],
           },
         ],
@@ -326,8 +332,16 @@ describe('tool calling on the wire', () => {
     expect(messages[2]).toMatchObject({
       role: 'assistant',
       tool_calls: [
-        { id: 'c1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"A"}' } },
-        { id: 'c2', type: 'function', function: { name: 'get_weather', arguments: '{"city":"B"}' } },
+        {
+          id: 'c1',
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"city":"A"}' },
+        },
+        {
+          id: 'c2',
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"city":"B"}' },
+        },
       ],
     });
     expect(messages[3]).toEqual({
@@ -352,9 +366,7 @@ describe('tool calling on the wire', () => {
           { role: 'user', content: 'weather?' },
           {
             role: 'assistant',
-            content: [
-              { type: 'tool_call', id: 'c1', name: 'get_weather', argumentsJson: '{}' },
-            ],
+            content: [{ type: 'tool_call', id: 'c1', name: 'get_weather', argumentsJson: '{}' }],
           },
           {
             role: 'user',

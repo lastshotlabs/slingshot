@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { type StoreInfra, defineEntity, field, index } from '@lastshotlabs/slingshot-core';
+import {
+  type StoreInfra,
+  type TransactionOpConfig,
+  defineEntity,
+  field,
+  index,
+} from '@lastshotlabs/slingshot-core';
 import { op } from '../../src/builders/op';
 import {
   UnsupportedEntityBackendError,
@@ -30,6 +36,22 @@ const UniqueEntity = defineEntity('CapabilityUnique', {
   softDelete: { field: 'deletedAt', strategy: 'non-null' },
   ttl: { defaultSeconds: 60 },
 });
+
+const unreachableInfra: StoreInfra = {
+  appName: 'test',
+  getRedis: () => {
+    throw new Error('backend infrastructure must not be accessed');
+  },
+  getMongo: () => {
+    throw new Error('backend infrastructure must not be accessed');
+  },
+  getSqliteDb: () => {
+    throw new Error('backend infrastructure must not be accessed');
+  },
+  getPostgres: () => {
+    throw new Error('backend infrastructure must not be accessed');
+  },
+};
 
 describe('entity backend requirement derivation', () => {
   test('derives deterministic base and optional requirements from resolved config', () => {
@@ -132,21 +154,6 @@ describe('entity backend requirement derivation', () => {
   });
 
   test('rejects transaction steps that reference an unknown composite entity', () => {
-    const unreachableInfra: StoreInfra = {
-      appName: 'test',
-      getRedis: () => {
-        throw new Error('backend infrastructure must not be accessed');
-      },
-      getMongo: () => {
-        throw new Error('backend infrastructure must not be accessed');
-      },
-      getSqliteDb: () => {
-        throw new Error('backend infrastructure must not be accessed');
-      },
-      getPostgres: () => {
-        throw new Error('backend infrastructure must not be accessed');
-      },
-    };
     const factories = createCompositeFactories(
       { records: { config: BasicEntity } },
       {
@@ -158,6 +165,125 @@ describe('entity backend requirement derivation', () => {
 
     expect(() => factories.postgres(unreachableInfra)).toThrow(
       "step 0 references unknown entity 'missing'",
+    );
+  });
+
+  test('rejects empty transactions before infrastructure access', () => {
+    const factories = createCompositeFactories(
+      { records: { config: BasicEntity } },
+      { write: op.transaction({ steps: [] }) },
+    );
+
+    expect(() => factories.postgres(unreachableInfra)).toThrow(
+      "transaction 'write' requires at least one step",
+    );
+  });
+
+  test('rejects untyped illegal, missing, and unknown discriminant shapes deterministically', () => {
+    const invalidOperations = [
+      {
+        expected: "contains illegal key 'set' for create",
+        config: {
+          kind: 'transaction',
+          steps: [
+            {
+              op: 'create',
+              entity: 'records',
+              input: { id: 'param:id' },
+              set: { value: 'param:value' },
+            },
+          ],
+        },
+      },
+      {
+        expected: "is missing required key 'match'",
+        config: {
+          kind: 'transaction',
+          steps: [{ op: 'update', entity: 'records', set: { value: 'param:value' } }],
+        },
+      },
+      {
+        expected: "has unknown operation kind 'replace'",
+        config: {
+          kind: 'transaction',
+          steps: [{ op: 'replace', entity: 'records', input: {} }],
+        },
+      },
+    ] as const;
+
+    for (const [index, invalid] of invalidOperations.entries()) {
+      const factories = createCompositeFactories(
+        { records: { config: BasicEntity } },
+        { [`write${index}`]: invalid.config as unknown as TransactionOpConfig },
+      );
+      expect(() => factories.postgres(unreachableInfra)).toThrow(invalid.expected);
+    }
+  });
+
+  test('rejects non-prior result bindings and unknown fields before infrastructure access', () => {
+    const forwardReference = createCompositeFactories(
+      { records: { config: BasicEntity } },
+      {
+        write: op.transaction({
+          steps: [
+            {
+              op: 'create',
+              entity: 'records',
+              input: { id: 'param:id', value: { nested: 'result:0.value' } },
+            },
+          ],
+        }),
+      },
+    );
+    expect(() => forwardReference.postgres(unreachableInfra)).toThrow(
+      'step 0 references non-prior result 0',
+    );
+
+    const unknownField = createCompositeFactories(
+      { records: { config: BasicEntity } },
+      {
+        write: op.transaction({
+          steps: [{ op: 'create', entity: 'records', input: { missing: 'param:value' } }],
+        }),
+      },
+    );
+    expect(() => unknownField.postgres(unreachableInfra)).toThrow(
+      "step 0 references unknown field 'missing'",
+    );
+  });
+
+  test('rejects a missing or mismatched named semantic operation before infrastructure access', () => {
+    const factories = createCompositeFactories(
+      {
+        records: {
+          config: BasicEntity,
+          operations: {
+            setValue: op.fieldUpdate({
+              match: { id: 'param:id' },
+              set: ['value'],
+            }),
+          },
+        },
+      },
+      {
+        write: op.transaction({
+          steps: [
+            {
+              op: 'transition',
+              entity: 'records',
+              operation: 'setValue',
+              match: { id: 'param:id' },
+              field: 'value',
+              from: 'before',
+              to: 'after',
+            },
+          ],
+        }),
+      },
+    );
+
+    expect(() => factories.postgres(unreachableInfra)).toThrow(
+      "requires named transition operation 'setValue'",
     );
   });
 });

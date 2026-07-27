@@ -535,6 +535,29 @@ export {
   RESOLVE_REINDEX_SOURCE,
 } from './storeInfra';
 
+// --- Transactions ---
+/** Opaque transaction scope, manager, result, and failure contracts. */
+export type {
+  TransactionStore,
+  TransactionScope,
+  TransactionManager,
+  TransactionEntityResolutionOptions,
+  TransactionStepResult,
+  TransactionCommitFailureOutcome,
+  TransactionPostCommitFailure,
+} from './transactions';
+export {
+  TransactionStoreUnsupportedError,
+  TransactionScopeInvalidError,
+  TransactionScopeMismatchError,
+  TransactionScopeClosedError,
+  UnsettledTransactionWorkError,
+  TransactionBindingError,
+  EntityTransactionConflictError,
+  TransactionCommitError,
+  TransactionPostCommitError,
+} from './transactions';
+
 // --- Config-driven entity persistence (shared type contracts) ---
 export type {
   FieldType,
@@ -633,7 +656,18 @@ export type {
   DeriveOpConfig,
   DeriveSource,
   TransactionOpConfig,
+  TransactionBindingRecord,
   TransactionStep,
+  TransactionCreateStep,
+  TransactionUpdateStep,
+  TransactionDeleteStep,
+  TransactionLookupStep,
+  TransactionFieldUpdateStep,
+  TransactionTransitionStep,
+  TransactionBatchStep,
+  TransactionArrayPushStep,
+  TransactionArrayPullStep,
+  TransactionIncrementStep,
   PipeOpConfig,
   PipeStep,
   CustomOpConfig,

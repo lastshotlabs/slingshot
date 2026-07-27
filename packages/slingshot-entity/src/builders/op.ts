@@ -363,10 +363,9 @@ export const op = {
    * @returns A `TransactionOpConfig`.
    *
    * @remarks
-   * Atomicity guarantees depend on the backend. SQLite and Postgres composite
-   * adapters provide true transactions. Memory executes steps sequentially in
-   * process. Redis and Mongo composite adapters currently execute sequentially
-   * without rollback on failure.
+   * SQLite and PostgreSQL composite adapters provide rollback transactions.
+   * Standard memory, MongoDB, and Redis wiring rejects this operation during
+   * bootstrap because those profiles do not provide rollback.
    *
    * @example
    * ```ts

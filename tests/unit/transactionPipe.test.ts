@@ -287,6 +287,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
+            operation: 'pushLink',
             match: { id: 'param:id' },
             field: 'outwardLinks',
             value: 'param:targetId',
@@ -315,6 +316,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
+            operation: 'pushLink',
             match: { id: 'param:id' },
             field: 'outwardLinks',
             value: 'param:targetId',
@@ -345,6 +347,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPull',
             entity: 'documents',
+            operation: 'pullLink',
             match: { id: 'param:id' },
             field: 'outwardLinks',
             value: 'param:targetId',
@@ -374,6 +377,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
+            operation: 'pushLink',
             match: { id: 'param:sourceId' },
             field: 'outwardLinks',
             value: 'param:targetId',
@@ -382,6 +386,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
+            operation: 'pushLink',
             match: { id: 'param:targetId' },
             field: 'inwardLinks',
             value: 'param:sourceId',
@@ -423,6 +428,7 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
+            operation: 'pushLink',
             match: { id: 'param:sourceId' },
             field: 'outwardLinks',
             value: 'result:0.id',

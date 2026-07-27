@@ -204,11 +204,10 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
           steps: [
             { op: 'create', entity: 'parents', input: { name: 'param:name' } },
             {
-              op: 'arrayPush',
+              op: 'update',
               entity: 'children',
               match: { id: 'param:missingChildId' },
-              field: 'parentId',
-              value: 'result:0.id',
+              set: { parentId: 'result:0.id' },
             },
           ],
         }),
@@ -221,7 +220,7 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
 
     await expect(
       composite.createThenFail({ name: 'Acme', missingChildId: 'missing' }),
-    ).rejects.toThrow('arrayPush: record not found');
+    ).rejects.toThrow('update: record not found');
 
     expect(data[`slingshot_${Parent._storageName}`] ?? []).toHaveLength(0);
     expect(clientQueries).toContain('BEGIN');
@@ -245,6 +244,7 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
           {
             op: 'batch',
             entity: 'records',
+            operation: 'batch',
             action: 'delete',
             filter: { status: 'pending' },
           },

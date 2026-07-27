@@ -108,7 +108,28 @@ export type { SseClientData, SseFilter } from './framework/sse/index.js';
 export { createSseUpgradeHandler } from './framework/sse/index.js';
 
 // Core utilities
-export { HttpError, ValidationError } from '@lastshotlabs/slingshot-core';
+export {
+  HttpError,
+  ValidationError,
+  TransactionStoreUnsupportedError,
+  TransactionScopeInvalidError,
+  TransactionScopeMismatchError,
+  TransactionScopeClosedError,
+  UnsettledTransactionWorkError,
+  TransactionBindingError,
+  EntityTransactionConflictError,
+  TransactionCommitError,
+  TransactionPostCommitError,
+} from '@lastshotlabs/slingshot-core';
+export type {
+  TransactionStore,
+  TransactionScope,
+  TransactionManager,
+  TransactionEntityResolutionOptions,
+  TransactionStepResult,
+  TransactionCommitFailureOutcome,
+  TransactionPostCommitFailure,
+} from '@lastshotlabs/slingshot-core';
 export {
   COOKIE_TOKEN,
   HEADER_USER_TOKEN,

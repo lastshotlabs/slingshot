@@ -384,28 +384,232 @@ interface CompositeEntityEntry {
   readonly operations?: Readonly<Record<string, OperationConfig>>;
 }
 
+const TRANSACTION_STEP_KEYS = {
+  create: new Set(['op', 'entity', 'input']),
+  update: new Set(['op', 'entity', 'match', 'set']),
+  delete: new Set(['op', 'entity', 'match']),
+  lookup: new Set(['op', 'entity', 'match']),
+  fieldUpdate: new Set(['op', 'entity', 'operation', 'match', 'set']),
+  transition: new Set(['op', 'entity', 'operation', 'match', 'field', 'from', 'to', 'set']),
+  batch: new Set(['op', 'entity', 'operation', 'action', 'filter', 'set']),
+  arrayPush: new Set(['op', 'entity', 'operation', 'match', 'field', 'value', 'dedupe']),
+  arrayPull: new Set(['op', 'entity', 'operation', 'match', 'field', 'value']),
+  increment: new Set(['op', 'entity', 'operation', 'match', 'field', 'by']),
+} as const;
+
+const TRANSACTION_STEP_REQUIRED_KEYS = {
+  create: ['entity', 'input'],
+  update: ['entity', 'match', 'set'],
+  delete: ['entity', 'match'],
+  lookup: ['entity', 'match'],
+  fieldUpdate: ['entity', 'operation', 'match', 'set'],
+  transition: ['entity', 'operation', 'match', 'field', 'from', 'to'],
+  batch: ['entity', 'operation', 'action', 'filter'],
+  arrayPush: ['entity', 'operation', 'match', 'field', 'value'],
+  arrayPull: ['entity', 'operation', 'match', 'field', 'value'],
+  increment: ['entity', 'operation', 'match', 'field'],
+} as const;
+
+const NAMED_TRANSACTION_STEPS = new Set([
+  'fieldUpdate',
+  'transition',
+  'batch',
+  'arrayPush',
+  'arrayPull',
+  'increment',
+]);
+
+function invalidTransactionStep(operationName: string, index: number, message: string): never {
+  throw new Error(
+    `[slingshot-entity] Invalid entity operation configuration: transaction '${operationName}' ` +
+      `step ${index} ${message}.`,
+  );
+}
+
+function isBindingRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function assertTransactionRecord(
+  operationName: string,
+  stepIndex: number,
+  raw: Readonly<Record<string, unknown>>,
+  key: string,
+): Readonly<Record<string, unknown>> | undefined {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  if (!isBindingRecord(value)) {
+    invalidTransactionStep(operationName, stepIndex, `requires '${key}' to be an object`);
+  }
+  return value;
+}
+
+function assertTransactionBindings(operationName: string, stepIndex: number, value: unknown): void {
+  if (typeof value === 'string') {
+    if (value.startsWith('param:') && value.length === 'param:'.length) {
+      invalidTransactionStep(operationName, stepIndex, 'contains an empty param binding');
+    }
+    if (value.startsWith('result:')) {
+      const match = /^result:(\d+)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u.exec(value);
+      if (!match) {
+        invalidTransactionStep(
+          operationName,
+          stepIndex,
+          `contains malformed result binding '${value}'`,
+        );
+      }
+      const referenced = Number(match[1]);
+      if (referenced >= stepIndex) {
+        invalidTransactionStep(
+          operationName,
+          stepIndex,
+          `references non-prior result ${referenced}`,
+        );
+      }
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertTransactionBindings(operationName, stepIndex, item);
+    return;
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    for (const nested of Object.values(value)) {
+      assertTransactionBindings(operationName, stepIndex, nested);
+    }
+  }
+}
+
+function transactionFilterFields(filter: Readonly<Record<string, unknown>>): string[] {
+  const fields: string[] = [];
+  for (const [key, value] of Object.entries(filter)) {
+    if (key === '$and' || key === '$or') {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isBindingRecord(item)) fields.push(...transactionFilterFields(item));
+        }
+      }
+    } else {
+      fields.push(key);
+    }
+  }
+  return fields;
+}
+
+function assertKnownTransactionFields(
+  operationName: string,
+  stepIndex: number,
+  entry: CompositeEntityEntry,
+  fieldNames: readonly string[],
+): void {
+  for (const field of fieldNames) {
+    if (!(field in entry.config.fields)) {
+      invalidTransactionStep(operationName, stepIndex, `references unknown field '${field}'`);
+    }
+  }
+}
+
 function assertTransactionTopology(
   operationName: string,
   operation: TransactionOpConfig,
   entities: Readonly<Record<string, CompositeEntityEntry>>,
 ): void {
+  if (operation.steps.length === 0) {
+    throw new Error(
+      `[slingshot-entity] Invalid entity operation configuration: transaction '${operationName}' requires at least one step.`,
+    );
+  }
+
   for (const [index, step] of operation.steps.entries()) {
-    const entry = entities[step.entity];
-    if (!entry) {
-      throw new Error(
-        `[slingshot-entity] Invalid entity operation configuration: transaction '${operationName}' ` +
-          `step ${index} references unknown entity '${step.entity}'.`,
+    if (!isBindingRecord(step)) {
+      invalidTransactionStep(operationName, index, 'must be an object');
+    }
+    const raw = step as unknown as Record<string, unknown>;
+    const discriminant = raw.op;
+    if (typeof discriminant !== 'string' || !(discriminant in TRANSACTION_STEP_KEYS)) {
+      invalidTransactionStep(
+        operationName,
+        index,
+        `has unknown operation kind '${String(discriminant)}'`,
       );
     }
-    if (step.op === 'fieldUpdate' || step.op === 'batch') {
-      const named = entry.operations?.[step.op];
-      if (!named || named.kind !== step.op) {
-        throw new Error(
-          `[slingshot-entity] Invalid entity operation configuration: transaction '${operationName}' ` +
-            `step ${index} requires named ${step.op} operation '${step.op}' on entity '${step.entity}'.`,
+    const allowed: ReadonlySet<string> =
+      TRANSACTION_STEP_KEYS[discriminant as keyof typeof TRANSACTION_STEP_KEYS];
+    for (const key of Object.keys(raw)) {
+      if (!allowed.has(key)) {
+        invalidTransactionStep(
+          operationName,
+          index,
+          `contains illegal key '${key}' for ${step.op}`,
         );
       }
     }
+    for (const key of TRANSACTION_STEP_REQUIRED_KEYS[
+      discriminant as keyof typeof TRANSACTION_STEP_REQUIRED_KEYS
+    ]) {
+      if (!(key in raw)) {
+        invalidTransactionStep(operationName, index, `is missing required key '${key}'`);
+      }
+    }
+
+    if (typeof raw.entity !== 'string' || !raw.entity.trim()) {
+      invalidTransactionStep(operationName, index, "requires non-empty string 'entity'");
+    }
+    const entry = entities[step.entity];
+    if (!entry) {
+      invalidTransactionStep(operationName, index, `references unknown entity '${step.entity}'`);
+    }
+
+    if (NAMED_TRANSACTION_STEPS.has(step.op)) {
+      const namedStep = step as typeof step & { readonly operation: string };
+      if (typeof namedStep.operation !== 'string' || !namedStep.operation.trim()) {
+        invalidTransactionStep(operationName, index, 'has an empty named operation');
+      }
+      const named = entry.operations?.[namedStep.operation];
+      if (!named || named.kind !== step.op) {
+        invalidTransactionStep(
+          operationName,
+          index,
+          `requires named ${step.op} operation '${namedStep.operation}' on entity '${step.entity}'`,
+        );
+      }
+    }
+
+    if ('input' in step) {
+      const input = assertTransactionRecord(operationName, index, raw, 'input');
+      if (input) {
+        assertKnownTransactionFields(operationName, index, entry, Object.keys(input));
+        assertTransactionBindings(operationName, index, input);
+      }
+    }
+    if ('match' in step) {
+      const match = assertTransactionRecord(operationName, index, raw, 'match');
+      if (match) {
+        assertKnownTransactionFields(operationName, index, entry, Object.keys(match));
+        assertTransactionBindings(operationName, index, match);
+      }
+    }
+    if ('set' in step && step.set) {
+      const set = assertTransactionRecord(operationName, index, raw, 'set');
+      if (set) {
+        assertKnownTransactionFields(operationName, index, entry, Object.keys(set));
+        assertTransactionBindings(operationName, index, set);
+      }
+    }
+    if ('field' in step) {
+      if (typeof step.field !== 'string' || !step.field.trim()) {
+        invalidTransactionStep(operationName, index, "requires non-empty string 'field'");
+      }
+      assertKnownTransactionFields(operationName, index, entry, [step.field]);
+    }
+    if ('filter' in step) {
+      const filter = assertTransactionRecord(operationName, index, raw, 'filter');
+      if (filter) {
+        assertKnownTransactionFields(operationName, index, entry, transactionFilterFields(filter));
+        assertTransactionBindings(operationName, index, filter);
+      }
+    }
+    if ('value' in step) assertTransactionBindings(operationName, index, step.value);
   }
 }
 

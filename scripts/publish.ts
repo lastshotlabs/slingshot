@@ -8,21 +8,28 @@ type DependencySections = Pick<
   'dependencies' | 'optionalDependencies' | 'peerDependencies' | 'devDependencies'
 >;
 
-type PackageManifest = {
+export type PackageManifest = {
   name?: string;
   version?: string;
   private?: boolean;
   files?: string[];
   workspaces?: string[];
+  type?: string;
+  main?: string;
+  module?: string;
+  types?: string;
+  exports?: Record<string, unknown>;
+  bin?: string | Record<string, string>;
   scripts?: Record<string, string>;
   publishConfig?: Record<string, unknown>;
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
   devDependencies?: Record<string, string>;
 };
 
-type PublishablePackage = {
+export type PublishablePackage = {
   name: string;
   version: string;
   sourceDir: string;

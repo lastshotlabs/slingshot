@@ -129,12 +129,38 @@ const createEmitCommand = (tsconfigPath: string): string[] => [
   '--noCheck',
 ];
 
-const createAliasRewriteCommand = (tsconfigPath: string): string[] => [
+const createAliasRewriteConfig = (
+  name: string,
+  baseUrl: string,
+  outDir: string,
+  paths: Record<string, string[]>,
+): string => {
+  const configDir = path.join('.tmp', 'tsc-alias');
+  fs.mkdirSync(configDir, { recursive: true });
+  const configPath = path.join(configDir, `${name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+  fs.writeFileSync(
+    configPath,
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          baseUrl: path.relative(configDir, path.resolve(baseUrl)),
+          outDir: path.relative(configDir, path.resolve(outDir)),
+          paths,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return configPath;
+};
+
+const createAliasRewriteCommand = (aliasConfigPath: string): string[] => [
   'bun',
   'x',
   'tsc-alias',
   '-p',
-  tsconfigPath,
+  aliasConfigPath,
   '--resolve-full-paths',
   '--resolve-full-extension',
   '.js',
@@ -144,6 +170,14 @@ const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
   layer.map(name => {
     const pkg = packageLookup.get(name);
     if (!pkg) throw new Error(`Unknown package "${name}" in build layers`);
+    const localPaths: Record<string, string[]> =
+      name === '@lastshotlabs/slingshot-auth' ? { '@auth/*': ['./src/*'] } : {};
+    const aliasConfigPath = createAliasRewriteConfig(
+      name,
+      pkg.dir,
+      path.join(pkg.dir, 'dist'),
+      localPaths,
+    );
     return {
       name: `${name} build output`,
       cleanTargets: [
@@ -152,25 +186,45 @@ const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
       ],
       commands: [
         createEmitCommand(path.join(pkg.dir, 'tsconfig.build.json')),
-        createAliasRewriteCommand(path.join(pkg.dir, 'tsconfig.build.json')),
+        createAliasRewriteCommand(aliasConfigPath),
       ],
     };
   }),
 );
 
+const frameworkAliasConfigPath = createAliasRewriteConfig('framework', '.', 'dist', {
+  '@app': ['./src/app.ts'],
+  '@config/*': ['./src/config/*'],
+  '@framework/*': ['./src/framework/*'],
+  '@lib/*': ['./src/lib/*'],
+});
+
 const frameworkSteps: BuildStep[] = [
   {
     name: 'framework build output',
     cleanTargets: [
+      { path: 'dist' },
       { path: path.join('dist', 'src', 'framework') },
       { path: path.join('.tmp', 'tsconfig.framework.build.tsbuildinfo') },
     ],
     commands: [
       createEmitCommand('tsconfig.framework.build.json'),
-      createAliasRewriteCommand('tsconfig.framework.build.json'),
+      createAliasRewriteCommand(frameworkAliasConfigPath),
     ],
   },
 ];
+
+const rootAliasConfigPath = createAliasRewriteConfig('root', '.', 'dist', {
+  '@admin/*': ['./packages/slingshot-admin/src/*'],
+  '@app': ['./src/app.ts'],
+  '@auth/*': ['./packages/slingshot-auth/src/*'],
+  '@config/*': ['./src/config/*'],
+  '@framework/*': ['./dist/src/framework/*'],
+  '@lib/*': ['./src/lib/*'],
+  '@queues/*': ['./src/queues/*'],
+  '@scripts/*': ['./src/scripts/*'],
+  '@workers/*': ['./src/workers/*'],
+});
 
 const rootSteps: BuildStep[] = [
   {
@@ -184,7 +238,7 @@ const rootSteps: BuildStep[] = [
     ],
     commands: [
       createEmitCommand('tsconfig.build.json'),
-      createAliasRewriteCommand('tsconfig.build.json'),
+      createAliasRewriteCommand(rootAliasConfigPath),
     ],
   },
   { name: 'cli bundle', commands: [['bun', 'x', 'tsup', '--config', 'tsup.cli.config.ts']] },
@@ -201,6 +255,7 @@ export function rewriteFrameworkDeclarationImports(
 ): void {
   if (!fs.existsSync(frameworkDistDir)) return;
 
+  const rootSourceDistDir = path.dirname(frameworkDistDir);
   const queue = [frameworkDistDir];
   while (queue.length > 0) {
     const currentDir = queue.pop();
@@ -214,9 +269,15 @@ export function rewriteFrameworkDeclarationImports(
       if (!entry.isFile() || !fullPath.endsWith('.d.ts')) continue;
 
       const original = fs.readFileSync(fullPath, 'utf8');
-      const rewritten = original
-        .replace(/(['"])(?:\.\.\/)+config\/([^'"]+)\1/g, '$1@config/$2$1')
-        .replace(/(['"])(?:\.\.\/)+lib\/([^'"]+)\1/g, '$1@lib/$2$1');
+      const rewritten = original.replace(
+        /(['"])@(config|lib)\/([^'"]+)\1/g,
+        (_match, quote: string, area: string, rest: string) => {
+          const target = path.join(rootSourceDistDir, area, rest);
+          let specifier = path.relative(path.dirname(fullPath), target).replaceAll('\\', '/');
+          if (!specifier.startsWith('.')) specifier = `./${specifier}`;
+          return `${quote}${specifier}${quote}`;
+        },
+      );
 
       if (rewritten !== original) {
         fs.writeFileSync(fullPath, rewritten);

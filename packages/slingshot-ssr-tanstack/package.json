@@ -1,7 +1,7 @@
 {
   "name": "@lastshotlabs/slingshot-ssr-tanstack",
   "version": "0.2.7",
-  "description": "TanStack Router route source for slingshot-ssr \u2014 single-source routes for SSR + CSR apps",
+  "description": "TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -47,6 +47,8 @@
   },
   "peerDependencies": {
     "@tanstack/react-router": ">=1.0 <2",
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20",
     "vite": ">=5 <8"
   },
   "peerDependenciesMeta": {

@@ -19,6 +19,7 @@
     "packages/slingshot-auth/tests/helpers/runtime.ts",
     "scripts/build.ts",
     "scripts/publish.ts",
+    "scripts/verify-packed-artifacts.ts",
     "scripts/postgres-capacity-smoke.ts",
     "tsup.cli.config.ts",
     "vitest.config.ts"

@@ -52,6 +52,8 @@
     "hono": ">=4.12.18 <5",
     "zod": ">=4.0 <5",
     "samlify": ">=2.13.0 <3",
+    "@authenio/samlify-xsd-schema-validator": ">=1.0 <2",
+    "bullmq": ">=5 <6",
     "mongoose": ">=9.0 <10",
     "ioredis": ">=5 <6",
     "jose": ">=6.0",
@@ -69,6 +71,12 @@
       "optional": true
     },
     "samlify": {
+      "optional": true
+    },
+    "@authenio/samlify-xsd-schema-validator": {
+      "optional": true
+    },
+    "bullmq": {
       "optional": true
     },
     "otpauth": {

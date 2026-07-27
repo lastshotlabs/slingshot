@@ -18,7 +18,6 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
-import { NotificationsDeliveryRegistryCap } from '@lastshotlabs/slingshot-notifications/public';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
 import { buildPushEntityModules } from './entities/modules';
 import { compilePushFormatters } from './formatter';
@@ -516,9 +515,13 @@ export function createPushPackage(rawConfig: PushPluginConfig): SlingshotPackage
       // through the typed `NotificationsDeliveryRegistryCap` capability when notifications
       // is loaded. No-op when notifications isn't installed at all.
       const slingshotCtx = getContextOrNull(app);
-      const deliveryRegistry = slingshotCtx
-        ? resolveCapabilityValue(slingshotCtx, NotificationsDeliveryRegistryCap)
-        : undefined;
+      const notifications = slingshotCtx
+        ? await import('@lastshotlabs/slingshot-notifications/public').catch(() => null)
+        : null;
+      const deliveryRegistry =
+        slingshotCtx && notifications
+          ? resolveCapabilityValue(slingshotCtx, notifications.NotificationsDeliveryRegistryCap)
+          : undefined;
       if (deliveryRegistry) {
         deliveryRegistry.register(state.createDeliveryAdapter());
       }

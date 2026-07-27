@@ -40,13 +40,21 @@
   "peerDependencies": {
     "zod": ">=4.0 <5",
     "@aws-sdk/client-s3": ">=3.0",
-    "@aws-sdk/client-ssm": ">=3.0"
+    "@aws-sdk/client-ssm": ">=3.0",
+    "ioredis": ">=5 <6",
+    "pg": ">=8.20 <9"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {
       "optional": true
     },
     "@aws-sdk/client-ssm": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   },

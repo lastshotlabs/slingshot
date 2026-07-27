@@ -50,6 +50,18 @@ describe('extractJSDoc', () => {
     );
   });
 
+  test('uses the JSDoc immediately adjacent to the requested symbol', () => {
+    const content = `
+      /** Describe the first export. */
+      export interface FirstExport {}
+
+      /** Describe the requested export. */
+      export class RequestedExport {}
+    `;
+
+    expect(extractJSDoc(content, 'RequestedExport')).toBe('Describe the requested export.');
+  });
+
   test('sanitizes inline JSDoc link tags for MDX output', () => {
     const content = `
       /**

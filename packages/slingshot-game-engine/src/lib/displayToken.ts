@@ -78,7 +78,9 @@ export type DisplayTokenFailure =
   | 'revoked'
   | 'session-over';
 
-/** Successful display-token claims or a precise non-throwing verification failure. */
+/**
+ * Successful display-token claims or a precise non-throwing verification failure.
+ */
 export type DisplayTokenVerification =
   | { readonly ok: true; readonly claims: DisplayTokenClaims }
   | { readonly ok: false; readonly reason: DisplayTokenFailure };

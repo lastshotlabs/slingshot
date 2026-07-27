@@ -25,7 +25,7 @@ describe('build and publish scripts', () => {
 
     writeFileSync(
       join(nestedDir, 'types.d.ts'),
-      ['export * from "../../config/app";', 'export * from "../../lib/helpers";', ''].join('\n'),
+      ['export * from "@config/app.js";', 'export * from "@lib/helpers.js";', ''].join('\n'),
       'utf8',
     );
     writeFileSync(join(cleanDir, 'keep', 'file.txt'), 'keep\n', 'utf8');
@@ -36,8 +36,10 @@ describe('build and publish scripts', () => {
     buildModule.cleanTarget({ path: cleanDir, preserveEntries: ['keep'] });
 
     const rewritten = readFileSync(join(nestedDir, 'types.d.ts'), 'utf8');
-    expect(rewritten).toContain('@config/app');
-    expect(rewritten).toContain('@lib/helpers');
+    expect(rewritten).toContain('../../config/app.js');
+    expect(rewritten).toContain('../../lib/helpers.js');
+    expect(rewritten).not.toContain('@config/');
+    expect(rewritten).not.toContain('@lib/');
     expect(existsSync(join(cleanDir, 'keep', 'file.txt'))).toBe(true);
     expect(existsSync(join(cleanDir, 'remove-me'))).toBe(false);
 
@@ -129,5 +131,79 @@ describe('build and publish scripts', () => {
     expect(readFileSync(join(demoPackage!.stageDir, 'README.md'), 'utf8')).toContain('# demo');
     expect(readFileSync(join(demoPackage!.stageDir, 'LICENSE'), 'utf8')).toContain('MIT');
     expect(existsSync(join(demoPackage!.stageDir, 'dist', 'index.js'))).toBe(true);
+  });
+
+  test('detects undeclared emitted imports and missing packed export targets', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'slingshot-packed-artifact-'));
+    tempDirs.push(tempDir);
+
+    const stageDir = join(tempDir, 'stage');
+    mkdirSync(join(stageDir, 'dist'), { recursive: true });
+    writeFileSync(
+      join(stageDir, 'package.json'),
+      JSON.stringify({
+        name: '@acme/demo',
+        version: '1.0.0',
+        type: 'module',
+        exports: {
+          '.': {
+            types: './dist/index.d.ts',
+            import: './dist/index.js',
+          },
+        },
+      }),
+      'utf8',
+    );
+    writeFileSync(
+      join(stageDir, 'dist', 'index.js'),
+      [
+        "import { declared } from '@acme/declared';",
+        "const runtime = import('@acme/missing/runtime');",
+        'export { declared, runtime };',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const verifier = await import('../../scripts/verify-packed-artifacts');
+    expect(
+      verifier.extractPackageImports(readFileSync(join(stageDir, 'dist', 'index.js'), 'utf8')),
+    ).toEqual(new Set(['@acme/declared', '@acme/missing/runtime']));
+
+    const integrityErrors = verifier.findStageIntegrityErrors(
+      stageDir,
+      {
+        name: '@acme/demo',
+        dependencies: { '@acme/declared': '^1.0.0' },
+      },
+      tempDir,
+    );
+    expect(integrityErrors).toContain('dist/index.js imports undeclared package "@acme/missing"');
+
+    const manifestErrors = verifier.findPackedManifestErrors(
+      {
+        name: '@acme/demo',
+        exports: {
+          '.': {
+            types: './dist/index.d.ts',
+            import: './dist/index.js',
+          },
+        },
+      },
+      new Set(['dist/index.js']),
+    );
+    expect(manifestErrors).toEqual([
+      'manifest target "./dist/index.d.ts" is absent from the tarball',
+    ]);
+    expect(
+      verifier.publicImportSpecifiers({
+        name: '@acme/demo',
+        exports: {
+          '.': { import: './dist/index.js' },
+          './testing': { import: './dist/testing.js' },
+          './schema.json': './dist/schema.json',
+        },
+      }),
+    ).toEqual(['@acme/demo', '@acme/demo/testing']);
   });
 });

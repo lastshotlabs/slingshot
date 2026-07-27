@@ -327,7 +327,11 @@ async function enforceRequestBodyLimit(req: Request, maxBody: number): Promise<R
   return new Request(req, init);
 }
 
-/** @internal Exposes low-level Node runtime helpers for unit-test access. Not part of the public API. */
+/**
+ * Expose low-level Node runtime helpers for unit-test access.
+ *
+ * @internal
+ */
 export const runtimeNodeInternals = {
   toBufferChunk,
   stringifyWsPayload,

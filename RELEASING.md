@@ -1,8 +1,8 @@
 # Releasing
 
-Versioning is driven by [Changesets](https://github.com/changesets/changesets); publishing
-goes to **GitHub Packages** (`npm.pkg.github.com`, `@lastshotlabs` scope) via the
-`Publish Packages` workflow. Public npm is intentionally not a target.
+Versioning is driven by [Changesets](https://github.com/changesets/changesets). The
+`Publish Packages` workflow publishes to both **GitHub Packages** (`npm.pkg.github.com`) and
+the public npm registry.
 
 ## Day-to-day: describe your change
 
@@ -26,15 +26,19 @@ This drops a markdown file under `.changeset/`. Commit it with your PR.
 
 2. Commit the version + changelog changes, then create a GitHub Release for the new tag.
    The release `published` event triggers `.github/workflows/publish.yml`, which builds and
-   runs `scripts/publish.ts --target=github --publish --skip-existing`.
+   runs `scripts/publish.ts --target=github --publish --skip-existing` followed by the npm
+   registry publish.
 
 `scripts/publish.ts` rewrites each package's `workspace:*` cross-dependencies to the concrete
-published version, so the packages install cleanly outside the monorepo.
+published version. `bun run hardening:core` then runs `verify:packed-artifacts`, which stages
+packages through that same publication code, packs every tarball, checks manifest/export and
+dependency integrity, and installs each package in an isolated consumer before importing its
+public subpaths. Do not bypass this gate when preparing a release.
 
 ## Notes
 
-- `access` is `restricted` (GitHub Packages); consumers need a `read:packages` token in their
-  `~/.npmrc` to install.
+- GitHub Packages consumers need a `read:packages` token in `~/.npmrc`; public npm consumers
+  do not.
 - `docs` is excluded from the workspace and the private package is skipped — changesets won't
   ask to version them.
 - The legacy `release` / `release:patch` / `release:minor` scripts remain as a manual fallback

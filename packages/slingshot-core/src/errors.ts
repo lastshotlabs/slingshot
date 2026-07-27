@@ -50,7 +50,9 @@ export class SlingshotError extends Error {
  */
 const HTTP_ERROR_BRAND: unique symbol = Symbol.for('@lastshotlabs/slingshot.HttpError');
 
-/** HTTP-aware error carrying a response status and optional machine-readable code. */
+/**
+ * HTTP-aware error carrying a response status and optional machine-readable code.
+ */
 export class HttpError extends Error {
   /** @internal Cross-module brand — see {@link isHttpError}. */
   readonly [HTTP_ERROR_BRAND] = true;
@@ -102,7 +104,9 @@ export function isHttpError(err: unknown): err is HttpError {
 /** Cross-module brand for {@link ValidationError}; see {@link HttpError}'s brand. */
 const VALIDATION_ERROR_BRAND: unique symbol = Symbol.for('@lastshotlabs/slingshot.ValidationError');
 
-/** HTTP 400 error that preserves structured Zod validation issues. */
+/**
+ * HTTP 400 error that preserves structured Zod validation issues.
+ */
 export class ValidationError extends HttpError {
   /** @internal Cross-module brand — see {@link isValidationError}. */
   readonly [VALIDATION_ERROR_BRAND] = true;

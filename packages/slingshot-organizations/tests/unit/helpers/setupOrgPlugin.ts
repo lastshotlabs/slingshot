@@ -31,6 +31,7 @@ import {
   createEventPublisher,
   createNoopMetricsEmitter,
   getActor,
+  noopLogger,
 } from '@lastshotlabs/slingshot-core';
 import type {
   AppEnv,
@@ -120,7 +121,7 @@ async function createTestAuthRuntime(
     evaluateUserAccess: async () => undefined,
     eventBus: bus,
     events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus }),
-    logger: { log: () => {}, authTrace: () => {} },
+    logger: { ...noopLogger, log: () => {}, authTrace: () => {} },
     config: createAuthResolvedConfig({
       emailVerification: { required: false },
     }),

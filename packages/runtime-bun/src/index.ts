@@ -464,7 +464,11 @@ export function installProcessSafetyNet(): void {
   });
 }
 
-/** @internal Resets process safety-net state for test isolation. */
+/**
+ * Reset process safety-net state for test isolation.
+ *
+ * @internal
+ */
 export function resetProcessSafetyNetForTest(): void {
   processHandlersInstalled = false;
   process.removeAllListeners('unhandledRejection');

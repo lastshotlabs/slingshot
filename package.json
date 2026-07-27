@@ -69,6 +69,7 @@
     "check:unsafe-full-adapter": "bun scripts/check-unsafe-full-adapter.ts",
     "build": "bun scripts/build.ts",
     "build:packages": "bun scripts/build.ts --packages-only",
+    "verify:packed-artifacts": "bun scripts/verify-packed-artifacts.ts",
     "prepublishOnly": "bun run hardening:full",
     "changeset": "changeset",
     "version-packages": "changeset version",
@@ -101,7 +102,7 @@
     "lint:deps": "depcruise packages/ src/ --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "hardening:core": "bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run test",
+    "hardening:core": "bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test",
     "hardening:full": "bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci",
     "docs:sync": "bun packages/docs/sync-workspace-docs.ts",
     "docs:api": "bun packages/docs/generate-api.ts",
@@ -142,6 +143,8 @@
     "@aws-sdk/client-s3": ">=3.0",
     "@aws-sdk/s3-request-presigner": ">=3.0",
     "@aws-sdk/lib-storage": ">=3.0",
+    "@authenio/samlify-xsd-schema-validator": ">=1.0 <2",
+    "pg": ">=8.20 <9",
     "@lastshotlabs/slingshot-admin": "workspace:*",
     "@lastshotlabs/slingshot-bullmq": "workspace:*",
     "@lastshotlabs/slingshot-community": "workspace:*",
@@ -157,6 +160,8 @@
     "@lastshotlabs/slingshot-permissions": "workspace:*",
     "@lastshotlabs/slingshot-postgres": "workspace:*",
     "@lastshotlabs/slingshot-push": "workspace:*",
+    "@lastshotlabs/slingshot-runtime-bun": "workspace:*",
+    "@lastshotlabs/slingshot-infra": "workspace:*",
     "@lastshotlabs/slingshot-webhooks": "workspace:*"
   },
   "peerDependenciesMeta": {
@@ -197,6 +202,12 @@
       "optional": true
     },
     "@aws-sdk/lib-storage": {
+      "optional": true
+    },
+    "@authenio/samlify-xsd-schema-validator": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "@lastshotlabs/slingshot-admin": {
@@ -242,6 +253,12 @@
       "optional": true
     },
     "@lastshotlabs/slingshot-push": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-runtime-bun": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-infra": {
       "optional": true
     },
     "@lastshotlabs/slingshot-webhooks": {

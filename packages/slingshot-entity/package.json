@@ -44,6 +44,7 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
+    "@faker-js/faker": ">=10.0 <11",
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {

@@ -46,14 +46,18 @@
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
+    "@aws-sdk/client-sesv2": ">=3.0",
+    "@react-email/render": ">=2.0 <3",
+    "bullmq": ">=5 <6",
     "hono": ">=4.12.14 <5",
+    "ioredis": ">=5 <6",
     "zod": ">=4.0 <5"
   },
   "peerDependenciesMeta": {
     "@react-email/render": {
       "optional": true
     },
-    "@aws-sdk/client-ses": {
+    "@aws-sdk/client-sesv2": {
       "optional": true
     },
     "bullmq": {

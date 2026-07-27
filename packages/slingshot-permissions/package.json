@@ -48,7 +48,8 @@
   },
   "peerDependencies": {
     "pg": "^8.20.0",
-    "mongoose": ">=9.0 <10"
+    "mongoose": ">=9.0 <10",
+    "zod": ">=4.0 <5"
   },
   "peerDependenciesMeta": {
     "pg": {

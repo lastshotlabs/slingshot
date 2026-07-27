@@ -69,6 +69,7 @@
       },
       "peerDependencies": {
         "@anthropic-ai/sdk": ">=0.30",
+        "@authenio/samlify-xsd-schema-validator": ">=1.0 <2",
         "@aws-sdk/client-s3": ">=3.0",
         "@aws-sdk/client-ssm": ">=3.0",
         "@aws-sdk/lib-storage": ">=3.0",
@@ -77,6 +78,7 @@
         "@lastshotlabs/slingshot-bullmq": "workspace:*",
         "@lastshotlabs/slingshot-community": "workspace:*",
         "@lastshotlabs/slingshot-deep-links": "workspace:*",
+        "@lastshotlabs/slingshot-infra": "workspace:*",
         "@lastshotlabs/slingshot-interactions": "workspace:*",
         "@lastshotlabs/slingshot-kafka": "workspace:*",
         "@lastshotlabs/slingshot-mail": "workspace:*",
@@ -88,6 +90,7 @@
         "@lastshotlabs/slingshot-permissions": "workspace:*",
         "@lastshotlabs/slingshot-postgres": "workspace:*",
         "@lastshotlabs/slingshot-push": "workspace:*",
+        "@lastshotlabs/slingshot-runtime-bun": "workspace:*",
         "@lastshotlabs/slingshot-webhooks": "workspace:*",
         "@simplewebauthn/server": ">=10.0.0",
         "arctic": "^3.7.0",
@@ -97,11 +100,13 @@
         "jose": "6.2.0",
         "mongoose": ">=9.0 <10",
         "otpauth": ">=9.0 <10",
+        "pg": ">=8.20 <9",
         "samlify": ">=2.13.0 <3",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
         "@anthropic-ai/sdk",
+        "@authenio/samlify-xsd-schema-validator",
         "@aws-sdk/client-s3",
         "@aws-sdk/client-ssm",
         "@aws-sdk/lib-storage",
@@ -110,6 +115,7 @@
         "@lastshotlabs/slingshot-bullmq",
         "@lastshotlabs/slingshot-community",
         "@lastshotlabs/slingshot-deep-links",
+        "@lastshotlabs/slingshot-infra",
         "@lastshotlabs/slingshot-interactions",
         "@lastshotlabs/slingshot-kafka",
         "@lastshotlabs/slingshot-mail",
@@ -121,6 +127,7 @@
         "@lastshotlabs/slingshot-permissions",
         "@lastshotlabs/slingshot-postgres",
         "@lastshotlabs/slingshot-push",
+        "@lastshotlabs/slingshot-runtime-bun",
         "@lastshotlabs/slingshot-webhooks",
         "@simplewebauthn/server",
         "arctic",
@@ -129,6 +136,7 @@
         "jose",
         "mongoose",
         "otpauth",
+        "pg",
         "samlify",
       ],
     },
@@ -187,6 +195,7 @@
       },
       "peerDependencies": {
         "hono": ">=4.12.14 <5",
+        "jose": ">=6.0 <7",
         "zod": ">=4.0 <5",
       },
     },
@@ -226,13 +235,13 @@
       },
       "peerDependencies": {
         "@aws-sdk/client-s3": ">=3.0",
-        "@aws-sdk/lib-storage": "*",
+        "@aws-sdk/lib-storage": ">=3.0",
         "@aws-sdk/s3-request-presigner": ">=3.0",
-        "better-sqlite3": "*",
+        "better-sqlite3": ">=9.0",
         "hono": ">=4.12.14 <5",
-        "ioredis": "*",
-        "mongoose": "*",
-        "pg": "*",
+        "ioredis": ">=5 <6",
+        "mongoose": ">=9.0 <10",
+        "pg": ">=8.20 <9",
         "sharp": "*",
         "zod": ">=4.0 <5",
       },
@@ -257,9 +266,11 @@
         "@lastshotlabs/slingshot-postgres": "workspace:*",
       },
       "peerDependencies": {
+        "@authenio/samlify-xsd-schema-validator": ">=1.0 <2",
         "@lastshotlabs/slingshot-postgres": "workspace:*",
         "@simplewebauthn/server": ">=10.0.0",
         "arctic": ">=3.0",
+        "bullmq": ">=5 <6",
         "hono": ">=4.12.18 <5",
         "ioredis": ">=5 <6",
         "jose": ">=6.0",
@@ -270,8 +281,10 @@
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
+        "@authenio/samlify-xsd-schema-validator",
         "@lastshotlabs/slingshot-postgres",
         "@simplewebauthn/server",
+        "bullmq",
         "ioredis",
         "mongoose",
         "otpauth",
@@ -320,11 +333,11 @@
       },
       "peerDependencies": {
         "@lastshotlabs/slingshot-permissions": "workspace:*",
-        "better-sqlite3": "*",
+        "better-sqlite3": ">=9.0",
         "hono": ">=4.12.14 <5",
-        "ioredis": "*",
-        "mongoose": "*",
-        "pg": "*",
+        "ioredis": ">=5 <6",
+        "mongoose": ">=9.0 <10",
+        "pg": ">=8.20 <9",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
@@ -391,6 +404,10 @@
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
+      "peerDependencies": {
+        "hono": ">=4.12.14 <5",
+        "zod": ">=4.0 <5",
+      },
     },
     "packages/slingshot-emoji": {
       "name": "@lastshotlabs/slingshot-emoji",
@@ -418,6 +435,7 @@
       "name": "@lastshotlabs/slingshot-entity",
       "version": "0.2.7",
       "dependencies": {
+        "@faker-js/faker": ">=10.0 <11",
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
       "peerDependencies": {
@@ -443,6 +461,10 @@
       "version": "0.2.2",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
+      },
+      "peerDependencies": {
+        "hono": ">=4.12.14 <5",
+        "zod": ">=4.0 <5",
       },
     },
     "packages/slingshot-image": {
@@ -474,11 +496,15 @@
       "peerDependencies": {
         "@aws-sdk/client-s3": ">=3.0",
         "@aws-sdk/client-ssm": ">=3.0",
+        "ioredis": ">=5 <6",
+        "pg": ">=8.20 <9",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
         "@aws-sdk/client-s3",
         "@aws-sdk/client-ssm",
+        "ioredis",
+        "pg",
       ],
     },
     "packages/slingshot-interactions": {
@@ -531,15 +557,15 @@
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
       "peerDependencies": {
-        "@aws-sdk/client-ses": "*",
-        "@react-email/render": "*",
-        "bullmq": "*",
+        "@aws-sdk/client-sesv2": ">=3.0",
+        "@react-email/render": ">=2.0 <3",
+        "bullmq": ">=5 <6",
         "hono": ">=4.12.14 <5",
-        "ioredis": "*",
+        "ioredis": ">=5 <6",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
-        "@aws-sdk/client-ses",
+        "@aws-sdk/client-sesv2",
         "@react-email/render",
         "bullmq",
         "ioredis",
@@ -665,6 +691,7 @@
       "peerDependencies": {
         "mongoose": ">=9.0 <10",
         "pg": "^8.20.0",
+        "zod": ">=4.0 <5",
       },
       "optionalPeers": [
         "mongoose",
@@ -783,6 +810,8 @@
       },
       "peerDependencies": {
         "@tanstack/react-router": ">=1.0 <2",
+        "react": ">=18 <20",
+        "react-dom": ">=18 <20",
         "vite": ">=5 <8",
       },
       "optionalPeers": [
@@ -794,18 +823,18 @@
       "version": "0.2.4",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-entity": "workspace:*",
       },
       "peerDependencies": {
-        "@lastshotlabs/slingshot-entity": "workspace:*",
-        "bullmq": "*",
+        "@hono/zod-openapi": ">=0.18",
+        "bullmq": ">=5 <6",
         "hono": ">=4.12.14 <5",
-        "ioredis": "*",
+        "ioredis": ">=5 <6",
         "mongoose": ">=9.0 <10",
         "pg": "^8.20.0",
         "zod": ">=4.0 <5",
       },
       "optionalPeers": [
-        "@lastshotlabs/slingshot-entity",
         "bullmq",
         "ioredis",
         "mongoose",

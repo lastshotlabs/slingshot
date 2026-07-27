@@ -271,11 +271,11 @@ export function extractJSDoc(content: string, symbolName: string): string | null
   const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const patterns = [
     new RegExp(
-      `/\\*\\*[\\s\\S]*?\\*/\\s*export\\s+(?:async\\s+)?(?:function|class|const|let|var|interface|type|enum)\\s+${escapedName}\\b`,
+      `/\\*\\*(?:(?!\\*/)[\\s\\S])*\\*/\\s*export\\s+(?:async\\s+)?(?:function|class|const|let|var|interface|type|enum)\\s+${escapedName}\\b`,
       'g',
     ),
     new RegExp(
-      `/\\*\\*[\\s\\S]*?\\*/\\s*export\\s+(?:type\\s+)?\\{[^}]*\\b${escapedName}\\b[^}]*\\}\\s*(?:from\\s*['"][^'"]+['"])?`,
+      `/\\*\\*(?:(?!\\*/)[\\s\\S])*\\*/\\s*export\\s+(?:type\\s+)?\\{[^}]*\\b${escapedName}\\b[^}]*\\}\\s*(?:from\\s*['"][^'"]+['"])?`,
       'g',
     ),
   ];

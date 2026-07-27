@@ -53,6 +53,14 @@
 
 // Entity factory orchestrator
 export { createEntityFactories } from './createEntityFactories';
+export {
+  ENTITY_BACKEND_PROFILES,
+  UnsupportedEntityBackendError,
+  assertEntityBackendRequirements,
+  getEntityBackendProfile,
+  resolveEntityBackendRequirements,
+} from './backendProfiles';
+export type { MissingEntityBackendCapability } from './backendProfiles';
 
 // Individual adapter generators (for advanced use / custom wiring)
 export { createMemoryEntityAdapter } from './memoryAdapter';

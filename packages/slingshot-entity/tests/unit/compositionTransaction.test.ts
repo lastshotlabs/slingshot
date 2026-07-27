@@ -99,6 +99,14 @@ function createFakePostgresInfra(): {
       return { rows: [], rowCount: 1 };
     }
 
+    const selectByField =
+      /^SELECT \* FROM\s+([^\s]+)\s+WHERE\s+([^\s=]+)\s*=\s*\$1\s+LIMIT 1/i.exec(sql);
+    if (selectByField) {
+      const [, table, column] = selectByField;
+      const row = (currentStore()[table] ?? []).find(candidate => candidate[column] === params[0]);
+      return { rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 };
+    }
+
     throw new Error(`Unhandled SQL in fake Postgres adapter: ${sql}`);
   }
 
@@ -194,7 +202,13 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
         createThenFail: op.transaction({
           steps: [
             { op: 'create', entity: 'parents', input: { name: 'param:name' } },
-            { op: 'create', entity: 'missingEntity', input: { label: 'param:label' } },
+            {
+              op: 'arrayPush',
+              entity: 'children',
+              match: { id: 'param:missingChildId' },
+              field: 'parentId',
+              value: 'result:0.id',
+            },
           ],
         }),
       },
@@ -204,9 +218,9 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
       createThenFail(params: Record<string, unknown>): Promise<Array<Record<string, unknown>>>;
     };
 
-    await expect(composite.createThenFail({ name: 'Acme', label: 'HQ' })).rejects.toThrow(
-      "Entity 'missingEntity' not found",
-    );
+    await expect(
+      composite.createThenFail({ name: 'Acme', missingChildId: 'missing' }),
+    ).rejects.toThrow('arrayPush: record not found');
 
     expect(data[`slingshot_${Parent._storageName}`] ?? []).toHaveLength(0);
     expect(clientQueries).toContain('BEGIN');

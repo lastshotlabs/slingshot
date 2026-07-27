@@ -36,6 +36,7 @@ import type {
   TransactionOpConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { StoreType } from '@lastshotlabs/slingshot-core';
+import { assertCompositeEntityBackendRequirements } from './backendProfiles';
 import { createEntityFactories } from './createEntityFactories';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
 import { pipeExecutor } from './operationExecutors/pipe';
@@ -133,7 +134,7 @@ type InferCompositeAdapter<
  * receive the full adapters map at wiring time.
  *
  * **Atomicity:**
- * - `memory` — steps run sequentially in a single JS thread; already atomic.
+ * - `memory` — steps run sequentially but earlier writes are not rolled back after failure.
  * - `sqlite` — steps are wrapped in an explicit `BEGIN` / `COMMIT` / `ROLLBACK` block.
  * - `postgres` — transaction ops run on a single `pg` client inside `BEGIN` / `COMMIT` /
  *   `ROLLBACK`, so all steps share one real database transaction.
@@ -164,7 +165,7 @@ type InferCompositeAdapter<
  *     }),
  *   },
  * );
- * // docFactories.memory(infra) → { documents, snapshots, revert(params), clear() }
+ * // docFactories.postgres(infra) → { documents, snapshots, revert(params), clear() }
  * ```
  */
 export function createCompositeFactories<
@@ -180,6 +181,8 @@ export function createCompositeFactories<
   }
 
   function buildComposite(storeType: StoreType, infra: StoreInfra): InferCompositeAdapter<M, COps> {
+    assertCompositeEntityBackendRequirements(storeType, entities, operations);
+
     const adapters = {} as unknown as { [K in keyof M]: AdapterForEntry<M[K]> };
 
     for (const key of keys) {
@@ -188,11 +191,7 @@ export function createCompositeFactories<
 
     // Determine a transaction wrapper for backends that support it.
     let wrapInTransaction: ((fn: () => Promise<void>) => Promise<void>) | undefined;
-    if (storeType === 'memory') {
-      // Single-threaded; steps are already sequentially atomic. No wrapper needed
-      // but we still assign a pass-through so the option path is exercised uniformly.
-      wrapInTransaction = fn => fn();
-    } else if (storeType === 'sqlite') {
+    if (storeType === 'sqlite') {
       const db = infra.getSqliteDb() as unknown as SqliteDb;
       wrapInTransaction = async fn => {
         db.run('BEGIN');

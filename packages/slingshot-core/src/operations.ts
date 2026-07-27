@@ -593,18 +593,17 @@ export interface DeriveOpConfig {
  * Each backend key is an optional factory that receives the raw store handle and returns
  * a typed callable. Only the factory for the active `StoreType` is called at runtime.
  *
- * **Factory vs. external method:**
- * When backend factories are provided, the wiring layer calls the appropriate factory and
- * attaches the result as the named method on the adapter. When no factory is provided for
- * the active backend, the method is expected to be mixed onto the adapter externally
- * (e.g., from a composite adapter) — the wiring layer skips the op silently.
+ * **Standard vs. manual wiring:**
+ * Standard config-driven factories require a callable factory for the active backend.
+ * Startup fails with `UnsupportedEntityBackendError` when it is absent. Applications
+ * that supply operation methods externally must use manual adapter wiring instead.
  *
  * **Route auto-mounting:**
  * Set `http` to have the entity plugin auto-mount an HTTP route for this operation.
  * The method in `http.method` controls the HTTP verb; `http.path` overrides the URL
  * segment (defaults to `/{opName}` in kebab-case). The route handler calls
- * `adapter[opName](body)` — the method must be present on the adapter at request time,
- * whether wired by a factory or mixed in externally.
+ * `adapter[opName](body)` — standard wiring verifies that the method can be built before
+ * the adapter or route is constructed.
  *
  * @example
  * ```ts
@@ -616,9 +615,6 @@ export interface DeriveOpConfig {
  *     return parseInt(rows[0].count, 10);
  *   },
  * })
- *
- * // Route-only marker for a method mixed in from a composite adapter:
- * op.custom({ http: { method: 'post' } })
  * ```
  */
 export interface CustomOpConfig<Fn = unknown> {
@@ -982,6 +978,45 @@ export type OperationConfig =
   | ArrayPullOpConfig
   | ArraySetOpConfig
   | IncrementOpConfig;
+
+/**
+ * Runtime-complete list of declarative entity operation discriminants.
+ *
+ * Keep this list exhaustive with {@link OperationConfig}. Backend capability
+ * profiles, conformance registration, and generated documentation all consume
+ * this value so a new operation cannot exist only at the type level.
+ */
+export const ENTITY_OPERATION_KINDS = [
+  'lookup',
+  'exists',
+  'transition',
+  'fieldUpdate',
+  'aggregate',
+  'computedAggregate',
+  'batch',
+  'upsert',
+  'search',
+  'collection',
+  'consume',
+  'derive',
+  'transaction',
+  'pipe',
+  'custom',
+  'arrayPush',
+  'arrayPull',
+  'arraySet',
+  'increment',
+] as const satisfies readonly OperationConfig['kind'][];
+
+type AssertNever<T extends never> = T;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type MissingEntityOperationKind = AssertNever<
+  Exclude<OperationConfig['kind'], (typeof ENTITY_OPERATION_KINDS)[number]>
+>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type ExtraEntityOperationKind = AssertNever<
+  Exclude<(typeof ENTITY_OPERATION_KINDS)[number], OperationConfig['kind']>
+>;
 
 // ---------------------------------------------------------------------------
 // Named resolved-method types — one per op kind.

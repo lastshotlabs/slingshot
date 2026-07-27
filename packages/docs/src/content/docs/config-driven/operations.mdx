@@ -54,6 +54,10 @@ transaction-wrapped by the executor when correctness requires it. Use `op.transa
 you want to compose multiple operations as one explicit unit. Use optional `atomic` flags only on
 operations that expose a real semantic or performance tradeoff.
 
+Startup rejects an operation/backend pairing when the selected standard adapter cannot provide
+the required guarantee. Composite transaction rollback is currently supported by SQLite and Postgres;
+memory, MongoDB, and Redis fail startup for `op.transaction`.
+
 </Aside>
 
 ---
@@ -785,10 +789,11 @@ rawPostCount: op.custom({
   memory: store => (userId: string) =>
     [...store.values()].filter(r => r.authorId === userId && !r.deletedAt).length,
 });
-
-// Route-only marker for a method mixed in from a composite adapter
-hybridSearch: op.custom({ http: { method: 'post' } });
 ```
+
+Standard wiring requires a factory for the active backend and fails startup when one is absent.
+If your application mixes an operation method onto an adapter itself, use manual adapter wiring;
+`op.custom({ http: ... })` is not a route-only marker in standard factories.
 
 **Cross-entity access:** A `custom` handler's factory only receives its own entity's backend driver (e.g. `pool` for Postgres, `store` for memory). To access other entities' adapters — for example, creating a Transaction record from within an Account operation — capture adapters at startup with an `afterAdapters` hook:
 

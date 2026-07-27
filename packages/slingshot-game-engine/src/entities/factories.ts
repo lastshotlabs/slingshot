@@ -16,6 +16,16 @@ import { gameSessionOperations } from '../operations/session';
 import { GamePlayer } from './gamePlayer';
 import { GameSession } from './gameSession';
 
+const gamePlayerBaseOperations = {
+  findBySession: gamePlayerOperations.operations.findBySession,
+  findBySessionAndUser: gamePlayerOperations.operations.findBySessionAndUser,
+  incrementScore: gamePlayerOperations.operations.incrementScore,
+  updateConnection: gamePlayerOperations.operations.updateConnection,
+  countBySession: gamePlayerOperations.operations.countBySession,
+  assignTeam: gamePlayerOperations.operations.assignTeam,
+  assignRole: gamePlayerOperations.operations.assignRole,
+};
+
 /** Repository factories for the GameSession entity, dispatched by `StoreType`. */
 export const gameSessionFactories = createEntityFactories(
   GameSession,
@@ -23,7 +33,4 @@ export const gameSessionFactories = createEntityFactories(
 );
 
 /** Repository factories for the GamePlayer entity, dispatched by `StoreType`. */
-export const gamePlayerFactories = createEntityFactories(
-  GamePlayer,
-  gamePlayerOperations.operations,
-);
+export const gamePlayerFactories = createEntityFactories(GamePlayer, gamePlayerBaseOperations);

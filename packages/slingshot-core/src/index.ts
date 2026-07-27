@@ -598,6 +598,8 @@ export {
 } from './searchPluginRuntime';
 
 // --- Config-driven operation types (shared between slingshot-data and framework) ---
+/** Runtime-complete operation-kind registry used by conformance and generated docs. */
+export { ENTITY_OPERATION_KINDS } from './operations';
 /** Config-driven operation DSL types shared by generators, runtime executors, and route config. */
 export type {
   FilterExpression,
@@ -671,6 +673,18 @@ export type {
   PipeMethod,
   CollectionMethod,
 } from './operations';
+
+// --- Entity backend capabilities ---
+/** Runtime-complete entity backend capability registry. */
+export { ENTITY_BACKEND_CAPABILITIES } from './entityCapabilities';
+/** Shared backend capability profile and requirement contracts. */
+export type {
+  EntityOperationKind,
+  EntityBackendCapability,
+  EntityBackendCapabilityClaim,
+  EntityBackendProfile,
+  EntityBackendRequirement,
+} from './entityCapabilities';
 
 // --- Entity route config types ---
 export type {

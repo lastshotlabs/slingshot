@@ -134,9 +134,10 @@ export function buildWebhookEntityModules(args: BuildWebhookEntityModulesArgs) {
     wiring: {
       mode: 'manual',
       buildAdapter: (storeType, infra) => {
+        // Manual wiring supplies `transition` through the runtime transform,
+        // so the standard base factory receives only its CRUD contract.
         const base = resolveStandardAdapter({
           config: WebhookDeliveryEntity,
-          operations: webhookDeliveryOperations.operations,
           storeType,
           infra,
         });

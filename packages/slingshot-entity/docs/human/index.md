@@ -125,6 +125,21 @@ Built-in defaults: Redis key is `${storageName}:${appName}:${pk}`, auto-default 
 `'uuid'`/`'cuid'`/`'now'`, on-update handles `'now'`. Custom resolvers return `undefined`
 to fall through to the built-in handler.
 
+### Backend Capability Contract
+
+Standard entity factories validate the resolved entity and operation requirements before
+accessing backend infrastructure. `ENTITY_BACKEND_PROFILES`, `getEntityBackendProfile()`,
+and `UnsupportedEntityBackendError` expose the same immutable support contract used by
+startup. Unsupported semantics fail deterministically instead of silently degrading.
+
+Redis does not support secondary or compound uniqueness in standard wiring. Memory, MongoDB,
+and Redis do not currently support rollback for `op.transaction`; SQLite and Postgres do.
+Custom operations require a factory for the selected backend. Use manual adapter wiring when
+the application supplies operation methods itself.
+
+Primary-key creation is insert-only across standard adapters. In particular, MongoDB uses a
+strict insert and Redis uses `SET ... NX`, so create never overwrites an existing record.
+
 ### Operation Registry
 
 Policy and data-scope logic resolves operation semantics through a centralized registry

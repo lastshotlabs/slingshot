@@ -17,7 +17,7 @@
  * @internal
  */
 import { HTTPException } from 'hono/http-exception';
-import type { StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
+import type { OperationConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -40,6 +40,14 @@ import {
 
 type EntityFactoryCreator = typeof createEntityFactories;
 
+function standardBaseOperations(
+  operations: Readonly<Record<string, OperationConfig>>,
+): Record<string, OperationConfig> {
+  return Object.fromEntries(
+    Object.entries(operations).filter(([, operation]) => operation.kind !== 'custom'),
+  );
+}
+
 /**
  * Resolve a config-driven adapter for an entity. Matches the framework's
  * standard-wiring code path so manual-wiring entities here behave the same
@@ -53,7 +61,7 @@ function resolveStandardAdapter(args: {
     | EntityFactoryCreator
     | undefined;
   const factoryCreator = creator ?? createEntityFactories;
-  const factories = factoryCreator(Asset, assetOperations.operations);
+  const factories = factoryCreator(Asset, standardBaseOperations(assetOperations.operations));
   return resolveRepo(factories, args.storeType, args.infra) as unknown as BareEntityAdapter;
 }
 

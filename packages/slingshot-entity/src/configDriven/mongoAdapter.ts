@@ -11,7 +11,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import { HttpError, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -43,6 +43,7 @@ interface MongooseSchema {
 }
 
 interface MongooseModel {
+  create(document: Record<string, unknown>): Promise<unknown>;
   findOne(filter: Record<string, unknown>, projection?: string): MongooseQuery;
   find(filter: Record<string, unknown>): MongooseFindQuery;
   updateOne(
@@ -131,6 +132,15 @@ function mongooseType(fieldType: FieldType, mg: MongooseModule): unknown {
  */
 
 const mongoAdapterLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
+
+function isMongoDuplicateError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  return (
+    candidate.code === 11000 ||
+    (typeof candidate.message === 'string' && /duplicate key error/i.test(candidate.message))
+  );
+}
 
 /** Creates a MongoDB-backed {@link EntityAdapter} for the given entity config. */
 export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
@@ -325,7 +335,14 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         doc[mongoTtlField] = new Date(Date.now() + ttlSeconds * 1000);
       }
 
-      await Model.updateOne({ [mongoPkField]: doc[mongoPkField] }, { $set: doc }, { upsert: true });
+      try {
+        await Model.create(doc);
+      } catch (error) {
+        if (isMongoDuplicateError(error)) {
+          throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+        }
+        throw error;
+      }
       const created: Entity = { ...record } as unknown as Entity;
       return created;
     },

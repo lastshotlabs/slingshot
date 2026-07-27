@@ -27,6 +27,11 @@ export { op } from './builders/op';
 /** Runtime factories and helpers that turn entity config into live adapters and schemas. */
 export {
   createEntityFactories,
+  ENTITY_BACKEND_PROFILES,
+  UnsupportedEntityBackendError,
+  assertEntityBackendRequirements,
+  getEntityBackendProfile,
+  resolveEntityBackendRequirements,
   createMemoryEntityAdapter,
   createRedisEntityAdapter,
   createSqliteEntityAdapter,
@@ -44,7 +49,7 @@ export {
   fromPgRow,
 } from './configDriven/index';
 /** Runtime-generated schema bundle produced from resolved entity config. */
-export type { GeneratedSchemas } from './configDriven/index';
+export type { GeneratedSchemas, MissingEntityBackendCapability } from './configDriven/index';
 
 // Types
 /** Shared entity-definition, field, filter, and operation contracts re-exported for authoring. */

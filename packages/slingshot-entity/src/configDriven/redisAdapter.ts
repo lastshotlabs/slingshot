@@ -9,6 +9,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
+import { HttpError } from '@lastshotlabs/slingshot-core';
 import type { RedisLike } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
@@ -125,7 +126,14 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
         config.fields,
         customAutoDefault,
       );
-      await storeRecord(record);
+      const pk = record[pkField] as string | number;
+      const serialised = JSON.stringify(toRedisRecord(record, config.fields));
+      const stored = ttlSeconds
+        ? await redis.set(rkey(pk), serialised, 'EX', ttlSeconds, 'NX')
+        : await redis.set(rkey(pk), serialised, 'NX');
+      if (stored === null) {
+        throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+      }
       return { ...record } as unknown as Entity;
     },
 

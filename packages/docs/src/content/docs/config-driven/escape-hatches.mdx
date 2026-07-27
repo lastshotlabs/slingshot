@@ -52,6 +52,8 @@ Full examples: [Factories wiring mode](/entity-system/storage-and-adapter-wiring
 Use `entity({ wiring: { mode: 'manual', buildAdapter(...) } })` when you need full control over adapter construction.
 
 This is the stronger escape hatch for non-standard persistence composition, custom driver integration, and repo layers that do not fit the standard factories path.
+It is also the correct mode when operation methods are supplied externally: standard factories
+require every `op.custom` declaration to include a factory for the active backend.
 
 Full examples: [Manual wiring mode](/entity-system/storage-and-adapter-wiring/#manual)
 

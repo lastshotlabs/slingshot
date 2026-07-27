@@ -8,7 +8,12 @@ import { Asset, assetOperations } from './asset';
  */
 export const DEFAULT_ASSET_REGISTRY_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-const baseAssetFactories = createEntityFactories(Asset, assetOperations.operations);
+const assetBaseOperations = {
+  listByOwner: assetOperations.operations.listByOwner,
+  existsByKey: assetOperations.operations.existsByKey,
+  findByKey: assetOperations.operations.findByKey,
+};
+const baseAssetFactories = createEntityFactories(Asset, assetBaseOperations);
 
 function isExpired(asset: AssetRecord, ttlSeconds: number): boolean {
   const createdAtMs = Date.parse(asset.createdAt);

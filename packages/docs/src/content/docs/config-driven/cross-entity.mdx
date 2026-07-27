@@ -54,6 +54,8 @@ For multi-step entity behavior, use the higher-order operation DSL first:
 Those operation kinds keep the workflow declarative and compatible with generated adapters and routes.
 
 See [Operations Reference](/config-driven/operations/) for the exact shape of each operation.
+Atomic batch, computed aggregate, and rollback support are store-specific; the generated
+[entity backend support matrix](/reference/entity-backend-support/) is the source of truth.
 
 ## When to move out of the entity DSL
 
@@ -108,3 +110,4 @@ Use this decision rule:
 - [Adapters and Factories](/config-driven/adapters/)
 - [Routes](/config-driven/routes/)
 - [Escape Hatches](/config-driven/escape-hatches/)
+- [Entity Backend Support](/reference/entity-backend-support/)

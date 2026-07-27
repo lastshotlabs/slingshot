@@ -70,6 +70,10 @@ export function createDockerTestCommands(
         'packages/slingshot-entity/tests/conformance/redis.test.ts',
       ],
     },
+    {
+      label: 'five-backend entity conformance report',
+      command: ['bun', 'run', 'entity:conformance:report'],
+    },
   ];
 }
 

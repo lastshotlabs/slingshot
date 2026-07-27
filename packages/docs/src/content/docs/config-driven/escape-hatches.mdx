@@ -65,7 +65,10 @@ Full examples: [Composite factories](/entity-system/storage-and-adapter-wiring/#
 
 ### Storage backend swapping
 
-Switch the backing store for entities at the app root without changing entity definitions or adapter code. Supports memory, SQLite, Postgres, Redis, and Mongo.
+Switch the backing store for entities at the app root without changing entity definitions or
+adapter code. Memory, SQLite, Postgres, Redis, and Mongo expose one factory surface, while the
+generated [entity backend support matrix](/reference/entity-backend-support/) records which
+semantics each store actually proves.
 
 Full examples: [Backend swapping at the app root](/entity-system/storage-and-adapter-wiring/#backend-swapping-at-the-app-root)
 

@@ -38,15 +38,18 @@ bun add @lastshotlabs/slingshot
 - `dev`: `bun --watch src/index.ts`
 - `docs:api`: `bun packages/docs/generate-api.ts`
 - `docs:build`: `bun run docs:generate && bun run docs:install && cd packages/docs && bun run build`
-- `docs:ci`: `bun run docs:generate && bun run docs:typecheck && bun run docs:impact && bun run docs:coverage && bun run examples:typecheck && bun run examples:coverage && bun run examples:smoke`
+- `docs:ci`: `bun run docs:entity-support:check && bun run docs:generate && bun run docs:typecheck && bun run docs:impact && bun run docs:coverage && bun run examples:typecheck && bun run examples:coverage && bun run examples:smoke`
 - `docs:coverage`: `bun packages/docs/coverage-docs.ts`
 - `docs:dev`: `bun run docs:generate && bun run docs:install && cd packages/docs && bun run dev`
-- `docs:generate`: `bun run docs:sync && bun run docs:api`
+- `docs:entity-support`: `bun scripts/generate-entity-support-matrix.ts`
+- `docs:entity-support:check`: `bun scripts/generate-entity-support-matrix.ts --check`
+- `docs:generate`: `bun run docs:entity-support && bun run docs:sync && bun run docs:api`
 - `docs:impact`: `bun packages/docs/docs-impact.ts`
 - `docs:install`: `cd packages/docs && bun install`
 - `docs:preview`: `bun run docs:build && cd packages/docs && bun run preview`
 - `docs:sync`: `bun packages/docs/sync-workspace-docs.ts`
 - `docs:typecheck`: `bun packages/docs/typecheck-docs.ts`
+- `entity:conformance:report`: `bun scripts/entity-conformance-report.ts`
 - `examples:coverage`: `bun scripts/examples-coverage.ts`
 - `examples:smoke`: `bun scripts/examples-smoke.ts`
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`

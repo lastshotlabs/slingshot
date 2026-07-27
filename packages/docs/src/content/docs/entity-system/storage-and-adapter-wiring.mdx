@@ -11,6 +11,8 @@ Standard wiring checks the complete resolved entity and operation contract befor
 backend connection. If the selected backend cannot honor required semantics, startup throws
 `UnsupportedEntityBackendError` with every missing capability and the configuration that
 required it. This prevents a backend switch from silently weakening behavior.
+See the generated [entity backend support matrix](/reference/entity-backend-support/) for the
+exact semantic claims and unsupported reasons for every standard store.
 
 ## Start with in-memory (the default)
 
@@ -169,6 +171,57 @@ Current important boundaries:
 
 Use manual adapter wiring when your application intentionally provides semantics outside the
 standard factory contract.
+
+### Source-backed startup examples
+
+This PostgreSQL entity configuration is accepted because PostgreSQL claims and proves configured
+uniqueness:
+
+```typescript
+import {
+  assertEntityBackendRequirements,
+  defineEntity,
+  field,
+} from '@lastshotlabs/slingshot-entity';
+
+const Account = defineEntity('Account', {
+  fields: {
+    id: field.string({ primary: true }),
+    email: field.string(),
+  },
+  uniques: [{ fields: ['email'] }],
+});
+
+assertEntityBackendRequirements('postgres', Account);
+```
+
+The same configuration is rejected for standard Redis wiring before the Redis client is opened:
+
+```typescript
+import {
+  UnsupportedEntityBackendError,
+  assertEntityBackendRequirements,
+  defineEntity,
+  field,
+} from '@lastshotlabs/slingshot-entity';
+
+const Account = defineEntity('Account', {
+  fields: {
+    id: field.string({ primary: true }),
+    email: field.string(),
+  },
+  uniques: [{ fields: ['email'] }],
+});
+
+try {
+  assertEntityBackendRequirements('redis', Account);
+} catch (error) {
+  if (error instanceof UnsupportedEntityBackendError) {
+    console.error(error.code); // "SLINGSHOT_ENTITY_BACKEND_UNSUPPORTED"
+    console.error(error.missing[0]?.capability); // "constraint.unique"
+  }
+}
+```
 
 ## Composite factories
 

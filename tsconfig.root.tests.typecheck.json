@@ -21,6 +21,8 @@
     "scripts/publish.ts",
     "scripts/verify-packed-artifacts.ts",
     "scripts/postgres-capacity-smoke.ts",
+    "scripts/entity-conformance-report.ts",
+    "scripts/generate-entity-support-matrix.ts",
     "tsup.cli.config.ts",
     "vitest.config.ts"
   ],

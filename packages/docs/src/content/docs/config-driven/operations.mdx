@@ -5,7 +5,11 @@ description: Complete reference for all 17 built-in operation kinds — JSON con
 
 import { Aside } from '@astrojs/starlight/components';
 
-Operations are plain JSON config objects with a `kind` field. The framework reads those objects and generates typed adapter methods (wired to five backends — memory, SQLite, Postgres, MongoDB, Redis) and HTTP routes. Standard CRUD comes from the entity definition itself; operations extend it with domain-specific behavior.
+Operations are plain JSON config objects with a `kind` field. The framework reads those objects
+and generates typed adapter methods and HTTP routes. Standard CRUD comes from the entity definition
+itself; operations extend it with domain-specific behavior. Backend wiring is capability-gated, so
+use the generated [entity backend support matrix](/reference/entity-backend-support/) instead of
+assuming every operation has identical semantics on every store.
 
 Each operation is a JSON object like:
 

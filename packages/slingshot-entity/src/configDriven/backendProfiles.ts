@@ -75,9 +75,18 @@ function defineEntityBackendProfile(
  */
 export const ENTITY_BACKEND_PROFILES = deepFreeze({
   memory: defineEntityBackendProfile('memory', false, {
+    'operation.transaction':
+      'Memory cannot expose transaction operations because it does not provide rollback.',
     'transaction.rollback': 'Memory transactions do not restore earlier writes after failure.',
   }),
   sqlite: defineEntityBackendProfile('sqlite', true, {
+    'operation.arrayPush':
+      'SQLite cannot expose array push until array mutation is implemented atomically.',
+    'operation.arrayPull':
+      'SQLite cannot expose array pull until array mutation is implemented atomically.',
+    'operation.arraySet':
+      'SQLite cannot expose array set until array mutation is implemented atomically.',
+    'operation.consume': 'SQLite cannot expose consume until select-and-delete is atomic.',
     'atomic.array-mutation':
       'SQLite array mutation currently reads and writes in separate statements without a transaction.',
     'atomic.consume':
@@ -87,6 +96,8 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
   }),
   postgres: defineEntityBackendProfile('postgres', true, {}),
   mongo: defineEntityBackendProfile('mongo', true, {
+    'operation.transaction':
+      'MongoDB cannot expose transaction operations without a session transaction.',
     'atomic.batch':
       'MongoDB batch writes are atomic per document, not across the matched document set.',
     'atomic.computed-aggregate':
@@ -96,6 +107,18 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
   redis: defineEntityBackendProfile('redis', true, {
     'constraint.unique':
       'Redis does not maintain atomic secondary or compound unique-index reservations.',
+    'operation.transition':
+      'Redis cannot expose transition while it uses a non-atomic read-modify-write sequence.',
+    'operation.increment':
+      'Redis cannot expose increment while it uses a non-atomic JSON read-modify-write sequence.',
+    'operation.arrayPush': 'Redis cannot expose array push while array mutation is non-atomic.',
+    'operation.arrayPull': 'Redis cannot expose array pull while array mutation is non-atomic.',
+    'operation.arraySet': 'Redis cannot expose array set while array mutation is non-atomic.',
+    'operation.consume':
+      'Redis cannot expose consume while scan, read, and delete use separate commands.',
+    'operation.upsert': 'Redis cannot expose upsert without an atomic uniqueness reservation.',
+    'operation.transaction':
+      'Redis cannot expose transaction operations because composite execution does not roll back.',
     'atomic.transition': 'Redis transition uses a non-atomic read-modify-write sequence.',
     'atomic.increment': 'Redis increment uses a non-atomic JSON read-modify-write sequence.',
     'atomic.array-mutation': 'Redis array mutation uses a non-atomic read-modify-write sequence.',

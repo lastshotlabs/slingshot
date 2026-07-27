@@ -685,6 +685,26 @@ const NAMED_OPERATIONS = [
     },
   ),
   defineCase(
+    'operation.batch-best-effort',
+    'non-atomic batch remains available without claiming an all-record transaction',
+    ['crud.create', 'crud.read', 'operation.batch'],
+    async harness => {
+      const target = adapter(harness);
+      await target.create(recordInput('batch-best-effort-1', { category: 'batch-best-effort' }));
+      await target.create(recordInput('batch-best-effort-2', { category: 'batch-best-effort' }));
+      assertEqual(
+        await operation(target, 'markGroupBestEffort')({ group: 'batch-best-effort' }),
+        2,
+        'Best-effort batch count',
+      );
+      assertEqual(
+        (await target.getById('batch-best-effort-1'))?.status,
+        'active',
+        'Best-effort batch first row',
+      );
+    },
+  ),
+  defineCase(
     'operation.computed-aggregate',
     'computed aggregate materializes a result on its target',
     ['crud.create', 'crud.read', 'operation.computedAggregate', 'atomic.computed-aggregate'],
@@ -700,6 +720,29 @@ const NAMED_OPERATIONS = [
         JSON.stringify((await target.getById('computed-target'))?.metadata),
         JSON.stringify({ total: 2 }),
         'Materialized aggregate',
+      );
+    },
+  ),
+  defineCase(
+    'operation.computed-aggregate-best-effort',
+    'non-atomic computed aggregate remains available without a transaction claim',
+    ['crud.create', 'crud.read', 'operation.computedAggregate'],
+    async harness => {
+      const target = adapter(harness);
+      await target.create(
+        recordInput('computed-best-effort-target', { category: 'computed-best-effort' }),
+      );
+      await target.create(
+        recordInput('computed-best-effort-source', { category: 'computed-best-effort' }),
+      );
+      await operation(
+        target,
+        'materializeGroupCountBestEffort',
+      )({ group: 'computed-best-effort', id: 'computed-best-effort-target' });
+      assertEqual(
+        JSON.stringify((await target.getById('computed-best-effort-target'))?.metadata),
+        JSON.stringify({ total: 2 }),
+        'Best-effort materialized aggregate',
       );
     },
   ),

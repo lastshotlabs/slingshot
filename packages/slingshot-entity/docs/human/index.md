@@ -164,6 +164,10 @@ Backend authors and framework contributors can run the same capability-selected 
 catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory,
 temporary-file SQLite, live PostgreSQL, live MongoDB, and live Redis drivers:
 
+The generated [entity backend support matrix](/reference/entity-backend-support/) is sourced from
+the same immutable profiles. Memory is intended for development and tests; it is neither durable
+nor rollback-capable for composite transactions.
+
 ```ts
 import {
   createMongoEntityConformanceDriver,

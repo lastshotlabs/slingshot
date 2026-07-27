@@ -546,11 +546,19 @@ describe('script entrypoints', () => {
 
     const dockerEnv = dockerModule.getDockerEnv({ POSTGRES_URL: 'postgres://custom' });
     expect(dockerEnv.TEST_POSTGRES_URL).toBe('postgres://custom');
+    expect(dockerEnv.TEST_MONGO_URL).toBe('mongodb://localhost:27018/slingshot_test');
     expect(
       dockerModule
         .createDockerTestCommands([])
         .some((step: { command: string[] }) =>
           step.command.includes('packages/slingshot-entity/tests/conformance/postgres.test.ts'),
+        ),
+    ).toBe(true);
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some((step: { command: string[] }) =>
+          step.command.includes('packages/slingshot-entity/tests/conformance/mongo.test.ts'),
         ),
     ).toBe(true);
 

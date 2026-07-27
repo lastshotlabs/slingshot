@@ -21,8 +21,8 @@
  * - SQLite: `UPDATE ... WHERE` followed by `SELECT` (two statements, not wrapped in
  *   an explicit transaction).
  * - Postgres: `UPDATE ... WHERE ... RETURNING *` — single atomic statement.
- * - Mongo: `updateOne + findOne` — not atomic; a concurrent delete could cause the
- *   follow-up `findOne` to return `null`, triggering the "Record not found" error.
+ * - Mongo: `findOneAndUpdate(..., { new: true })` — the guard and mutation are
+ *   applied atomically and the updated document is returned by the same command.
  * - Redis: read-modify-write — not atomic across keys.
  */
 import type { FieldUpdateOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
@@ -276,9 +276,9 @@ export function fieldUpdatePostgres(
 /**
  * Create a fieldUpdate executor for the MongoDB store.
  *
- * Calls `Model.updateOne(query, { $set })` then `Model.findOne(query).lean()`.
- * The follow-up read is necessary because Mongoose's `updateOne` does not return
- * the updated document. Throws if `findOne` returns `null`.
+ * Calls `Model.findOneAndUpdate(query, { $set }, { new: true }).lean()` so a
+ * guard-changing write returns the updated document without reusing the stale
+ * guard in a second query.
  *
  * @param op - FieldUpdate operation config.
  * @param config - Resolved entity config (provides `fields` for PK detection).
@@ -307,8 +307,7 @@ export function fieldUpdateMongo(
       if (input[f] !== undefined) $set[f] = input[f];
     }
     const Model = getModel();
-    await Model.updateOne(query, { $set });
-    const doc = await Model.findOne(query).lean();
+    const doc = await Model.findOneAndUpdate(query, { $set }, { returnDocument: 'after' }).lean();
     if (!doc) throw new Error(`[${config.name}] Record not found`);
     return fromDoc(doc);
   };

@@ -178,6 +178,7 @@ const RECORD_OPERATIONS = deepFreeze({
     memory: () => async () => 'pong',
     sqlite: () => async () => 'pong',
     postgres: () => async () => 'pong',
+    mongo: () => async () => 'pong',
   },
   pushTag: {
     kind: 'arrayPush',

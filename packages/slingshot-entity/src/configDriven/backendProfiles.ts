@@ -87,8 +87,6 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
   }),
   postgres: defineEntityBackendProfile('postgres', true, {}),
   mongo: defineEntityBackendProfile('mongo', true, {
-    'atomic.consume':
-      'MongoDB consume currently finds and deletes in separate operations instead of findOneAndDelete.',
     'atomic.batch':
       'MongoDB batch writes are atomic per document, not across the matched document set.',
     'atomic.computed-aggregate':

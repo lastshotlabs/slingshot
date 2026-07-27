@@ -238,10 +238,11 @@ export function upsertMongo(
   getModel: () => MongoModel,
   fromDoc: (doc: Record<string, unknown>) => Record<string, unknown>,
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return async input => {
     const query: Record<string, unknown> = {};
     for (const f of op.match) {
-      query[config.fields[f].primary ? '_id' : f] = input[f];
+      query[config.fields[f].primary ? config._storageFields.mongoPkField : f] = input[f];
     }
     const $set: Record<string, unknown> = {};
     for (const f of op.set) {
@@ -251,15 +252,17 @@ export function upsertMongo(
     const insertRecord = resolveOnCreate(op, config, input);
     for (const [f, v] of Object.entries(insertRecord)) {
       if (op.match.includes(f) || op.set.includes(f)) continue;
-      const mongoField = f === config._pkField ? '_id' : f;
+      const mongoField = f === config._pkField ? config._storageFields.mongoPkField : f;
       $setOnInsert[mongoField] = v;
     }
     const Model = getModel();
     const update: Record<string, unknown> = { $set };
     if (Object.keys($setOnInsert).length > 0) update.$setOnInsert = $setOnInsert;
-    await Model.updateOne(query, update, { upsert: true });
+    const result = await Model.updateOne(query, update, { upsert: true });
     const doc = await Model.findOne(query).lean();
-    return doc ? fromDoc(doc) : input;
+    const entity = doc ? fromDoc(doc) : input;
+    const created = (result.upsertedCount ?? 0) > 0 || result.upsertedId != null;
+    return returnsCreated ? { entity, created } : entity;
   };
 }
 

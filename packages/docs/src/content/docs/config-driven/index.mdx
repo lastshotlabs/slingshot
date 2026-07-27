@@ -50,11 +50,11 @@ Use this mapping:
 
 Framework contributors can verify config-driven entity semantics through the public
 `@lastshotlabs/slingshot-entity/testing` entry point. `runEntityConformance()` runs one frozen,
-backend-independent catalog, while the memory, temporary-file SQLite, and live PostgreSQL drivers
-select cases only from their immutable capability profiles. The PostgreSQL driver uses
-`TEST_POSTGRES_URL` and a unique schema per harness. Results are serializable passes,
-profile-derived skips, or sanitized failures; unsupported operation configurations still fail
-during bootstrap.
+backend-independent catalog, while the memory, temporary-file SQLite, live PostgreSQL, and live
+MongoDB drivers select cases only from their immutable capability profiles. PostgreSQL uses
+`TEST_POSTGRES_URL` with a unique schema per harness; MongoDB uses `TEST_MONGO_URL` with a unique
+database per harness. Results are serializable passes, profile-derived skips, or sanitized
+failures; unsupported operation configurations still fail during bootstrap.
 
 ## Why this changed
 

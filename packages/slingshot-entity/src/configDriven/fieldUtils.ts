@@ -676,9 +676,7 @@ export function fromMongoDoc(
       record[name] = doc[mongoPkField];
     } else {
       const val = doc[name];
-      if (val !== undefined && val !== null) {
-        record[name] = val;
-      }
+      if (val !== undefined) record[name] = val;
     }
   }
 

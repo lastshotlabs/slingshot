@@ -87,6 +87,25 @@ export interface BuildGameEngineEntityModulesArgs {
 export function buildGameEngineEntityModules(args: BuildGameEngineEntityModulesArgs) {
   const { refs } = args;
 
+  // `updateContent` is an `op.custom` carrying a MEMORY factory and nothing
+  // else, so the standard adapter cannot service it on sqlite, postgres, mongo
+  // or redis. Passing it into the strict factory made
+  // `assertEntityBackendRequirements` reject the whole GameSession entity at
+  // boot — every game app that persists to anything but memory failed to start
+  // on `UnsupportedEntityBackendError`, over an operation nothing calls.
+  // Same treatment as the player's `kick` marker below.
+  const sessionBaseOperations = {
+    findByJoinCode: gameSessionOperations.operations.findByJoinCode,
+    findByGameType: gameSessionOperations.operations.findByGameType,
+    startGame: gameSessionOperations.operations.startGame,
+    pauseGame: gameSessionOperations.operations.pauseGame,
+    resumeGame: gameSessionOperations.operations.resumeGame,
+    completeGame: gameSessionOperations.operations.completeGame,
+    abandonSession: gameSessionOperations.operations.abandonSession,
+    updateRules: gameSessionOperations.operations.updateRules,
+    endGame: gameSessionOperations.operations.endGame,
+  };
+
   // Manual wiring owns the cross-entity `kick` marker. Pass only operations
   // implemented by the standard player adapter into its strict factory.
   const playerBaseOperations = {
@@ -108,7 +127,7 @@ export function buildGameEngineEntityModules(args: BuildGameEngineEntityModulesA
       buildAdapter: (storeType, infra) => {
         const adapter = resolveStandardAdapter({
           config: GameSession,
-          operations: gameSessionOperations.operations,
+          operations: sessionBaseOperations,
           storeType,
           infra,
         });

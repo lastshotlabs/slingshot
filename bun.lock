@@ -775,7 +775,7 @@
     },
     "packages/slingshot-ssr-tanstack": {
       "name": "@lastshotlabs/slingshot-ssr-tanstack",
-      "version": "0.2.5",
+      "version": "0.2.7",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",

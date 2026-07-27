@@ -162,12 +162,13 @@ boot sequence the framework runs at startup without spinning up a real HTTP host
 
 Backend authors and framework contributors can run the same capability-selected behavior
 catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory,
-temporary-file SQLite, live PostgreSQL, and live MongoDB drivers:
+temporary-file SQLite, live PostgreSQL, live MongoDB, and live Redis drivers:
 
 ```ts
 import {
   createMongoEntityConformanceDriver,
   createPostgresEntityConformanceDriver,
+  createRedisEntityConformanceDriver,
   runEntityConformance,
 } from '@lastshotlabs/slingshot-entity/testing';
 
@@ -177,13 +178,17 @@ const postgresResults = await runEntityConformance(
 const mongoResults = await runEntityConformance(
   createMongoEntityConformanceDriver(process.env.TEST_MONGO_URL),
 );
+const redisResults = await runEntityConformance(
+  createRedisEntityConformanceDriver(process.env.TEST_REDIS_URL),
+);
 ```
 
 The shared catalog contains no store-specific branches or handwritten skips. A driver's
 immutable `EntityBackendProfile` is the sole selection source, and every result is a frozen,
 serializable pass, skip, or sanitized failure record. The PostgreSQL driver creates a unique
 quoted schema per harness; the MongoDB driver creates a unique database per harness. Cleanup
-drops only the schema or database owned by that harness.
+drops only the schema or database owned by that harness. The Redis driver creates a random,
+validated application prefix and deletes only exact fixture-key prefixes under that namespace.
 
 ## Capability identity invariant
 

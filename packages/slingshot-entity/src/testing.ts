@@ -33,6 +33,7 @@ export { ENTITY_CONFORMANCE_DEFINITIONS } from './testing/fixtures';
 export { createMemoryEntityConformanceDriver } from './testing/drivers/memory';
 export { createMongoEntityConformanceDriver } from './testing/drivers/mongo';
 export { createPostgresEntityConformanceDriver } from './testing/drivers/postgres';
+export { createRedisEntityConformanceDriver } from './testing/drivers/redis';
 export { createSqliteEntityConformanceDriver } from './testing/drivers/sqlite';
 
 type EntityFactoryCreator = (

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 export const DEFAULT_DOCKER_POSTGRES_URL =
   'postgresql://postgres:postgres@localhost:5433/slingshot_test';
 export const DEFAULT_DOCKER_MONGO_URL = 'mongodb://localhost:27018/slingshot_test';
+export const DEFAULT_DOCKER_REDIS_URL = 'redis://localhost:6380';
 
 export type DockerTestCommand = { label: string; command: string[] };
 
@@ -58,6 +59,17 @@ export function createDockerTestCommands(
         'packages/slingshot-entity/tests/conformance/mongo.test.ts',
       ],
     },
+    {
+      label: 'package redis entity conformance',
+      command: [
+        'bun',
+        'test',
+        '--config',
+        'bunfig.docker.toml',
+        '--concurrency=1',
+        'packages/slingshot-entity/tests/conformance/redis.test.ts',
+      ],
+    },
   ];
 }
 
@@ -67,11 +79,13 @@ export function getDockerEnv(env: Record<string, string | undefined> = Bun.env) 
   const dockerPostgresUrl =
     env.TEST_POSTGRES_URL ?? env.POSTGRES_URL ?? DEFAULT_DOCKER_POSTGRES_URL;
   const dockerMongoUrl = env.TEST_MONGO_URL ?? DEFAULT_DOCKER_MONGO_URL;
+  const dockerRedisUrl = env.TEST_REDIS_URL ?? env.REDIS_URL ?? DEFAULT_DOCKER_REDIS_URL;
   return {
     ...env,
     TEST_POSTGRES_URL: dockerPostgresUrl,
     POSTGRES_URL: dockerPostgresUrl,
     TEST_MONGO_URL: dockerMongoUrl,
+    TEST_REDIS_URL: dockerRedisUrl,
   };
 }
 

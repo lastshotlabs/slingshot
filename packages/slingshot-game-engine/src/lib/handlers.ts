@@ -91,6 +91,21 @@ export interface HandlerContextDeps {
     options?: { exclude?: ReadonlySet<string>; volatile?: boolean; trackDelivery?: boolean },
   ) => void;
 
+  /**
+   * Notified whenever `ctx.addScore` / `ctx.setScore` moves a player's score.
+   *
+   * The runtime wires this to the `score.changed` replay entry. It is a
+   * callback rather than a direct replay append because scoring lives behind
+   * the handler context, which has no replay sequence of its own — and the
+   * standalone test harness builds a context with no replay log at all.
+   */
+  onScoreChanged?: (change: {
+    userId: string;
+    previousScore: number;
+    newScore: number;
+    change: number;
+  }) => void;
+
   /** Set to signal that the current phase should advance. */
   requestAdvancePhase: () => void;
 
@@ -154,6 +169,7 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
     gameLoopState,
     rng,
     publish,
+    onScoreChanged,
     requestAdvancePhase,
     requestEndGame,
     setCurrentRound,
@@ -284,8 +300,10 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
 
     // Scoring
     addScore(userId: string, points: number, breakdown?: Record<string, unknown>): void {
+      const previousScore = getScore(scoreState, userId);
       addScore(scoreState, userId, points, currentRound, breakdown);
       const score = getScore(scoreState, userId);
+      onScoreChanged?.({ userId, previousScore, newScore: score, change: points });
       publish(sessionRoom(sessionId), {
         type: 'game:score.changed',
         sessionId,
@@ -298,6 +316,12 @@ export function buildProcessHandlerContext(deps: HandlerContextDeps): ProcessHan
     setScore(userId: string, points: number): void {
       const prev = getScore(scoreState, userId);
       setScore(scoreState, userId, points);
+      onScoreChanged?.({
+        userId,
+        previousScore: prev,
+        newScore: points,
+        change: points - prev,
+      });
       publish(sessionRoom(sessionId), {
         type: 'game:score.changed',
         sessionId,

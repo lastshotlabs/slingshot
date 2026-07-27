@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-admin",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Admin plugin for Slingshot",
   "license": "MIT",
   "type": "module",

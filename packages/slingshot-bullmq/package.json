@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-bullmq",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Durable BullMQ-backed event bus adapter for Slingshot",
   "license": "MIT",
   "type": "module",

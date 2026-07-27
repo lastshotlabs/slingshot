@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `0.2.4`
+- Version: `0.2.12`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.
@@ -52,7 +52,7 @@ bun add @lastshotlabs/slingshot
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`
 - `format`: `prettier --write .`
 - `format:check`: `prettier --check .`
-- `hardening:core`: `bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run test`
+- `hardening:core`: `bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test`
 - `hardening:full`: `bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci`
 - `lint`: `eslint src/ --cache && bun run --filter '@lastshotlabs/slingshot-*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
@@ -84,6 +84,7 @@ bun add @lastshotlabs/slingshot
 - `typecheck`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.typecheck.json --pretty false`
 - `typecheck:root`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.root.typecheck.json --pretty false`
 - `typecheck:tests`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.tests.typecheck.json --pretty false`
+- `verify:packed-artifacts`: `bun scripts/verify-packed-artifacts.ts`
 - `version-packages`: `changeset version`
 
 ## Dependencies
@@ -101,6 +102,7 @@ bun add @lastshotlabs/slingshot
 ## Peer Dependencies
 
 - `@anthropic-ai/sdk`: `>=0.30`
+- `@authenio/samlify-xsd-schema-validator`: `>=1.0 <2`
 - `@aws-sdk/client-s3`: `>=3.0`
 - `@aws-sdk/client-ssm`: `>=3.0`
 - `@aws-sdk/lib-storage`: `>=3.0`
@@ -109,6 +111,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-bullmq`: `workspace:*`
 - `@lastshotlabs/slingshot-community`: `workspace:*`
 - `@lastshotlabs/slingshot-deep-links`: `workspace:*`
+- `@lastshotlabs/slingshot-infra`: `workspace:*`
 - `@lastshotlabs/slingshot-interactions`: `workspace:*`
 - `@lastshotlabs/slingshot-kafka`: `workspace:*`
 - `@lastshotlabs/slingshot-mail`: `workspace:*`
@@ -120,6 +123,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-permissions`: `workspace:*`
 - `@lastshotlabs/slingshot-postgres`: `workspace:*`
 - `@lastshotlabs/slingshot-push`: `workspace:*`
+- `@lastshotlabs/slingshot-runtime-bun`: `workspace:*`
 - `@lastshotlabs/slingshot-webhooks`: `workspace:*`
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `^3.7.0`
@@ -129,6 +133,7 @@ bun add @lastshotlabs/slingshot
 - `jose`: `6.2.0`
 - `mongoose`: `>=9.0 <10`
 - `otpauth`: `>=9.0 <10`
+- `pg`: `>=8.20 <9`
 - `samlify`: `>=2.13.0 <3`
 - `zod`: `>=4.0 <5`
 

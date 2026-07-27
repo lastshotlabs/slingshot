@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-infra
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-infra`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: platform tooling package
 - Description: Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps
@@ -41,6 +41,8 @@ bun add @lastshotlabs/slingshot-infra
 
 - `@aws-sdk/client-s3`: `>=3.0`
 - `@aws-sdk/client-ssm`: `>=3.0`
+- `ioredis`: `>=5 <6`
+- `pg`: `>=8.20 <9`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

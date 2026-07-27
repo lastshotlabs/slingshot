@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssr-tans
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssr-tanstack`
-- Version: `0.2.2`
+- Version: `0.2.8`
 - Kind: Workspace package
 - Role: feature package
 - Description: TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps
@@ -44,6 +44,8 @@ bun add @lastshotlabs/slingshot-ssr-tanstack
 ## Peer Dependencies
 
 - `@tanstack/react-router`: `>=1.0 <2`
+- `react`: `>=18 <20`
+- `react-dom`: `>=18 <20`
 - `vite`: `>=5 <8`
 
 ## Related Docs

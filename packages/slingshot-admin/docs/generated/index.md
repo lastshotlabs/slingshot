@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-admin
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-admin`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Admin plugin for Slingshot
@@ -45,6 +45,7 @@ bun add @lastshotlabs/slingshot-admin
 ## Peer Dependencies
 
 - `hono`: `>=4.12.14 <5`
+- `jose`: `>=6.0 <7`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-webhooks
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-webhooks`
-- Version: `0.2.2`
+- Version: `0.2.5`
 - Kind: Workspace package
 - Role: feature package
 - Description: Inbound and outbound webhook plugin with entity-backed endpoints for Slingshot
@@ -41,11 +41,14 @@ bun add @lastshotlabs/slingshot-webhooks
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 
 ## Peer Dependencies
 
-- `@lastshotlabs/slingshot-entity`: `workspace:*`
+- `@hono/zod-openapi`: `>=0.18`
+- `bullmq`: `>=5 <6`
 - `hono`: `>=4.12.14 <5`
+- `ioredis`: `>=5 <6`
 - `mongoose`: `>=9.0 <10`
 - `pg`: `^8.20.0`
 - `zod`: `>=4.0 <5`

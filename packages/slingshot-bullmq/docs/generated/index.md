@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-bullmq
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-bullmq`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Durable BullMQ-backed event bus adapter for Slingshot

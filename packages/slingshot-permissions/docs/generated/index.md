@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-permissi
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-permissions`
-- Version: `0.2.2`
+- Version: `0.2.4`
 - Kind: Workspace package
 - Role: library package
 - Description: Policy engine for Slingshot — grants, roles, tenant-scoped permission evaluation
@@ -46,6 +46,7 @@ bun add @lastshotlabs/slingshot-permissions
 
 - `mongoose`: `>=9.0 <10`
 - `pg`: `^8.20.0`
+- `zod`: `>=4.0 <5`
 
 ## Related Docs
 

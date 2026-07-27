@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-runtime-node`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: Node.js runtime implementation for Slingshot

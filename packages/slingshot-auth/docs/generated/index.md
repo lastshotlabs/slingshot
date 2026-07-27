@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-auth
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-auth`
-- Version: `0.2.4`
+- Version: `0.2.5`
 - Kind: Workspace package
 - Role: feature package
 - Description: Authentication, sessions, MFA, OAuth, WebAuthn, and passkeys for Slingshot
@@ -39,9 +39,11 @@ bun add @lastshotlabs/slingshot-auth
 
 ## Peer Dependencies
 
+- `@authenio/samlify-xsd-schema-validator`: `>=1.0 <2`
 - `@lastshotlabs/slingshot-postgres`: `workspace:*`
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `>=3.0`
+- `bullmq`: `>=5 <6`
 - `hono`: `>=4.12.18 <5`
 - `ioredis`: `>=5 <6`
 - `jose`: `>=6.0`

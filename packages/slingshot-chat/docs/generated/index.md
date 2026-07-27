@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-chat
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-chat`
-- Version: `0.2.3`
+- Version: `0.2.7`
 - Kind: Workspace package
 - Role: feature package
 - Description: Real-time chat with rooms, messages, membership, and encryption for Slingshot
@@ -43,7 +43,11 @@ bun add @lastshotlabs/slingshot-chat
 ## Peer Dependencies
 
 - `@lastshotlabs/slingshot-permissions`: `workspace:*`
+- `better-sqlite3`: `>=9.0`
 - `hono`: `>=4.12.14 <5`
+- `ioredis`: `>=5 <6`
+- `mongoose`: `>=9.0 <10`
+- `pg`: `>=8.20 <9`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-embeds
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-embeds`
-- Version: `0.2.2`
+- Version: `0.2.3`
 - Kind: Workspace package
 - Role: feature package
 - Description: URL unfurling for Slingshot — fetches OG metadata server-side for link previews
@@ -37,7 +37,8 @@ bun add @lastshotlabs/slingshot-embeds
 
 ## Peer Dependencies
 
-- None
+- `hono`: `>=4.12.14 <5`
+- `zod`: `>=4.0 <5`
 
 ## Related Docs
 

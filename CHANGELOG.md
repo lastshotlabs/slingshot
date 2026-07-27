@@ -1,5 +1,34 @@
 # @lastshotlabs/slingshot
 
+## 0.2.12
+
+### Patch Changes
+
+- 7f2fefe: Verify every published tarball in a clean consumer and preserve package imports during build.
+- Updated dependencies [7f2fefe]
+  - @lastshotlabs/slingshot-runtime-bun@0.2.3
+  - @lastshotlabs/slingshot-admin@0.2.3
+  - @lastshotlabs/slingshot-auth@0.2.5
+  - @lastshotlabs/slingshot-bullmq@0.2.3
+  - @lastshotlabs/slingshot-community@0.2.10
+  - @lastshotlabs/slingshot-core@0.2.4
+  - @lastshotlabs/slingshot-deep-links@0.2.3
+  - @lastshotlabs/slingshot-entity@0.2.8
+  - @lastshotlabs/slingshot-infra@0.2.3
+  - @lastshotlabs/slingshot-interactions@0.2.6
+  - @lastshotlabs/slingshot-kafka@0.2.3
+  - @lastshotlabs/slingshot-mail@0.2.3
+  - @lastshotlabs/slingshot-notifications@0.2.6
+  - @lastshotlabs/slingshot-orchestration@0.2.3
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.3
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.3
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.3
+  - @lastshotlabs/slingshot-organizations@0.2.5
+  - @lastshotlabs/slingshot-permissions@0.2.4
+  - @lastshotlabs/slingshot-postgres@0.2.3
+  - @lastshotlabs/slingshot-push@0.2.5
+  - @lastshotlabs/slingshot-webhooks@0.2.5
+
 ## 0.2.9
 
 ### Patch Changes

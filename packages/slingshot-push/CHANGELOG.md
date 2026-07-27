@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-push
 
+## 0.2.5
+
+### Patch Changes
+
+- 7f2fefe: Verify every published tarball in a clean consumer and preserve package imports during build.
+- Updated dependencies [7f2fefe]
+  - @lastshotlabs/slingshot-core@0.2.4
+  - @lastshotlabs/slingshot-entity@0.2.8
+  - @lastshotlabs/slingshot-notifications@0.2.6
+
 ## 0.2.4
 
 ### Patch Changes

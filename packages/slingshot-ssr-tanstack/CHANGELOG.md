@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-ssr-tanstack
 
+## 0.2.8
+
+### Patch Changes
+
+- 7f2fefe: Verify every published tarball in a clean consumer and preserve package imports during build.
+- Updated dependencies [7f2fefe]
+  - @lastshotlabs/slingshot-core@0.2.4
+  - @lastshotlabs/slingshot-permissions@0.2.4
+  - @lastshotlabs/slingshot-ssr@0.2.6
+
 ## 0.2.5
 
 ### Patch Changes

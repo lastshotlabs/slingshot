@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-assets
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-assets`
-- Version: `0.2.2`
+- Version: `0.2.6`
 - Kind: Workspace package
 - Role: feature package
 - Description: Entity-backed asset storage, upload metadata, and storage adapter resolution for Slingshot
@@ -46,8 +46,13 @@ bun add @lastshotlabs/slingshot-assets
 ## Peer Dependencies
 
 - `@aws-sdk/client-s3`: `>=3.0`
+- `@aws-sdk/lib-storage`: `>=3.0`
 - `@aws-sdk/s3-request-presigner`: `>=3.0`
+- `better-sqlite3`: `>=9.0`
 - `hono`: `>=4.12.14 <5`
+- `ioredis`: `>=5 <6`
+- `mongoose`: `>=9.0 <10`
+- `pg`: `>=8.20 <9`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

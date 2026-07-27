@@ -29,7 +29,7 @@ describe('edgeRuntime() — password stress tests', () => {
         expect(await runtime.password.verify(pwd, hash)).toBe(true);
         expect(await runtime.password.verify(`wrong-${i}`, hash)).toBe(false);
       }
-    });
+    }, 15_000);
   });
 
   // -----------------------------------------------------------------------

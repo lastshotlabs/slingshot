@@ -1,11 +1,16 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type {
   EntityAdapter,
   EntityBackendProfile,
   OperationConfig,
+  PostgresBundle,
   StoreInfra,
+  StoreType,
+  TransactionManager,
+  TransactionScope,
+  TransactionStore,
 } from '@lastshotlabs/slingshot-core';
-import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import { quoteSqlIdent } from '../../lib/naming';
@@ -25,6 +30,120 @@ interface PostgresResources {
   readonly pool: import('pg').Pool;
   readonly schema: string;
   readonly composite: Readonly<Record<string, unknown>>;
+}
+
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
+const SCOPED_POSTGRES_QUERYABLE = Symbol.for('slingshot.scopedPostgresQueryable');
+
+interface ConformanceTransactionState {
+  readonly scope: TransactionScope;
+  readonly infra: StoreInfra;
+}
+
+/**
+ * The backend driver exercises the same StoreInfra/TransactionManager protocol as
+ * an application without importing the root framework package into slingshot-entity.
+ * The production provider itself is covered by root unit and Docker integration tests.
+ */
+function createConformanceStoreInfra(pool: import('pg').Pool): StoreInfra {
+  const active = new AsyncLocalStorage<ConformanceTransactionState>();
+  const manager: TransactionManager = {
+    supports(store: StoreType): store is TransactionStore {
+      return store === 'postgres';
+    },
+    async run<T>(
+      store: TransactionStore,
+      callback: (scope: TransactionScope) => T | Promise<T>,
+    ): Promise<T> {
+      const current = active.getStore();
+      if (current) {
+        if (store !== current.scope.store) {
+          throw new Error(
+            `Transaction scope for '${current.scope.store}' cannot be used with '${store}'.`,
+          );
+        }
+        return callback(current.scope);
+      }
+      if (store !== 'postgres') {
+        throw new Error(`Store '${store}' is unavailable in the PostgreSQL conformance driver.`);
+      }
+
+      const client = await pool.connect();
+      const scope = Object.freeze({
+        store: 'postgres',
+        id: randomUUID(),
+      }) as unknown as TransactionScope;
+      let rollbackOnly = false;
+      let rollbackOnlyError: unknown;
+      const queryable = Object.freeze({
+        [SCOPED_POSTGRES_QUERYABLE]: true,
+        async query(sql: string, params?: unknown[]) {
+          try {
+            return await client.query(sql, params);
+          } catch (error) {
+            rollbackOnly = true;
+            rollbackOnlyError ??= error;
+            throw error;
+          }
+        },
+      });
+      const scopedInfra = Object.create(infra) as StoreInfra;
+      Object.defineProperty(scopedInfra, 'getPostgres', {
+        configurable: false,
+        enumerable: true,
+        writable: false,
+        value: () => ({ pool: queryable, db: {} }) as unknown as PostgresBundle,
+      });
+      const state: ConformanceTransactionState = { scope, infra: scopedInfra };
+
+      try {
+        await client.query('BEGIN');
+        const result = await active.run(state, () => callback(scope));
+        if (rollbackOnly) throw rollbackOnlyError;
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Preserve the callback/query error.
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+  };
+
+  const infra: StoreInfra = {
+    appName: 'entity-conformance',
+    getTransactions: () => manager,
+    getRedis() {
+      throw new Error('[entity-conformance] Redis is unavailable in the PostgreSQL driver');
+    },
+    getMongo() {
+      throw new Error('[entity-conformance] MongoDB is unavailable in the PostgreSQL driver');
+    },
+    getSqliteDb() {
+      throw new Error('[entity-conformance] SQLite is unavailable in the PostgreSQL driver');
+    },
+    getPostgres() {
+      return { pool, db: {} };
+    },
+  };
+  Object.defineProperty(infra, RESOLVE_TRANSACTION_SCOPE_INFRA, {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: (scope: TransactionScope): StoreInfra => {
+      const current = active.getStore();
+      if (!current || current.scope !== scope) {
+        throw new Error('[entity-conformance] Invalid PostgreSQL transaction scope.');
+      }
+      return current.infra;
+    },
+  });
+  return infra;
 }
 
 function supportedOperations(
@@ -82,22 +201,7 @@ async function createResources(
     await pool.query(`CREATE SCHEMA ${quotedSchema}`);
     await pool.query(`SET search_path TO ${quotedSchema}`);
 
-    const infra: StoreInfra = {
-      appName: 'entity-conformance',
-      getTransactions: () => createUnsupportedTransactionManager(),
-      getRedis() {
-        throw new Error('[entity-conformance] Redis is unavailable in the PostgreSQL driver');
-      },
-      getMongo() {
-        throw new Error('[entity-conformance] MongoDB is unavailable in the PostgreSQL driver');
-      },
-      getSqliteDb() {
-        throw new Error('[entity-conformance] SQLite is unavailable in the PostgreSQL driver');
-      },
-      getPostgres() {
-        return { pool, db: {} };
-      },
-    };
+    const infra = createConformanceStoreInfra(pool);
 
     const entries: Record<string, CompositeEntry> = {};
     for (const definition of definitions) {

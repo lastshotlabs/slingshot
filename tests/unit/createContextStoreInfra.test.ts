@@ -180,6 +180,7 @@ describe('createContextStoreInfra', () => {
     });
 
     expect(infra.getPostgres()).toBe(mockPg as unknown as ReturnType<typeof infra.getPostgres>);
+    expect(infra.getTransactions().supports('postgres')).toBe(true);
   });
 
   test('REGISTER_ENTITY registers an entity config in the registry', () => {

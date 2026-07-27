@@ -31,6 +31,7 @@ function createHarness(options?: {
   readonly commit?: () => void | Promise<void>;
   readonly rollback?: () => void | Promise<void>;
   readonly release?: () => void | Promise<void>;
+  readonly rollbackOnlyCause?: () => unknown;
   readonly searchSync?: () => unknown;
 }) {
   const events: string[] = [];
@@ -72,6 +73,9 @@ function createHarness(options?: {
             events.push('release');
             await options?.release?.();
           },
+          rollbackOnlyCause: options?.rollbackOnlyCause
+            ? () => ({ cause: options.rollbackOnlyCause?.() })
+            : undefined,
         };
       },
     },
@@ -328,6 +332,18 @@ describe('framework transaction manager', () => {
     expect(error).toBeInstanceOf(TransactionCommitError);
     expect((error as TransactionCommitError).outcome).toBe('rolled_back');
     expect(harness.events).toEqual(['open', 'commit', 'rollback', 'release']);
+  });
+
+  test('rolls back and rejects a backend-marked rollback-only scope without committing', async () => {
+    const queryError = new Error('current transaction is aborted');
+    const harness = createHarness({
+      rollbackOnlyCause: () => queryError,
+    });
+
+    await expect(harness.manager.run('postgres', async () => 'caught-by-callback')).rejects.toBe(
+      queryError,
+    );
+    expect(harness.events).toEqual(['open', 'rollback', 'release']);
   });
 
   test('buffers framework search effects until commit and runs them in order', async () => {

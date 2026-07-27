@@ -6,6 +6,7 @@ import type {
   SearchClientLike,
   SearchPluginRuntime,
   SlingshotEventBus,
+  StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import {
   REGISTER_TRANSACTION_ENTITY,
@@ -15,6 +16,7 @@ import {
   RESOLVE_TRANSACTION_ENTITY_ADAPTER,
   type TransactionEntityAdapterLookup,
   type TransactionEntityAdapterRegistration,
+  type TransactionScope,
   getSearchPluginRuntimeOrNull,
 } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -26,6 +28,9 @@ import {
   type ResolvedSearchSync,
 } from './internalRepoResolution';
 import { createFrameworkTransactionManager } from './transactions/frameworkTransactionManager';
+import { createPostgresTransactionProvider } from './transactions/postgresTransactionProvider';
+
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
 interface CreateContextStoreInfraOptions {
   readonly appName: string;
@@ -224,9 +229,16 @@ export function createContextStoreInfra(
 ): FrameworkStoreInfra {
   const { appName, infra, bus, pluginState, entityRegistry } = options;
   const registeredEntities = new Set<string>();
-  // Physical PostgreSQL and SQLite providers are installed in WP2 Phases 4 and 5.
-  // The manager still exists for every app so route and hook service identity is stable.
-  const transactions = createFrameworkTransactionManager([]);
+  const transactions = createFrameworkTransactionManager(
+    infra.postgres
+      ? [
+          createPostgresTransactionProvider({
+            postgres: infra.postgres,
+            getStoreInfra: () => storeInfra,
+          }),
+        ]
+      : [],
+  );
   const storeInfra: FrameworkStoreInfra = {
     appName,
     getTransactions: () => transactions,
@@ -302,6 +314,19 @@ export function createContextStoreInfra(
       value: storeInfra[key],
     });
   }
+
+  Object.defineProperty(storeInfra, RESOLVE_TRANSACTION_SCOPE_INFRA, {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: (scope: TransactionScope): StoreInfra => {
+      const resolveScopeInfra = Reflect.get(transactions, RESOLVE_TRANSACTION_SCOPE_INFRA);
+      if (typeof resolveScopeInfra !== 'function') {
+        throw new Error('[slingshot] Transaction scope infrastructure is unavailable.');
+      }
+      return resolveScopeInfra.call(transactions, scope) as StoreInfra;
+    },
+  });
 
   Object.defineProperty(storeInfra, RESOLVE_REINDEX_SOURCE, {
     configurable: false,

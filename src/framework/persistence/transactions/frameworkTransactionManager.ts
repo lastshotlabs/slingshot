@@ -19,6 +19,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 
 const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
 type ScopePhase = 'open' | 'settling' | 'committing' | 'closed';
 
@@ -34,6 +35,7 @@ interface ScopeState {
   readonly effects: BufferedEffect[];
   readonly adapters: Map<string, object>;
   readonly methodWrappers: WeakMap<object, Map<PropertyKey, (...args: unknown[]) => unknown>>;
+  scopedInfra?: StoreInfra;
   phase: ScopePhase;
 }
 
@@ -47,6 +49,14 @@ export interface FrameworkTransactionBackendSession {
   rollback(): void | Promise<void>;
   /** Release the physical backend lease/client exactly once. */
   release(): void | Promise<void>;
+  /**
+   * Return the first backend error that made this transaction impossible to commit.
+   *
+   * PostgreSQL uses this after a query error is caught by user code: the server-side
+   * transaction remains aborted, so the framework must roll back and reject instead
+   * of issuing a misleading COMMIT.
+   */
+  rollbackOnlyCause?(): { readonly cause: unknown } | null;
 }
 
 /** Internal provider implemented by each store that claims scoped rollback support. */
@@ -164,6 +174,11 @@ function createEffectBufferingInfra(state: ScopeState): StoreInfra {
     });
   }
   return Object.preventExtensions(scopedInfra);
+}
+
+function resolveScopedInfra(state: ScopeState): StoreInfra {
+  state.scopedInfra ??= createEffectBufferingInfra(state);
+  return state.scopedInfra;
 }
 
 function trackPromise(state: ScopeState, promiseLike: PromiseLike<unknown>): Promise<unknown> {
@@ -320,6 +335,13 @@ export function createFrameworkTransactionManager(
           throw new UnsettledTransactionWorkError(scope.id, unsettledCount);
         }
 
+        const rollbackOnly = session.rollbackOnlyCause?.() ?? null;
+        if (rollbackOnly) {
+          await rollbackPreservingPrimary(session);
+          state.phase = 'closed';
+          throw rollbackOnly.cause;
+        }
+
         state.phase = 'committing';
         try {
           await session.commit();
@@ -389,7 +411,7 @@ export function createFrameworkTransactionManager(
       const cached = state.adapters.get(key);
       if (cached) return cached;
 
-      const scopedInfra = createEffectBufferingInfra(state);
+      const scopedInfra = resolveScopedInfra(state);
       // The provider owns the transaction-bound infra. Entity construction happens
       // only after scope ownership and store compatibility have been validated.
       const adapter = registration.buildAdapter(scopedInfra);
@@ -404,6 +426,21 @@ export function createFrameworkTransactionManager(
     configurable: false,
     writable: false,
     value: manager.resolveEntity.bind(manager),
+  });
+  Object.defineProperty(manager, RESOLVE_TRANSACTION_SCOPE_INFRA, {
+    enumerable: false,
+    configurable: false,
+    writable: false,
+    value: (scope: TransactionScope): StoreInfra => {
+      const state = states.get(scope);
+      if (!state) {
+        throw new TransactionScopeInvalidError();
+      }
+      if (state.phase !== 'open') {
+        throw new TransactionScopeClosedError(scope.id);
+      }
+      return resolveScopedInfra(state);
+    },
   });
 
   return Object.freeze(manager);

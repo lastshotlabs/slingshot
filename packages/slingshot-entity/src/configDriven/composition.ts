@@ -34,6 +34,7 @@ import type {
   ResolvedEntityConfig,
   StoreInfra,
   TransactionOpConfig,
+  TransactionScope,
   TransactionStepResult,
 } from '@lastshotlabs/slingshot-core';
 import type { StoreType } from '@lastshotlabs/slingshot-core';
@@ -43,7 +44,8 @@ import type { SqliteDb } from './operationExecutors/dbInterfaces';
 import { pipeExecutor } from './operationExecutors/pipe';
 import type { AdapterMap } from './operationExecutors/transaction';
 import { transactionExecutor } from './operationExecutors/transaction';
-import { createPostgresEntityAdapter } from './postgresAdapter';
+
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -85,18 +87,6 @@ type CompositeFactoryMap<M extends Record<string, EntityEntry>> = {
  * composite level — they require the full adapters map, not a single entity adapter.
  */
 type CompositeOpConfig = TransactionOpConfig | PipeOpConfig;
-
-interface PostgresTxClient {
-  query(
-    sql: string,
-    params?: unknown[],
-  ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
-  release(): void;
-}
-
-interface PostgresTxPool {
-  connect(): Promise<PostgresTxClient>;
-}
 
 // ---------------------------------------------------------------------------
 // Type-level inference
@@ -184,11 +174,16 @@ export function createCompositeFactories<
   function buildComposite(storeType: StoreType, infra: StoreInfra): InferCompositeAdapter<M, COps> {
     assertCompositeEntityBackendRequirements(storeType, entities, operations);
 
-    const adapters = {} as unknown as { [K in keyof M]: AdapterForEntry<M[K]> };
-
-    for (const key of keys) {
-      adapters[key] = individualFactories[key][storeType](infra);
-    }
+    const buildIndividualAdapters = (
+      targetInfra: StoreInfra,
+    ): { [K in keyof M]: AdapterForEntry<M[K]> } => {
+      const built = {} as unknown as { [K in keyof M]: AdapterForEntry<M[K]> };
+      for (const key of keys) {
+        built[key] = individualFactories[key][storeType](targetInfra);
+      }
+      return built;
+    };
+    const adapters = buildIndividualAdapters(infra);
 
     // Determine a transaction wrapper for backends that support it.
     let wrapInTransaction: ((fn: () => Promise<void>) => Promise<void>) | undefined;
@@ -223,7 +218,9 @@ export function createCompositeFactories<
         if (op.kind === 'transaction') {
           compositeOpMethods[opName] =
             storeType === 'postgres'
-              ? createPostgresTransactionMethod(opName, op, entities, keys, infra)
+              ? createPostgresTransactionMethod(opName, op, entities, keys, infra, scopedInfra =>
+                  buildIndividualAdapters(scopedInfra),
+                )
               : transactionExecutor(op, adapterMap, {
                   wrapInTransaction,
                   primaryKeys,
@@ -277,24 +274,20 @@ function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
   entities: M,
   keys: Array<keyof M>,
   infra: StoreInfra,
+  buildAdapters: (scopedInfra: StoreInfra) => { [K in keyof M]: AdapterForEntry<M[K]> },
 ): (params: Record<string, unknown>) => Promise<TransactionStepResult[]> {
-  const pool = infra.getPostgres().pool as unknown as PostgresTxPool;
-
-  return async (params: Record<string, unknown>) => {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const transactionalAdapters = {} as unknown as { [K in keyof M]: AdapterForEntry<M[K]> };
-      for (const key of keys) {
-        const entry = entities[key];
-        transactionalAdapters[key] = createPostgresEntityAdapter(
-          client,
-          entry.config,
-          entry.operations,
-        ) as AdapterForEntry<M[typeof key]>;
+  return (params: Record<string, unknown>) =>
+    infra.getTransactions().run('postgres', async scope => {
+      const resolveScopeInfra = Reflect.get(infra, RESOLVE_TRANSACTION_SCOPE_INFRA) as
+        | ((scope: TransactionScope) => StoreInfra)
+        | undefined;
+      if (typeof resolveScopeInfra !== 'function') {
+        throw new Error(
+          '[slingshot-entity] PostgreSQL transaction scope infrastructure is unavailable.',
+        );
       }
-
+      const scopedInfra = resolveScopeInfra.call(infra, scope);
+      const transactionalAdapters = buildAdapters(scopedInfra);
       const primaryKeys = Object.fromEntries(
         keys.map(key => [String(key), entities[key].config._pkField]),
       );
@@ -306,21 +299,8 @@ function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
         operationName,
         operationConfigs,
       });
-      const results = await executor(params);
-
-      await client.query('COMMIT');
-      return results;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // Preserve the original transaction failure.
-      }
-      throw error;
-    } finally {
-      client.release();
-    }
-  };
+      return executor(params);
+    });
 }
 
 /**

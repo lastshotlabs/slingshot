@@ -18,6 +18,7 @@ import type { ResolvedEntityConfig } from './entityConfig';
 // ---------------------------------------------------------------------------
 
 import type { PaginatedResult } from './entityConfig';
+import type { TransactionStepResult } from './transactions';
 
 // ---------------------------------------------------------------------------
 // Filter expression types
@@ -651,86 +652,99 @@ export interface CustomOpConfig<Fn = unknown> {
 // op.transaction — cross-entity atomic writes
 // ---------------------------------------------------------------------------
 
-/**
- * A single step within a `TransactionOpConfig`.
- *
- * Steps execute in order and can reference the results of earlier steps via
- * `'result:stepIndex.field'` references in `input`. The entire transaction
- * is rolled back if any step fails when the backend provides a real transaction
- * wrapper (currently SQLite and Postgres composite adapters).
- */
-export interface TransactionStep {
-  /**
-   * Which operation to perform on the entity.
-   *
-   * - `create` — insert a new record (uses `input`)
-   * - `update` — full-record replace of a matched record (uses `match` + `set`)
-   * - `delete` — hard-delete a matched record (uses `match`)
-   * - `fieldUpdate` — partial write of specific fields (uses `match` + `set`)
-   * - `transition` — state-machine transition (uses `match` + `field` + `from` + `to`)
-   * - `batch` — multi-record update or delete (uses `filter` + `action` + optional `set`)
-   * - `arrayPush` — append a value to an array field (uses `match` + `field` + `value` + `dedupe`)
-   * - `arrayPull` — remove a value from an array field (uses `match` + `field` + `value`)
-   * - `lookup` — read a record without writing; result is available via `result:N.field` (uses `match`)
-   * - `increment` — atomically add `by` (default 1) to a numeric field (uses `match` + `field` + `by`)
-   */
-  readonly op:
-    | 'create'
-    | 'update'
-    | 'delete'
-    | 'fieldUpdate'
-    | 'transition'
-    | 'batch'
-    | 'arrayPush'
-    | 'arrayPull'
-    | 'lookup'
-    | 'increment';
-  /** Which entity to operate on (key in the composite adapter). */
+/** Call-time literal or `param:`/`result:` binding record used by transaction steps. */
+export type TransactionBindingRecord = Readonly<Record<string, unknown>>;
+
+interface TransactionStepBase {
+  /** Entity key in the composite adapter. */
   readonly entity: string;
-  /**
-   * Input for the operation.
-   *
-   * Accepted value types:
-   * - Any JSON-serialisable literal (string, number, boolean, null, object, array)
-   * - `'param:x'` — resolved from the transaction's call-time `params` map using key `x`
-   * - `'result:N.field'` — value extracted from step N's output object using dot-notation
-   *   field access (e.g. `'result:0.id'` reads the `id` field of step 0's return value)
-   *
-   * Step index in `'result:N.field'` is zero-based and must refer to a step that has
-   * already executed (i.e. `N < current step index`).
-   */
-  readonly input?: Record<string, unknown>;
-  /** Match condition for `update`, `delete`, `fieldUpdate`, `transition`, `arrayPush`, `arrayPull`, and `lookup` steps. */
-  readonly match?: Record<string, string>;
-  /** Fields to set for `fieldUpdate` and `batch update` steps. */
-  readonly set?: Record<string, unknown>;
-  /** Array field name for `arrayPush` and `arrayPull` steps. Also used as the state field for `transition` steps. */
-  readonly field?: string;
-  /** Expected current state value for `transition` steps. */
-  readonly from?: string | number | boolean;
-  /** Target state value for `transition` steps. */
-  readonly to?: string | number | boolean;
-  /** Action for `batch` steps. */
-  readonly action?: 'update' | 'delete';
-  /** Filter expression for `batch` steps. */
-  readonly filter?: FilterExpression;
-  /**
-   * The value to push or pull for `arrayPush` and `arrayPull` steps.
-   * Supports `'param:x'` and `'result:N.field'` references in addition to literals.
-   */
-  readonly value?: unknown;
-  /**
-   * When `true` (default for `arrayPush` steps), the value is only pushed if it is
-   * not already present — making the push idempotent.
-   * Has no effect on `arrayPull`, `lookup`, or `increment` steps.
-   */
-  readonly dedupe?: boolean;
-  /**
-   * Amount to add to the numeric field for `increment` steps.
-   * Use a negative number to decrement. Defaults to `1`.
-   */
-  readonly by?: number;
 }
+
+/** Insert one entity. */
+export interface TransactionCreateStep extends TransactionStepBase {
+  readonly op: 'create';
+  readonly input: TransactionBindingRecord;
+}
+
+/** Update the single entity selected by `match`. */
+export interface TransactionUpdateStep extends TransactionStepBase {
+  readonly op: 'update';
+  readonly match: TransactionBindingRecord;
+  readonly set: TransactionBindingRecord;
+}
+
+/** Idempotently delete the entity selected by `match`. */
+export interface TransactionDeleteStep extends TransactionStepBase {
+  readonly op: 'delete';
+  readonly match: TransactionBindingRecord;
+}
+
+/** Read at most one entity for later `result:N.path` bindings. */
+export interface TransactionLookupStep extends TransactionStepBase {
+  readonly op: 'lookup';
+  readonly match: TransactionBindingRecord;
+}
+
+interface TransactionNativeStepBase extends TransactionStepBase {
+  /** Exact configured entity operation to invoke. Its kind must match this step. */
+  readonly operation: string;
+  /**
+   * Call-time bindings for the native operation.
+   *
+   * Values may contain nested `param:x` and `result:N.path` references. Field-update inputs
+   * supply both match parameters and writable fields. Array and increment inputs use `id`
+   * (or the entity primary-key name) plus `value` or `by`.
+   */
+  readonly input?: TransactionBindingRecord;
+}
+
+/** Invoke one configured native field-update operation. */
+export interface TransactionFieldUpdateStep extends TransactionNativeStepBase {
+  readonly op: 'fieldUpdate';
+}
+
+/** Invoke one configured native transition operation. */
+export interface TransactionTransitionStep extends TransactionNativeStepBase {
+  readonly op: 'transition';
+}
+
+/** Invoke one configured native batch operation. */
+export interface TransactionBatchStep extends TransactionNativeStepBase {
+  readonly op: 'batch';
+}
+
+/** Invoke one configured native array-push operation. */
+export interface TransactionArrayPushStep extends TransactionNativeStepBase {
+  readonly op: 'arrayPush';
+}
+
+/** Invoke one configured native array-pull operation. */
+export interface TransactionArrayPullStep extends TransactionNativeStepBase {
+  readonly op: 'arrayPull';
+}
+
+/** Invoke one configured native increment operation. */
+export interface TransactionIncrementStep extends TransactionNativeStepBase {
+  readonly op: 'increment';
+}
+
+/**
+ * One statically valid step in an `op.transaction`.
+ *
+ * Named semantic steps carry the exact configured operation they will invoke. This prevents
+ * runtime reconstruction of atomic backend behavior through generic read/modify/write calls.
+ */
+export type TransactionStep =
+  | TransactionCreateStep
+  | TransactionUpdateStep
+  | TransactionDeleteStep
+  | TransactionLookupStep
+  | TransactionFieldUpdateStep
+  | TransactionTransitionStep
+  | TransactionBatchStep
+  | TransactionArrayPushStep
+  | TransactionArrayPullStep
+  | TransactionIncrementStep;
 
 /**
  * Transaction operation — execute multiple entity operations atomically.
@@ -1254,7 +1268,7 @@ export type DeriveMethod = (params: Record<string, unknown>) => Promise<unknown[
  * Resolved method for a {@link TransactionOpConfig}.
  *
  * Executes a sequence of named steps in order. Each step's result is
- * available to subsequent steps via `'result:stepName.field'` references.
+ * available to subsequent steps via zero-based `'result:N.field'` references.
  * Returns all step results as an array.
  *
  * @param params - Runtime values for `'param:x'` placeholders across all steps.
@@ -1262,7 +1276,7 @@ export type DeriveMethod = (params: Record<string, unknown>) => Promise<unknown[
  */
 export type TransactionMethod = (
   params: Record<string, unknown>,
-) => Promise<Array<Record<string, unknown>>>;
+) => Promise<TransactionStepResult[]>;
 
 /**
  * Resolved method for a {@link PipeOpConfig}.

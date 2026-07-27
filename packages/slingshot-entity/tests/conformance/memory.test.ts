@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
 import { ENTITY_BACKEND_CAPABILITIES, ENTITY_OPERATION_KINDS } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories } from '../../src/configDriven/composition';
 import {
   ENTITY_CONFORMANCE_CATALOG,
@@ -60,6 +61,7 @@ describe('entity conformance — memory', () => {
     };
     const infra: StoreInfra = {
       appName: 'entity-conformance',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis: unavailable,
       getMongo: unavailable,
       getSqliteDb: unavailable,

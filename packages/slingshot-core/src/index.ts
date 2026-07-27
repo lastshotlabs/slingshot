@@ -525,6 +525,8 @@ export type {
   RepoFactories,
   TestableRepoFactories,
   PostgresBundle,
+  TransactionEntityAdapterRegistration,
+  TransactionEntityAdapterLookup,
 } from './storeInfra';
 /** Store-type resolution and plugin-facing DI symbols for infrastructure factories. */
 export {
@@ -533,7 +535,33 @@ export {
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  REGISTER_TRANSACTION_ENTITY,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
 } from './storeInfra';
+
+// --- Transactions ---
+/** Opaque transaction scope, manager, result, and failure contracts. */
+export type {
+  TransactionStore,
+  TransactionScope,
+  TransactionManager,
+  TransactionEntityResolutionOptions,
+  TransactionStepResult,
+  TransactionCommitFailureOutcome,
+  TransactionPostCommitFailure,
+} from './transactions';
+export {
+  TransactionStoreUnsupportedError,
+  TransactionScopeInvalidError,
+  TransactionScopeMismatchError,
+  TransactionScopeClosedError,
+  UnsettledTransactionWorkError,
+  TransactionBindingError,
+  EntityTransactionConflictError,
+  TransactionCommitError,
+  TransactionPostCommitError,
+  createUnsupportedTransactionManager,
+} from './transactions';
 
 // --- Config-driven entity persistence (shared type contracts) ---
 export type {
@@ -633,7 +661,18 @@ export type {
   DeriveOpConfig,
   DeriveSource,
   TransactionOpConfig,
+  TransactionBindingRecord,
   TransactionStep,
+  TransactionCreateStep,
+  TransactionUpdateStep,
+  TransactionDeleteStep,
+  TransactionLookupStep,
+  TransactionFieldUpdateStep,
+  TransactionTransitionStep,
+  TransactionBatchStep,
+  TransactionArrayPushStep,
+  TransactionArrayPullStep,
+  TransactionIncrementStep,
   PipeOpConfig,
   PipeStep,
   CustomOpConfig,

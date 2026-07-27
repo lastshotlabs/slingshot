@@ -6,9 +6,15 @@ import type {
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import {
+  REGISTER_TRANSACTION_ENTITY,
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
+} from '@lastshotlabs/slingshot-core';
+import type {
+  TransactionEntityAdapterLookup,
+  TransactionEntityAdapterRegistration,
 } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -121,6 +127,8 @@ export interface FrameworkRepoResolutionHooks {
     >,
     operations?: Record<string, OperationConfig>,
   ): RepoFactories<Record<string, unknown>>;
+  [REGISTER_TRANSACTION_ENTITY]?(registration: TransactionEntityAdapterRegistration): void;
+  [RESOLVE_TRANSACTION_ENTITY_ADAPTER]?(lookup: TransactionEntityAdapterLookup): object;
 }
 
 /**

@@ -12,6 +12,7 @@ import type { Actor } from './identity';
 import type { PluginSeedContext, PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';
 import { publishPluginState } from './pluginState';
+import type { TransactionEntityResolutionOptions, TransactionManager } from './transactions';
 
 type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema extends ZodTypeAny
   ? z.infer<TSchema>
@@ -333,16 +334,21 @@ export interface SlingshotPackageEntityModuleLike<
 
 /** Lookup helper for framework-managed entity adapters owned by the app. */
 export interface PackageEntityReader {
-  /** Resolve an adapter from a typed package-owned entity module or typed entity ref. */
+  /** Resolve a package-owned adapter, optionally bound to one open transaction scope. */
   get<TEntity extends SlingshotPackageEntityModuleLike<unknown>>(
     entity: TEntity,
+    options?: TransactionEntityResolutionOptions,
   ): Exclude<TEntity['__adapter'], undefined>;
-  /** Resolve an adapter from a typed cross-package entity ref. */
+  /** Resolve a cross-package adapter, optionally bound to one open transaction scope. */
   get<TEntity extends PackageEntityRef<unknown>>(
     entity: TEntity,
+    options?: TransactionEntityResolutionOptions,
   ): Exclude<TEntity['__adapter'], undefined>;
-  /** Escape hatch: resolve an entity adapter by name. */
-  get<TValue = unknown>(args: { entity: string; plugin?: string }): TValue;
+  /** Escape hatch: resolve a named adapter, optionally bound to one open transaction scope. */
+  get<TValue = unknown>(
+    args: { entity: string; plugin?: string },
+    options?: TransactionEntityResolutionOptions,
+  ): TValue;
 }
 
 /** Full handler context available to package-authored domain routes. */
@@ -356,6 +362,8 @@ export interface PackageDomainRouteContext<
   readonly capabilities: PackageCapabilityReader;
   /** Entity adapter lookup for package/domain handlers. */
   readonly entities: PackageEntityReader;
+  /** Application-owned transaction manager for atomic package/domain work. */
+  readonly transactions: TransactionManager;
   /** Domain-local service bag declared on the domain module. */
   readonly services: TServices;
 }

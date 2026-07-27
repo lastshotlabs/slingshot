@@ -4,6 +4,7 @@
  * Import from `@lastshotlabs/slingshot-core/testing` — never from the main entry.
  */
 import type { StoreInfra } from './storeInfra';
+import { createUnsupportedTransactionManager } from './transactions';
 
 export { resetPackageStabilityWarnings } from './stability';
 
@@ -28,6 +29,7 @@ export { resetPackageStabilityWarnings } from './stability';
 export function createMemoryStoreInfra(): StoreInfra {
   return {
     appName: 'test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('[test] Redis not available in memory test environment');
     },

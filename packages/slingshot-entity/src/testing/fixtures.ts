@@ -318,6 +318,112 @@ export const CONFORMANCE_COMPOSITE_OPERATIONS = deepFreeze({
       },
     ],
   },
+  nativeFieldUpdateRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'fieldUpdate',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'guardedStatusUpdate',
+        input: {
+          id: 'param:id',
+          expectedStatus: 'param:expectedStatus',
+          status: 'param:status',
+        },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
+  nativeTransitionRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'transition',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'activate',
+        input: { id: 'param:id' },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
+  nativeBatchRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'batch',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'markGroup',
+        input: { group: 'param:group' },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
+  nativeArrayPushRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'arrayPush',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'pushTag',
+        input: { id: 'param:id', value: 'param:tag' },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
+  nativeArrayPullRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'arrayPull',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'pullTag',
+        input: { id: 'param:id', value: 'param:tag' },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
+  nativeIncrementRollback: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'increment',
+        entity: CONFORMANCE_RECORDS_KEY,
+        operation: 'incrementCount',
+        input: { id: 'param:id', by: 4 },
+      },
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: { id: 'param:missingId' },
+        set: { title: 'unreachable' },
+      },
+    ],
+  },
 } satisfies Record<string, PipeOpConfig | TransactionOpConfig>);
 
 /** Canonical resolved fixtures installed by every conformance driver. */

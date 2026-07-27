@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import {
+  EntityTransactionConflictError,
+  TransactionBindingError,
+} from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, defineOperations, op } from '@lastshotlabs/slingshot-entity';
 import type { EntityAdapter } from '../../packages/slingshot-core/src/entityConfig';
 import { defineEntity, field } from '../../packages/slingshot-core/src/entityConfig';
@@ -61,6 +65,12 @@ const MessageOps = defineOperations(Message, {
     to: 'delivered',
     match: { id: 'param:id' },
   }),
+});
+
+const DocumentOps = defineOperations(Document, {
+  pushOutward: op.arrayPush({ field: 'outwardLinks', value: 'input:value' }),
+  pushInward: op.arrayPush({ field: 'inwardLinks', value: 'input:value' }),
+  pullOutward: op.arrayPull({ field: 'outwardLinks', value: 'input:value' }),
 });
 
 // Type aliases derived from the concrete entity factories.
@@ -190,6 +200,163 @@ describe('op.transaction', () => {
     ); // second message's content = first message's id
   });
 
+  it('dispatches the exact named transition and normalizes a guard miss to HTTP 409', async () => {
+    const entityAdapter = messageAdapter as unknown as EntityAdapter<
+      Record<string, unknown>,
+      Record<string, unknown>,
+      Record<string, unknown>
+    >;
+    const message = await entityAdapter.create({ roomId: 'room-1', content: 'Hello!' });
+    (messageAdapter as unknown as Record<string, unknown>).update = async () => {
+      throw new Error('generic update must not be called');
+    };
+
+    const txn = transactionExecutor(
+      {
+        kind: 'transaction',
+        steps: [
+          {
+            op: 'transition',
+            entity: 'messages',
+            operation: 'markDelivered',
+            input: { id: 'param:messageId' },
+          },
+        ],
+      },
+      { messages: messageAdapter } as unknown as Parameters<typeof transactionExecutor>[1],
+      {
+        operationName: 'deliver',
+        operationConfigs: { messages: MessageOps.operations },
+      },
+    );
+
+    const results = await txn({ messageId: message.id });
+    expect((results[0] as Record<string, unknown>).status).toBe('delivered');
+    await expect(txn({ messageId: message.id })).rejects.toMatchObject({
+      status: 409,
+      code: 'ENTITY_TRANSACTION_CONFLICT',
+      entity: 'messages',
+      operation: 'markDelivered',
+      stepIndex: 0,
+    } satisfies Partial<EntityTransactionConflictError>);
+  });
+
+  it('resolves nested bindings and reports missing params with operation metadata', async () => {
+    const adapter = {
+      create: async (input: Record<string, unknown>) => input,
+      getById: async () => null,
+      update: async () => null,
+      delete: async () => false,
+      list: async () => ({ items: [], hasMore: false }),
+      clear: async () => {},
+    };
+    const txn = transactionExecutor(
+      {
+        kind: 'transaction',
+        steps: [
+          {
+            op: 'create',
+            entity: 'records',
+            input: { nested: { values: ['param:value'] } },
+          },
+        ],
+      },
+      { records: adapter },
+      { operationName: 'nestedWrite' },
+    );
+
+    expect(await txn({ value: 'resolved' })).toEqual([{ nested: { values: ['resolved'] } }]);
+    await expect(txn({})).rejects.toMatchObject({
+      code: 'TRANSACTION_BINDING_INVALID',
+      operationName: 'nestedWrite',
+      stepIndex: 0,
+    } satisfies Partial<TransactionBindingError>);
+  });
+
+  it('routes every semantic step family through its exact configured method', async () => {
+    const calls: Array<{ name: string; args: unknown[] }> = [];
+    const record =
+      (name: string, result: unknown) =>
+      async (...args: unknown[]): Promise<unknown> => {
+        calls.push({ name, args });
+        return result;
+      };
+    const forbidden = async (): Promise<never> => {
+      throw new Error('generic CRUD must not implement a semantic step');
+    };
+    const adapter = {
+      create: forbidden,
+      getById: forbidden,
+      update: forbidden,
+      delete: forbidden,
+      list: forbidden,
+      clear: async () => {},
+      setFields: record('setFields', { id: 'r1', value: 'set' }),
+      advance: record('advance', true),
+      purge: record('purge', 2),
+      attach: record('attach', { id: 'r1', values: ['v1'] }),
+      detach: record('detach', { id: 'r1', values: [] }),
+      add: record('add', { id: 'r1', count: 3 }),
+    };
+    const txn = transactionExecutor(
+      {
+        kind: 'transaction',
+        steps: [
+          {
+            op: 'fieldUpdate',
+            entity: 'records',
+            operation: 'setFields',
+            input: { id: 'param:id', value: 'param:value' },
+          },
+          {
+            op: 'transition',
+            entity: 'records',
+            operation: 'advance',
+            input: { id: 'param:id' },
+          },
+          { op: 'batch', entity: 'records', operation: 'purge', input: { owner: 'param:id' } },
+          {
+            op: 'arrayPush',
+            entity: 'records',
+            operation: 'attach',
+            input: { id: 'param:id', value: 'param:value' },
+          },
+          {
+            op: 'arrayPull',
+            entity: 'records',
+            operation: 'detach',
+            input: { id: 'param:id', value: 'param:value' },
+          },
+          {
+            op: 'increment',
+            entity: 'records',
+            operation: 'add',
+            input: { id: 'param:id', by: 3 },
+          },
+        ],
+      },
+      { records: adapter } as unknown as Parameters<typeof transactionExecutor>[1],
+    );
+
+    const results = await txn({ id: 'r1', value: 'v1' });
+    expect(calls.map(call => call.name)).toEqual([
+      'setFields',
+      'advance',
+      'purge',
+      'attach',
+      'detach',
+      'add',
+    ]);
+    expect(calls[0]?.args).toEqual([
+      { id: 'r1', value: 'v1' },
+      { id: 'r1', value: 'v1' },
+    ]);
+    expect(calls[3]?.args).toEqual(['r1', 'v1']);
+    expect(calls[5]?.args).toEqual(['r1', 3]);
+    expect(results[1]).toEqual({ applied: true });
+    expect(results[2]).toEqual({ count: 2 });
+  });
+
   it('throws when entity not found in adapters', async () => {
     const txn = transactionExecutor(
       {
@@ -238,7 +405,7 @@ describe('op.pipe', () => {
           },
         ],
       },
-      adapter as any,
+      adapter as unknown as Parameters<typeof pipeExecutor>[1],
     );
 
     const result = (await pipe({ roomId: 'r1' })) as Record<string, unknown>;
@@ -251,7 +418,7 @@ describe('op.pipe', () => {
         kind: 'pipe',
         steps: [{ op: 'nonexistent', config: { kind: 'lookup', fields: {}, returns: 'one' } }],
       },
-      adapter as any,
+      adapter as unknown as Parameters<typeof pipeExecutor>[1],
     );
 
     expect(pipe({})).rejects.toThrow("Operation 'nonexistent' not found");
@@ -263,7 +430,7 @@ describe('op.pipe', () => {
 // ---------------------------------------------------------------------------
 
 describe('op.transaction — arrayPush and arrayPull steps', () => {
-  const docFactories = createEntityFactories(Document);
+  const docFactories = createEntityFactories(Document, DocumentOps.operations);
   type DocAdapter = ReturnType<typeof docFactories.memory>;
   let docAdapter: DocAdapter;
 
@@ -287,9 +454,8 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
-            match: { id: 'param:id' },
-            field: 'outwardLinks',
-            value: 'param:targetId',
+            operation: 'pushOutward',
+            input: { id: 'param:id', value: 'param:targetId' },
           },
         ],
       },
@@ -315,10 +481,8 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
-            match: { id: 'param:id' },
-            field: 'outwardLinks',
-            value: 'param:targetId',
-            dedupe: true,
+            operation: 'pushOutward',
+            input: { id: 'param:id', value: 'param:targetId' },
           },
         ],
       },
@@ -345,9 +509,8 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPull',
             entity: 'documents',
-            match: { id: 'param:id' },
-            field: 'outwardLinks',
-            value: 'param:targetId',
+            operation: 'pullOutward',
+            input: { id: 'param:id', value: 'param:targetId' },
           },
         ],
       },
@@ -374,18 +537,14 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
-            match: { id: 'param:sourceId' },
-            field: 'outwardLinks',
-            value: 'param:targetId',
-            dedupe: true,
+            operation: 'pushOutward',
+            input: { id: 'param:sourceId', value: 'param:targetId' },
           },
           {
             op: 'arrayPush',
             entity: 'documents',
-            match: { id: 'param:targetId' },
-            field: 'inwardLinks',
-            value: 'param:sourceId',
-            dedupe: true,
+            operation: 'pushInward',
+            input: { id: 'param:targetId', value: 'param:sourceId' },
           },
         ],
       },
@@ -423,10 +582,8 @@ describe('op.transaction — arrayPush and arrayPull steps', () => {
           {
             op: 'arrayPush',
             entity: 'documents',
-            match: { id: 'param:sourceId' },
-            field: 'outwardLinks',
-            value: 'result:0.id',
-            dedupe: true,
+            operation: 'pushOutward',
+            input: { id: 'param:sourceId', value: 'result:0.id' },
           },
         ],
       },
@@ -560,7 +717,7 @@ describe('op.transaction — lookup step', () => {
     expect((updatedDoc as Record<string, unknown>).title).toBe('Snapshot Title');
   });
 
-  it('lookup step returns empty object when record not found', async () => {
+  it('lookup step returns null when record not found', async () => {
     const txn = transactionExecutor(
       {
         kind: 'transaction',
@@ -576,6 +733,6 @@ describe('op.transaction — lookup step', () => {
     );
 
     const results = await txn({ id: 'nonexistent' });
-    expect(results[0]).toEqual({});
+    expect(results[0]).toBeNull();
   });
 });

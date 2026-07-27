@@ -9,6 +9,7 @@ import type {
   RuntimeSqliteDatabase,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import type {
@@ -48,6 +49,23 @@ function supportedOperations(
   return Object.keys(selected).length > 0 ? selected : undefined;
 }
 
+function compositeOperationAvailable(
+  operation: (typeof CONFORMANCE_COMPOSITE_OPERATIONS)[keyof typeof CONFORMANCE_COMPOSITE_OPERATIONS],
+  entries: Readonly<Record<string, CompositeEntry>>,
+): boolean {
+  return (
+    operation.kind !== 'transaction' ||
+    operation.steps.every(step => {
+      if (!('operation' in step)) return true;
+      const namedOperation = step.operation;
+      return (
+        typeof namedOperation === 'string' &&
+        entries[step.entity]?.operations?.[namedOperation] !== undefined
+      );
+    })
+  );
+}
+
 async function createResources(
   definitions: readonly EntityConformanceDefinition[],
   profile: EntityBackendProfile,
@@ -60,6 +78,7 @@ async function createResources(
 
   const infra: StoreInfra = {
     appName: 'entity-conformance',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('[entity-conformance] Redis is unavailable in the SQLite driver');
     },
@@ -88,8 +107,9 @@ async function createResources(
         operation.kind === 'transaction'
           ? (['operation.transaction', 'transaction.rollback'] as const)
           : (['operation.pipe'] as const);
-      return capabilities.every(
-        capability => profile.capabilities[capability].status === 'supported',
+      return (
+        capabilities.every(capability => profile.capabilities[capability].status === 'supported') &&
+        compositeOperationAvailable(operation, entries)
       );
     }),
   );

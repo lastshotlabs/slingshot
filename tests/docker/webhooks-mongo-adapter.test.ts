@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createWebhooksTestApp } from '../../packages/slingshot-webhooks/src/testing';
 import { getMongooseModule } from '../../src/lib/mongo';
 import {
@@ -24,6 +25,7 @@ function adminHeaders(tenantId: string): Record<string, string> {
 function createMongoInfra(): StoreInfra {
   return {
     appName: 'slingshot-webhooks-docker-mongo',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('redis not configured');
     },

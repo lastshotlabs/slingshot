@@ -8,6 +8,7 @@ import {
   defineEntity,
   field,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, createEntityFactories } from '../../src/configDriven';
 import {
   ENTITY_CONFORMANCE_CATALOG,
@@ -56,6 +57,7 @@ function noIoInfra(onRedisAccess: () => void): StoreInfra {
   };
   return {
     appName: 'entity-conformance-no-io',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       onRedisAccess();
       throw new Error('Redis must not be accessed');

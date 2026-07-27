@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import mongoose from 'mongoose';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { pushSubscriptionFactories } from '../../packages/slingshot-push/src/entities/factories';
 
 const MONGO_URI = process.env.TEST_MONGO_URL ?? 'mongodb://localhost:27018/slingshot_test';
@@ -8,6 +9,7 @@ const MONGO_URI = process.env.TEST_MONGO_URL ?? 'mongodb://localhost:27018/sling
 function createMongoInfra(conn: mongoose.Connection): StoreInfra {
   return {
     appName: 'slingshot-push-docker',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('redis not configured');
     },

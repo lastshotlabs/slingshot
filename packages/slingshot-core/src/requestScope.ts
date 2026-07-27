@@ -3,14 +3,14 @@
  *
  * A request scope is a typed handle for "something that exists for the duration
  * of a single HTTP request and gets cleaned up at the end." Common examples:
- * a database transaction, a per-request HTTP client with the actor's token,
- * an idempotency session, a request-bound tracing helper.
+ * a per-request HTTP client with the actor's token, an idempotency session,
+ * or a request-bound tracing helper. Database transactions use the dedicated
+ * `transactions.run()` lifecycle instead.
  *
  * The framework runs `factory` lazily on first `getRequestScoped(c, scope)`
  * inside a request and caches the result for the rest of that request. After
  * the handler returns (success or error), the framework calls `cleanup` for
- * every scope that was actually initialized — in LIFO order, so a transaction
- * can roll back before its underlying connection is released.
+ * every scope that was actually initialized in LIFO order.
  */
 import type { Context } from 'hono';
 
@@ -57,24 +57,20 @@ export interface RequestScope<T = unknown> {
  * ```ts
  * import { defineRequestScope, getRequestScoped } from '@lastshotlabs/slingshot';
  *
- * export const dbTransaction = defineRequestScope({
- *   name: 'dbTransaction',
- *   factory: async ({ request }) => {
- *     const ctx = getSlingshotCtx(request);
- *     return ctx.persistence.beginTransaction();
- *   },
- *   cleanup: async tx => {
- *     // The handler should have committed by now; rollback is a safety net.
- *     if (tx.isOpen()) await tx.rollback();
- *   },
+ * export const upstreamClient = defineRequestScope({
+ *   name: 'upstreamClient',
+ *   factory: ({ request }) => createUpstreamClient(request.req.header('authorization')),
+ *   cleanup: client => client.close(),
  * });
  *
- * // In a route handler:
+ * // Database work instead uses the framework-owned transaction manager:
  * route.post({
  *   path: '/publish',
- *   handler: async ({ request, respond }) => {
- *     const tx = await getRequestScoped(request, dbTransaction);
- *     await tx.commit();
+ *   handler: async ({ transactions, entities, respond }) => {
+ *     await transactions.run('postgres', async scope => {
+ *       const posts = entities.get(PostEntity, { scope });
+ *       await posts.create({ title: 'Published' });
+ *     });
  *     return respond.json({ ok: true });
  *   },
  * });

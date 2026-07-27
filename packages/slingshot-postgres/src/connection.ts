@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import {
   type PostgresHealthCheckResult,
   type PostgresMigrationMode,
@@ -8,6 +8,8 @@ import {
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
+
+const CREATE_POSTGRES_SCOPED_BUNDLE = Symbol.for('slingshot.createPostgresScopedBundle');
 
 /**
  * A connected Postgres handle bundling a raw `pg.Pool` and a Drizzle ORM client.
@@ -190,12 +192,24 @@ export async function connectPostgres(
       `[slingshot-postgres] startup verification exceeded ${runtime.healthcheckTimeoutMs}ms`,
     ); // verify connectivity eagerly
     const db = drizzle(pool);
-    return {
+    const connected: DrizzlePostgresDb = {
       pool,
       db,
       healthCheck: timeoutMs => checkPostgresHealth(pool, runtime.healthcheckTimeoutMs, timeoutMs),
       getStats: () => runtime.snapshot(pool),
     };
+    Object.defineProperty(connected, CREATE_POSTGRES_SCOPED_BUNDLE, {
+      configurable: false,
+      enumerable: false,
+      writable: false,
+      value: (queryable: object): DrizzlePostgresDb => ({
+        pool: queryable as Pool,
+        db: drizzle(queryable as PoolClient),
+        healthCheck: connected.healthCheck,
+        getStats: connected.getStats,
+      }),
+    });
+    return connected;
   } catch (error) {
     await pool.end().catch(() => undefined);
     throw error;

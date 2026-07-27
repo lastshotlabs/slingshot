@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'bun:test';
-import type { EntityAdapter, PostgresBundle, StoreInfra } from '@lastshotlabs/slingshot-core';
+import { EntityTransactionConflictError } from '@lastshotlabs/slingshot-core';
+import type {
+  EntityAdapter,
+  PostgresBundle,
+  StoreInfra,
+  StoreType,
+  TransactionManager,
+  TransactionScope,
+  TransactionStore,
+} from '@lastshotlabs/slingshot-core';
 import { transactionExecutor } from '../../src/configDriven/operationExecutors/transaction';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
 
@@ -131,8 +140,53 @@ function createFakePostgresInfra(): {
     },
   };
 
-  const infra: StoreInfra = {
+  let infra: StoreInfra;
+  let activeScope: TransactionScope | undefined;
+  let activeInfra: StoreInfra | undefined;
+  const manager: TransactionManager = {
+    supports(store: StoreType): store is TransactionStore {
+      return store === 'postgres';
+    },
+    async run<T>(
+      store: TransactionStore,
+      callback: (scope: TransactionScope) => T | Promise<T>,
+    ): Promise<T> {
+      if (store !== 'postgres') throw new Error(`Unsupported transaction store '${store}'`);
+      if (activeScope) return callback(activeScope);
+
+      const client = await pool.connect();
+      const scope = Object.freeze({
+        store: 'postgres',
+        id: 'composition-test-scope',
+      }) as unknown as TransactionScope;
+      const scopedInfra = Object.create(infra) as StoreInfra;
+      Object.defineProperty(scopedInfra, 'getPostgres', {
+        configurable: false,
+        enumerable: true,
+        writable: false,
+        value: () => ({ pool: client, db: {} }) as unknown as PostgresBundle,
+      });
+      activeScope = scope;
+      activeInfra = scopedInfra;
+      try {
+        await client.query('BEGIN');
+        const result = await callback(scope);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        activeScope = undefined;
+        activeInfra = undefined;
+        client.release();
+      }
+    },
+  };
+  const postgres = { pool, db: {} } as unknown as PostgresBundle;
+  infra = {
     appName: 'test',
+    getTransactions: () => manager,
     getRedis() {
       throw new Error('Redis not configured');
     },
@@ -143,9 +197,18 @@ function createFakePostgresInfra(): {
       throw new Error('SQLite not configured');
     },
     getPostgres() {
-      return { pool, db: {} } as unknown as PostgresBundle;
+      return postgres;
     },
   };
+  Object.defineProperty(infra, Symbol.for('slingshot.resolveTransactionScopeInfra'), {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: (scope: TransactionScope): StoreInfra => {
+      if (scope !== activeScope || !activeInfra) throw new Error('Invalid transaction scope');
+      return activeInfra;
+    },
+  });
 
   return { infra, data, poolQueries, clientQueries, released };
 }
@@ -186,8 +249,9 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
     expect(data[parentTable]).toHaveLength(1);
     expect(data[childTable]).toHaveLength(1);
     expect(data[childTable]?.[0]?.parent_id).toBe(parentId);
-    expect(clientQueries).toContain('BEGIN');
-    expect(clientQueries).toContain('COMMIT');
+    expect(clientQueries.filter(query => query === 'BEGIN')).toHaveLength(1);
+    expect(clientQueries.filter(query => query === 'COMMIT')).toHaveLength(1);
+    expect(clientQueries).not.toContain('ROLLBACK');
     expect(poolQueries).toHaveLength(0);
     expect(released.count).toBe(1);
   });
@@ -204,11 +268,10 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
           steps: [
             { op: 'create', entity: 'parents', input: { name: 'param:name' } },
             {
-              op: 'arrayPush',
+              op: 'update',
               entity: 'children',
               match: { id: 'param:missingChildId' },
-              field: 'parentId',
-              value: 'result:0.id',
+              set: { parentId: 'result:0.id' },
             },
           ],
         }),
@@ -221,11 +284,12 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
 
     await expect(
       composite.createThenFail({ name: 'Acme', missingChildId: 'missing' }),
-    ).rejects.toThrow('arrayPush: record not found');
+    ).rejects.toBeInstanceOf(EntityTransactionConflictError);
 
     expect(data[`slingshot_${Parent._storageName}`] ?? []).toHaveLength(0);
-    expect(clientQueries).toContain('BEGIN');
-    expect(clientQueries).toContain('ROLLBACK');
+    expect(clientQueries.filter(query => query === 'BEGIN')).toHaveLength(1);
+    expect(clientQueries.filter(query => query === 'ROLLBACK')).toHaveLength(1);
+    expect(clientQueries).not.toContain('COMMIT');
     expect(released.count).toBe(1);
   });
 
@@ -245,14 +309,16 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
           {
             op: 'batch',
             entity: 'records',
-            action: 'delete',
-            filter: { status: 'pending' },
+            operation: 'batch',
+            input: {},
           },
         ],
       },
       { records: adapter },
     );
 
-    await expect(execute({})).rejects.toThrow("batch executor is missing on entity 'records'");
+    await expect(execute({})).rejects.toThrow(
+      "Configured operation 'batch' is missing on entity 'records' adapter",
+    );
   });
 });

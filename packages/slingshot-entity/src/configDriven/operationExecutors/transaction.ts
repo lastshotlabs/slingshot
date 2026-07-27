@@ -2,14 +2,21 @@
  * Runtime executor: op.transaction — cross-entity atomic writes.
  *
  * Executes a sequence of steps across multiple entity adapters.
- * Memory: sequential (single-threaded = atomic).
- * SQL: wrapped in BEGIN/COMMIT when `wrapInTransaction` is supplied.
+ * SQLite and PostgreSQL callers provide the real transaction boundary.
  *
  * Steps can reference params and previous step results via 'param:x' and 'result:N.field'
  * or 'result:N.nested.field'.
  */
-import type { TransactionOpConfig } from '@lastshotlabs/slingshot-core';
-import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  EntityTransactionConflictError,
+  TransactionBindingError,
+} from '@lastshotlabs/slingshot-core';
+import type {
+  EntityAdapter,
+  OperationConfig,
+  TransactionOpConfig,
+  TransactionStepResult,
+} from '@lastshotlabs/slingshot-core';
 
 export type AdapterMap = Partial<
   Record<string, EntityAdapter<unknown, unknown, unknown> & Record<string, unknown>>
@@ -28,45 +35,152 @@ function withoutPrimaryKey(
   return Object.keys(guard).length > 0 ? guard : undefined;
 }
 
-function resolveValue(
-  value: unknown,
-  params: Record<string, unknown>,
-  results: Array<Record<string, unknown>>,
-): unknown {
+interface BindingContext {
+  readonly params: Record<string, unknown>;
+  readonly results: readonly TransactionStepResult[];
+  readonly operationName?: string;
+  readonly stepIndex: number;
+}
+
+function invalidBinding(context: BindingContext, message: string): never {
+  throw new TransactionBindingError(message, context.operationName, context.stepIndex);
+}
+
+function resolveValue(value: unknown, context: BindingContext): unknown {
+  if (Array.isArray(value)) return value.map(item => resolveValue(item, context));
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, resolveValue(nested, context)]),
+    );
+  }
   if (typeof value !== 'string') return value;
-  if (value.startsWith('param:')) return params[value.slice(6)];
+  if (value.startsWith('param:')) {
+    const key = value.slice(6);
+    if (!key || !Object.prototype.hasOwnProperty.call(context.params, key)) {
+      invalidBinding(context, `Transaction parameter '${key}' is missing.`);
+    }
+    return context.params[key];
+  }
   if (value.startsWith('result:')) {
-    // Format: result:N.field or result:N.nested.field
-    const rest = value.slice(7); // e.g. "0.id" or "0.metadata.title"
-    const dotIdx = rest.indexOf('.');
-    if (dotIdx === -1) return results[Number(rest)];
-    const idx = Number(rest.slice(0, dotIdx));
-    const fieldPath = rest.slice(dotIdx + 1);
-    return fieldPath
-      .split('.')
-      .reduce<unknown>(
-        (obj, key) =>
-          obj != null && typeof obj === 'object'
-            ? (obj as Record<string, unknown>)[key]
-            : undefined,
-        results[idx],
-      );
+    const match = /^result:(\d+)(?:\.([A-Za-z_][A-Za-z0-9_.]*))?$/u.exec(value);
+    if (!match) invalidBinding(context, `Transaction result binding '${value}' is malformed.`);
+    const index = Number(match[1]);
+    if (index >= context.results.length) {
+      invalidBinding(context, `Transaction result ${index} is not available.`);
+    }
+    let resolved: unknown = context.results[index];
+    if (!match[2]) return resolved;
+    for (const key of match[2].split('.')) {
+      if (
+        resolved === null ||
+        typeof resolved !== 'object' ||
+        !Object.prototype.hasOwnProperty.call(resolved, key)
+      ) {
+        invalidBinding(context, `Transaction result binding '${value}' does not exist.`);
+      }
+      resolved = (resolved as Record<string, unknown>)[key];
+    }
+    return resolved;
   }
   if (value === 'now') return new Date();
   return value;
 }
 
 function resolveRecord(
-  record: Record<string, unknown> | undefined,
-  params: Record<string, unknown>,
-  results: Array<Record<string, unknown>>,
+  record: Readonly<Record<string, unknown>> | undefined,
+  context: BindingContext,
 ): Record<string, unknown> {
   if (!record) return {};
-  const resolved: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    resolved[key] = resolveValue(value, params, results);
+  return resolveValue(record, context) as Record<string, unknown>;
+}
+
+function collectNativeParams(
+  template: unknown,
+  resolved: unknown,
+  target: Record<string, unknown>,
+): void {
+  if (typeof template === 'string' && template.startsWith('param:')) {
+    const key = template.slice(6);
+    if (!Object.prototype.hasOwnProperty.call(target, key)) {
+      target[key] = resolved;
+    }
+    return;
   }
-  return resolved;
+  if (Array.isArray(template) && Array.isArray(resolved)) {
+    for (const [index, item] of template.entries()) {
+      collectNativeParams(item, resolved[index], target);
+    }
+    return;
+  }
+  if (
+    template &&
+    resolved &&
+    typeof template === 'object' &&
+    typeof resolved === 'object' &&
+    !Array.isArray(template) &&
+    !Array.isArray(resolved)
+  ) {
+    for (const [key, nested] of Object.entries(template)) {
+      if (Object.prototype.hasOwnProperty.call(resolved, key)) {
+        collectNativeParams(nested, (resolved as Record<string, unknown>)[key], target);
+      }
+    }
+  }
+}
+
+function getNativeOperation(
+  options: TransactionExecutorOptions | undefined,
+  entity: string,
+  operation: string,
+): OperationConfig | undefined {
+  return options?.operationConfigs?.[entity]?.[operation];
+}
+
+function getNativeMethod(
+  adapter: EntityAdapter<unknown, unknown, unknown> & Record<string, unknown>,
+  entity: string,
+  operation: string,
+): (...args: unknown[]) => Promise<unknown> {
+  const method = adapter[operation];
+  if (typeof method !== 'function') {
+    throw new Error(
+      `[transaction] Configured operation '${operation}' is missing on entity '${entity}' adapter`,
+    );
+  }
+  return method.bind(adapter) as (...args: unknown[]) => Promise<unknown>;
+}
+
+function isNativeRequiredMiss(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (/\] Not found$/u.test(error.message) || /\] Record not found$/u.test(error.message))
+  );
+}
+
+function requiredMutationConflict(
+  entity: string,
+  operation: string,
+  stepIndex: number,
+): EntityTransactionConflictError {
+  return new EntityTransactionConflictError(
+    `Transaction operation '${operation}' did not match a required '${entity}' record.`,
+    entity,
+    operation,
+    stepIndex,
+  );
+}
+
+function assertRecordResult(
+  value: unknown,
+  entity: string,
+  operation: string,
+): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(
+    `[transaction] Operation '${operation}' on entity '${entity}' returned an invalid result`,
+  );
 }
 
 async function findMatchedRecord(
@@ -108,18 +222,19 @@ async function findMatchedRecord(
  * `create`, `update`, `delete`, `fieldUpdate`, `transition`, `batch`,
  * `arrayPush`, `arrayPull`, `lookup`, or `increment`.
  *
- * **Input resolution:** Step fields (`input`, `match`, `set`, `value`) support:
+ * **Input resolution:** Step binding records support:
  * - `param:x` → value from the original `params` argument.
  * - `result:N.field` or `result:N.nested.field` → a (possibly nested) field of the N-th step's result (0-indexed).
  * - `'now'` → the current `Date`.
  * - Any other literal value → passed through unchanged.
  *
- * **Return value:** An array of result objects, one per step. The index in the
+ * **Return value:** An array of result records or `null`, one per step. The index in the
  * array corresponds to the step index and can be referenced by subsequent steps
  * via `result:N.field`.
  * - `delete` steps produce `{ deleted: true }`.
- * - `transition` steps that fail the guard produce `{ transitionFailed: true }`.
- * - `lookup` steps that find no record produce `{}`.
+ * - Native boolean transitions produce `{ applied: true }`; a guard miss throws HTTP 409.
+ * - Native numeric batches produce `{ count }`.
+ * - `lookup` steps that find no record produce `null`.
  *
  * **Atomicity:** Steps execute sequentially in JavaScript. When `options.wrapInTransaction`
  * is provided, the entire step sequence runs inside that wrapper (e.g. a SQLite
@@ -132,7 +247,7 @@ async function findMatchedRecord(
  * @param options.wrapInTransaction - When provided, wraps the entire step sequence
  *   in a transaction (e.g. SQLite BEGIN/COMMIT). The function receives an async
  *   callback and is responsible for opening, committing, and rolling back.
- * @returns An async function `(params) => Promise<Array<Record<string, unknown>>>`.
+ * @returns An async function `(params) => Promise<TransactionStepResult[]>`.
  * @throws If a step's `entity` name is not present in `adapters`.
  *
  * @example
@@ -153,51 +268,67 @@ async function findMatchedRecord(
  * // step 2: create new snapshot with type:'revert'
  * ```
  */
+export interface TransactionExecutorOptions {
+  readonly wrapInTransaction?: (fn: () => Promise<void>) => Promise<void>;
+  readonly primaryKeys?: Readonly<Record<string, string>>;
+  readonly operationName?: string;
+  readonly operationConfigs?: Readonly<
+    Record<string, Readonly<Record<string, OperationConfig>> | undefined>
+  >;
+}
+
 export function transactionExecutor(
   op: TransactionOpConfig,
   adapters: AdapterMap,
-  options?: {
-    wrapInTransaction?: (fn: () => Promise<void>) => Promise<void>;
-    primaryKeys?: Readonly<Record<string, string>>;
-  },
-): (params: Record<string, unknown>) => Promise<Array<Record<string, unknown>>> {
+  options?: TransactionExecutorOptions,
+): (params: Record<string, unknown>) => Promise<TransactionStepResult[]> {
   return async params => {
-    const results: Array<Record<string, unknown>> = [];
+    const results: TransactionStepResult[] = [];
 
     const executeSteps = async (): Promise<void> => {
-      for (const step of op.steps) {
+      for (const [stepIndex, step] of op.steps.entries()) {
         const adapter = adapters[step.entity];
         if (!adapter) {
           throw new Error(`[transaction] Entity '${step.entity}' not found in composite adapter`);
         }
         const primaryKey = options?.primaryKeys?.[step.entity] ?? 'id';
+        const context: BindingContext = {
+          params,
+          results,
+          operationName: options?.operationName,
+          stepIndex,
+        };
 
-        let result: Record<string, unknown> = {};
+        let result: TransactionStepResult;
 
         switch (step.op) {
           case 'create': {
-            const input = resolveRecord(step.input, params, results);
+            const input = resolveRecord(step.input, context);
             result = (await adapter.create(input)) as Record<string, unknown>;
             break;
           }
 
           case 'update': {
-            const match = resolveRecord(step.match, params, results);
+            const match = resolveRecord(step.match, context);
             const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
-            if (!matched) throw new Error('[transaction] update: record not found');
-            const input = resolveRecord(step.set, params, results);
+            if (!matched) {
+              throw requiredMutationConflict(step.entity, 'update', stepIndex);
+            }
+            const input = resolveRecord(step.set, context);
             const updated = await adapter.update(
               matched.id,
               input,
               withoutPrimaryKey(match, primaryKey),
             );
-            if (!updated) throw new Error('[transaction] update: record not found');
+            if (!updated) {
+              throw requiredMutationConflict(step.entity, 'update', stepIndex);
+            }
             result = updated as Record<string, unknown>;
             break;
           }
 
           case 'delete': {
-            const match = resolveRecord(step.match, params, results);
+            const match = resolveRecord(step.match, context);
             const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
             const deleted = matched
               ? await adapter.delete(matched.id, withoutPrimaryKey(match, primaryKey))
@@ -207,156 +338,156 @@ export function transactionExecutor(
           }
 
           case 'fieldUpdate': {
-            const matchResolved = resolveRecord(step.match, params, results);
-            const setResolved = resolveRecord(step.set, params, results);
-            // fieldUpdate ops are named on the adapter — find the first one matching convention
-            // or fall back to calling adapter.update with the set fields directly.
-            const fn = (adapter as Record<string, unknown>)['fieldUpdate'];
-            if (typeof fn === 'function') {
-              result = await (
-                fn as (
-                  a: Record<string, unknown>,
-                  b: Record<string, unknown>,
-                ) => Promise<Record<string, unknown>>
-              )(matchResolved, setResolved);
-            } else {
-              throw new Error(
-                `[transaction] fieldUpdate executor is missing on entity '${step.entity}'`,
-              );
+            const input = resolveRecord(step.input, context);
+            const nativeParams = { ...params, ...input };
+            const native = getNativeOperation(options, step.entity, step.operation);
+            if (native?.kind === 'fieldUpdate') {
+              collectNativeParams(native.match, input, nativeParams);
+            }
+            try {
+              const value = await getNativeMethod(
+                adapter,
+                step.entity,
+                step.operation,
+              )(nativeParams, input);
+              if (value === null || value === false) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              result = assertRecordResult(value, step.entity, step.operation);
+            } catch (error) {
+              if (error instanceof EntityTransactionConflictError) throw error;
+              if (isNativeRequiredMiss(error)) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              throw error;
             }
             break;
           }
 
           case 'transition': {
-            const matchResolved = resolveRecord(step.match, params, results);
-            if (step.field && step.from !== undefined && step.to !== undefined) {
-              const matched = await findMatchedRecord(
+            const input = resolveRecord(step.input, context);
+            const nativeParams = { ...params, ...input };
+            const native = getNativeOperation(options, step.entity, step.operation);
+            if (native?.kind === 'transition') {
+              collectNativeParams(native.match, input, nativeParams);
+              collectNativeParams(native.set, input, nativeParams);
+            }
+            try {
+              const value = await getNativeMethod(
                 adapter,
                 step.entity,
-                matchResolved,
-                primaryKey,
-              );
-              const entity = matched?.record;
-              if (entity && entity[step.field] === step.from) {
-                const updateInput: Record<string, unknown> = { [step.field]: step.to };
-                const setResolved = resolveRecord(step.set, params, results);
-                Object.assign(updateInput, setResolved);
-                const updated = await adapter.update(
-                  matched.id,
-                  updateInput,
-                  withoutPrimaryKey(matchResolved, primaryKey),
-                );
-                if (!updated) throw new Error('[transaction] transition: record not found');
-                result = updated as Record<string, unknown>;
-              } else {
-                result = { transitionFailed: true };
+                step.operation,
+              )(nativeParams);
+              if (value === null || value === false) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
               }
-            } else {
-              throw new Error('[transaction] transition step is missing field/from/to');
+              result =
+                value === true
+                  ? { applied: true }
+                  : assertRecordResult(value, step.entity, step.operation);
+            } catch (error) {
+              if (error instanceof EntityTransactionConflictError) throw error;
+              if (isNativeRequiredMiss(error)) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              throw error;
             }
             break;
           }
 
           case 'batch': {
-            // Batch steps delegate to a named 'batch' op on the adapter if present.
-            // Full batch support requires the named op to be wired — this is a best-effort
-            // dispatch; consumers should prefer dedicated step types where possible.
-            const batchFn = (adapter as Record<string, unknown>)['batch'];
-            if (typeof batchFn === 'function') {
-              const filterResolved = resolveRecord(
-                step.filter as Record<string, unknown> | undefined,
-                params,
-                results,
-              );
-              result = {
-                count: await (batchFn as (f: Record<string, unknown>) => Promise<number>)(
-                  filterResolved,
-                ),
-              };
+            const input = resolveRecord(step.input, context);
+            const nativeParams = { ...params, ...input };
+            const native = getNativeOperation(options, step.entity, step.operation);
+            if (native?.kind === 'batch') {
+              collectNativeParams(native.filter, input, nativeParams);
+              collectNativeParams(native.set, input, nativeParams);
+            }
+            const value = await getNativeMethod(adapter, step.entity, step.operation)(nativeParams);
+            if (typeof value === 'number') {
+              result = { count: value };
             } else {
-              throw new Error(`[transaction] batch executor is missing on entity '${step.entity}'`);
+              result = assertRecordResult(value, step.entity, step.operation);
             }
             break;
           }
 
           case 'arrayPush': {
-            if (!step.field) throw new Error('[transaction] arrayPush step is missing field');
-            const match = resolveRecord(step.match, params, results);
-            const value = resolveValue(step.value, params, results);
-            const dedupe = step.dedupe !== false;
-            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
-            if (!matched) throw new Error(`[transaction] arrayPush: record not found`);
-            const entity = matched.record;
-            const current = Array.isArray(entity[step.field])
-              ? [...(entity[step.field] as unknown[])]
-              : [];
-            if (dedupe && current.includes(value)) {
-              result = entity;
-            } else {
-              current.push(value);
-              const updated = await adapter.update(
-                matched.id,
-                {
-                  ...entity,
-                  [step.field]: current,
-                },
-                withoutPrimaryKey(match, primaryKey),
+            const input = resolveRecord(step.input, context);
+            const id = input[primaryKey] ?? input.id;
+            if (typeof id !== 'string' && typeof id !== 'number') {
+              invalidBinding(context, `Transaction array push requires '${primaryKey}'.`);
+            }
+            if (!Object.prototype.hasOwnProperty.call(input, 'value')) {
+              invalidBinding(context, "Transaction array push requires 'value'.");
+            }
+            const value = input.value;
+            try {
+              result = assertRecordResult(
+                await getNativeMethod(adapter, step.entity, step.operation)(id, value),
+                step.entity,
+                step.operation,
               );
-              if (!updated) throw new Error('[transaction] arrayPush: record not found');
-              result = updated as Record<string, unknown>;
+            } catch (error) {
+              if (isNativeRequiredMiss(error)) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              throw error;
             }
             break;
           }
 
           case 'arrayPull': {
-            if (!step.field) throw new Error('[transaction] arrayPull step is missing field');
-            const match = resolveRecord(step.match, params, results);
-            const value = resolveValue(step.value, params, results);
-            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
-            if (!matched) throw new Error(`[transaction] arrayPull: record not found`);
-            const entity = matched.record;
-            const filtered = Array.isArray(entity[step.field])
-              ? (entity[step.field] as unknown[]).filter(v => v !== value)
-              : [];
-            const updated = await adapter.update(
-              matched.id,
-              {
-                ...entity,
-                [step.field]: filtered,
-              },
-              withoutPrimaryKey(match, primaryKey),
-            );
-            if (!updated) throw new Error('[transaction] arrayPull: record not found');
-            result = updated as Record<string, unknown>;
+            const input = resolveRecord(step.input, context);
+            const id = input[primaryKey] ?? input.id;
+            if (typeof id !== 'string' && typeof id !== 'number') {
+              invalidBinding(context, `Transaction array pull requires '${primaryKey}'.`);
+            }
+            if (!Object.prototype.hasOwnProperty.call(input, 'value')) {
+              invalidBinding(context, "Transaction array pull requires 'value'.");
+            }
+            const value = input.value;
+            try {
+              result = assertRecordResult(
+                await getNativeMethod(adapter, step.entity, step.operation)(id, value),
+                step.entity,
+                step.operation,
+              );
+            } catch (error) {
+              if (isNativeRequiredMiss(error)) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              throw error;
+            }
             break;
           }
 
           case 'lookup': {
-            const match = resolveRecord(step.match, params, results);
+            const match = resolveRecord(step.match, context);
             const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
-            result = matched?.record ?? {};
+            result = matched?.record ?? null;
             break;
           }
 
           case 'increment': {
-            if (!step.field) throw new Error('[transaction] increment step is missing field');
-            const match = resolveRecord(step.match, params, results);
-            const by = typeof step.by === 'number' ? step.by : 1;
-            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
-            if (!matched) throw new Error(`[transaction] increment: record not found`);
-            const entity = matched.record;
-            const current = entity[step.field];
-            const next = typeof current === 'number' ? current + by : by;
-            const updated = await adapter.update(
-              matched.id,
-              {
-                ...entity,
-                [step.field]: next,
-              },
-              withoutPrimaryKey(match, primaryKey),
-            );
-            if (!updated) throw new Error('[transaction] increment: record not found');
-            result = updated as Record<string, unknown>;
+            const input = resolveRecord(step.input, context);
+            const id = input[primaryKey] ?? input.id;
+            if (typeof id !== 'string' && typeof id !== 'number') {
+              invalidBinding(context, `Transaction increment requires '${primaryKey}'.`);
+            }
+            const by = typeof input.by === 'number' ? input.by : undefined;
+            try {
+              result = assertRecordResult(
+                await getNativeMethod(adapter, step.entity, step.operation)(id, by),
+                step.entity,
+                step.operation,
+              );
+            } catch (error) {
+              if (isNativeRequiredMiss(error)) {
+                throw requiredMutationConflict(step.entity, step.operation, stepIndex);
+              }
+              throw error;
+            }
             break;
           }
         }

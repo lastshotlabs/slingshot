@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { pushSubscriptionFactories } from '../../packages/slingshot-push/src/entities/factories';
 
 const CONNECTION =
@@ -9,6 +10,7 @@ const CONNECTION =
 function createPostgresInfra(pool: Pool): StoreInfra {
   return {
     appName: 'slingshot-push-docker',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('redis not configured');
     },

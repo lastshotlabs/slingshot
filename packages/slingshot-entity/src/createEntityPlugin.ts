@@ -32,6 +32,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
+  REGISTER_TRANSACTION_ENTITY,
   RESOLVE_REINDEX_SOURCE,
   createConsoleLogger,
   createRouter,
@@ -261,6 +262,7 @@ function resolveEntryAdapter(
   entry: EntityPluginEntry,
   storeType: StoreType,
   infra: StoreInfra,
+  notify = true,
 ): BareEntityAdapter {
   if ('buildAdapter' in entry) {
     return entry.buildAdapter(storeType, infra);
@@ -297,7 +299,7 @@ function resolveEntryAdapter(
     }
   }
 
-  entry.onAdapter?.(adapter);
+  if (notify) entry.onAdapter?.(adapter);
   return adapter;
 }
 
@@ -646,6 +648,16 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
       for (const entry of resolvedEntries) {
         const adapter = resolveEntryAdapter(entry, storeType, infra);
         const { config } = entry;
+        const registerTransactionEntity = Reflect.get(infra, REGISTER_TRANSACTION_ENTITY);
+        if (typeof registerTransactionEntity === 'function') {
+          registerTransactionEntity.call(infra, {
+            plugin: pluginConfig.name,
+            entity: config.name,
+            store: storeType,
+            buildAdapter: (scopedInfra: StoreInfra) =>
+              resolveEntryAdapter(entry, storeType, scopedInfra, false),
+          });
+        }
         const planningParentPath = supportsOpenApiRegistration(app)
           ? [mountPath, entry.parentPath]
               .filter((part): part is string => Boolean(part))

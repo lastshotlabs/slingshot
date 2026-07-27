@@ -305,7 +305,7 @@ export function createMemoryChatState(
   // Cast resolveRepo() results to hand-written adapter interfaces.
   // Opaque boundary between entity framework generics and our concrete API.
   const typedRooms = rooms as ChatPluginState['rooms'];
-  const typedMembers = members as ChatPluginState['members'];
+  const typedMembers = members as unknown as ChatPluginState['members'];
   const typedMessages = messages as unknown as ChatPluginState['messages'];
   const typedReceipts = receipts as ChatPluginState['receipts'];
   const typedReactions = reactions as ChatPluginState['reactions'];

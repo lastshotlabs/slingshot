@@ -46,6 +46,8 @@ import {
 } from './packageAuthoring';
 import { requireEntityAdapter } from './pluginState';
 import type { PluginStateMap } from './pluginStateTypes';
+import { RESOLVE_TRANSACTION_ENTITY_ADAPTER } from './storeInfra';
+import type { TransactionEntityResolutionOptions, TransactionManager } from './transactions';
 
 /**
  * Out-of-request hook services. Mirrors the accessor surface
@@ -66,6 +68,9 @@ export interface HookServices {
    * concrete adapter shape without casting.
    */
   readonly entities: PackageEntityReader;
+
+  /** Application-owned transaction manager for atomic out-of-request work. */
+  readonly transactions: TransactionManager;
 
   /**
    * Resolve typed cross-package capabilities. Use `require` when the providing
@@ -130,8 +135,31 @@ export function buildHookServices(args: {
    * own entities by module reference without redundant `{ plugin: '...' }` qualifiers.
    */
   pluginName: string;
+  /**
+   * Explicit manager override for manually assembled hook environments.
+   * Framework-created apps resolve the manager from their attached StoreInfra.
+   */
+  transactions?: TransactionManager;
 }): HookServices {
   const { app, pluginState, bus, logger, pluginName } = args;
+  const appContext = getContextOrNull(app);
+  const contextStoreInfra = appContext
+    ? Reflect.get(appContext, Symbol.for('slingshot.contextStoreInfra'))
+    : undefined;
+  const getTransactions =
+    typeof contextStoreInfra === 'object' && contextStoreInfra !== null
+      ? Reflect.get(contextStoreInfra, 'getTransactions')
+      : undefined;
+  const transactions =
+    args.transactions ??
+    (typeof getTransactions === 'function'
+      ? (getTransactions.call(contextStoreInfra) as TransactionManager)
+      : null);
+  if (!transactions) {
+    throw new Error(
+      '[slingshot] buildHookServices requires an app-owned or explicitly supplied transaction manager.',
+    );
+  }
 
   const entities: PackageEntityReader = {
     get<TValue = unknown>(
@@ -139,7 +167,28 @@ export function buildHookServices(args: {
         | SlingshotPackageEntityModuleLike<TValue>
         | PackageEntityRef<TValue>
         | { entity: string; plugin?: string },
+      options?: TransactionEntityResolutionOptions,
     ): TValue {
+      const resolveAdapter = (plugin: string, entity: string): object => {
+        if (!options) {
+          return requireEntityAdapter(app, { plugin, entity });
+        }
+        const resolveTransactionEntity =
+          typeof contextStoreInfra === 'object' && contextStoreInfra !== null
+            ? Reflect.get(contextStoreInfra, RESOLVE_TRANSACTION_ENTITY_ADAPTER)
+            : undefined;
+        if (typeof resolveTransactionEntity !== 'function') {
+          throw new Error(
+            '[slingshot] Scoped hook entity resolution requires framework StoreInfra.',
+          );
+        }
+        return resolveTransactionEntity.call(contextStoreInfra, {
+          plugin,
+          entity,
+          scope: options.scope,
+        });
+      };
+
       // Module form: `entity({ config: Foo })` returns a SlingshotPackageEntityModuleLike.
       if (
         typeof target === 'object' &&
@@ -147,10 +196,7 @@ export function buildHookServices(args: {
         (target as SlingshotPackageEntityModuleLike).kind === 'entity'
       ) {
         const module = target as SlingshotPackageEntityModuleLike;
-        return requireEntityAdapter(app, {
-          plugin: pluginName,
-          entity: module.entityName,
-        }) as TValue;
+        return resolveAdapter(pluginName, module.entityName) as TValue;
       }
       // entityRef form: `entityRef(...)` returns a PackageEntityRef with `kind: 'entity-ref'`.
       if (
@@ -159,10 +205,7 @@ export function buildHookServices(args: {
         (target as PackageEntityRef).kind === 'entity-ref'
       ) {
         const ref = target as PackageEntityRef;
-        const adapter = requireEntityAdapter(app, {
-          plugin: ref.plugin ?? ref.contract ?? pluginName,
-          entity: ref.entity,
-        });
+        const adapter = resolveAdapter(ref.plugin ?? ref.contract ?? pluginName, ref.entity);
         return applyPublicEntityExposure(adapter, ref.exposure, {
           entity: ref.entity,
           contract: ref.contract,
@@ -171,10 +214,7 @@ export function buildHookServices(args: {
       }
       // Escape hatch — `{ plugin?, entity }` lookup by name.
       const lookup = target as { plugin?: string; entity: string };
-      return requireEntityAdapter(app, {
-        plugin: lookup.plugin ?? pluginName,
-        entity: lookup.entity,
-      }) as TValue;
+      return resolveAdapter(lookup.plugin ?? pluginName, lookup.entity) as TValue;
     },
   };
 
@@ -203,6 +243,7 @@ export function buildHookServices(args: {
 
   return {
     entities,
+    transactions,
     capabilities,
     pluginState,
     bus,

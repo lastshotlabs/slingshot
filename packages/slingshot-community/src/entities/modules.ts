@@ -141,6 +141,16 @@ export interface BuildCommunityEntityModulesArgs {
 export function buildCommunityEntityModules(args: BuildCommunityEntityModulesArgs) {
   const { refs, permissionsAdapter, tenantId } = args;
 
+  // Manual wiring owns these externally implemented custom operations. The
+  // standard base factories receive only operations they implement directly.
+  const reactionBaseOperations = {
+    listByTarget: reactionOperations.operations.listByTarget,
+  };
+  const containerInviteBaseOperations = {
+    findByToken: containerInviteOperations.operations.findByToken,
+    listByContainer: containerInviteOperations.operations.listByContainer,
+  };
+
   // ─── Container ─────────────────────────────────────────────────────────────
   const containerModule = entity({
     config: Container,
@@ -200,8 +210,8 @@ export function buildCommunityEntityModules(args: BuildCommunityEntityModulesArg
   });
 
   // ─── Reaction ──────────────────────────────────────────────────────────────
-  // The `updateScore` op.custom is intentionally route-disabled and has no
-  // adapter wiring — the custom-handler is dormant and never invoked at runtime.
+  // `updateScore` is performed by the package's bus subscriber, outside the
+  // standard adapter factory.
   const reactionModule = entity({
     config: Reaction,
     operations: reactionOperations,
@@ -210,7 +220,7 @@ export function buildCommunityEntityModules(args: BuildCommunityEntityModulesArg
       buildAdapter: (storeType, infra) => {
         const adapter = resolveStandardAdapter({
           config: Reaction,
-          operations: reactionOperations.operations,
+          operations: reactionBaseOperations,
           storeType,
           infra,
         });
@@ -328,7 +338,7 @@ export function buildCommunityEntityModules(args: BuildCommunityEntityModulesArg
       buildAdapter: (storeType, infra) => {
         const adapter = resolveStandardAdapter({
           config: ContainerInvite,
-          operations: containerInviteOperations.operations,
+          operations: containerInviteBaseOperations,
           storeType,
           infra,
         });

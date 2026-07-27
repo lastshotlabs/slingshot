@@ -22,6 +22,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { ResolvedOperations } from '../types';
+import { assertEntityBackendRequirements } from './backendProfiles';
 import { createMemoryEntityAdapter } from './memoryAdapter';
 import { createMongoEntityAdapter } from './mongoAdapter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
@@ -428,6 +429,10 @@ export function createEntityFactories<
   type UI = InferUpdateInput<F>;
   const normalizedOperations = resolveOperations(operations);
 
+  function assertStore(store: 'memory' | 'redis' | 'sqlite' | 'mongo' | 'postgres'): void {
+    assertEntityBackendRequirements(store, config, normalizedOperations);
+  }
+
   function maybeWrap<
     AdapterT extends EntityAdapter<InferEntity<F>, InferCreateInput<F>, InferUpdateInput<F>>,
   >(adapter: AdapterT, infra?: StoreInfra): AdapterT {
@@ -449,11 +454,14 @@ export function createEntityFactories<
   }
 
   return {
-    memory: (infra?: StoreInfra) =>
-      maybeWrap(createMemoryEntityAdapter<E, CI, UI>(config, normalizedOperations), infra),
+    memory: (infra?: StoreInfra) => {
+      assertStore('memory');
+      return maybeWrap(createMemoryEntityAdapter<E, CI, UI>(config, normalizedOperations), infra);
+    },
 
-    redis: (infra: StoreInfra) =>
-      maybeWrap(
+    redis: (infra: StoreInfra) => {
+      assertStore('redis');
+      return maybeWrap(
         createRedisEntityAdapter<E, CI, UI>(
           infra.getRedis(),
           infra.appName,
@@ -461,20 +469,24 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
-      ),
+      );
+    },
 
-    sqlite: (infra: StoreInfra) =>
-      maybeWrap(
+    sqlite: (infra: StoreInfra) => {
+      assertStore('sqlite');
+      return maybeWrap(
         createSqliteEntityAdapter<E, CI, UI>(
           adaptRuntimeSqliteToEntityDb(infra.getSqliteDb()),
           config,
           normalizedOperations,
         ),
         infra,
-      ),
+      );
+    },
 
-    mongo: (infra: StoreInfra) =>
-      maybeWrap(
+    mongo: (infra: StoreInfra) => {
+      assertStore('mongo');
+      return maybeWrap(
         createMongoEntityAdapter<E, CI, UI>(
           (() => {
             const { conn } = infra.getMongo();
@@ -488,17 +500,20 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
-      ),
+      );
+    },
 
-    postgres: (infra: StoreInfra) =>
-      maybeWrap(
+    postgres: (infra: StoreInfra) => {
+      assertStore('postgres');
+      return maybeWrap(
         createPostgresEntityAdapter<E, CI, UI>(
           infra.getPostgres().pool,
           config,
           normalizedOperations,
         ),
         infra,
-      ),
+      );
+    },
   };
 }
 

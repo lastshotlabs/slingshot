@@ -546,6 +546,37 @@ describe('script entrypoints', () => {
 
     const dockerEnv = dockerModule.getDockerEnv({ POSTGRES_URL: 'postgres://custom' });
     expect(dockerEnv.TEST_POSTGRES_URL).toBe('postgres://custom');
+    expect(dockerEnv.TEST_MONGO_URL).toBe('mongodb://localhost:27018/slingshot_test');
+    expect(dockerEnv.TEST_REDIS_URL).toBe('redis://localhost:6380');
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some((step: { command: string[] }) =>
+          step.command.includes('packages/slingshot-entity/tests/conformance/postgres.test.ts'),
+        ),
+    ).toBe(true);
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some(
+          (step: { command: string[] }) =>
+            step.command.join(' ') === 'bun run entity:conformance:report',
+        ),
+    ).toBe(true);
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some((step: { command: string[] }) =>
+          step.command.includes('packages/slingshot-entity/tests/conformance/mongo.test.ts'),
+        ),
+    ).toBe(true);
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some((step: { command: string[] }) =>
+          step.command.includes('packages/slingshot-entity/tests/conformance/redis.test.ts'),
+        ),
+    ).toBe(true);
 
     const dockerCalls: SpawnCalls = [];
     expect(

@@ -19,6 +19,14 @@ import { ThreadTag, threadTagOperations } from './threadTag';
 import { UserMute, userMuteOperations } from './userMute';
 import { Warning, warningOperations } from './warning';
 
+const reactionBaseOperations = {
+  listByTarget: reactionOperations.operations.listByTarget,
+};
+const containerInviteBaseOperations = {
+  findByToken: containerInviteOperations.operations.findByToken,
+  listByContainer: containerInviteOperations.operations.listByContainer,
+};
+
 /**
  * `RepoFactories` for the Container entity.
  *
@@ -78,7 +86,7 @@ export const replyFactories = createEntityFactories(Reply, replyOperations.opera
  * const reactionAdapter = resolveRepo(reactionFactories, 'postgres', infra);
  * ```
  */
-export const reactionFactories = createEntityFactories(Reaction, reactionOperations.operations);
+export const reactionFactories = createEntityFactories(Reaction, reactionBaseOperations);
 
 /**
  * `RepoFactories` for the ContainerMember entity.
@@ -157,7 +165,7 @@ export const threadTagFactories = createEntityFactories(ThreadTag, threadTagOper
 /** `RepoFactories` for the ContainerInvite entity. */
 export const containerInviteFactories = createEntityFactories(
   ContainerInvite,
-  containerInviteOperations.operations,
+  containerInviteBaseOperations,
 );
 
 /** `RepoFactories` for the ContainerSubscription entity. */

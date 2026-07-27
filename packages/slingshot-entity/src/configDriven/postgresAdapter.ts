@@ -21,12 +21,14 @@ import {
   HttpError,
   type OperationConfig,
   type ResolvedEntityConfig,
+  evaluateFilter,
 } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
   buildCursorForRecord,
   coerceToDate,
+  compareForSort,
   decodeCursor,
   fromPgRow,
   pgColumnType,
@@ -329,14 +331,23 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       const { where, params } = buildWhereClause(id, filter, entries.length + 1);
       values.push(...params);
 
-      const result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where}`, values);
+      let result: { rows: Record<string, unknown>[]; rowCount: number | null };
+      try {
+        result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where}`, values);
+      } catch (error) {
+        if ((error as { code?: unknown }).code === '23505') {
+          throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+        }
+        throw error;
+      }
 
       if ((result.rowCount ?? 0) === 0) {
         return null;
       }
 
-      // Read back the updated record
-      const readback = buildWhereClause(id, filter, 1);
+      // The guarded UPDATE is the source of truth. Read by primary key so an
+      // update that changes one of its own guard fields still returns the row.
+      const readback = buildWhereClause(id, undefined, 1);
       const updated = await pool.query(
         `SELECT * FROM ${table} WHERE ${readback.where} LIMIT 1`,
         readback.params,
@@ -394,91 +405,41 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       // TTL
       if (ttlSeconds) {
-        conditions.push(`${ttlColumn} > $${paramIdx++}`);
+        conditions.push(`${ttlColumn} > $${paramIdx}`);
         params.push(Date.now());
       }
 
-      // Filter
-      if (filter) {
-        for (const [key, val] of Object.entries(filter)) {
-          if (val === undefined) continue;
-          if (!(key in config.fields)) continue;
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const visible = (await pool.query(`SELECT * FROM ${table} ${where}`, params)).rows
+        .map(row => fromPgRow(row, config.fields))
+        .filter(record => !filter || evaluateFilter(record, filter));
+      visible.sort((a, b) => compareForSort(a, b, cursorFields, sortDir));
 
-          const col = toSnakeCase(key);
-          const def = config.fields[key];
-
-          if (def.type === 'json') {
-            conditions.push(`${col} = $${paramIdx++}`);
-            params.push(JSON.stringify(val));
-          } else if (def.type === 'date') {
-            conditions.push(`${col} = $${paramIdx++}`);
-            params.push(val instanceof Date ? val : coerceToDate(val));
-          } else {
-            conditions.push(`${col} = $${paramIdx++}`);
-            params.push(val);
-          }
-        }
-      }
-
-      // Cursor
+      let startIndex = 0;
       if (opts?.cursor) {
         const cursorValues = decodeCursor(opts.cursor);
-        const op = sortDir === 'desc' ? '<' : '>';
-
-        if (cursorFields.length === 1) {
-          const f = cursorFields[0];
-          const col = toSnakeCase(f);
-          let cv = cursorValues[f];
-          if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-          conditions.push(`${col} ${op} $${paramIdx++}`);
-          params.push(cv);
-        } else {
-          // Multi-field cursor
-          const orClauses: string[] = [];
-          for (let i = 0; i < cursorFields.length; i++) {
-            const parts: string[] = [];
-            for (let j = 0; j < i; j++) {
-              const f = cursorFields[j];
-              const col = toSnakeCase(f);
-              let cv = cursorValues[f];
-              if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-              parts.push(`${col} = $${paramIdx++}`);
-              params.push(cv);
-            }
-            const f = cursorFields[i];
-            const col = toSnakeCase(f);
-            let cv = cursorValues[f];
-            if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-            parts.push(`${col} ${op} $${paramIdx++}`);
-            params.push(cv);
-            orClauses.push(`(${parts.join(' AND ')})`);
-          }
-          conditions.push(`(${orClauses.join(' OR ')})`);
-        }
+        const cursorIndex = visible.findIndex(record =>
+          cursorFields.every(field => {
+            const recordValue = record[field];
+            const cursorValue =
+              config.fields[field].type === 'date'
+                ? coerceToDate(cursorValues[field])
+                : cursorValues[field];
+            return recordValue instanceof Date && cursorValue instanceof Date
+              ? recordValue.getTime() === cursorValue.getTime()
+              : recordValue === cursorValue;
+          }),
+        );
+        startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       }
 
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      // Sort
-      const sortColsStr = cursorFields
-        .map(f => `${toSnakeCase(f)} ${sortDir === 'desc' ? 'DESC' : 'ASC'}`)
-        .join(', ');
-
-      params.push(limit + 1);
-
-      const result = await pool.query(
-        `SELECT * FROM ${table} ${where} ORDER BY ${sortColsStr} LIMIT $${paramIdx}`,
-        params,
-      );
-
-      const hasMore = result.rows.length > limit;
-      const pageRows = result.rows.slice(0, limit);
-      const items = pageRows.map(row => fromPgRow(row, config.fields) as Entity);
+      const pageRows = visible.slice(startIndex, startIndex + limit + 1);
+      const hasMore = pageRows.length > limit;
+      const items = pageRows.slice(0, limit) as Entity[];
 
       let nextCursor: string | undefined;
-      if (hasMore && pageRows.length > 0) {
-        const lastRow = fromPgRow(pageRows[pageRows.length - 1], config.fields);
-        nextCursor = buildCursorForRecord(lastRow, cursorFields);
+      if (hasMore && items.length > 0) {
+        nextCursor = buildCursorForRecord(pageRows[limit - 1], cursorFields);
       }
 
       return { items, nextCursor, hasMore };

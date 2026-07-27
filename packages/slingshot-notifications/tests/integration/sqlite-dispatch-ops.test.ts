@@ -20,6 +20,7 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { RuntimeSqliteDatabase, StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import {
   notificationFactories,
   notificationPreferenceFactories,
@@ -77,6 +78,7 @@ function createMemorySqliteInfra(): { infra: StoreInfra; raw: Database } {
   const runtimeDb = adaptForRuntimeSqlite(raw);
   const infra: StoreInfra = {
     appName: 'slingshot-notifications-test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis: () => {
       throw new Error('redis not configured');
     },

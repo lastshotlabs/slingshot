@@ -1,10 +1,17 @@
 import type { PgPool, PgQueryable } from './dbInterfaces';
 
+const SCOPED_POSTGRES_QUERYABLE = Symbol.for('slingshot.scopedPostgresQueryable');
+
 export async function withOptionalPostgresTransaction<T>(
   db: PgPool,
   fn: (queryable: PgQueryable) => Promise<T>,
 ): Promise<T> {
-  if (typeof db.connect !== 'function') {
+  const existingClient = db as PgPool & { release?: () => void };
+  if (
+    Reflect.get(db, SCOPED_POSTGRES_QUERYABLE) === true ||
+    typeof existingClient.release === 'function' ||
+    typeof db.connect !== 'function'
+  ) {
     return fn(db);
   }
 

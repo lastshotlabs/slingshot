@@ -7,6 +7,13 @@ The entity system separates your data model from your storage backend. Define th
 then point it at memory for development, SQLite for prototyping, or Postgres for production — the
 entity code stays the same.
 
+Standard wiring checks the complete resolved entity and operation contract before opening a
+backend connection. If the selected backend cannot honor required semantics, startup throws
+`UnsupportedEntityBackendError` with every missing capability and the configuration that
+required it. This prevents a backend switch from silently weakening behavior.
+See the generated [entity backend support matrix](/reference/entity-backend-support/) for the
+exact semantic claims and unsupported reasons for every standard store.
+
 ## Start with in-memory (the default)
 
 When you do not configure a database, entities use in-memory storage:
@@ -141,6 +148,80 @@ entity({
 
 This is useful when you need to test against a specific backend or access the adapter directly
 in test code.
+
+## Inspect backend capabilities
+
+Use the same immutable profiles that startup validation uses:
+
+```typescript
+import { ENTITY_BACKEND_PROFILES, getEntityBackendProfile } from '@lastshotlabs/slingshot-entity';
+
+const redis = getEntityBackendProfile('redis');
+redis.capabilities['constraint.unique'].status; // "unsupported"
+ENTITY_BACKEND_PROFILES.postgres.capabilities['transaction.rollback'].status; // "supported"
+```
+
+Current important boundaries:
+
+- Redis standard wiring rejects entities with secondary or compound unique constraints.
+- Memory, MongoDB, and Redis reject composite `op.transaction` because rollback is unavailable.
+- A standard `op.custom` requires a factory for the active backend.
+- Primary-key create is insert-only on every standard adapter; MongoDB and Redis do not overwrite
+  existing records.
+
+Use manual adapter wiring when your application intentionally provides semantics outside the
+standard factory contract.
+
+### Source-backed startup examples
+
+This PostgreSQL entity configuration is accepted because PostgreSQL claims and proves configured
+uniqueness:
+
+```typescript
+import {
+  assertEntityBackendRequirements,
+  defineEntity,
+  field,
+} from '@lastshotlabs/slingshot-entity';
+
+const Account = defineEntity('Account', {
+  fields: {
+    id: field.string({ primary: true }),
+    email: field.string(),
+  },
+  uniques: [{ fields: ['email'] }],
+});
+
+assertEntityBackendRequirements('postgres', Account);
+```
+
+The same configuration is rejected for standard Redis wiring before the Redis client is opened:
+
+```typescript
+import {
+  UnsupportedEntityBackendError,
+  assertEntityBackendRequirements,
+  defineEntity,
+  field,
+} from '@lastshotlabs/slingshot-entity';
+
+const Account = defineEntity('Account', {
+  fields: {
+    id: field.string({ primary: true }),
+    email: field.string(),
+  },
+  uniques: [{ fields: ['email'] }],
+});
+
+try {
+  assertEntityBackendRequirements('redis', Account);
+} catch (error) {
+  if (error instanceof UnsupportedEntityBackendError) {
+    console.error(error.code); // "SLINGSHOT_ENTITY_BACKEND_UNSUPPORTED"
+    console.error(error.missing[0]?.capability); // "constraint.unique"
+  }
+}
+```
 
 ## Composite factories
 

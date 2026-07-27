@@ -20,7 +20,12 @@
  *
  * @internal
  */
-import type { EntityChannelConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
+import type {
+  EntityChannelConfig,
+  OperationConfig,
+  StoreInfra,
+  StoreType,
+} from '@lastshotlabs/slingshot-core';
 import { RESOLVE_ENTITY_FACTORIES, resolveRepo } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, entity } from '@lastshotlabs/slingshot-entity';
 import type {
@@ -65,6 +70,14 @@ import {
 
 type EntityFactoryCreator = typeof createEntityFactories;
 
+function standardBaseOperations(
+  operations: Readonly<Record<string, OperationConfig>>,
+): Record<string, OperationConfig> {
+  return Object.fromEntries(
+    Object.entries(operations).filter(([, operation]) => operation.kind !== 'custom'),
+  );
+}
+
 /**
  * Resolve a config-driven adapter via the framework's standard-wiring code
  * path so manual-wiring entities here behave the same as the default
@@ -72,7 +85,7 @@ type EntityFactoryCreator = typeof createEntityFactories;
  */
 function resolveStandardAdapter(args: {
   config: Parameters<typeof createEntityFactories>[0];
-  operations?: Parameters<typeof createEntityFactories>[1];
+  operations?: Readonly<Record<string, OperationConfig>>;
   storeType: StoreType;
   infra: StoreInfra;
 }): BareEntityAdapter {
@@ -81,7 +94,7 @@ function resolveStandardAdapter(args: {
     | undefined;
   const factoryCreator = creator ?? createEntityFactories;
   const factories = args.operations
-    ? factoryCreator(args.config, args.operations)
+    ? factoryCreator(args.config, standardBaseOperations(args.operations))
     : factoryCreator(args.config);
   return resolveRepo(factories, args.storeType, args.infra) as unknown as BareEntityAdapter;
 }

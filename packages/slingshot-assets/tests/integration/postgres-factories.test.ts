@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createAssetFactories } from '../../src/entities/factories';
 
 type PgRow = Record<string, unknown>;
@@ -91,6 +92,7 @@ class FakeAssetPostgresPool {
 function createPostgresInfra(pool: FakeAssetPostgresPool): StoreInfra {
   const infra: StoreInfra = {
     appName: 'assets-test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('Redis is not configured in this test');
     },

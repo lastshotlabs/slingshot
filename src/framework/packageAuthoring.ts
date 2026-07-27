@@ -9,9 +9,11 @@ import {
   type PackageDomainRouteContext,
   type PackageEntityRef,
   RESOLVE_ENTITY_FACTORIES,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
   type SlingshotPackageDefinition,
   type SlingshotPackageEntityModuleLike,
   type SlingshotPlugin,
+  type TransactionEntityResolutionOptions,
   type TypedRouteRequestSpec,
   type TypedRouteResponseSpec,
   type TypedRouteResponses,
@@ -56,6 +58,7 @@ import {
   safeReadJsonBody,
 } from '@lastshotlabs/slingshot-entity';
 import { rateLimit } from './middleware/rateLimit';
+import { getContextStoreInfra } from './persistence/internalRepoResolution';
 
 // Re-import from core so framework root and hook builder share the exact same key.
 const PACKAGE_INSPECTION_PREFIX = 'slingshot:package:inspection:';
@@ -356,28 +359,47 @@ function buildPackageEntityReader(app: object, packageName: string) {
         | SlingshotPackageEntityModuleLike<TValue>
         | PackageEntityRef<TValue>
         | { entity: string; plugin?: string },
+      options?: TransactionEntityResolutionOptions,
     ): TValue {
+      const resolveAdapter = (plugin: string, entity: string): object => {
+        if (!options) {
+          return requireEntityAdapter(app, { plugin, entity });
+        }
+        const context = getContextOrNull(app);
+        const infra = context ? getContextStoreInfra(context) : null;
+        const resolveTransactionEntity = infra
+          ? Reflect.get(infra, RESOLVE_TRANSACTION_ENTITY_ADAPTER)
+          : undefined;
+        if (typeof resolveTransactionEntity !== 'function') {
+          throw new Error('[slingshot] Transaction entity resolution is unavailable for this app.');
+        }
+        const resolver = resolveTransactionEntity as (lookup: {
+          plugin: string;
+          entity: string;
+          scope: TransactionEntityResolutionOptions['scope'];
+        }) => object;
+        return resolver.call(infra, {
+          plugin,
+          entity,
+          scope: options.scope,
+        });
+      };
+
       if (isPackageEntityModuleLike(target)) {
-        return requireEntityAdapter(app, {
-          plugin: packageName,
-          entity: target.entityName,
-        }) as TValue;
+        return resolveAdapter(packageName, target.entityName) as TValue;
       }
       if (isPackageEntityRef(target)) {
-        const adapter = requireEntityAdapter(app, {
-          plugin: target.plugin ?? target.contract ?? packageName,
-          entity: target.entity,
-        });
+        const adapter = resolveAdapter(
+          target.plugin ?? target.contract ?? packageName,
+          target.entity,
+        );
         return applyPublicEntityExposure(adapter, target.exposure, {
           entity: target.entity,
           contract: target.contract,
           source: target.source,
         }) as TValue;
       }
-      return requireEntityAdapter(app, {
-        plugin: target.plugin ?? packageName,
-        entity: target.entity,
-      }) as TValue;
+      return resolveAdapter(target.plugin ?? packageName, target.entity) as TValue;
     },
   };
 }
@@ -1015,6 +1037,16 @@ function createPackagePlugin(
                 respond,
                 capabilities: capabilityReaderFactory(ctx.app),
                 entities: buildPackageEntityReader(ctx.app, pkg.name),
+                transactions: (() => {
+                  const context = getContextOrNull(ctx.app);
+                  const infra = context ? getContextStoreInfra(context) : null;
+                  if (!infra) {
+                    throw new Error(
+                      '[slingshot] Package route transaction manager is unavailable.',
+                    );
+                  }
+                  return infra.getTransactions();
+                })(),
                 services,
               };
               const response = await routeDefinition.handler(routeContext);

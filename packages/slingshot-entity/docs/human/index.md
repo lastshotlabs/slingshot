@@ -125,6 +125,21 @@ Built-in defaults: Redis key is `${storageName}:${appName}:${pk}`, auto-default 
 `'uuid'`/`'cuid'`/`'now'`, on-update handles `'now'`. Custom resolvers return `undefined`
 to fall through to the built-in handler.
 
+### Backend Capability Contract
+
+Standard entity factories validate the resolved entity and operation requirements before
+accessing backend infrastructure. `ENTITY_BACKEND_PROFILES`, `getEntityBackendProfile()`,
+and `UnsupportedEntityBackendError` expose the same immutable support contract used by
+startup. Unsupported semantics fail deterministically instead of silently degrading.
+
+Redis does not support secondary or compound uniqueness in standard wiring. Memory, MongoDB,
+and Redis do not currently support rollback for `op.transaction`; SQLite and Postgres do.
+Custom operations require a factory for the selected backend. Use manual adapter wiring when
+the application supplies operation methods itself.
+
+Primary-key creation is insert-only across standard adapters. In particular, MongoDB uses a
+strict insert and Redis uses `SET ... NX`, so create never overwrites an existing record.
+
 ### Operation Registry
 
 Policy and data-scope logic resolves operation semantics through a centralized registry
@@ -144,6 +159,40 @@ to drive a `definePackage(...)` module in tests that bypass `createApp()` /
 `compilePackages()`. It exposes the package's compiled entity plugin and publishes the
 runtime state the package's capability resolvers depend on, so tests can exercise the same
 boot sequence the framework runs at startup without spinning up a real HTTP host.
+
+Backend authors and framework contributors can run the same capability-selected behavior
+catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory,
+temporary-file SQLite, live PostgreSQL, live MongoDB, and live Redis drivers:
+
+The generated [entity backend support matrix](/reference/entity-backend-support/) is sourced from
+the same immutable profiles. Memory is intended for development and tests; it is neither durable
+nor rollback-capable for composite transactions.
+
+```ts
+import {
+  createMongoEntityConformanceDriver,
+  createPostgresEntityConformanceDriver,
+  createRedisEntityConformanceDriver,
+  runEntityConformance,
+} from '@lastshotlabs/slingshot-entity/testing';
+
+const postgresResults = await runEntityConformance(
+  createPostgresEntityConformanceDriver(process.env.TEST_POSTGRES_URL),
+);
+const mongoResults = await runEntityConformance(
+  createMongoEntityConformanceDriver(process.env.TEST_MONGO_URL),
+);
+const redisResults = await runEntityConformance(
+  createRedisEntityConformanceDriver(process.env.TEST_REDIS_URL),
+);
+```
+
+The shared catalog contains no store-specific branches or handwritten skips. A driver's
+immutable `EntityBackendProfile` is the sole selection source, and every result is a frozen,
+serializable pass, skip, or sanitized failure record. The PostgreSQL driver creates a unique
+quoted schema per harness; the MongoDB driver creates a unique database per harness. Cleanup
+drops only the schema or database owned by that harness. The Redis driver creates a random,
+validated application prefix and deletes only exact fixture-key prefixes under that namespace.
 
 ## Capability identity invariant
 

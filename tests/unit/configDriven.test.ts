@@ -21,6 +21,7 @@ import {
 import type { EntityAdapter, InferEntity } from '../../packages/slingshot-core/src/entityConfig';
 import { resolveRepo } from '../../packages/slingshot-core/src/storeInfra';
 import type { StoreInfra } from '../../packages/slingshot-core/src/storeInfra';
+import { createUnsupportedTransactionManager } from '../../packages/slingshot-core/src/transactions';
 import {
   coerceToDate,
   fromSqliteRow,
@@ -387,6 +388,7 @@ describe('createEntityFactories', () => {
 
     const storeInfra: FrameworkStoreInfra = {
       appName: 'test',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis: () => {
         throw new Error('no redis');
       },
@@ -788,6 +790,7 @@ describe('resolveRepo integration', () => {
     const factories = createEntityFactories(Ticket);
     const storeInfra: StoreInfra = {
       appName: 'test',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis: () => {
         throw new Error('no redis');
       },
@@ -816,6 +819,7 @@ describe('resolveRepo integration', () => {
     const factories = createEntityFactories(Ticket);
     const storeInfra: StoreInfra = {
       appName: 'test',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis: () => {
         throw new Error('no redis');
       },

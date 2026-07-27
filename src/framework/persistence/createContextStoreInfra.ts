@@ -6,11 +6,17 @@ import type {
   SearchClientLike,
   SearchPluginRuntime,
   SlingshotEventBus,
+  StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import {
+  REGISTER_TRANSACTION_ENTITY,
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
+  type TransactionEntityAdapterLookup,
+  type TransactionEntityAdapterRegistration,
+  type TransactionScope,
   getSearchPluginRuntimeOrNull,
 } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -21,6 +27,10 @@ import {
   RESOLVE_SEARCH_SYNC,
   type ResolvedSearchSync,
 } from './internalRepoResolution';
+import { createFrameworkTransactionManager } from './transactions/frameworkTransactionManager';
+import { createPostgresTransactionProvider } from './transactions/postgresTransactionProvider';
+
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
 interface CreateContextStoreInfraOptions {
   readonly appName: string;
@@ -219,8 +229,19 @@ export function createContextStoreInfra(
 ): FrameworkStoreInfra {
   const { appName, infra, bus, pluginState, entityRegistry } = options;
   const registeredEntities = new Set<string>();
+  const transactions = createFrameworkTransactionManager(
+    infra.postgres
+      ? [
+          createPostgresTransactionProvider({
+            postgres: infra.postgres,
+            getStoreInfra: () => storeInfra,
+          }),
+        ]
+      : [],
+  );
   const storeInfra: FrameworkStoreInfra = {
     appName,
+    getTransactions: () => transactions,
     getRedis: () => {
       if (!infra.redis) throw new Error('[slingshot] Redis is not configured for this app');
       return infra.redis;
@@ -252,6 +273,12 @@ export function createContextStoreInfra(
       if (!searchRuntime) return null;
       return searchRuntime.getSearchClient(config._storageName);
     },
+    [REGISTER_TRANSACTION_ENTITY](registration: TransactionEntityAdapterRegistration): void {
+      transactions.registerEntity(registration);
+    },
+    [RESOLVE_TRANSACTION_ENTITY_ADAPTER](lookup: TransactionEntityAdapterLookup): object {
+      return transactions.resolveEntity(lookup);
+    },
     // Inject createEntityFactories / createCompositeFactories so packages/slingshot-entity
     // can create RepoFactories<T> at setupRoutes time without a direct import
     // from the root app (CLAUDE.md Rule 16).
@@ -267,6 +294,7 @@ export function createContextStoreInfra(
 
   for (const key of [
     'appName',
+    'getTransactions',
     'getRedis',
     'getMongo',
     'getSqliteDb',
@@ -274,6 +302,8 @@ export function createContextStoreInfra(
     REGISTER_ENTITY,
     RESOLVE_SEARCH_SYNC,
     RESOLVE_SEARCH_CLIENT,
+    REGISTER_TRANSACTION_ENTITY,
+    RESOLVE_TRANSACTION_ENTITY_ADAPTER,
     RESOLVE_ENTITY_FACTORIES,
     RESOLVE_COMPOSITE_FACTORIES,
   ] as const) {
@@ -284,6 +314,19 @@ export function createContextStoreInfra(
       value: storeInfra[key],
     });
   }
+
+  Object.defineProperty(storeInfra, RESOLVE_TRANSACTION_SCOPE_INFRA, {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: (scope: TransactionScope): StoreInfra => {
+      const resolveScopeInfra = Reflect.get(transactions, RESOLVE_TRANSACTION_SCOPE_INFRA);
+      if (typeof resolveScopeInfra !== 'function') {
+        throw new Error('[slingshot] Transaction scope infrastructure is unavailable.');
+      }
+      return resolveScopeInfra.call(transactions, scope) as StoreInfra;
+    },
+  });
 
   Object.defineProperty(storeInfra, RESOLVE_REINDEX_SOURCE, {
     configurable: false,

@@ -6,6 +6,7 @@
  * still pass flat field filters directly on the options object. Runtime
  * adapters must honor both shapes.
  */
+import type { FilterExpression } from '@lastshotlabs/slingshot-core';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -20,14 +21,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function resolveListFilter(
   opts: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
+): FilterExpression | undefined {
   if (!opts) {
     return undefined;
   }
 
   const nestedFilter = opts['filter'];
   if (isRecord(nestedFilter)) {
-    return nestedFilter;
+    return nestedFilter as FilterExpression;
   }
 
   const flatFilter = Object.fromEntries(
@@ -41,5 +42,5 @@ export function resolveListFilter(
     ),
   );
 
-  return Object.keys(flatFilter).length > 0 ? flatFilter : undefined;
+  return Object.keys(flatFilter).length > 0 ? (flatFilter as FilterExpression) : undefined;
 }

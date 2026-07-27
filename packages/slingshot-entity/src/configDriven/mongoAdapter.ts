@@ -11,12 +11,13 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import { HttpError, evaluateFilter } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
   buildCursorForRecord,
   coerceToDate,
+  compareForSort,
   decodeCursor,
   fromMongoDoc,
   storageName,
@@ -43,13 +44,26 @@ interface MongooseSchema {
 }
 
 interface MongooseModel {
+  init?(): Promise<unknown>;
+  create(document: Record<string, unknown>): Promise<unknown>;
   findOne(filter: Record<string, unknown>, projection?: string): MongooseQuery;
+  findOneAndUpdate(
+    filter: Record<string, unknown>,
+    update: Record<string, unknown>,
+    opts?: Record<string, unknown>,
+  ): MongooseQuery;
+  findOneAndDelete(filter: Record<string, unknown>): MongooseQuery;
   find(filter: Record<string, unknown>): MongooseFindQuery;
   updateOne(
     filter: Record<string, unknown>,
     update: Record<string, unknown>,
     opts?: Record<string, unknown>,
-  ): Promise<{ modifiedCount: number; matchedCount: number }>;
+  ): Promise<{
+    modifiedCount: number;
+    matchedCount: number;
+    upsertedCount?: number;
+    upsertedId?: unknown;
+  }>;
   updateMany(
     filter: Record<string, unknown>,
     update: Record<string, unknown>,
@@ -130,7 +144,14 @@ function mongooseType(fieldType: FieldType, mg: MongooseModule): unknown {
  * @see {@link EntityStorageFieldMap} for customising the Mongo PK field name.
  */
 
-const mongoAdapterLogger = createConsoleLogger({ base: { component: 'slingshot-entity' } });
+function isMongoDuplicateError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  return (
+    candidate.code === 11000 ||
+    (typeof candidate.message === 'string' && /duplicate key error/i.test(candidate.message))
+  );
+}
 
 /** Creates a MongoDB-backed {@link EntityAdapter} for the given entity config. */
 export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
@@ -159,6 +180,15 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     .join('');
 
   let cachedModel: MongooseModel | null = null;
+  const collectionModels = new Map<string, MongooseModel>();
+  const modelInitialization = new WeakMap<MongooseModel, Promise<void>>();
+
+  function beginModelInitialization(model: MongooseModel): void {
+    if (modelInitialization.has(model)) return;
+    const ready =
+      typeof model.init === 'function' ? model.init().then(() => undefined) : Promise.resolve();
+    modelInitialization.set(model, ready);
+  }
 
   /**
    * Return the Mongoose model for this entity, creating it on first call.
@@ -176,6 +206,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     if (cachedModel) return cachedModel;
     if ((conn.models as Record<string, unknown>)[modelName]) {
       cachedModel = (conn.models as Record<string, unknown>)[modelName] as MongooseModel;
+      beginModelInitialization(cachedModel);
       return cachedModel;
     }
 
@@ -233,6 +264,17 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
     }
 
+    // MongoDB permits one text index per collection. Merge every configured
+    // search operation into that index so `$text` works from the first query.
+    if (operations) {
+      const textIndex: Record<string, unknown> = {};
+      for (const operation of Object.values(operations)) {
+        if (operation.kind !== 'search') continue;
+        for (const field of operation.fields) textIndex[field] = 'text';
+      }
+      if (Object.keys(textIndex).length > 0) schema.index(textIndex);
+    }
+
     // TTL index
     if (ttlSeconds) {
       schema.index({ [mongoTtlField]: 1 }, { expireAfterSeconds: 0 });
@@ -243,7 +285,104 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       modelName,
       schema as unknown as Parameters<typeof conn.model>[1],
     ) as unknown as MongooseModel;
+    beginModelInitialization(cachedModel);
     return cachedModel;
+  }
+
+  async function getReadyModel(): Promise<MongooseModel> {
+    const model = getModel();
+    await modelInitialization.get(model);
+    return model;
+  }
+
+  function getCollectionModel(operationName: string): MongooseModel {
+    const cached = collectionModels.get(operationName);
+    if (cached) return cached;
+    const operation = operations?.[operationName];
+    if (!operation || operation.kind !== 'collection') {
+      throw new Error(`[${config.name}] Unknown collection operation '${operationName}'`);
+    }
+
+    const itemSchema: Record<string, unknown> = {};
+    for (const [fieldName, fieldDef] of Object.entries(operation.itemFields)) {
+      const fieldSchema: Record<string, unknown> = {
+        type: mongooseType(fieldDef.type, mongoosePkg),
+      };
+      if (!fieldDef.optional) fieldSchema['required'] = true;
+      if (fieldDef.enumValues) fieldSchema['enum'] = [...fieldDef.enumValues];
+      itemSchema[fieldName] = fieldSchema;
+    }
+
+    const collectionSchema = new mongoosePkg.Schema(
+      {
+        [mongoPkField]: {
+          type: mongooseType(config.fields[pkField].type, mongoosePkg),
+          required: true,
+        },
+        [operationName]: { type: [itemSchema], default: [] },
+      },
+      { collection: `${collectionName}__${operationName}` },
+    );
+    const operationModelName = operationName
+      .split(/[_\s-]/)
+      .map(value => value.charAt(0).toUpperCase() + value.slice(1))
+      .join('');
+    const collectionModelName = `${modelName}${operationModelName}Collection`;
+    const existing = (conn.models as Record<string, unknown>)[collectionModelName] as
+      | MongooseModel
+      | undefined;
+    const model =
+      existing ??
+      (conn.model(
+        collectionModelName,
+        collectionSchema as unknown as Parameters<typeof conn.model>[1],
+      ) as unknown as MongooseModel);
+    collectionModels.set(operationName, model);
+    beginModelInitialization(model);
+    return model;
+  }
+
+  function readyOperationModel(getRawModel: () => MongooseModel) {
+    const ready = async (): Promise<MongooseModel> => {
+      const model = getRawModel();
+      beginModelInitialization(model);
+      await modelInitialization.get(model);
+      return model;
+    };
+    const wrapFind = (filter: Record<string, unknown>, limit?: number): MongoFindQuery => ({
+      limit: (n: number) => wrapFind(filter, n),
+      lean: async () => {
+        const query = (await ready()).find(filter);
+        return (limit === undefined ? query : query.limit(limit)).lean();
+      },
+    });
+    return {
+      findOne: (filter: Record<string, unknown>) => ({
+        lean: async () => (await ready()).findOne(filter).lean(),
+      }),
+      findOneAndUpdate: (
+        filter: Record<string, unknown>,
+        update: Record<string, unknown>,
+        opts?: Record<string, unknown>,
+      ) => ({
+        lean: async () => (await ready()).findOneAndUpdate(filter, update, opts).lean(),
+      }),
+      findOneAndDelete: (filter: Record<string, unknown>) => ({
+        lean: async () => (await ready()).findOneAndDelete(filter).lean(),
+      }),
+      find: (filter: Record<string, unknown>) => wrapFind(filter),
+      updateOne: async (
+        filter: Record<string, unknown>,
+        update: Record<string, unknown>,
+        opts?: Record<string, unknown>,
+      ) => (await ready()).updateOne(filter, update, opts),
+      updateMany: async (filter: Record<string, unknown>, update: Record<string, unknown>) =>
+        (await ready()).updateMany(filter, update),
+      deleteOne: async (filter: Record<string, unknown>) => (await ready()).deleteOne(filter),
+      deleteMany: async (filter: Record<string, unknown>) => (await ready()).deleteMany(filter),
+      aggregate: async (pipeline: Array<Record<string, unknown>>) =>
+        (await ready()).aggregate(pipeline),
+    };
   }
 
   /**
@@ -313,7 +452,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   return {
     async create(input) {
-      const Model = getModel();
+      const Model = await getReadyModel();
       const record = applyDefaults(
         input as Record<string, unknown>,
         config.fields,
@@ -325,13 +464,20 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         doc[mongoTtlField] = new Date(Date.now() + ttlSeconds * 1000);
       }
 
-      await Model.updateOne({ [mongoPkField]: doc[mongoPkField] }, { $set: doc }, { upsert: true });
+      try {
+        await Model.create(doc);
+      } catch (error) {
+        if (isMongoDuplicateError(error)) {
+          throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+        }
+        throw error;
+      }
       const created: Entity = { ...record } as unknown as Entity;
       return created;
     },
 
     async getById(id, filter) {
-      const Model = getModel();
+      const Model = await getReadyModel();
       const doc = await Model.findOne({
         [mongoPkField]: id,
         ...baseFilter(),
@@ -342,7 +488,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     },
 
     async update(id, input, filter) {
-      const Model = getModel();
+      const Model = await getReadyModel();
       const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
 
       const updatePayload = applyOnUpdate(
@@ -372,18 +518,29 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         return fromMongoDoc(current, config) as Entity;
       }
 
-      const result = await Model.updateOne(query, { $set });
+      let result: { modifiedCount: number; matchedCount: number };
+      try {
+        result = await Model.updateOne(query, { $set });
+      } catch (error) {
+        if (isMongoDuplicateError(error)) {
+          throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+        }
+        throw error;
+      }
       if ((result.modifiedCount || result.matchedCount || 0) === 0) {
         return null;
       }
 
-      const updated = await Model.findOne(query).lean();
+      const updated = await Model.findOne({
+        [mongoPkField]: id,
+        ...baseFilter(),
+      }).lean();
       if (!updated) return null;
       return fromMongoDoc(updated, config) as Entity;
     },
 
     async delete(id, filter) {
-      const Model = getModel();
+      const Model = await getReadyModel();
       const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
 
       if (config.softDelete) {
@@ -406,126 +563,59 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     },
 
     async list(opts) {
-      const Model = getModel();
+      const Model = await getReadyModel();
       const sortDir = opts?.sortDir ?? defaultSortDir;
       const rawLimit = opts?.limit ?? defaultLimit;
       const limit = Math.min(rawLimit, maxLimit);
       const filter = resolveListFilter(opts as Record<string, unknown> | undefined);
 
-      const query: Record<string, unknown> = { ...baseFilter() };
+      const docs = await Model.find(baseFilter()).sort({}).lean();
+      const visible = docs
+        .map(doc => fromMongoDoc(doc, config))
+        .filter(record => !filter || evaluateFilter(record, filter));
+      visible.sort((a, b) => compareForSort(a, b, cursorFields, sortDir));
 
-      // Apply filter parameters
-      if (filter) {
-        for (const [key, val] of Object.entries(filter)) {
-          if (val === undefined) continue;
-          if (!(key in config.fields)) continue;
-
-          if (config.fields[key].primary) {
-            query[mongoPkField] = val;
-          } else {
-            query[key] = val;
-          }
-        }
-      }
-
-      // Cursor condition
+      let startIndex = 0;
       if (opts?.cursor) {
         const cursorValues = decodeCursor(opts.cursor);
-        const op = sortDir === 'desc' ? '$lt' : '$gt';
-
-        if (cursorFields.length === 1) {
-          const f = cursorFields[0];
-          const mongoField = config.fields[f].primary ? mongoPkField : f;
-          let cv = cursorValues[f];
-          if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-          query[mongoField] = { [op]: cv };
-        } else {
-          // Multi-field cursor: use $or for tie-breaking
-          const orClauses: Array<Record<string, unknown>> = [];
-          for (let i = 0; i < cursorFields.length; i++) {
-            const clause: Record<string, unknown> = {};
-            for (let j = 0; j < i; j++) {
-              const f = cursorFields[j];
-              const mongoField = config.fields[f].primary ? mongoPkField : f;
-              let cv = cursorValues[f];
-              if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-              clause[mongoField] = cv;
-            }
-            const f = cursorFields[i];
-            const mongoField = config.fields[f].primary ? mongoPkField : f;
-            let cv = cursorValues[f];
-            if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
-            clause[mongoField] = { [op]: cv };
-            orClauses.push(clause);
-          }
-          query['$or'] = orClauses;
-        }
+        const cursorIndex = visible.findIndex(record =>
+          cursorFields.every(field => {
+            const recordValue = record[field];
+            const cursorValue =
+              config.fields[field].type === 'date'
+                ? coerceToDate(cursorValues[field])
+                : cursorValues[field];
+            return recordValue instanceof Date && cursorValue instanceof Date
+              ? recordValue.getTime() === cursorValue.getTime()
+              : recordValue === cursorValue;
+          }),
+        );
+        startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       }
 
-      // Sort spec
-      const sortSpec: Record<string, number> = {};
-      for (const f of cursorFields) {
-        const mongoField = config.fields[f].primary ? mongoPkField : f;
-        sortSpec[mongoField] = sortDir === 'desc' ? -1 : 1;
-      }
-
-      const docs = await Model.find(query)
-        .sort(sortSpec)
-        .limit(limit + 1)
-        .lean();
-
-      const hasMore = docs.length > limit;
-      const pageDocs = docs.slice(0, limit);
-      const items = pageDocs.map(doc => fromMongoDoc(doc, config) as Entity);
+      const pageRecords = visible.slice(startIndex, startIndex + limit + 1);
+      const hasMore = pageRecords.length > limit;
+      const items = pageRecords.slice(0, limit) as Entity[];
 
       let nextCursor: string | undefined;
-      if (hasMore && pageDocs.length > 0) {
-        const lastDoc = fromMongoDoc(pageDocs[pageDocs.length - 1], config);
-        nextCursor = buildCursorForRecord(lastDoc, cursorFields);
+      if (hasMore && items.length > 0) {
+        nextCursor = buildCursorForRecord(pageRecords[limit - 1], cursorFields);
       }
 
       return { items, nextCursor, hasMore };
     },
 
     async clear() {
-      try {
-        await getModel().deleteMany({});
-      } catch (err) {
-        // best-effort clear — log so connection or schema issues are visible
-        mongoAdapterLogger.error('clear() failed', {
-          storageName: config._storageName,
-          error:
-            err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
-        });
-      }
+      await (await getReadyModel()).deleteMany({});
     },
 
     ...(operations
-      ? buildMongoOperations(operations, config, () => {
-          const model = getModel();
-          // Adapt MongooseModel to the executor's MongoModelLike interface.
-          // MongooseFindQuery also has sort/skip; executors need lean() and a
-          // chainable limit() so a bounded lookup pushes the bound down to
-          // MongoDB instead of slicing after the fact.
-          const wrapFind = (q: MongooseFindQuery): MongoFindQuery => ({
-            limit: (n: number) => wrapFind(q.limit(n)),
-            lean: () => q.lean(),
-          });
-          return {
-            findOne: (filter: Record<string, unknown>) => model.findOne(filter),
-            find: (filter: Record<string, unknown>) => wrapFind(model.find(filter)),
-            updateOne: (
-              f: Record<string, unknown>,
-              u: Record<string, unknown>,
-              o?: Record<string, unknown>,
-            ) => model.updateOne(f, u, o),
-            updateMany: (f: Record<string, unknown>, u: Record<string, unknown>) =>
-              model.updateMany(f, u),
-            deleteOne: (f: Record<string, unknown>) => model.deleteOne(f),
-            deleteMany: (f: Record<string, unknown>) => model.deleteMany(f),
-            aggregate: (p: Array<Record<string, unknown>>) => model.aggregate(p),
-          };
-        })
+      ? buildMongoOperations(
+          operations,
+          config,
+          () => readyOperationModel(getModel),
+          operationName => readyOperationModel(() => getCollectionModel(operationName)),
+        )
       : {}),
   };
 }

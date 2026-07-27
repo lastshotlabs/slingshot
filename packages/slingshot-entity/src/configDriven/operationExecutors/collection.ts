@@ -26,7 +26,7 @@
  * when the target item does not exist.
  */
 import type { CollectionOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
-import { toSnakeCase } from '../fieldUtils';
+import { quoteSqliteIdent, toSnakeCase } from '../fieldUtils';
 import type { MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
@@ -205,7 +205,13 @@ export function collectionSqlite(
   const idField = op.identifyBy ?? 'id';
   const parentKeyCol = toSnakeCase(op.parentKey);
   const idCol = toSnakeCase(idField);
-  const table = `${parentTable}_${opName}`;
+  const parentIsQuoted = parentTable.startsWith('"') && parentTable.endsWith('"');
+  const rawParentTable = parentIsQuoted
+    ? parentTable.slice(1, -1).replaceAll('""', '"')
+    : parentTable;
+  const table = parentIsQuoted
+    ? quoteSqliteIdent(`${rawParentTable}_${opName}`)
+    : `${rawParentTable}_${opName}`;
   let initialized = false;
 
   function ensureTable(): void {
@@ -493,8 +499,8 @@ export function collectionPostgres(
 /**
  * Create a collection executor for the MongoDB store.
  *
- * Items are stored as an embedded array on the parent document. The array field
- * name is `opName`. Operations use Mongoose update operators:
+ * Items are stored as an embedded array in a collection-specific parent document.
+ * The array field name is `opName`. Operations use Mongoose update operators:
  * - `add`: `$push` (with optional `$pop: -1` to enforce `maxItems`).
  * - `remove`: `$pull` with the `identifyBy` field as the filter.
  * - `update`: `$set` with positional array filter `[elem.<identifyBy>]`.
@@ -540,7 +546,7 @@ export function collectionMongo(
         }
       }
       const pushOp: Record<string, unknown> = { $push: { [arrayField]: item } };
-      await Model.updateOne({ [pkField]: parentId }, pushOp);
+      await Model.updateOne({ [pkField]: parentId }, pushOp, { upsert: true });
       return { ...item };
     };
   }
@@ -577,7 +583,11 @@ export function collectionMongo(
   }
   if (op.operations.includes('set')) {
     result.set = async (parentId, items) => {
-      await getModel().updateOne({ [pkField]: parentId }, { $set: { [arrayField]: items } });
+      await getModel().updateOne(
+        { [pkField]: parentId },
+        { $set: { [arrayField]: items } },
+        { upsert: true },
+      );
     };
   }
 

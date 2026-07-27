@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 export const DEFAULT_DOCKER_POSTGRES_URL =
   'postgresql://postgres:postgres@localhost:5433/slingshot_test';
+export const DEFAULT_DOCKER_MONGO_URL = 'mongodb://localhost:27018/slingshot_test';
+export const DEFAULT_DOCKER_REDIS_URL = 'redis://localhost:6380';
 
 export type DockerTestCommand = { label: string; command: string[] };
 
@@ -42,8 +44,35 @@ export function createDockerTestCommands(
         'bunfig.docker.toml',
         '--concurrency=1',
         'packages/slingshot-auth/tests/integration/postgres-auth.test.ts',
+        'packages/slingshot-entity/tests/conformance/postgres.test.ts',
         'packages/slingshot-permissions/tests/integration/postgres-adapter.integration.test.ts',
       ],
+    },
+    {
+      label: 'package mongo entity conformance',
+      command: [
+        'bun',
+        'test',
+        '--config',
+        'bunfig.docker.toml',
+        '--concurrency=1',
+        'packages/slingshot-entity/tests/conformance/mongo.test.ts',
+      ],
+    },
+    {
+      label: 'package redis entity conformance',
+      command: [
+        'bun',
+        'test',
+        '--config',
+        'bunfig.docker.toml',
+        '--concurrency=1',
+        'packages/slingshot-entity/tests/conformance/redis.test.ts',
+      ],
+    },
+    {
+      label: 'five-backend entity conformance report',
+      command: ['bun', 'run', 'entity:conformance:report'],
     },
   ];
 }
@@ -53,10 +82,14 @@ export const dockerTestCommands: DockerTestCommand[] = createDockerTestCommands(
 export function getDockerEnv(env: Record<string, string | undefined> = Bun.env) {
   const dockerPostgresUrl =
     env.TEST_POSTGRES_URL ?? env.POSTGRES_URL ?? DEFAULT_DOCKER_POSTGRES_URL;
+  const dockerMongoUrl = env.TEST_MONGO_URL ?? DEFAULT_DOCKER_MONGO_URL;
+  const dockerRedisUrl = env.TEST_REDIS_URL ?? env.REDIS_URL ?? DEFAULT_DOCKER_REDIS_URL;
   return {
     ...env,
     TEST_POSTGRES_URL: dockerPostgresUrl,
     POSTGRES_URL: dockerPostgresUrl,
+    TEST_MONGO_URL: dockerMongoUrl,
+    TEST_REDIS_URL: dockerRedisUrl,
   };
 }
 

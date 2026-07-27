@@ -128,6 +128,7 @@ export function consumePostgres(
 
 export function consumeMongo(
   op: ConsumeOpConfig,
+  config: ResolvedEntityConfig,
   getModel: () => MongoModel,
   fromDoc: (doc: Record<string, unknown>) => Record<string, unknown>,
 ): (params: Record<string, unknown>) => Promise<Record<string, unknown> | boolean | null> {
@@ -136,16 +137,16 @@ export function consumeMongo(
     const query: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(op.filter)) {
       if (key === '$and' || key === '$or') continue;
-      query[key] =
+      const storageKey = config.fields[key]?.primary ? config._storageFields.mongoPkField : key;
+      query[storageKey] =
         typeof value === 'string' && value.startsWith('param:') ? params[value.slice(6)] : value;
     }
     if (op.expiry) {
       query[op.expiry.field] = { $gt: new Date() };
     }
     const Model = getModel();
-    const doc = await Model.findOne(query).lean();
+    const doc = await Model.findOneAndDelete(query).lean();
     if (!doc) return returnsBool ? false : null;
-    await Model.deleteOne({ _id: doc._id });
     return returnsBool ? true : fromDoc(doc);
   };
 }

@@ -67,6 +67,7 @@ export function buildMongoOperations(
   operations: Record<string, OperationConfig>,
   config: ResolvedEntityConfig,
   getModel: () => MongoModel,
+  getCollectionModel?: (operationName: string) => MongoModel,
 ): Record<string, unknown> {
   const methods: Record<string, unknown> = {};
   const fromDoc = (doc: Record<string, unknown>) => fromMongoDoc(doc, config);
@@ -104,7 +105,7 @@ export function buildMongoOperations(
         methods[opName] = upsertMongo(op, config, getModel, fromDoc);
         break;
       case 'consume':
-        methods[opName] = consumeMongo(op, getModel, fromDoc);
+        methods[opName] = consumeMongo(op, config, getModel, fromDoc);
         break;
       case 'aggregate':
         methods[opName] = aggregateMongo(op, getModel);
@@ -113,7 +114,12 @@ export function buildMongoOperations(
         methods[opName] = searchMongo(op, getModel, fromDoc);
         break;
       case 'collection': {
-        const coll = collectionMongo(opName, op, config, getModel);
+        const coll = collectionMongo(
+          opName,
+          op,
+          config,
+          getCollectionModel ? () => getCollectionModel(opName) : getModel,
+        );
         if (coll.list) methods[`${opName}List`] = coll.list;
         if (coll.add) methods[`${opName}Add`] = coll.add;
         if (coll.remove) methods[`${opName}Remove`] = coll.remove;
@@ -134,7 +140,8 @@ export function buildMongoOperations(
         if (op.mongo) {
           methods[opName] = op.mongo(getModel());
         }
-        // No factory → method expected to be mixed onto the adapter externally (e.g. from a composite).
+        // Standard config-driven factories reject a missing active-store factory before
+        // operation wiring reaches this low-level helper.
         break;
     }
   }

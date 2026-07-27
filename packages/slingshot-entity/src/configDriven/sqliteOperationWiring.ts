@@ -137,7 +137,8 @@ export function buildSqliteOperations(
         if (op.sqlite) {
           methods[opName] = op.sqlite(db);
         }
-        // No factory → method expected to be mixed onto the adapter externally (e.g. from a composite).
+        // Standard config-driven factories reject a missing active-store factory before
+        // operation wiring reaches this low-level helper.
         break;
     }
   }

@@ -21,6 +21,7 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   createPluginStateMap,
+  createUnsupportedTransactionManager,
   defineEvent,
   getActor,
   getActorId,
@@ -39,6 +40,7 @@ function unsupportedInfra(name: string): never {
 
 const memoryInfra: StoreInfra = {
   appName: 'slingshot-webhooks-test',
+  getTransactions: () => createUnsupportedTransactionManager(),
   getRedis: () => unsupportedInfra('redis'),
   getMongo: () => unsupportedInfra('mongo'),
   getSqliteDb: () => unsupportedInfra('sqlite'),

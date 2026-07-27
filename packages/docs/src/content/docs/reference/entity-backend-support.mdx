@@ -1,0 +1,89 @@
+---
+title: Entity Backend Support
+description: Generated semantic capability matrix for standard Slingshot entity stores.
+---
+
+{/* GENERATED FILE — run `bun run docs:entity-support` to update. */}
+
+# Entity backend support
+
+This page is generated from `ENTITY_BACKEND_PROFILES`, the same immutable registry used by
+startup validation and the conformance report. A method name existing internally is not a
+support claim: unsupported configurations fail before backend infrastructure is opened.
+
+> Memory is a development/test store. It is not a durable production store and does not provide
+> rollback durability for composite transactions.
+
+## CRUD and configuration features
+
+| Capability                 | Memory       | Sqlite       | Postgres     | Mongo        | Redis                                                                              |
+| -------------------------- | ------------ | ------------ | ------------ | ------------ | ---------------------------------------------------------------------------------- |
+| `crud.create`              | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `crud.read`                | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `crud.update`              | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `crud.delete`              | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `crud.list`                | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `crud.clear`               | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `defaults.apply`           | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `mapping.fields`           | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `constraint.unique`        | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ❌ Redis does not maintain atomic secondary or compound unique-index reservations. |
+| `scope.tenant`             | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `lifecycle.soft-delete`    | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `lifecycle.ttl-visibility` | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `query.sort`               | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+| `query.cursor`             | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported                                                                       |
+
+## Filters
+
+| Capability        | Memory       | Sqlite       | Postgres     | Mongo        | Redis        |
+| ----------------- | ------------ | ------------ | ------------ | ------------ | ------------ |
+| `filter.eq`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.ne`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.gt`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.gte`      | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.lt`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.lte`      | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.in`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.nin`      | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.contains` | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.and`      | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| `filter.or`       | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+
+## Declarative operations
+
+| Capability                    | Memory                                                                               | Sqlite                                                                             | Postgres     | Mongo                                                                          | Redis                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `operation.lookup`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.exists`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.transition`        | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose transition while it uses a non-atomic read-modify-write sequence.      |
+| `operation.fieldUpdate`       | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.aggregate`         | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.computedAggregate` | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.batch`             | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.upsert`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose upsert without an atomic uniqueness reservation.                       |
+| `operation.search`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.collection`        | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.consume`           | ✅ Supported                                                                         | ❌ SQLite cannot expose consume until select-and-delete is atomic.                 | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose consume while scan, read, and delete use separate commands.            |
+| `operation.derive`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.transaction`       | ❌ Memory cannot expose transaction operations because it does not provide rollback. | ✅ Supported                                                                       | ✅ Supported | ❌ MongoDB cannot expose transaction operations without a session transaction. | ❌ Redis cannot expose transaction operations because composite execution does not roll back. |
+| `operation.pipe`              | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.custom`            | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ✅ Supported                                                                                  |
+| `operation.arrayPush`         | ✅ Supported                                                                         | ❌ SQLite cannot expose array push until array mutation is implemented atomically. | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose array push while array mutation is non-atomic.                         |
+| `operation.arrayPull`         | ✅ Supported                                                                         | ❌ SQLite cannot expose array pull until array mutation is implemented atomically. | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose array pull while array mutation is non-atomic.                         |
+| `operation.arraySet`          | ✅ Supported                                                                         | ❌ SQLite cannot expose array set until array mutation is implemented atomically.  | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose array set while array mutation is non-atomic.                          |
+| `operation.increment`         | ✅ Supported                                                                         | ✅ Supported                                                                       | ✅ Supported | ✅ Supported                                                                   | ❌ Redis cannot expose increment while it uses a non-atomic JSON read-modify-write sequence.  |
+
+## Atomicity and rollback guarantees
+
+| Capability                  | Memory                                                              | Sqlite                                                                                                | Postgres     | Mongo                                                                                 | Redis                                                                      |
+| --------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `atomic.transition`         | ✅ Supported                                                        | ✅ Supported                                                                                          | ✅ Supported | ✅ Supported                                                                          | ❌ Redis transition uses a non-atomic read-modify-write sequence.          |
+| `atomic.increment`          | ✅ Supported                                                        | ✅ Supported                                                                                          | ✅ Supported | ✅ Supported                                                                          | ❌ Redis increment uses a non-atomic JSON read-modify-write sequence.      |
+| `atomic.array-mutation`     | ✅ Supported                                                        | ❌ SQLite array mutation currently reads and writes in separate statements without a transaction.     | ✅ Supported | ✅ Supported                                                                          | ❌ Redis array mutation uses a non-atomic read-modify-write sequence.      |
+| `atomic.consume`            | ✅ Supported                                                        | ❌ SQLite consume currently selects and deletes in separate statements without a transaction.         | ✅ Supported | ✅ Supported                                                                          | ❌ Redis consume scans, reads, and deletes in separate commands.           |
+| `atomic.upsert`             | ✅ Supported                                                        | ✅ Supported                                                                                          | ✅ Supported | ✅ Supported                                                                          | ❌ Redis upsert scans and writes without an atomic uniqueness reservation. |
+| `atomic.batch`              | ✅ Supported                                                        | ✅ Supported                                                                                          | ✅ Supported | ❌ MongoDB batch writes are atomic per document, not across the matched document set. | ❌ Redis batch mutates matching keys one at a time.                        |
+| `atomic.computed-aggregate` | ✅ Supported                                                        | ❌ SQLite computed aggregate currently reads and writes in separate statements without a transaction. | ✅ Supported | ❌ MongoDB computed aggregate reads and writes without a session transaction.         | ❌ Redis computed aggregate scans and writes in separate commands.         |
+| `transaction.rollback`      | ❌ Memory transactions do not restore earlier writes after failure. | ✅ Supported                                                                                          | ✅ Supported | ❌ MongoDB composite operations do not use a session transaction.                     | ❌ Redis composite operations do not provide rollback.                     |
+
+{/* END GENERATED FILE */}

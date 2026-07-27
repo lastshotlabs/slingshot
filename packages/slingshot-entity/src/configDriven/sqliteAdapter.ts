@@ -10,12 +10,13 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, evaluateFilter } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
   buildCursorForRecord,
   coerceToDate,
+  compareForSort,
   decodeCursor,
   fromSqliteRow,
   quoteSqliteIdent,
@@ -328,7 +329,17 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       const setClauses = entries.map(([col]) => `${col} = ?`).join(', ');
       const values = [...entries.map(([, v]) => v), ...checkParams];
 
-      const result = db.run(`UPDATE ${table} SET ${setClauses} ${where}`, values);
+      let result: { changes: number };
+      try {
+        result = db.run(`UPDATE ${table} SET ${setClauses} ${where}`, values);
+      } catch (error) {
+        if (isSqliteUniqueViolation(error)) {
+          return Promise.reject(
+            new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION'),
+          );
+        }
+        return Promise.reject(error);
+      }
       // The guarded UPDATE is the source of truth: zero rows changed means the
       // CAS guard lost (the row no longer matched `where`), so return null.
       if (result.changes === 0) return Promise.resolve(null);
@@ -412,106 +423,39 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         params.push(Date.now());
       }
 
-      // Filter parameters
-      if (filter) {
-        for (const [key, val] of Object.entries(filter)) {
-          if (val === undefined) continue;
-          if (!(key in config.fields)) continue;
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const visible = db
+        .query<Record<string, unknown>>(`SELECT * FROM ${table} ${where}`)
+        .all(...params)
+        .map(row => fromSqliteRow(row, config.fields))
+        .filter(record => !filter || evaluateFilter(record, filter));
+      visible.sort((a, b) => compareForSort(a, b, cursorFields, sortDir));
 
-          const col = toSnakeCase(key);
-          const def = config.fields[key];
-          if (def.type === 'json' || def.type === 'string[]') {
-            conditions.push(`${col} = ?`);
-            params.push(JSON.stringify(val));
-          } else if (def.type === 'date') {
-            conditions.push(`${col} = ?`);
-            params.push(val instanceof Date ? val.getTime() : val);
-          } else if (def.type === 'boolean') {
-            conditions.push(`${col} = ?`);
-            params.push(val ? 1 : 0);
-          } else {
-            conditions.push(`${col} = ?`);
-            params.push(val);
-          }
-        }
-      }
-
-      // Cursor condition
+      let startIndex = 0;
       if (opts?.cursor) {
         const cursorValues = decodeCursor(opts.cursor);
-        const cursorCols = cursorFields.map(f => toSnakeCase(f));
-
-        // Tuple comparison: (col1, col2) > ($cursor1, $cursor2)
-        const op = sortDir === 'desc' ? '<' : '>';
-        if (cursorCols.length === 1) {
-          conditions.push(`${cursorCols[0]} ${op} ?`);
-          const f = cursorFields[0];
-          const cv = cursorValues[f];
-          params.push(
-            config.fields[f].type === 'date'
-              ? cv instanceof Date
-                ? cv.getTime()
-                : coerceToDate(cv).getTime()
-              : cv,
-          );
-        } else {
-          // Multi-column cursor: (a, b) > (v1, v2) expands to
-          // (a > v1) OR (a = v1 AND b > v2)
-          const orClauses: string[] = [];
-          for (let i = 0; i < cursorCols.length; i++) {
-            const parts: string[] = [];
-            for (let j = 0; j < i; j++) {
-              parts.push(`${cursorCols[j]} = ?`);
-              const f = cursorFields[j];
-              const cv = cursorValues[f];
-              params.push(
-                config.fields[f].type === 'date'
-                  ? cv instanceof Date
-                    ? cv.getTime()
-                    : coerceToDate(cv).getTime()
-                  : cv,
-              );
-            }
-            parts.push(`${cursorCols[i]} ${op} ?`);
-            const f = cursorFields[i];
-            const cv = cursorValues[f];
-            params.push(
-              config.fields[f].type === 'date'
-                ? cv instanceof Date
-                  ? cv.getTime()
-                  : coerceToDate(cv).getTime()
-                : cv,
-            );
-            orClauses.push(`(${parts.join(' AND ')})`);
-          }
-          conditions.push(`(${orClauses.join(' OR ')})`);
-        }
+        const cursorIndex = visible.findIndex(record =>
+          cursorFields.every(field => {
+            const recordValue = record[field];
+            const cursorValue =
+              config.fields[field].type === 'date'
+                ? coerceToDate(cursorValues[field])
+                : cursorValues[field];
+            return recordValue instanceof Date && cursorValue instanceof Date
+              ? recordValue.getTime() === cursorValue.getTime()
+              : recordValue === cursorValue;
+          }),
+        );
+        startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       }
 
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      // Sort clause
-      const sortColsStr = cursorFields
-        .map(f => `${toSnakeCase(f)} ${sortDir === 'desc' ? 'DESC' : 'ASC'}`)
-        .join(', ');
-
-      // Fetch limit + 1 to detect hasMore
-      params.push(limit + 1);
-
-      const rows = db
-        .query<
-          Record<string, unknown>
-        >(`SELECT * FROM ${table} ${where} ORDER BY ${sortColsStr} LIMIT ?`)
-        .all(...params);
-
-      const hasMore = rows.length > limit;
-      const pageRows = rows.slice(0, limit);
-      const items = pageRows.map(row => fromSqliteRow(row, config.fields) as Entity);
+      const pageRows = visible.slice(startIndex, startIndex + limit + 1);
+      const hasMore = pageRows.length > limit;
+      const items = pageRows.slice(0, limit) as Entity[];
 
       let nextCursor: string | undefined;
-      if (hasMore && pageRows.length > 0) {
-        const lastRow = fromSqliteRow(pageRows[pageRows.length - 1], config.fields);
-        nextCursor = buildCursorForRecord(lastRow, cursorFields);
+      if (hasMore && items.length > 0) {
+        nextCursor = buildCursorForRecord(pageRows[limit - 1], cursorFields);
       }
 
       return Promise.resolve({ items, nextCursor, hasMore });

@@ -52,6 +52,8 @@ Full examples: [Factories wiring mode](/entity-system/storage-and-adapter-wiring
 Use `entity({ wiring: { mode: 'manual', buildAdapter(...) } })` when you need full control over adapter construction.
 
 This is the stronger escape hatch for non-standard persistence composition, custom driver integration, and repo layers that do not fit the standard factories path.
+It is also the correct mode when operation methods are supplied externally: standard factories
+require every `op.custom` declaration to include a factory for the active backend.
 
 Full examples: [Manual wiring mode](/entity-system/storage-and-adapter-wiring/#manual)
 
@@ -63,7 +65,10 @@ Full examples: [Composite factories](/entity-system/storage-and-adapter-wiring/#
 
 ### Storage backend swapping
 
-Switch the backing store for entities at the app root without changing entity definitions or adapter code. Supports memory, SQLite, Postgres, Redis, and Mongo.
+Switch the backing store for entities at the app root without changing entity definitions or
+adapter code. Memory, SQLite, Postgres, Redis, and Mongo expose one factory surface, while the
+generated [entity backend support matrix](/reference/entity-backend-support/) records which
+semantics each store actually proves.
 
 Full examples: [Backend swapping at the app root](/entity-system/storage-and-adapter-wiring/#backend-swapping-at-the-app-root)
 

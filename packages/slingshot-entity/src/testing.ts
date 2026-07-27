@@ -20,6 +20,22 @@ import type { EntityPlugin, EntityPluginEntry } from './createEntityPlugin';
 import type { BareEntityAdapter } from './routing/buildBareEntityRoutes';
 import type { EntityExtraRoute, EntityRouteExecutorOverrides } from './routing/entityRoutePlanning';
 
+export { ENTITY_CONFORMANCE_CATALOG } from './testing/catalog';
+export { runEntityConformance } from './testing/conformance';
+export type {
+  EntityConformanceCase,
+  EntityConformanceDefinition,
+  EntityConformanceDriver,
+  EntityConformanceHarness,
+  EntityConformanceResult,
+} from './testing/conformance';
+export { ENTITY_CONFORMANCE_DEFINITIONS } from './testing/fixtures';
+export { createMemoryEntityConformanceDriver } from './testing/drivers/memory';
+export { createMongoEntityConformanceDriver } from './testing/drivers/mongo';
+export { createPostgresEntityConformanceDriver } from './testing/drivers/postgres';
+export { createRedisEntityConformanceDriver } from './testing/drivers/redis';
+export { createSqliteEntityConformanceDriver } from './testing/drivers/sqlite';
+
 type EntityFactoryCreator = (
   config: ResolvedEntityConfig,
   operations?: Record<string, unknown>,

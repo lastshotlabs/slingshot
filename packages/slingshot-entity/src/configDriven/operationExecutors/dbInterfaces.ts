@@ -105,6 +105,26 @@ export interface MongoModel {
     projection?: string,
   ): { lean(): Promise<Record<string, unknown> | null> };
   /**
+   * Atomically update and return the first matching document.
+   *
+   * @param filter - MongoDB query filter, including any transition/guard fields.
+   * @param update - MongoDB update expression.
+   * @param opts   - Mongoose options such as `{ new: true }`.
+   */
+  findOneAndUpdate(
+    filter: Record<string, unknown>,
+    update: Record<string, unknown>,
+    opts?: Record<string, unknown>,
+  ): { lean(): Promise<Record<string, unknown> | null> };
+  /**
+   * Atomically delete and return the first matching document.
+   *
+   * @param filter - MongoDB query filter.
+   */
+  findOneAndDelete(filter: Record<string, unknown>): {
+    lean(): Promise<Record<string, unknown> | null>;
+  };
+  /**
    * Find all documents matching `filter`.
    * Chain `.lean()` to receive plain objects, or `.limit(n).lean()` to bound
    * the result set server-side.
@@ -123,7 +143,12 @@ export interface MongoModel {
     filter: Record<string, unknown>,
     update: Record<string, unknown>,
     opts?: Record<string, unknown>,
-  ): Promise<{ modifiedCount: number; matchedCount: number }>;
+  ): Promise<{
+    modifiedCount: number;
+    matchedCount: number;
+    upsertedCount?: number;
+    upsertedId?: unknown;
+  }>;
   /**
    * Update all documents matching `filter`.
    *

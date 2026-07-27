@@ -135,8 +135,16 @@ export function upsertSqlite(
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const matchCols = op.match.map(f => toSnakeCase(f));
   const updateCols = op.set.map(f => `${toSnakeCase(f)} = excluded.${toSnakeCase(f)}`);
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return input => {
     ensureTable();
+    const existed = Boolean(
+      db
+        .query<
+          Record<string, unknown>
+        >(`SELECT 1 AS present FROM ${table} WHERE ${matchCols.map(c => `${c} = ?`).join(' AND ')} LIMIT 1`)
+        .get(...op.match.map(f => input[f])),
+    );
     const record = resolveOnCreate(op, config, input);
     const row = toRow(record);
     const columns = Object.keys(row);
@@ -151,7 +159,8 @@ export function upsertSqlite(
         Record<string, unknown>
       >(`SELECT * FROM ${table} WHERE ${matchCols.map(c => `${c} = ?`).join(' AND ')}`)
       .get(...op.match.map(f => input[f]));
-    return Promise.resolve(fetched ? fromRow(fetched) : record);
+    const entity = fetched ? fromRow(fetched) : record;
+    return Promise.resolve(returnsCreated ? { entity, created: !existed } : entity);
   };
 }
 
@@ -185,6 +194,7 @@ export function upsertPostgres(
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const matchCols = op.match.map(f => toSnakeCase(f));
   const updateCols = op.set.map(f => `${toSnakeCase(f)} = EXCLUDED.${toSnakeCase(f)}`);
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return async input => {
     await ensureTable();
     const record = resolveOnCreate(op, config, input);
@@ -193,10 +203,14 @@ export function upsertPostgres(
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
     const values = columns.map(c => row[c]);
     const result = await pool.query(
-      `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT (${matchCols.join(', ')}) DO UPDATE SET ${updateCols.join(', ')} RETURNING *`,
+      `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT (${matchCols.join(', ')}) DO UPDATE SET ${updateCols.join(', ')} RETURNING *, (xmax = 0) AS __slingshot_created`,
       values,
     );
-    return result.rows[0] ? fromRow(result.rows[0]) : record;
+    const returned = result.rows[0];
+    const entity = returned ? fromRow(returned) : record;
+    return returnsCreated
+      ? { entity, created: returned?.['__slingshot_created'] === true }
+      : entity;
   };
 }
 
@@ -224,10 +238,11 @@ export function upsertMongo(
   getModel: () => MongoModel,
   fromDoc: (doc: Record<string, unknown>) => Record<string, unknown>,
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return async input => {
     const query: Record<string, unknown> = {};
     for (const f of op.match) {
-      query[config.fields[f].primary ? '_id' : f] = input[f];
+      query[config.fields[f].primary ? config._storageFields.mongoPkField : f] = input[f];
     }
     const $set: Record<string, unknown> = {};
     for (const f of op.set) {
@@ -237,15 +252,17 @@ export function upsertMongo(
     const insertRecord = resolveOnCreate(op, config, input);
     for (const [f, v] of Object.entries(insertRecord)) {
       if (op.match.includes(f) || op.set.includes(f)) continue;
-      const mongoField = f === config._pkField ? '_id' : f;
+      const mongoField = f === config._pkField ? config._storageFields.mongoPkField : f;
       $setOnInsert[mongoField] = v;
     }
     const Model = getModel();
     const update: Record<string, unknown> = { $set };
     if (Object.keys($setOnInsert).length > 0) update.$setOnInsert = $setOnInsert;
-    await Model.updateOne(query, update, { upsert: true });
+    const result = await Model.updateOne(query, update, { upsert: true });
     const doc = await Model.findOne(query).lean();
-    return doc ? fromDoc(doc) : input;
+    const entity = doc ? fromDoc(doc) : input;
+    const created = (result.upsertedCount ?? 0) > 0 || result.upsertedId != null;
+    return returnsCreated ? { entity, created } : entity;
   };
 }
 

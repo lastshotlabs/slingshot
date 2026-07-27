@@ -314,6 +314,10 @@ lineItems: op.collection({
 
 ### Custom operations
 
+Operation availability and atomicity vary by store and are enforced at startup. Check the generated
+[entity backend support matrix](/reference/entity-backend-support/) before selecting a persistence
+backend.
+
 When none of the built-in kinds fit, write backend-specific logic:
 
 ```typescript
@@ -430,4 +434,5 @@ Operation configs use binding strings to specify where values come from at runti
 
 - [Route Policy](/entity-system/route-policy/) — auth, permissions, rate limits per route
 - [Storage and Adapter Wiring](/entity-system/storage-and-adapter-wiring/) — swap backends
+- [Entity Backend Support](/reference/entity-backend-support/) — generated semantic support claims
 - [Generated Routes, Overrides, and Extra Routes](/entity-system/generated-routes-overrides-and-extra-routes/) — customize the generated routes

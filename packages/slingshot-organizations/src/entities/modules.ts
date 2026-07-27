@@ -143,6 +143,13 @@ export function buildOrganizationsEntityModules(args: BuildOrganizationsEntityMo
     },
   };
 
+  // Manual wiring owns the externally implemented custom operations. Only
+  // operations that the standard adapter itself implements are passed into
+  // its factory, so startup validation remains strict for standard wiring.
+  const organizationBaseOperations = {
+    getBySlug: organizationOperations.operations.getBySlug,
+  };
+
   const inviteOverrides: EntityRouteExecutorOverrides = {
     operations: {
       findByToken: wrapHandler(findByToken),
@@ -164,7 +171,7 @@ export function buildOrganizationsEntityModules(args: BuildOrganizationsEntityMo
           buildAdapter: (storeType, infra) => {
             const base = resolveStandardAdapter({
               config: Organization,
-              operations: organizationOperations.operations,
+              operations: organizationBaseOperations,
               storeType,
               infra,
             });
@@ -217,7 +224,6 @@ export function buildOrganizationsEntityModules(args: BuildOrganizationsEntityMo
           buildAdapter: (storeType, infra) => {
             const base = resolveStandardAdapter({
               config: OrganizationInvite,
-              operations: organizationInviteOperations.operations,
               storeType,
               infra,
             });

@@ -131,6 +131,9 @@ Core now owns configurable entity field mapping and storage convention types:
   (beyond `uuid`/`cuid`/`now`), and custom on-update resolvers (beyond `now`).
 - `CustomAutoDefaultResolver` / `CustomOnUpdateResolver` — function type aliases for the
   convention hooks. Return `undefined` to fall through to the built-in handler.
+- `ENTITY_OPERATION_KINDS`, `ENTITY_BACKEND_CAPABILITIES`, and their associated profile and
+  requirement types — the exhaustive public vocabulary used by entity backend startup
+  validation and conformance reporting.
 
 These types are declared in `src/entityConfig.ts` and resolved at `defineEntity()` time. All
 adapters consume the resolved shapes — consumers never need to fork an adapter to change field

@@ -125,6 +125,10 @@ Production stores must not resolve to memory for sessions or auth. Prefer Postgr
 for durable auth/session state and Redis for cross-instance ephemeral coordination
 when a package requires it.
 
+Memory is also a development/test entity store: it does not provide persistence or composite
+rollback durability. Verify the selected entity store and operation guarantees in the generated
+[entity backend support matrix](/reference/entity-backend-support/).
+
 For Postgres-backed production:
 
 - Set `db.postgres` from the production secret provider.

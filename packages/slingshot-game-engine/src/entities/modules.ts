@@ -87,6 +87,18 @@ export interface BuildGameEngineEntityModulesArgs {
 export function buildGameEngineEntityModules(args: BuildGameEngineEntityModulesArgs) {
   const { refs } = args;
 
+  // Manual wiring owns the cross-entity `kick` marker. Pass only operations
+  // implemented by the standard player adapter into its strict factory.
+  const playerBaseOperations = {
+    findBySession: gamePlayerOperations.operations.findBySession,
+    findBySessionAndUser: gamePlayerOperations.operations.findBySessionAndUser,
+    incrementScore: gamePlayerOperations.operations.incrementScore,
+    updateConnection: gamePlayerOperations.operations.updateConnection,
+    countBySession: gamePlayerOperations.operations.countBySession,
+    assignTeam: gamePlayerOperations.operations.assignTeam,
+    assignRole: gamePlayerOperations.operations.assignRole,
+  };
+
   const sessionModule = entity({
     config: GameSession,
     operations: gameSessionOperations,
@@ -118,7 +130,7 @@ export function buildGameEngineEntityModules(args: BuildGameEngineEntityModulesA
       buildAdapter: (storeType, infra) => {
         const adapter = resolveStandardAdapter({
           config: GamePlayer,
-          operations: gamePlayerOperations.operations,
+          operations: playerBaseOperations,
           storeType,
           infra,
         });

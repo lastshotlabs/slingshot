@@ -113,7 +113,10 @@ the framework validates `from` and `to` against these exact values.
 
 ## Add indexes
 
-Indexes tell the storage backend to optimize queries on specific fields:
+Indexes tell the storage backend to optimize queries on specific fields. Configured uniqueness is
+validated against the selected store at startup; consult the generated
+[entity backend support matrix](/reference/entity-backend-support/) before relying on a backend
+switch:
 
 ```typescript
 import { defineEntity, field, index } from '@lastshotlabs/slingshot';

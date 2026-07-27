@@ -72,19 +72,17 @@ class FakeChatRoutePostgresPool {
       return Promise.resolve({ rows: [], rowCount: 1 });
     }
 
-    if (sql === `SELECT * FROM ${BLOCK_TABLE} WHERE blocker_id = $1 ORDER BY id ASC LIMIT $2`) {
-      const blockerId = String(params[0]);
-      const limit = Number(params[1]);
-      const rows = this.rows
-        .filter(entry => String(entry.blocker_id) === blockerId)
-        .sort((left, right) => String(left.id).localeCompare(String(right.id)))
-        .slice(0, limit)
-        .map(entry => ({ ...entry }));
-      return Promise.resolve({ rows, rowCount: rows.length });
+    if (sql === `SELECT * FROM ${BLOCK_TABLE} `) {
+      return Promise.resolve({
+        rows: this.rows.map(entry => ({ ...entry })),
+        rowCount: this.rows.length,
+      });
     }
 
     if (
-      sql === 'SELECT * FROM slingshot_chat_messages WHERE id = $1 AND deleted_at IS NULL LIMIT 1'
+      sql ===
+        'SELECT * FROM slingshot_chat_messages WHERE id = $1 AND deleted_at IS NULL LIMIT 1' ||
+      sql === 'SELECT * FROM slingshot_chat_messages WHERE id = $1 LIMIT 1'
     ) {
       return Promise.resolve({ rows: [], rowCount: 0 });
     }
@@ -372,8 +370,6 @@ describe('chat postgres block routes', () => {
     });
 
     expect(pool.queries.some(sql => sql.startsWith(`INSERT INTO ${BLOCK_TABLE} (`))).toBe(true);
-    expect(pool.queries).toContain(
-      `SELECT * FROM ${BLOCK_TABLE} WHERE blocker_id = $1 ORDER BY id ASC LIMIT $2`,
-    );
+    expect(pool.queries).toContain(`SELECT * FROM ${BLOCK_TABLE} `);
   });
 });

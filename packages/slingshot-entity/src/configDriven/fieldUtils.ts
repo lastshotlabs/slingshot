@@ -382,7 +382,11 @@ export function fromSqliteRow(
   for (const [camel, def] of Object.entries(fields)) {
     const snake = toSnakeCase(camel);
     const val = row[snake];
-    if (val === undefined || val === null) continue;
+    if (val === undefined) continue;
+    if (val === null) {
+      record[camel] = null;
+      continue;
+    }
 
     record[camel] = sqliteToDomain(val, def);
   }
@@ -513,7 +517,11 @@ export function fromPgRow(
   for (const [camel, def] of Object.entries(fields)) {
     const snake = toSnakeCase(camel);
     const val = row[snake];
-    if (val === undefined || val === null) continue;
+    if (val === undefined) continue;
+    if (val === null) {
+      record[camel] = null;
+      continue;
+    }
 
     record[camel] = pgToDomain(val, def);
   }
@@ -541,6 +549,9 @@ function pgToDomain(val: unknown, def: FieldDef): unknown {
   switch (def.type) {
     case 'date':
       return val instanceof Date ? val : coerceToDate(val);
+    case 'number':
+    case 'integer':
+      return typeof val === 'number' ? val : Number(val);
     case 'json':
       return typeof val === 'string' ? JSON.parse(val) : val;
     default:
@@ -665,9 +676,7 @@ export function fromMongoDoc(
       record[name] = doc[mongoPkField];
     } else {
       const val = doc[name];
-      if (val !== undefined && val !== null) {
-        record[name] = val;
-      }
+      if (val !== undefined) record[name] = val;
     }
   }
 

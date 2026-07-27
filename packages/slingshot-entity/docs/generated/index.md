@@ -43,6 +43,9 @@ bun add @lastshotlabs/slingshot-entity
 
 - `@hono/zod-openapi`: `>=0.18`
 - `hono`: `>=4.12.14 <5`
+- `ioredis`: `>=5 <6`
+- `mongoose`: `>=9.0 <10`
+- `pg`: `>=8.20 <9`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

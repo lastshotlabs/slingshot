@@ -9,6 +9,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
+import { HttpError, evaluateFilter } from '@lastshotlabs/slingshot-core';
 import type { RedisLike } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
@@ -53,6 +54,8 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
   const prefix = `${resolvedStorageName}:${appName}:`;
   const pkField = config._pkField;
   const ttlSeconds = config.ttl?.defaultSeconds;
+  const ttlMilliseconds =
+    ttlSeconds === undefined ? undefined : Math.max(1, Math.ceil(ttlSeconds * 1000));
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
@@ -69,8 +72,8 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
   async function storeRecord(record: Record<string, unknown>): Promise<void> {
     const pk = record[pkField] as string | number;
     const serialised = JSON.stringify(toRedisRecord(record, config.fields));
-    if (ttlSeconds) {
-      await redis.set(rkey(pk), serialised, 'EX', ttlSeconds);
+    if (ttlMilliseconds !== undefined) {
+      await redis.set(rkey(pk), serialised, 'PX', ttlMilliseconds);
     } else {
       await redis.set(rkey(pk), serialised);
     }
@@ -125,7 +128,14 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
         config.fields,
         customAutoDefault,
       );
-      await storeRecord(record);
+      const pk = record[pkField] as string | number;
+      const serialised = JSON.stringify(toRedisRecord(record, config.fields));
+      const stored = ttlMilliseconds
+        ? await redis.set(rkey(pk), serialised, 'PX', ttlMilliseconds, 'NX')
+        : await redis.set(rkey(pk), serialised, 'NX');
+      if (stored === null) {
+        throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
+      }
       return { ...record } as unknown as Entity;
     },
 
@@ -188,7 +198,7 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (!raw) continue;
         const record = fromRedisRecord(JSON.parse(raw) as Record<string, unknown>, config.fields);
         if (!isVisible(record)) continue;
-        if (filter && !matchesFilter(record, filter)) continue;
+        if (filter && !evaluateFilter(record, filter)) continue;
         records.push(record);
       }
 

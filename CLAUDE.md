@@ -148,7 +148,7 @@ and detailed agent context strategy lives in the companion `slingshot-specs/` di
 ## Test Commands
 
 - `bun run test`: default non-Docker suite. Runs root tests, isolated root tests, and package-local tests that do not require external services.
-- `bun run test:docker`: Docker-backed integration suite. Runs `tests/docker/` plus package-local live Postgres integrations that need the Docker PostgreSQL instance.
+- `bun run test:docker`: Docker-backed integration suite. Runs `tests/docker/` plus package-local live Postgres and MongoDB integrations.
 - `bun run test:e2e`: end-to-end suite with Docker dependencies.
 - `bun run test:all`: full verification pass. Runs `test`, then `test:docker`, then `test:e2e`.
 

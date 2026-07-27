@@ -5,7 +5,11 @@ description: Complete reference for all 17 built-in operation kinds — JSON con
 
 import { Aside } from '@astrojs/starlight/components';
 
-Operations are plain JSON config objects with a `kind` field. The framework reads those objects and generates typed adapter methods (wired to five backends — memory, SQLite, Postgres, MongoDB, Redis) and HTTP routes. Standard CRUD comes from the entity definition itself; operations extend it with domain-specific behavior.
+Operations are plain JSON config objects with a `kind` field. The framework reads those objects
+and generates typed adapter methods and HTTP routes. Standard CRUD comes from the entity definition
+itself; operations extend it with domain-specific behavior. Backend wiring is capability-gated, so
+use the generated [entity backend support matrix](/reference/entity-backend-support/) instead of
+assuming every operation has identical semantics on every store.
 
 Each operation is a JSON object like:
 
@@ -54,6 +58,19 @@ transaction-wrapped by the executor when correctness requires it. Use `op.transa
 you want to compose multiple operations as one explicit unit. Use optional `atomic` flags only on
 operations that expose a real semantic or performance tradeoff.
 
+Startup rejects an operation/backend pairing when the selected standard adapter cannot provide
+the required guarantee. Composite transaction rollback is currently supported by SQLite and Postgres;
+memory, MongoDB, and Redis fail startup for `op.transaction`.
+
+</Aside>
+
+<Aside type="caution" title="Redis safety boundary">
+  Standard Redis wiring proves strict primary-key create, CRUD, TTL visibility, filtering, sorting,
+  cursor traversal, and its supported read operations against a live Redis service. It rejects
+  secondary or compound uniqueness, transition, increment, array mutation, consume, upsert, atomic
+  batch/computed aggregate, and composite rollback before opening the Redis client. Those guarantees
+  stay unsupported until one complete atomic Lua or `WATCH` implementation covers the whole write
+  lifecycle and passes the shared race cases.
 </Aside>
 
 ---
@@ -731,7 +748,10 @@ activityFeed: op.derive({
 
 ## increment
 
-Atomically add to (or subtract from) a numeric field on a specific record. All backends perform this atomically where supported — Postgres uses `SET field = field + $n`, Mongo uses `$inc`, memory/Redis use read-modify-write.
+Atomically add to (or subtract from) a numeric field on a specific record where the selected backend
+claims that guarantee. Postgres uses `SET field = field + $n`, Mongo uses `$inc`, and memory
+serializes the mutation. Standard Redis wiring rejects `increment` because its JSON
+read-modify-write path is not atomic.
 
 ```json
 {
@@ -785,10 +805,11 @@ rawPostCount: op.custom({
   memory: store => (userId: string) =>
     [...store.values()].filter(r => r.authorId === userId && !r.deletedAt).length,
 });
-
-// Route-only marker for a method mixed in from a composite adapter
-hybridSearch: op.custom({ http: { method: 'post' } });
 ```
+
+Standard wiring requires a factory for the active backend and fails startup when one is absent.
+If your application mixes an operation method onto an adapter itself, use manual adapter wiring;
+`op.custom({ http: ... })` is not a route-only marker in standard factories.
 
 **Cross-entity access:** A `custom` handler's factory only receives its own entity's backend driver (e.g. `pool` for Postgres, `store` for memory). To access other entities' adapters — for example, creating a Transaction record from within an Account operation — capture adapters at startup with an `afterAdapters` hook:
 

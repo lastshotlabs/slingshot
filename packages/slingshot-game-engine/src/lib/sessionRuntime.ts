@@ -21,7 +21,7 @@ import type {
   WinResult,
 } from '../types/models';
 import type { MutableChannelState } from './channels';
-import { closeChannel, createChannelState, recordSubmission } from './channels';
+import { closeChannel, computeVoteTally, createChannelState, recordSubmission } from './channels';
 import type { MutableChildSessionState } from './childSessions';
 import { createChildSessionState, getChildSessionResult } from './childSessions';
 import type { MutableAfkState, MutableDisconnectState } from './disconnect';
@@ -78,10 +78,13 @@ import {
   logChannelClosed,
   logChannelInput,
   logChannelOpened,
+  logChannelRaceClaimed,
+  logChannelVoteTally,
   logPhaseEntered,
   logPhaseExited,
   logPlayerDisconnected,
   logPlayerReconnected,
+  logScoreChanged,
   logSessionCompleted,
   logSessionStarted,
   logTimerStarted,
@@ -502,6 +505,13 @@ function buildHandlerDeps(runtime: SessionRuntime): HandlerContextDeps {
     gameLoopState: runtime.gameLoopState,
     rng: runtime.rng,
     publish: runtime.publish,
+    // `score.changed` is the one replay event that cannot be derived from
+    // anything else in the log: the log carries the input that earned the
+    // points, never the points themselves. Without it a replay can reconstruct
+    // who buzzed but not what anyone scored.
+    onScoreChanged: change => {
+      appendReplay(runtime, logScoreChanged(runtime.sessionId, runtime.replaySeq, change));
+    },
     requestAdvancePhase: () => {
       advancePhase(runtime, 'handler').catch((e: unknown) =>
         runtime.log.error('advancePhase error', e),
@@ -553,6 +563,44 @@ export function refreshHandlerContext(runtime: SessionRuntime): SessionRuntime['
 function appendReplay(runtime: SessionRuntime, entry: ReplayEntry): void {
   runtime.pendingReplayEntries.push(entry);
   scheduleReplayFlush(runtime);
+}
+
+/**
+ * Append every replay entry a closing channel owes: `channel.closed` always,
+ * and `channel.vote.tally` when the channel was a vote.
+ *
+ * The tally is computed here, at close, because that is the only moment it is
+ * final — and because `computeVoteTally` is otherwise unreachable from the
+ * runtime, which left a vote's *outcome* absent from the log even though every
+ * individual vote was in it. Reconstructing it downstream means re-implementing
+ * the winner/tie rule against raw `channel.input` entries.
+ */
+function appendChannelCloseReplay(
+  runtime: SessionRuntime,
+  channelName: string,
+  channel: MutableChannelState,
+  reason: string,
+): void {
+  appendReplay(
+    runtime,
+    logChannelClosed(runtime.sessionId, runtime.replaySeq, {
+      channel: channelName,
+      reason,
+      submissionCount: channel.submissions.size,
+    }),
+  );
+  if (channel.mode !== 'vote') return;
+  const tally = computeVoteTally(channel);
+  appendReplay(
+    runtime,
+    logChannelVoteTally(runtime.sessionId, runtime.replaySeq, {
+      channel: channelName,
+      options: Object.fromEntries(tally.options),
+      winner: tally.winner,
+      tie: tally.tie,
+      totalVotes: tally.totalVotes,
+    }),
+  );
 }
 
 /**
@@ -1527,14 +1575,7 @@ async function doAdvancePhase(runtime: SessionRuntime): Promise<boolean> {
   for (const [channelName, channel] of runtime.channels) {
     if (channel.open) {
       closeChannel(channel);
-      appendReplay(
-        runtime,
-        logChannelClosed(sessionId, replaySeq, {
-          channel: channelName,
-          reason: 'phase-advance',
-          submissionCount: channel.submissions.size,
-        }),
-      );
+      appendChannelCloseReplay(runtime, channelName, channel, 'phase-advance');
       runtime.publish(sessionRoom(sessionId), {
         type: 'game:channel.closed',
         sessionId,
@@ -1765,6 +1806,21 @@ export async function processInputPipeline(
     }),
   );
 
+  // A race channel's ORDER is the whole point of racing, and `channel.input`
+  // does not carry it — the log said who submitted, never who got there first.
+  // `recordRace` has already pushed this claim, so the claim list's length IS
+  // this claimant's 1-based position.
+  if (channel.mode === 'race') {
+    appendReplay(
+      runtime,
+      logChannelRaceClaimed(sessionId, replaySeq, {
+        channel: channelName,
+        userId,
+        position: channel.claimedBy.length,
+      }),
+    );
+  }
+
   // Step 11: Relay to other players
   if (result.shouldRelay) {
     const targets = resolveRelayTargetsFull(
@@ -1823,14 +1879,7 @@ export async function processInputPipeline(
       channel: channelName,
       reason: 'complete',
     });
-    appendReplay(
-      runtime,
-      logChannelClosed(sessionId, replaySeq, {
-        channel: channelName,
-        reason: 'complete',
-        submissionCount: channel.submissions.size,
-      }),
-    );
+    appendChannelCloseReplay(runtime, channelName, channel, 'complete');
   }
 
   // Step 14: Check phase advance trigger

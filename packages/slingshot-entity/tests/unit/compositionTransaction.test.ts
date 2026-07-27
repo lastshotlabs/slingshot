@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { EntityTransactionConflictError } from '@lastshotlabs/slingshot-core';
 import type { EntityAdapter, PostgresBundle, StoreInfra } from '@lastshotlabs/slingshot-core';
 import { transactionExecutor } from '../../src/configDriven/operationExecutors/transaction';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
@@ -220,7 +221,7 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
 
     await expect(
       composite.createThenFail({ name: 'Acme', missingChildId: 'missing' }),
-    ).rejects.toThrow('update: record not found');
+    ).rejects.toBeInstanceOf(EntityTransactionConflictError);
 
     expect(data[`slingshot_${Parent._storageName}`] ?? []).toHaveLength(0);
     expect(clientQueries).toContain('BEGIN');
@@ -245,14 +246,15 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
             op: 'batch',
             entity: 'records',
             operation: 'batch',
-            action: 'delete',
-            filter: { status: 'pending' },
+            input: {},
           },
         ],
       },
       { records: adapter },
     );
 
-    await expect(execute({})).rejects.toThrow("batch executor is missing on entity 'records'");
+    await expect(execute({})).rejects.toThrow(
+      "Configured operation 'batch' is missing on entity 'records' adapter",
+    );
   });
 });

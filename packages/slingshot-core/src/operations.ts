@@ -685,60 +685,47 @@ export interface TransactionLookupStep extends TransactionStepBase {
   readonly match: TransactionBindingRecord;
 }
 
-/** Invoke one configured native field-update operation. */
-export interface TransactionFieldUpdateStep extends TransactionStepBase {
-  readonly op: 'fieldUpdate';
+interface TransactionNativeStepBase extends TransactionStepBase {
+  /** Exact configured entity operation to invoke. Its kind must match this step. */
   readonly operation: string;
-  readonly match: TransactionBindingRecord;
-  readonly set: TransactionBindingRecord;
+  /**
+   * Call-time bindings for the native operation.
+   *
+   * Values may contain nested `param:x` and `result:N.path` references. Field-update inputs
+   * supply both match parameters and writable fields. Array and increment inputs use `id`
+   * (or the entity primary-key name) plus `value` or `by`.
+   */
+  readonly input?: TransactionBindingRecord;
+}
+
+/** Invoke one configured native field-update operation. */
+export interface TransactionFieldUpdateStep extends TransactionNativeStepBase {
+  readonly op: 'fieldUpdate';
 }
 
 /** Invoke one configured native transition operation. */
-export interface TransactionTransitionStep extends TransactionStepBase {
+export interface TransactionTransitionStep extends TransactionNativeStepBase {
   readonly op: 'transition';
-  readonly operation: string;
-  readonly match: TransactionBindingRecord;
-  readonly field: string;
-  readonly from: string | number | boolean;
-  readonly to: string | number | boolean;
-  readonly set?: TransactionBindingRecord;
 }
 
 /** Invoke one configured native batch operation. */
-export interface TransactionBatchStep extends TransactionStepBase {
+export interface TransactionBatchStep extends TransactionNativeStepBase {
   readonly op: 'batch';
-  readonly operation: string;
-  readonly action: 'update' | 'delete';
-  readonly filter: FilterExpression;
-  readonly set?: TransactionBindingRecord;
 }
 
 /** Invoke one configured native array-push operation. */
-export interface TransactionArrayPushStep extends TransactionStepBase {
+export interface TransactionArrayPushStep extends TransactionNativeStepBase {
   readonly op: 'arrayPush';
-  readonly operation: string;
-  readonly match: TransactionBindingRecord;
-  readonly field: string;
-  readonly value: unknown;
-  readonly dedupe?: boolean;
 }
 
 /** Invoke one configured native array-pull operation. */
-export interface TransactionArrayPullStep extends TransactionStepBase {
+export interface TransactionArrayPullStep extends TransactionNativeStepBase {
   readonly op: 'arrayPull';
-  readonly operation: string;
-  readonly match: TransactionBindingRecord;
-  readonly field: string;
-  readonly value: unknown;
 }
 
 /** Invoke one configured native increment operation. */
-export interface TransactionIncrementStep extends TransactionStepBase {
+export interface TransactionIncrementStep extends TransactionNativeStepBase {
   readonly op: 'increment';
-  readonly operation: string;
-  readonly match: TransactionBindingRecord;
-  readonly field: string;
-  readonly by?: number;
 }
 
 /**

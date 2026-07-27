@@ -19,10 +19,7 @@ describe('transaction public errors', () => {
       op: 'transition',
       entity: 'orders',
       operation: 'confirm',
-      match: { id: 'param:id' },
-      field: 'status',
-      from: 'pending',
-      to: 'confirmed',
+      input: { id: 'param:id' },
     };
 
     const reservedStore: TransactionStore = 'mongo';
@@ -32,10 +29,7 @@ describe('transaction public errors', () => {
     const unnamedStep: TransactionStep = {
       op: 'transition',
       entity: 'orders',
-      match: { id: 'param:id' },
-      field: 'status',
-      from: 'pending',
-      to: 'confirmed',
+      input: { id: 'param:id' },
     };
 
     expect(store).toBe('postgres');

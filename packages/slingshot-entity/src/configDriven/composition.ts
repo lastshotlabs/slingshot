@@ -34,6 +34,7 @@ import type {
   ResolvedEntityConfig,
   StoreInfra,
   TransactionOpConfig,
+  TransactionStepResult,
 } from '@lastshotlabs/slingshot-core';
 import type { StoreType } from '@lastshotlabs/slingshot-core';
 import { assertCompositeEntityBackendRequirements } from './backendProfiles';
@@ -157,8 +158,8 @@ type InferCompositeAdapter<
  *     revert: op.transaction({
  *       steps: [
  *         { op: 'lookup',      entity: 'snapshots', match: { id: 'param:versionId' } },
- *         { op: 'fieldUpdate', entity: 'documents', match: { id: 'param:id' },
- *           set: { title: 'result:0.title', body: 'result:0.body' } },
+ *         { op: 'fieldUpdate', entity: 'documents', operation: 'restoreSnapshot',
+ *           input: { id: 'param:id', title: 'result:0.title', body: 'result:0.body' } },
  *         { op: 'create',      entity: 'snapshots',
  *           input: { documentId: 'param:id', title: 'result:0.title', body: 'result:0.body' } },
  *       ],
@@ -194,6 +195,9 @@ export function createCompositeFactories<
     const primaryKeys = Object.fromEntries(
       keys.map(key => [String(key), entities[key].config._pkField]),
     );
+    const operationConfigs = Object.fromEntries(
+      keys.map(key => [String(key), entities[key].operations]),
+    );
     if (storeType === 'sqlite') {
       const db = infra.getSqliteDb() as unknown as SqliteDb;
       wrapInTransaction = async fn => {
@@ -219,8 +223,13 @@ export function createCompositeFactories<
         if (op.kind === 'transaction') {
           compositeOpMethods[opName] =
             storeType === 'postgres'
-              ? createPostgresTransactionMethod(op, entities, keys, infra)
-              : transactionExecutor(op, adapterMap, { wrapInTransaction, primaryKeys });
+              ? createPostgresTransactionMethod(opName, op, entities, keys, infra)
+              : transactionExecutor(op, adapterMap, {
+                  wrapInTransaction,
+                  primaryKeys,
+                  operationName: opName,
+                  operationConfigs,
+                });
         } else {
           // pipe takes a single adapter — use the first entity's adapter as the target.
           // For cross-entity pipe, use a transaction instead.
@@ -263,11 +272,12 @@ export function createCompositeFactories<
 }
 
 function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
+  operationName: string,
   op: TransactionOpConfig,
   entities: M,
   keys: Array<keyof M>,
   infra: StoreInfra,
-): (params: Record<string, unknown>) => Promise<Array<Record<string, unknown>>> {
+): (params: Record<string, unknown>) => Promise<TransactionStepResult[]> {
   const pool = infra.getPostgres().pool as unknown as PostgresTxPool;
 
   return async (params: Record<string, unknown>) => {
@@ -288,8 +298,13 @@ function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
       const primaryKeys = Object.fromEntries(
         keys.map(key => [String(key), entities[key].config._pkField]),
       );
+      const operationConfigs = Object.fromEntries(
+        keys.map(key => [String(key), entities[key].operations]),
+      );
       const executor = transactionExecutor(op, transactionalAdapters as unknown as AdapterMap, {
         primaryKeys,
+        operationName,
+        operationConfigs,
       });
       const results = await executor(params);
 

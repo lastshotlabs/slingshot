@@ -389,12 +389,12 @@ const TRANSACTION_STEP_KEYS = {
   update: new Set(['op', 'entity', 'match', 'set']),
   delete: new Set(['op', 'entity', 'match']),
   lookup: new Set(['op', 'entity', 'match']),
-  fieldUpdate: new Set(['op', 'entity', 'operation', 'match', 'set']),
-  transition: new Set(['op', 'entity', 'operation', 'match', 'field', 'from', 'to', 'set']),
-  batch: new Set(['op', 'entity', 'operation', 'action', 'filter', 'set']),
-  arrayPush: new Set(['op', 'entity', 'operation', 'match', 'field', 'value', 'dedupe']),
-  arrayPull: new Set(['op', 'entity', 'operation', 'match', 'field', 'value']),
-  increment: new Set(['op', 'entity', 'operation', 'match', 'field', 'by']),
+  fieldUpdate: new Set(['op', 'entity', 'operation', 'input']),
+  transition: new Set(['op', 'entity', 'operation', 'input']),
+  batch: new Set(['op', 'entity', 'operation', 'input']),
+  arrayPush: new Set(['op', 'entity', 'operation', 'input']),
+  arrayPull: new Set(['op', 'entity', 'operation', 'input']),
+  increment: new Set(['op', 'entity', 'operation', 'input']),
 } as const;
 
 const TRANSACTION_STEP_REQUIRED_KEYS = {
@@ -402,12 +402,12 @@ const TRANSACTION_STEP_REQUIRED_KEYS = {
   update: ['entity', 'match', 'set'],
   delete: ['entity', 'match'],
   lookup: ['entity', 'match'],
-  fieldUpdate: ['entity', 'operation', 'match', 'set'],
-  transition: ['entity', 'operation', 'match', 'field', 'from', 'to'],
-  batch: ['entity', 'operation', 'action', 'filter'],
-  arrayPush: ['entity', 'operation', 'match', 'field', 'value'],
-  arrayPull: ['entity', 'operation', 'match', 'field', 'value'],
-  increment: ['entity', 'operation', 'match', 'field'],
+  fieldUpdate: ['entity', 'operation'],
+  transition: ['entity', 'operation'],
+  batch: ['entity', 'operation'],
+  arrayPush: ['entity', 'operation'],
+  arrayPull: ['entity', 'operation'],
+  increment: ['entity', 'operation'],
 } as const;
 
 const NAMED_TRANSACTION_STEPS = new Set([
@@ -478,22 +478,6 @@ function assertTransactionBindings(operationName: string, stepIndex: number, val
       assertTransactionBindings(operationName, stepIndex, nested);
     }
   }
-}
-
-function transactionFilterFields(filter: Readonly<Record<string, unknown>>): string[] {
-  const fields: string[] = [];
-  for (const [key, value] of Object.entries(filter)) {
-    if (key === '$and' || key === '$or') {
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isBindingRecord(item)) fields.push(...transactionFilterFields(item));
-        }
-      }
-    } else {
-      fields.push(key);
-    }
-  }
-  return fields;
 }
 
 function assertKnownTransactionFields(
@@ -578,7 +562,9 @@ function assertTransactionTopology(
     if ('input' in step) {
       const input = assertTransactionRecord(operationName, index, raw, 'input');
       if (input) {
-        assertKnownTransactionFields(operationName, index, entry, Object.keys(input));
+        if (step.op === 'create') {
+          assertKnownTransactionFields(operationName, index, entry, Object.keys(input));
+        }
         assertTransactionBindings(operationName, index, input);
       }
     }
@@ -596,20 +582,6 @@ function assertTransactionTopology(
         assertTransactionBindings(operationName, index, set);
       }
     }
-    if ('field' in step) {
-      if (typeof step.field !== 'string' || !step.field.trim()) {
-        invalidTransactionStep(operationName, index, "requires non-empty string 'field'");
-      }
-      assertKnownTransactionFields(operationName, index, entry, [step.field]);
-    }
-    if ('filter' in step) {
-      const filter = assertTransactionRecord(operationName, index, raw, 'filter');
-      if (filter) {
-        assertKnownTransactionFields(operationName, index, entry, transactionFilterFields(filter));
-        assertTransactionBindings(operationName, index, filter);
-      }
-    }
-    if ('value' in step) assertTransactionBindings(operationName, index, step.value);
   }
 }
 

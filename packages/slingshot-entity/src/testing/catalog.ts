@@ -100,6 +100,31 @@ function defineCase(
   return deepFreeze({ id, description, requires: [...requires], run });
 }
 
+function defineNativeTransactionRollbackCase(
+  id: string,
+  description: string,
+  requires: readonly EntityBackendCapability[],
+  operationName: string,
+  initial: RecordValue,
+  params: RecordValue,
+  verify: (record: RecordValue) => void,
+): EntityConformanceCase {
+  return defineCase(id, description, requires, async harness => {
+    const target = adapter(harness);
+    const recordId = `tx-native-${id.split('.').at(-1)}`;
+    await target.create(recordInput(recordId, initial));
+    await expectConflict(
+      operation(
+        harness.composite(CONFORMANCE_COMPOSITE_KEY),
+        operationName,
+      )({ id: recordId, missingId: 'missing', ...params }),
+    );
+    const restored = await target.getById(recordId);
+    assert(restored, `${description}: rolled-back record must still exist`);
+    verify(restored);
+  });
+}
+
 const CRUD = [
   defineCase(
     'crud.strict-create',
@@ -873,6 +898,101 @@ const COMPOSITION_AND_REGRESSIONS = [
       })) as RecordValue[];
       assertEqual(results[0]?.deleted, false, 'Missing transaction delete result');
     },
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-field-update',
+    'named field update rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.fieldUpdate',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeFieldUpdateRollback',
+    { status: 'pending' },
+    { expectedStatus: 'pending', status: 'review' },
+    record => assertEqual(record.status, 'pending', 'Rolled-back field update'),
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-transition',
+    'named transition rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.transition',
+      'atomic.transition',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeTransitionRollback',
+    { status: 'pending' },
+    {},
+    record => assertEqual(record.status, 'pending', 'Rolled-back transition'),
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-batch',
+    'named batch rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.batch',
+      'atomic.batch',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeBatchRollback',
+    { category: 'native-batch', status: 'pending' },
+    { group: 'native-batch' },
+    record => assertEqual(record.status, 'pending', 'Rolled-back batch'),
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-array-push',
+    'named array push rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.arrayPush',
+      'atomic.array-mutation',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeArrayPushRollback',
+    { tags: [] },
+    { tag: 'added' },
+    record => assertArrayEqual(record.tags as unknown[], [], 'Rolled-back array push'),
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-array-pull',
+    'named array pull rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.arrayPull',
+      'atomic.array-mutation',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeArrayPullRollback',
+    { tags: ['existing'] },
+    { tag: 'existing' },
+    record => assertArrayEqual(record.tags as unknown[], ['existing'], 'Rolled-back array pull'),
+  ),
+  defineNativeTransactionRollbackCase(
+    'composition.transaction-native-increment',
+    'named increment rolls back after a later required miss',
+    [
+      'crud.create',
+      'crud.read',
+      'operation.increment',
+      'atomic.increment',
+      'operation.transaction',
+      'transaction.rollback',
+    ],
+    'nativeIncrementRollback',
+    { count: 1 },
+    {},
+    record => assertEqual(record.count, 1, 'Rolled-back increment'),
   ),
   defineCase(
     'composition.missing-rejection',

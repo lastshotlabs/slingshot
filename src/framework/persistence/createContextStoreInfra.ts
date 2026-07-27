@@ -8,9 +8,13 @@ import type {
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
 import {
+  REGISTER_TRANSACTION_ENTITY,
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
+  type TransactionEntityAdapterLookup,
+  type TransactionEntityAdapterRegistration,
   getSearchPluginRuntimeOrNull,
 } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -21,6 +25,7 @@ import {
   RESOLVE_SEARCH_SYNC,
   type ResolvedSearchSync,
 } from './internalRepoResolution';
+import { createFrameworkTransactionManager } from './transactions/frameworkTransactionManager';
 
 interface CreateContextStoreInfraOptions {
   readonly appName: string;
@@ -219,8 +224,12 @@ export function createContextStoreInfra(
 ): FrameworkStoreInfra {
   const { appName, infra, bus, pluginState, entityRegistry } = options;
   const registeredEntities = new Set<string>();
+  // Physical PostgreSQL and SQLite providers are installed in WP2 Phases 4 and 5.
+  // The manager still exists for every app so route and hook service identity is stable.
+  const transactions = createFrameworkTransactionManager([]);
   const storeInfra: FrameworkStoreInfra = {
     appName,
+    getTransactions: () => transactions,
     getRedis: () => {
       if (!infra.redis) throw new Error('[slingshot] Redis is not configured for this app');
       return infra.redis;
@@ -252,6 +261,12 @@ export function createContextStoreInfra(
       if (!searchRuntime) return null;
       return searchRuntime.getSearchClient(config._storageName);
     },
+    [REGISTER_TRANSACTION_ENTITY](registration: TransactionEntityAdapterRegistration): void {
+      transactions.registerEntity(registration);
+    },
+    [RESOLVE_TRANSACTION_ENTITY_ADAPTER](lookup: TransactionEntityAdapterLookup): object {
+      return transactions.resolveEntity(lookup);
+    },
     // Inject createEntityFactories / createCompositeFactories so packages/slingshot-entity
     // can create RepoFactories<T> at setupRoutes time without a direct import
     // from the root app (CLAUDE.md Rule 16).
@@ -267,6 +282,7 @@ export function createContextStoreInfra(
 
   for (const key of [
     'appName',
+    'getTransactions',
     'getRedis',
     'getMongo',
     'getSqliteDb',
@@ -274,6 +290,8 @@ export function createContextStoreInfra(
     REGISTER_ENTITY,
     RESOLVE_SEARCH_SYNC,
     RESOLVE_SEARCH_CLIENT,
+    REGISTER_TRANSACTION_ENTITY,
+    RESOLVE_TRANSACTION_ENTITY_ADAPTER,
     RESOLVE_ENTITY_FACTORIES,
     RESOLVE_COMPOSITE_FACTORIES,
   ] as const) {

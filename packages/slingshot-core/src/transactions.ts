@@ -46,6 +46,24 @@ export interface TransactionManager {
   ): Promise<T>;
 }
 
+/**
+ * Create an explicit manager for infrastructure that supports no rollback transactions.
+ *
+ * Manual repository fixtures can use this helper to satisfy {@link StoreInfra} without
+ * accidentally claiming that a configured client provides framework transaction semantics.
+ */
+export function createUnsupportedTransactionManager(): TransactionManager {
+  return Object.freeze({
+    supports(_store: StoreType): _store is TransactionStore {
+      return false;
+    },
+    run<T>(store: TransactionStore, _callback: (scope: TransactionScope) => T | Promise<T>) {
+      void _callback;
+      return Promise.reject(new TransactionStoreUnsupportedError(store));
+    },
+  });
+}
+
 /** Thrown when an app cannot provide a real transaction for the requested store. */
 export class TransactionStoreUnsupportedError extends SlingshotError {
   override readonly name = 'TransactionStoreUnsupportedError';

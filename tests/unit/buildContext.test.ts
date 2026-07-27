@@ -4,6 +4,7 @@ import {
   createCoreRegistrar,
   createEntityRegistry,
   createRouter,
+  createUnsupportedTransactionManager,
 } from '@lastshotlabs/slingshot-core';
 import type { CacheAdapter, EmailTemplate, SecretRepository } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
@@ -397,6 +398,7 @@ describe('buildContext lifecycle', () => {
         trustProxy: false,
         storeInfra: {
           appName: 'direct-app',
+          getTransactions: () => createUnsupportedTransactionManager(),
           getRedis: () => {
             throw new Error('not configured');
           },

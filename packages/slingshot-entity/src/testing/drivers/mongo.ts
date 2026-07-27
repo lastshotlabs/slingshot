@@ -5,6 +5,7 @@ import type {
   OperationConfig,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import type {
@@ -57,6 +58,7 @@ async function createResources(
   try {
     const infra: StoreInfra = {
       appName: 'entity-conformance',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis() {
         throw new Error('[entity-conformance] Redis is unavailable in the MongoDB driver');
       },

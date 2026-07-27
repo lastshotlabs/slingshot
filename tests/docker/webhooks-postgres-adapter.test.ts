@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import type { StoreInfra } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createWebhooksTestApp } from '../../packages/slingshot-webhooks/src/testing';
 
 const CONNECTION =
@@ -20,6 +21,7 @@ function adminHeaders(tenantId: string): Record<string, string> {
 function createPostgresInfra(pool: Pool): StoreInfra {
   return {
     appName: 'slingshot-webhooks-docker-postgres',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('redis not configured');
     },

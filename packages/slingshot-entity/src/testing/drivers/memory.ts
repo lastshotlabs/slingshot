@@ -4,6 +4,7 @@ import type {
   OperationConfig,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import type {
@@ -24,6 +25,7 @@ function createInfra(): StoreInfra {
   };
   return {
     appName: 'entity-conformance',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis: () => unavailable('Redis'),
     getMongo: () => unavailable('MongoDB'),
     getSqliteDb: () => unavailable('SQLite'),

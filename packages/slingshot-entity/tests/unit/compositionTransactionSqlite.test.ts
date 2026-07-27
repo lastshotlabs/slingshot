@@ -1,7 +1,10 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import type { EntityAdapter, StoreInfra } from '@lastshotlabs/slingshot-core';
-import { EntityTransactionConflictError } from '@lastshotlabs/slingshot-core';
+import {
+  EntityTransactionConflictError,
+  createUnsupportedTransactionManager,
+} from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
 
 const RecordEntity = defineEntity('TransactionRecord', {
@@ -98,6 +101,7 @@ interface Composite {
 function sqliteInfra(db: Database): StoreInfra {
   return {
     appName: 'transaction-test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getSqliteDb: () => db,
     getPostgres: () => {
       throw new Error('PostgreSQL not configured');

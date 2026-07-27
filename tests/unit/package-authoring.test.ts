@@ -139,6 +139,7 @@ describe('package-first authoring', () => {
                     packageName: z.string(),
                     capability: z.string(),
                     count: z.number(),
+                    transactionsAvailable: z.boolean(),
                   }),
                 },
               },
@@ -150,6 +151,7 @@ describe('package-first authoring', () => {
                   packageName: ctx.packageName,
                   capability: reporter.label,
                   count: list.items.length,
+                  transactionsAvailable: ctx.transactions.supports('postgres'),
                 });
               },
             }),
@@ -187,6 +189,7 @@ describe('package-first authoring', () => {
       packageName: 'notes',
       capability: 'ready',
       count: 1,
+      transactionsAvailable: false,
     });
   });
 

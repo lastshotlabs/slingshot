@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { createEntityRegistry, defineEntity, field } from '@lastshotlabs/slingshot-core';
+import {
+  createEntityRegistry,
+  createUnsupportedTransactionManager,
+  defineEntity,
+  field,
+} from '@lastshotlabs/slingshot-core';
 import type { EntityRegistry } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import {
@@ -17,6 +22,7 @@ function createStubInfra(entityRegistry: EntityRegistry): FrameworkStoreInfra {
 
   return {
     appName: 'test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis: () => {
       throw new Error('not configured');
     },

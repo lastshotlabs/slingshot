@@ -30,6 +30,7 @@ import type { PostgresHealthCheckResult, PostgresPoolStatsSnapshot } from './pos
 import type { RedisLike } from './redis';
 import type { RuntimeSqliteDatabase } from './runtime';
 import type { StoreType } from './storeType';
+import type { TransactionManager, TransactionScope } from './transactions';
 
 // ---------------------------------------------------------------------------
 // Framework injection symbols
@@ -76,6 +77,37 @@ export const RESOLVE_COMPOSITE_FACTORIES: symbol = Symbol.for(
  * See CLAUDE.md Rule 16.
  */
 export const RESOLVE_REINDEX_SOURCE: symbol = Symbol.for('slingshot.resolveReindexSource');
+
+/**
+ * Framework-internal registration hook for rebuilding an entity adapter against
+ * a transaction-bound infrastructure view.
+ */
+export const REGISTER_TRANSACTION_ENTITY: symbol = Symbol.for(
+  'slingshot.registerTransactionEntity',
+);
+
+/**
+ * Framework-internal resolver used by package and hook entity readers when a
+ * transaction scope is supplied.
+ */
+export const RESOLVE_TRANSACTION_ENTITY_ADAPTER: symbol = Symbol.for(
+  'slingshot.resolveTransactionEntityAdapter',
+);
+
+/** Immutable metadata needed to rebuild one entity adapter inside a transaction. */
+export interface TransactionEntityAdapterRegistration {
+  readonly plugin: string;
+  readonly entity: string;
+  readonly store: StoreType;
+  readonly buildAdapter: (infra: StoreInfra) => object;
+}
+
+/** Internal scope-aware entity lookup passed through the StoreInfra DI boundary. */
+export interface TransactionEntityAdapterLookup {
+  readonly plugin: string;
+  readonly entity: string;
+  readonly scope: TransactionScope;
+}
 
 /**
  * Postgres connection bundle passed through {@link StoreInfra} to repository factories.
@@ -144,6 +176,13 @@ export interface PostgresBundle {
 export interface StoreInfra {
   /** The application name — used as a namespace prefix for store keys/tables. */
   readonly appName: string;
+  /**
+   * Return the application-owned transaction manager.
+   *
+   * Manual and test infrastructure must provide this accessor explicitly so
+   * transaction support is never inferred from the presence of a raw client.
+   */
+  readonly getTransactions: () => TransactionManager;
   /**
    * Returns the Redis client for this app instance.
    * @throws If Redis is not configured for this app.

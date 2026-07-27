@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { EntityTransactionConflictError } from '@lastshotlabs/slingshot-core';
+import {
+  EntityTransactionConflictError,
+  createUnsupportedTransactionManager,
+} from '@lastshotlabs/slingshot-core';
 import type { EntityAdapter, PostgresBundle, StoreInfra } from '@lastshotlabs/slingshot-core';
 import { transactionExecutor } from '../../src/configDriven/operationExecutors/transaction';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
@@ -134,6 +137,7 @@ function createFakePostgresInfra(): {
 
   const infra: StoreInfra = {
     appName: 'test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('Redis not configured');
     },

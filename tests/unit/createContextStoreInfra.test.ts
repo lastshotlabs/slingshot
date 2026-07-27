@@ -58,6 +58,20 @@ describe('createContextStoreInfra', () => {
     expect(infra.appName).toBe('my-app');
   });
 
+  test('returns one stable app-owned transaction manager', () => {
+    const infra = createContextStoreInfra({
+      appName: 'my-app',
+      infra: createMinimalInfra(),
+      bus: createInProcessAdapter(),
+      pluginState: new Map(),
+      entityRegistry: createEntityRegistry(),
+    });
+
+    expect(infra.getTransactions()).toBe(infra.getTransactions());
+    expect(infra.getTransactions().supports('postgres')).toBe(false);
+    expect(infra.getTransactions().supports('sqlite')).toBe(false);
+  });
+
   test('getRedis throws when redis is not configured', () => {
     const entityRegistry = createEntityRegistry();
     const infra = createContextStoreInfra({

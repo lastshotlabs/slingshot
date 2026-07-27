@@ -7,6 +7,7 @@ import type {
   ResolvedEntityConfig,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import { storageName } from '../../lib/naming';
@@ -111,6 +112,7 @@ async function createResources(
     await client.ping();
     const infra: StoreInfra = {
       appName,
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis() {
         return client as unknown as RedisLike;
       },

@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   createEntityRegistry,
+  createUnsupportedTransactionManager,
   defineEntity,
   field,
   resolveRepo,
@@ -123,6 +124,7 @@ function createTestInfra(options: {
 
   return {
     appName: 'test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis: () => {
       throw new Error('[test] Redis not configured');
     },

@@ -55,6 +55,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   createEntityRegistry,
+  createUnsupportedTransactionManager,
   deepFreeze,
   resolveRepo,
   resolveRepoAsync,
@@ -614,8 +615,10 @@ async function resolveFrameworkPersistence(opts: PersistenceResolutionOptions): 
   // If anything below throws (e.g. resolveRepo with an unsupported store), close the
   // SQLite handle before propagating — otherwise the file lock is held until GC.
   try {
+    const unsupportedTransactions = createUnsupportedTransactionManager();
     const storeInfra = {
       appName: appName || 'slingshot',
+      getTransactions: () => unsupportedTransactions,
       getRedis: () => {
         if (!redis)
           throw new Error('[framework/persistence] Redis store selected but Redis is unavailable');

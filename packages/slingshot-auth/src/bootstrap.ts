@@ -20,6 +20,7 @@ import type {
   SlingshotEvents,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { createMemoryAuthAdapter } from './adapters/memoryAuth';
 import { createAuthResolvedConfig } from './config/authConfig';
 import type { AuthResolvedConfig } from './config/authConfig';
@@ -654,6 +655,7 @@ export async function bootstrapAuth(
 
   const storeInfra: import('@lastshotlabs/slingshot-core').StoreInfra = {
     appName: resolvedConfig.appName,
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis,
     getMongo: () => {
       const conn = getMongoApp();

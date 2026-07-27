@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { ENTITY_BACKEND_CAPABILITIES, type StoreInfra } from '@lastshotlabs/slingshot-core';
+import {
+  ENTITY_BACKEND_CAPABILITIES,
+  type StoreInfra,
+  createUnsupportedTransactionManager,
+} from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories } from '../../src/configDriven';
 import {
   ENTITY_CONFORMANCE_CATALOG,
@@ -65,6 +69,7 @@ describe.skipIf(!TEST_MONGO_URL)('entity conformance — live MongoDB', () => {
     };
     const infra: StoreInfra = {
       appName: 'entity-conformance',
+      getTransactions: () => createUnsupportedTransactionManager(),
       getRedis: unavailable,
       getMongo: unavailable,
       getSqliteDb: unavailable,

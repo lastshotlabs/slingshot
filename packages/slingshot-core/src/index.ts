@@ -525,6 +525,8 @@ export type {
   RepoFactories,
   TestableRepoFactories,
   PostgresBundle,
+  TransactionEntityAdapterRegistration,
+  TransactionEntityAdapterLookup,
 } from './storeInfra';
 /** Store-type resolution and plugin-facing DI symbols for infrastructure factories. */
 export {
@@ -533,6 +535,8 @@ export {
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  REGISTER_TRANSACTION_ENTITY,
+  RESOLVE_TRANSACTION_ENTITY_ADAPTER,
 } from './storeInfra';
 
 // --- Transactions ---
@@ -556,6 +560,7 @@ export {
   EntityTransactionConflictError,
   TransactionCommitError,
   TransactionPostCommitError,
+  createUnsupportedTransactionManager,
 } from './transactions';
 
 // --- Config-driven entity persistence (shared type contracts) ---

@@ -6,6 +6,7 @@ import {
   field,
   index,
 } from '@lastshotlabs/slingshot-core';
+import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
 import { op } from '../../src/builders/op';
 import {
   UnsupportedEntityBackendError,
@@ -39,6 +40,7 @@ const UniqueEntity = defineEntity('CapabilityUnique', {
 
 const unreachableInfra: StoreInfra = {
   appName: 'test',
+  getTransactions: () => createUnsupportedTransactionManager(),
   getRedis: () => {
     throw new Error('backend infrastructure must not be accessed');
   },

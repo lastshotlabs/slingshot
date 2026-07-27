@@ -26,7 +26,7 @@
  * when the target item does not exist.
  */
 import type { CollectionOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
-import { toSnakeCase } from '../fieldUtils';
+import { quoteSqliteIdent, toSnakeCase } from '../fieldUtils';
 import type { MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
@@ -205,7 +205,13 @@ export function collectionSqlite(
   const idField = op.identifyBy ?? 'id';
   const parentKeyCol = toSnakeCase(op.parentKey);
   const idCol = toSnakeCase(idField);
-  const table = `${parentTable}_${opName}`;
+  const parentIsQuoted = parentTable.startsWith('"') && parentTable.endsWith('"');
+  const rawParentTable = parentIsQuoted
+    ? parentTable.slice(1, -1).replaceAll('""', '"')
+    : parentTable;
+  const table = parentIsQuoted
+    ? quoteSqliteIdent(`${rawParentTable}_${opName}`)
+    : `${rawParentTable}_${opName}`;
   let initialized = false;
 
   function ensureTable(): void {

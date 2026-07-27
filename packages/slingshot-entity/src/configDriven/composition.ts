@@ -194,6 +194,7 @@ export function createCompositeFactories<
     if (storeType === 'sqlite') {
       const db = infra.getSqliteDb() as unknown as SqliteDb;
       wrapInTransaction = async fn => {
+        await Promise.all(Object.values(adapters).map(adapter => adapter.list({ limit: 1 })));
         db.run('BEGIN');
         try {
           await fn();

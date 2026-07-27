@@ -382,7 +382,11 @@ export function fromSqliteRow(
   for (const [camel, def] of Object.entries(fields)) {
     const snake = toSnakeCase(camel);
     const val = row[snake];
-    if (val === undefined || val === null) continue;
+    if (val === undefined) continue;
+    if (val === null) {
+      record[camel] = null;
+      continue;
+    }
 
     record[camel] = sqliteToDomain(val, def);
   }

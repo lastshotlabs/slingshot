@@ -160,6 +160,24 @@ to drive a `definePackage(...)` module in tests that bypass `createApp()` /
 runtime state the package's capability resolvers depend on, so tests can exercise the same
 boot sequence the framework runs at startup without spinning up a real HTTP host.
 
+Backend authors and framework contributors can run the same capability-selected behavior
+catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory
+and temporary-file SQLite drivers:
+
+```ts
+import {
+  createSqliteEntityConformanceDriver,
+  runEntityConformance,
+} from '@lastshotlabs/slingshot-entity/testing';
+
+const results = await runEntityConformance(createSqliteEntityConformanceDriver());
+const failures = results.filter(result => result.status === 'failed');
+```
+
+The shared catalog contains no store-specific branches or handwritten skips. A driver's
+immutable `EntityBackendProfile` is the sole selection source, and every result is a frozen,
+serializable pass, skip, or sanitized failure record.
+
 ## Capability identity invariant
 
 Cross-package consumers resolve published services through

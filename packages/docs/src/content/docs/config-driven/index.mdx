@@ -46,6 +46,14 @@ Use this mapping:
   />
 </CardGrid>
 
+## Backend conformance
+
+Framework contributors can verify config-driven entity semantics through the public
+`@lastshotlabs/slingshot-entity/testing` entry point. `runEntityConformance()` runs one frozen,
+backend-independent catalog, while the memory and temporary-file SQLite drivers select cases only
+from their immutable capability profiles. Results are serializable passes, profile-derived skips,
+or sanitized failures; unsupported operation configurations still fail during bootstrap.
+
 ## Why this changed
 
 `Config-driven` was too broad. It mixed:

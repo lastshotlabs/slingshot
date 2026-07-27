@@ -9,7 +9,12 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { HttpError, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
+import {
+  HttpError,
+  createEvictExpired,
+  evaluateFilter,
+  evictOldest,
+} from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -120,11 +125,10 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
     record: Record<string, unknown>,
     filter: Record<string, unknown>,
   ): boolean {
-    for (const [key, val] of Object.entries(filter)) {
-      if (val === undefined) continue;
-      // Skip pagination keys
+    for (const [key, value] of Object.entries(filter)) {
+      if (value === undefined) continue;
       if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
-      if (record[key] !== val) return false;
+      if (record[key] !== value) return false;
     }
     return true;
   }
@@ -289,7 +293,7 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
           continue;
         }
         if (!recordVisible(entry.record)) continue;
-        if (filter && !matchesFilter(entry.record, filter)) continue;
+        if (filter && !evaluateFilter(entry.record, filter)) continue;
         visible.push(entry.record);
       }
 

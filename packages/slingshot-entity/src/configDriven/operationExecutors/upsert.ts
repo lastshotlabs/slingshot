@@ -135,8 +135,16 @@ export function upsertSqlite(
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const matchCols = op.match.map(f => toSnakeCase(f));
   const updateCols = op.set.map(f => `${toSnakeCase(f)} = excluded.${toSnakeCase(f)}`);
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return input => {
     ensureTable();
+    const existed = Boolean(
+      db
+        .query<
+          Record<string, unknown>
+        >(`SELECT 1 AS present FROM ${table} WHERE ${matchCols.map(c => `${c} = ?`).join(' AND ')} LIMIT 1`)
+        .get(...op.match.map(f => input[f])),
+    );
     const record = resolveOnCreate(op, config, input);
     const row = toRow(record);
     const columns = Object.keys(row);
@@ -151,7 +159,8 @@ export function upsertSqlite(
         Record<string, unknown>
       >(`SELECT * FROM ${table} WHERE ${matchCols.map(c => `${c} = ?`).join(' AND ')}`)
       .get(...op.match.map(f => input[f]));
-    return Promise.resolve(fetched ? fromRow(fetched) : record);
+    const entity = fetched ? fromRow(fetched) : record;
+    return Promise.resolve(returnsCreated ? { entity, created: !existed } : entity);
   };
 }
 

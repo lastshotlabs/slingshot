@@ -370,6 +370,32 @@ export function createNotificationsPackage(
         );
       }
 
+      // THE PREFERENCES TABLE NEEDS THE SAME PRE-WARM, AND FOR A SHARPER REASON.
+      //
+      // `ensureTable()` is lazy per adapter, so the table is only provisioned
+      // once something touches that adapter. Nothing did at boot — and the
+      // preference lookup on the notify() path is RAW SQL
+      // (`SELECT * FROM slingshot_notification_preferences WHERE user_id = $1`),
+      // which bypasses the adapter entirely and therefore never provisions
+      // anything. On a fresh Postgres database every notify() failed with:
+      //
+      //   relation "slingshot_notification_preferences" does not exist
+      //
+      // NO NOTIFICATION COULD BE SENT AT ALL until someone happened to hit a
+      // preference HTTP route, which most deployments never do. It hid because
+      // any database that has served that route once is permanently fine, so
+      // long-lived dev machines look healthy while every fresh deploy is broken.
+      // Reproduced by pointing a clean database at the app and watching the
+      // table appear only after touching `/notifications/notification-preferences`.
+      try {
+        await preferences.list({ limit: 1 });
+      } catch (err) {
+        pluginLogger.error(
+          '[slingshot-notifications] Failed to pre-warm notification-preferences storage; delivery resolution will fail',
+          errorLogFields(err),
+        );
+      }
+
       const rateLimitBackend = resolveRateLimitBackend(config.rateLimit.backend);
       dispatcher = config.dispatcher.enabled
         ? createIntervalDispatcher({

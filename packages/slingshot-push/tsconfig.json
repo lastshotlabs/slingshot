@@ -7,6 +7,7 @@
     "types": ["bun"],
     "paths": {
       "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/src/testing.ts"],
       "@lastshotlabs/slingshot-entity": ["../slingshot-entity/src/index.ts"],
       "@lastshotlabs/slingshot-entity/routing": ["../slingshot-entity/src/routing/index.ts"],
       "@lastshotlabs/slingshot-entity/testing": ["../slingshot-entity/src/testing.ts"],

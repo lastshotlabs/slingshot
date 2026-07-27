@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-search
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [0f42569]
+- Updated dependencies [79dae42]
+  - @lastshotlabs/slingshot-core@0.3.0
+
 ## 0.2.4
 
 ### Patch Changes

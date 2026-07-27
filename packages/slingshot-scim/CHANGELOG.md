@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-scim
 
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [0f42569]
+- Updated dependencies [79dae42]
+  - @lastshotlabs/slingshot-core@0.3.0
+  - @lastshotlabs/slingshot-auth@1.0.0
+
 ## 0.2.3
 
 ### Patch Changes

@@ -1,5 +1,51 @@
 # @lastshotlabs/slingshot
 
+## 1.0.0
+
+### Minor Changes
+
+- 79dae42: Define the public transaction scope, manager, lifecycle-error, step-result, and semantic-step
+  contracts; require named native operations for semantic transaction steps; and reject malformed
+  transaction topology before backend infrastructure is accessed. Dispatch semantic steps through
+  their exact configured methods, resolve nested bindings, return nullable lookups, and normalize
+  required mutation misses to typed HTTP conflicts.
+  Expose one app-owned manager through package routes, hook services, and StoreInfra; bind entity
+  resolution explicitly to opaque scopes; enforce same-store nesting, lifecycle ownership, closed
+  scope safety, and pending-work rollback; cache scope-bound adapters; and defer framework search and
+  entity effects until the primary transaction commits.
+  Install the live PostgreSQL scope provider when the app has a configured pool; bind scoped entity
+  and Drizzle adapters to one checked-out queryable, route declarative composite transactions through
+  the shared manager, reject caught server-aborted work as rollback-only, and release the client
+  exactly once after every lifecycle outcome.
+
+### Patch Changes
+
+- Updated dependencies [0f42569]
+- Updated dependencies [ec8a199]
+- Updated dependencies [79dae42]
+  - @lastshotlabs/slingshot-core@0.3.0
+  - @lastshotlabs/slingshot-entity@0.3.0
+  - @lastshotlabs/slingshot-postgres@0.3.0
+  - @lastshotlabs/slingshot-runtime-bun@0.2.4
+  - @lastshotlabs/slingshot-admin@0.2.4
+  - @lastshotlabs/slingshot-auth@1.0.0
+  - @lastshotlabs/slingshot-bullmq@0.2.4
+  - @lastshotlabs/slingshot-community@0.2.11
+  - @lastshotlabs/slingshot-deep-links@0.2.4
+  - @lastshotlabs/slingshot-infra@0.2.4
+  - @lastshotlabs/slingshot-interactions@0.2.7
+  - @lastshotlabs/slingshot-kafka@0.2.4
+  - @lastshotlabs/slingshot-mail@0.2.4
+  - @lastshotlabs/slingshot-notifications@0.2.11
+  - @lastshotlabs/slingshot-orchestration@0.2.4
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.4
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.4
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.4
+  - @lastshotlabs/slingshot-organizations@1.0.0
+  - @lastshotlabs/slingshot-permissions@0.2.5
+  - @lastshotlabs/slingshot-push@0.2.6
+  - @lastshotlabs/slingshot-webhooks@0.2.6
+
 ## 0.2.12
 
 ### Patch Changes

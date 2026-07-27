@@ -19,6 +19,7 @@ import {
   createEntityRegistry,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createUnsupportedTransactionManager,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories, createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -114,6 +115,7 @@ function createNotificationsCapabilitiesSlot(): Record<string, unknown> {
 function createFrameworkConfig(pool: FakeChatRoutePostgresPool) {
   const storeInfra: StoreInfra = {
     appName: 'chat-postgres-route-test',
+    getTransactions: () => createUnsupportedTransactionManager(),
     getRedis() {
       throw new Error('Redis is not configured in this test');
     },

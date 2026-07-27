@@ -42,6 +42,7 @@ export function createDockerTestCommands(
         'bunfig.docker.toml',
         '--concurrency=1',
         'packages/slingshot-auth/tests/integration/postgres-auth.test.ts',
+        'packages/slingshot-entity/tests/conformance/postgres.test.ts',
         'packages/slingshot-permissions/tests/integration/postgres-adapter.integration.test.ts',
       ],
     },

@@ -164,22 +164,25 @@ runtime state the package's capability resolvers depend on, so tests can exercis
 boot sequence the framework runs at startup without spinning up a real HTTP host.
 
 Backend authors and framework contributors can run the same capability-selected behavior
-catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory
-and temporary-file SQLite drivers:
+catalog through `runEntityConformance()`. The `/testing` entry point exports isolated memory,
+temporary-file SQLite, and live PostgreSQL drivers:
 
 ```ts
 import {
-  createSqliteEntityConformanceDriver,
+  createPostgresEntityConformanceDriver,
   runEntityConformance,
 } from '@lastshotlabs/slingshot-entity/testing';
 
-const results = await runEntityConformance(createSqliteEntityConformanceDriver());
+const results = await runEntityConformance(
+  createPostgresEntityConformanceDriver(process.env.TEST_POSTGRES_URL),
+);
 const failures = results.filter(result => result.status === 'failed');
 ```
 
 The shared catalog contains no store-specific branches or handwritten skips. A driver's
 immutable `EntityBackendProfile` is the sole selection source, and every result is a frozen,
-serializable pass, skip, or sanitized failure record.
+serializable pass, skip, or sanitized failure record. The PostgreSQL driver creates a unique
+quoted schema per harness and drops only that schema during cleanup.
 
 ## Capability identity invariant
 

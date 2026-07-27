@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { PostgresBundle, StoreInfra } from '@lastshotlabs/slingshot-core';
+import type { EntityAdapter, PostgresBundle, StoreInfra } from '@lastshotlabs/slingshot-core';
+import { transactionExecutor } from '../../src/configDriven/operationExecutors/transaction';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
 
 const Parent = defineEntity('Parent', {
@@ -226,5 +227,32 @@ describe('createCompositeFactories — Postgres op.transaction', () => {
     expect(clientQueries).toContain('BEGIN');
     expect(clientQueries).toContain('ROLLBACK');
     expect(released.count).toBe(1);
+  });
+
+  it('throws instead of fabricating a result when a step executor is missing', async () => {
+    const adapter: EntityAdapter<unknown, unknown, unknown> = {
+      create: async input => input,
+      getById: async () => null,
+      update: async () => null,
+      delete: async () => false,
+      list: async () => ({ items: [], hasMore: false }),
+      clear: async () => {},
+    };
+    const execute = transactionExecutor(
+      {
+        kind: 'transaction',
+        steps: [
+          {
+            op: 'batch',
+            entity: 'records',
+            action: 'delete',
+            filter: { status: 'pending' },
+          },
+        ],
+      },
+      { records: adapter },
+    );
+
+    await expect(execute({})).rejects.toThrow("batch executor is missing on entity 'records'");
   });
 });

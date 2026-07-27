@@ -39,6 +39,19 @@ function assertArrayEqual(
   if (left !== right) throw new Error(`${message}: expected ${right}, received ${left}`);
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableJson(item)).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function operation(
   target: Readonly<Record<string, unknown>>,
   name: string,
@@ -204,8 +217,8 @@ const MAPPING_AND_CONSTRAINTS = [
       );
       assertArrayEqual(found.tags as unknown[], ['one', 'two'], 'Array round trip');
       assertEqual(
-        JSON.stringify(found.metadata),
-        JSON.stringify({ nested: { ok: true }, count: 2 }),
+        stableJson(found.metadata),
+        stableJson({ nested: { ok: true }, count: 2 }),
         'JSON round trip',
       );
     },
@@ -764,6 +777,58 @@ const COMPOSITION_AND_REGRESSIONS = [
         null,
         'Rolled-back first write',
       );
+    },
+  ),
+  defineCase(
+    'composition.transaction-full-match',
+    'transaction matching honors every declared non-primary field',
+    ['crud.create', 'crud.read', 'crud.update', 'operation.transaction', 'transaction.rollback'],
+    async harness => {
+      const target = adapter(harness);
+      const composite = harness.composite(CONFORMANCE_COMPOSITE_KEY);
+      await target.create(recordInput('tx-match', { status: 'pending' }));
+
+      const updated = (await operation(
+        composite,
+        'matchAndUpdate',
+      )({
+        email: 'tx-match@example.test',
+        expectedStatus: 'pending',
+        title: 'matched',
+      })) as RecordValue[];
+      assertEqual(updated[0]?.id, 'tx-match', 'Transaction match result');
+      assertEqual((await target.getById('tx-match'))?.title, 'matched', 'Matched update');
+
+      let rejected = false;
+      try {
+        await operation(
+          composite,
+          'matchAndUpdate',
+        )({
+          email: 'tx-match@example.test',
+          expectedStatus: 'complete',
+          title: 'must-not-write',
+        });
+      } catch {
+        rejected = true;
+      }
+      assert(rejected, 'Mismatched secondary guard must reject');
+      assertEqual((await target.getById('tx-match'))?.title, 'matched', 'Guarded row');
+    },
+  ),
+  defineCase(
+    'composition.transaction-delete-result',
+    'transaction delete preserves the adapter result for a missing match',
+    ['crud.delete', 'operation.transaction', 'transaction.rollback'],
+    async harness => {
+      const results = (await operation(
+        harness.composite(CONFORMANCE_COMPOSITE_KEY),
+        'deleteByMatch',
+      )({
+        email: 'missing@example.test',
+        expectedStatus: 'pending',
+      })) as RecordValue[];
+      assertEqual(results[0]?.deleted, false, 'Missing transaction delete result');
     },
   ),
   defineCase(

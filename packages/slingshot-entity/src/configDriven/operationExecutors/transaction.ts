@@ -15,6 +15,19 @@ export type AdapterMap = Partial<
   Record<string, EntityAdapter<unknown, unknown, unknown> & Record<string, unknown>>
 >;
 
+interface MatchedRecord {
+  readonly id: string | number;
+  readonly record: Record<string, unknown>;
+}
+
+function withoutPrimaryKey(
+  match: Record<string, unknown>,
+  primaryKey: string,
+): Record<string, unknown> | undefined {
+  const guard = Object.fromEntries(Object.entries(match).filter(([field]) => field !== primaryKey));
+  return Object.keys(guard).length > 0 ? guard : undefined;
+}
+
 function resolveValue(
   value: unknown,
   params: Record<string, unknown>,
@@ -54,6 +67,37 @@ function resolveRecord(
     resolved[key] = resolveValue(value, params, results);
   }
   return resolved;
+}
+
+async function findMatchedRecord(
+  adapter: EntityAdapter<unknown, unknown, unknown>,
+  entityName: string,
+  match: Record<string, unknown>,
+  primaryKey: string,
+): Promise<MatchedRecord | null> {
+  const directId = match[primaryKey];
+  if (typeof directId === 'string' || typeof directId === 'number') {
+    const record = (await adapter.getById(
+      directId,
+      withoutPrimaryKey(match, primaryKey),
+    )) as Record<string, unknown> | null;
+    return record ? { id: directId, record } : null;
+  }
+
+  const matches = await adapter.list({ filter: match, limit: 2 });
+  if (matches.items.length === 0) return null;
+  if (matches.items.length > 1) {
+    throw new Error(`[transaction] Match for entity '${entityName}' selected more than one record`);
+  }
+
+  const record = matches.items[0] as Record<string, unknown>;
+  const resolvedId = record[primaryKey];
+  if (typeof resolvedId !== 'string' && typeof resolvedId !== 'number') {
+    throw new Error(
+      `[transaction] Matched entity '${entityName}' has no usable primary key '${primaryKey}'`,
+    );
+  }
+  return { id: resolvedId, record };
 }
 
 /**
@@ -112,7 +156,10 @@ function resolveRecord(
 export function transactionExecutor(
   op: TransactionOpConfig,
   adapters: AdapterMap,
-  options?: { wrapInTransaction?: (fn: () => Promise<void>) => Promise<void> },
+  options?: {
+    wrapInTransaction?: (fn: () => Promise<void>) => Promise<void>;
+    primaryKeys?: Readonly<Record<string, string>>;
+  },
 ): (params: Record<string, unknown>) => Promise<Array<Record<string, unknown>>> {
   return async params => {
     const results: Array<Record<string, unknown>> = [];
@@ -123,6 +170,7 @@ export function transactionExecutor(
         if (!adapter) {
           throw new Error(`[transaction] Entity '${step.entity}' not found in composite adapter`);
         }
+        const primaryKey = options?.primaryKeys?.[step.entity] ?? 'id';
 
         let result: Record<string, unknown> = {};
 
@@ -135,20 +183,26 @@ export function transactionExecutor(
 
           case 'update': {
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            if (!matched) throw new Error('[transaction] update: record not found');
             const input = resolveRecord(step.set, params, results);
-            result = (await adapter.update(id as string | number, input)) as Record<
-              string,
-              unknown
-            >;
+            const updated = await adapter.update(
+              matched.id,
+              input,
+              withoutPrimaryKey(match, primaryKey),
+            );
+            if (!updated) throw new Error('[transaction] update: record not found');
+            result = updated as Record<string, unknown>;
             break;
           }
 
           case 'delete': {
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
-            await adapter.delete(id as string | number);
-            result = { deleted: true };
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            const deleted = matched
+              ? await adapter.delete(matched.id, withoutPrimaryKey(match, primaryKey))
+              : false;
+            result = { deleted };
             break;
           }
 
@@ -166,12 +220,9 @@ export function transactionExecutor(
                 ) => Promise<Record<string, unknown>>
               )(matchResolved, setResolved);
             } else {
-              // Fallback: partial update via adapter.update using the match id
-              const id = matchResolved.id ?? matchResolved[Object.keys(matchResolved)[0]];
-              result = (await adapter.update(id as string | number, setResolved)) as Record<
-                string,
-                unknown
-              >;
+              throw new Error(
+                `[transaction] fieldUpdate executor is missing on entity '${step.entity}'`,
+              );
             }
             break;
           }
@@ -179,22 +230,29 @@ export function transactionExecutor(
           case 'transition': {
             const matchResolved = resolveRecord(step.match, params, results);
             if (step.field && step.from !== undefined && step.to !== undefined) {
-              const id = matchResolved.id ?? matchResolved[Object.keys(matchResolved)[0]];
-              const entity = (await adapter.getById(id as string | number)) as Record<
-                string,
-                unknown
-              > | null;
+              const matched = await findMatchedRecord(
+                adapter,
+                step.entity,
+                matchResolved,
+                primaryKey,
+              );
+              const entity = matched?.record;
               if (entity && entity[step.field] === step.from) {
                 const updateInput: Record<string, unknown> = { [step.field]: step.to };
                 const setResolved = resolveRecord(step.set, params, results);
                 Object.assign(updateInput, setResolved);
-                result = (await adapter.update(id as string | number, updateInput)) as Record<
-                  string,
-                  unknown
-                >;
+                const updated = await adapter.update(
+                  matched.id,
+                  updateInput,
+                  withoutPrimaryKey(matchResolved, primaryKey),
+                );
+                if (!updated) throw new Error('[transaction] transition: record not found');
+                result = updated as Record<string, unknown>;
               } else {
                 result = { transitionFailed: true };
               }
+            } else {
+              throw new Error('[transaction] transition step is missing field/from/to');
             }
             break;
           }
@@ -216,23 +274,19 @@ export function transactionExecutor(
                 ),
               };
             } else {
-              result = { count: 0 };
+              throw new Error(`[transaction] batch executor is missing on entity '${step.entity}'`);
             }
             break;
           }
 
           case 'arrayPush': {
-            if (!step.field) break;
+            if (!step.field) throw new Error('[transaction] arrayPush step is missing field');
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
             const value = resolveValue(step.value, params, results);
             const dedupe = step.dedupe !== false;
-            // Read-modify-write: get current array, push value, write back.
-            const entity = (await adapter.getById(id as string | number)) as Record<
-              string,
-              unknown
-            > | null;
-            if (!entity) throw new Error(`[transaction] arrayPush: record not found`);
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            if (!matched) throw new Error(`[transaction] arrayPush: record not found`);
+            const entity = matched.record;
             const current = Array.isArray(entity[step.field])
               ? [...(entity[step.field] as unknown[])]
               : [];
@@ -240,62 +294,69 @@ export function transactionExecutor(
               result = entity;
             } else {
               current.push(value);
-              result = (await adapter.update(id as string | number, {
-                ...entity,
-                [step.field]: current,
-              })) as Record<string, unknown>;
+              const updated = await adapter.update(
+                matched.id,
+                {
+                  ...entity,
+                  [step.field]: current,
+                },
+                withoutPrimaryKey(match, primaryKey),
+              );
+              if (!updated) throw new Error('[transaction] arrayPush: record not found');
+              result = updated as Record<string, unknown>;
             }
             break;
           }
 
           case 'arrayPull': {
-            if (!step.field) break;
+            if (!step.field) throw new Error('[transaction] arrayPull step is missing field');
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
             const value = resolveValue(step.value, params, results);
-            // Read-modify-write: get current array, filter out value, write back.
-            const entity = (await adapter.getById(id as string | number)) as Record<
-              string,
-              unknown
-            > | null;
-            if (!entity) throw new Error(`[transaction] arrayPull: record not found`);
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            if (!matched) throw new Error(`[transaction] arrayPull: record not found`);
+            const entity = matched.record;
             const filtered = Array.isArray(entity[step.field])
               ? (entity[step.field] as unknown[]).filter(v => v !== value)
               : [];
-            result = (await adapter.update(id as string | number, {
-              ...entity,
-              [step.field]: filtered,
-            })) as Record<string, unknown>;
+            const updated = await adapter.update(
+              matched.id,
+              {
+                ...entity,
+                [step.field]: filtered,
+              },
+              withoutPrimaryKey(match, primaryKey),
+            );
+            if (!updated) throw new Error('[transaction] arrayPull: record not found');
+            result = updated as Record<string, unknown>;
             break;
           }
 
           case 'lookup': {
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
-            const entity = (await adapter.getById(id as string | number)) as Record<
-              string,
-              unknown
-            > | null;
-            result = entity ?? {};
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            result = matched?.record ?? {};
             break;
           }
 
           case 'increment': {
-            if (!step.field) break;
+            if (!step.field) throw new Error('[transaction] increment step is missing field');
             const match = resolveRecord(step.match, params, results);
-            const id = match.id ?? match[Object.keys(match)[0]];
             const by = typeof step.by === 'number' ? step.by : 1;
-            const entity = (await adapter.getById(id as string | number)) as Record<
-              string,
-              unknown
-            > | null;
-            if (!entity) throw new Error(`[transaction] increment: record not found`);
+            const matched = await findMatchedRecord(adapter, step.entity, match, primaryKey);
+            if (!matched) throw new Error(`[transaction] increment: record not found`);
+            const entity = matched.record;
             const current = entity[step.field];
             const next = typeof current === 'number' ? current + by : by;
-            result = (await adapter.update(id as string | number, {
-              ...entity,
-              [step.field]: next,
-            })) as Record<string, unknown>;
+            const updated = await adapter.update(
+              matched.id,
+              {
+                ...entity,
+                [step.field]: next,
+              },
+              withoutPrimaryKey(match, primaryKey),
+            );
+            if (!updated) throw new Error('[transaction] increment: record not found');
+            result = updated as Record<string, unknown>;
             break;
           }
         }

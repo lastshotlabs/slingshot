@@ -177,6 +177,7 @@ const RECORD_OPERATIONS = deepFreeze({
     kind: 'custom',
     memory: () => async () => 'pong',
     sqlite: () => async () => 'pong',
+    postgres: () => async () => 'pong',
   },
   pushTag: {
     kind: 'arrayPush',
@@ -264,6 +265,35 @@ export const CONFORMANCE_COMPOSITE_OPERATIONS = deepFreeze({
           id: 'param:auditId',
           recordId: 'result:0.id',
           message: 'param:message',
+        },
+      },
+    ],
+  },
+  matchAndUpdate: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'update',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: {
+          email: 'param:email',
+          status: 'param:expectedStatus',
+        },
+        set: {
+          title: 'param:title',
+        },
+      },
+    ],
+  },
+  deleteByMatch: {
+    kind: 'transaction',
+    steps: [
+      {
+        op: 'delete',
+        entity: CONFORMANCE_RECORDS_KEY,
+        match: {
+          email: 'param:email',
+          status: 'param:expectedStatus',
         },
       },
     ],

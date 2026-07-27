@@ -14,6 +14,7 @@ used by Slingshot feature packages.
 | src/defineOperations.ts             | Custom operation definition API                                    |
 | src/configDriven/index.ts           | Runtime entity factories and schema generation                     |
 | src/configDriven/backendProfiles.ts | Backend capability profiles and startup validation                 |
+| src/testing/                        | Shared entity conformance catalog and backend drivers              |
 | docs/human/index.md                 | Package guide synced into the docs site                            |
 
 ## Connections
@@ -26,4 +27,5 @@ used by Slingshot feature packages.
 - **Changing generated output**: update `src/generate.ts` or the relevant files under `src/generators/`
 - **Changing runtime entity behavior**: update `src/configDriven/index.ts` or `src/createEntityPlugin.ts`
 - **Changing backend support claims**: update `src/configDriven/backendProfiles.ts` and its conformance coverage
+- **Proving backend behavior**: update the shared catalog and the matching driver under `src/testing/`
 - **Testing**: `packages/slingshot-entity/tests/`

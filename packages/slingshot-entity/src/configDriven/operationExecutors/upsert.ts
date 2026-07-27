@@ -194,6 +194,7 @@ export function upsertPostgres(
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const matchCols = op.match.map(f => toSnakeCase(f));
   const updateCols = op.set.map(f => `${toSnakeCase(f)} = EXCLUDED.${toSnakeCase(f)}`);
+  const returnsCreated = typeof op.returns === 'object' && op.returns.created;
   return async input => {
     await ensureTable();
     const record = resolveOnCreate(op, config, input);
@@ -202,10 +203,14 @@ export function upsertPostgres(
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
     const values = columns.map(c => row[c]);
     const result = await pool.query(
-      `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT (${matchCols.join(', ')}) DO UPDATE SET ${updateCols.join(', ')} RETURNING *`,
+      `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT (${matchCols.join(', ')}) DO UPDATE SET ${updateCols.join(', ')} RETURNING *, (xmax = 0) AS __slingshot_created`,
       values,
     );
-    return result.rows[0] ? fromRow(result.rows[0]) : record;
+    const returned = result.rows[0];
+    const entity = returned ? fromRow(returned) : record;
+    return returnsCreated
+      ? { entity, created: returned?.['__slingshot_created'] === true }
+      : entity;
   };
 }
 

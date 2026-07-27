@@ -191,6 +191,9 @@ export function createCompositeFactories<
 
     // Determine a transaction wrapper for backends that support it.
     let wrapInTransaction: ((fn: () => Promise<void>) => Promise<void>) | undefined;
+    const primaryKeys = Object.fromEntries(
+      keys.map(key => [String(key), entities[key].config._pkField]),
+    );
     if (storeType === 'sqlite') {
       const db = infra.getSqliteDb() as unknown as SqliteDb;
       wrapInTransaction = async fn => {
@@ -217,7 +220,7 @@ export function createCompositeFactories<
           compositeOpMethods[opName] =
             storeType === 'postgres'
               ? createPostgresTransactionMethod(op, entities, keys, infra)
-              : transactionExecutor(op, adapterMap, { wrapInTransaction });
+              : transactionExecutor(op, adapterMap, { wrapInTransaction, primaryKeys });
         } else {
           // pipe takes a single adapter — use the first entity's adapter as the target.
           // For cross-entity pipe, use a transaction instead.
@@ -282,7 +285,12 @@ function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
         ) as AdapterForEntry<M[typeof key]>;
       }
 
-      const executor = transactionExecutor(op, transactionalAdapters as unknown as AdapterMap);
+      const primaryKeys = Object.fromEntries(
+        keys.map(key => [String(key), entities[key].config._pkField]),
+      );
+      const executor = transactionExecutor(op, transactionalAdapters as unknown as AdapterMap, {
+        primaryKeys,
+      });
       const results = await executor(params);
 
       await client.query('COMMIT');

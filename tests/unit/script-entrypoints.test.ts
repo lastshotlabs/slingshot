@@ -546,6 +546,13 @@ describe('script entrypoints', () => {
 
     const dockerEnv = dockerModule.getDockerEnv({ POSTGRES_URL: 'postgres://custom' });
     expect(dockerEnv.TEST_POSTGRES_URL).toBe('postgres://custom');
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
+        .some((step: { command: string[] }) =>
+          step.command.includes('packages/slingshot-entity/tests/conformance/postgres.test.ts'),
+        ),
+    ).toBe(true);
 
     const dockerCalls: SpawnCalls = [];
     expect(

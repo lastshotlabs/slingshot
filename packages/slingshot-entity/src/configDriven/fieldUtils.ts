@@ -517,7 +517,11 @@ export function fromPgRow(
   for (const [camel, def] of Object.entries(fields)) {
     const snake = toSnakeCase(camel);
     const val = row[snake];
-    if (val === undefined || val === null) continue;
+    if (val === undefined) continue;
+    if (val === null) {
+      record[camel] = null;
+      continue;
+    }
 
     record[camel] = pgToDomain(val, def);
   }
@@ -545,6 +549,9 @@ function pgToDomain(val: unknown, def: FieldDef): unknown {
   switch (def.type) {
     case 'date':
       return val instanceof Date ? val : coerceToDate(val);
+    case 'number':
+    case 'integer':
+      return typeof val === 'number' ? val : Number(val);
     case 'json':
       return typeof val === 'string' ? JSON.parse(val) : val;
     default:

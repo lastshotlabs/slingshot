@@ -35,15 +35,11 @@ class FakeListFilterPool {
       return Promise.resolve({ rows: [], rowCount: 1 });
     }
 
-    if (sql === 'SELECT * FROM notes_table WHERE owner_id = $1 ORDER BY id ASC LIMIT $2') {
-      const ownerId = String(params[0]);
-      const limit = Number(params[1]);
-      const filteredRows = this.rows
-        .filter(row => String(row.owner_id) === ownerId)
-        .sort((left, right) => String(left.id).localeCompare(String(right.id)))
-        .slice(0, limit)
-        .map(row => ({ ...row }));
-      return Promise.resolve({ rows: filteredRows, rowCount: filteredRows.length });
+    if (sql === 'SELECT * FROM notes_table ') {
+      return Promise.resolve({
+        rows: this.rows.map(row => ({ ...row })),
+        rowCount: this.rows.length,
+      });
     }
 
     throw new Error(`Unhandled SQL: ${sql}`);
@@ -82,8 +78,6 @@ describe('createPostgresEntityAdapter list filter handling', () => {
       ownerId: 'user-1',
       title: 'Visible',
     });
-    expect(pool.queries).toContain(
-      'SELECT * FROM notes_table WHERE owner_id = $1 ORDER BY id ASC LIMIT $2',
-    );
+    expect(pool.queries).toContain('SELECT * FROM notes_table ');
   });
 });

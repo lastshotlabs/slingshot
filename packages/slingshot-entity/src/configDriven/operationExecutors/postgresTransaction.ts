@@ -4,7 +4,8 @@ export async function withOptionalPostgresTransaction<T>(
   db: PgPool,
   fn: (queryable: PgQueryable) => Promise<T>,
 ): Promise<T> {
-  if (typeof db.connect !== 'function') {
+  const existingClient = db as PgPool & { release?: () => void };
+  if (typeof existingClient.release === 'function' || typeof db.connect !== 'function') {
     return fn(db);
   }
 

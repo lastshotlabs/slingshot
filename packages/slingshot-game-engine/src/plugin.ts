@@ -636,16 +636,21 @@ export function createGameEnginePackage(
         },
       });
 
-      // Register plugin state (Rule 16 — instance-scoped context).
-      const state = deepFreeze({
+      // Register plugin state (Rule 16 — instance-scoped context). This must be
+      // shallow-frozen: entity adapters can be lazy Proxies backed by mutable
+      // runtime resources, which deepFreeze explicitly does not support.
+      const sessionControls = Object.freeze(
+        createSessionControls(activeRuntimes, {
+          sessionAdapter: capturedSessionAdapter as never,
+          playerAdapter: capturedPlayerAdapter as never,
+        }),
+      );
+      const state = Object.freeze({
         config,
         sessionAdapter: capturedSessionAdapter,
         playerAdapter: capturedPlayerAdapter,
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
-        sessionControls: createSessionControls(activeRuntimes, {
-          sessionAdapter: capturedSessionAdapter as never,
-          playerAdapter: capturedPlayerAdapter as never,
-        }),
+        sessionControls,
       });
       // Legacy plugin-state slot — preserved for back-compat with consumers
       // that read the runtime via `getPluginState(app).get(GAME_ENGINE_PLUGIN_STATE_KEY)`.

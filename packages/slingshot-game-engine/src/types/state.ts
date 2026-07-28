@@ -258,7 +258,9 @@ export interface GameEngineSessionControls {
 /**
  * Runtime state stored in `getContext(app).pluginState`.
  *
- * Frozen via `deepFreeze()` at registration time (Rule 10).
+ * Shallow-frozen at registration time. The config and public control surface
+ * are independently frozen, while adapter references remain opaque mutable
+ * runtime resources and are never traversed by `deepFreeze()`.
  * Adapters are captured via closure during `buildAdapter` callbacks.
  */
 export interface GameEnginePluginState {

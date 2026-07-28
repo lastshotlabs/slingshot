@@ -65,6 +65,40 @@ describe('package plugin lifecycle', () => {
     expect('activeRuntimes' in ((state ?? {}) as Record<string, unknown>)).toBeFalse();
   });
 
+  test('slingshot-game-engine boots on SQLite without deep-freezing adapter proxies', async () => {
+    const app = await createTestApp({
+      db: {
+        mongo: false,
+        redis: false,
+        sqlite: ':memory:',
+        auth: 'memory',
+        sessions: 'memory',
+        cache: 'memory',
+      },
+      packages: [
+        createGameEnginePackage({
+          games: [lifecycleGame],
+        }),
+      ],
+    });
+    const ctx = getContext(app);
+    createdApps.push(ctx);
+
+    const state = ctx.pluginState.get(GAME_ENGINE_PLUGIN_STATE_KEY) as
+      | {
+          sessionAdapter?: unknown;
+          playerAdapter?: unknown;
+          sessionControls?: unknown;
+        }
+      | undefined;
+
+    expect(state).toBeDefined();
+    expect(Object.isFrozen(state)).toBeTrue();
+    expect(state?.sessionAdapter).toBeDefined();
+    expect(state?.playerAdapter).toBeDefined();
+    expect(Object.isFrozen(state?.sessionControls)).toBeTrue();
+  });
+
   test('slingshot-notifications publishes plugin state, mounts SSE, and unregisters its listener on teardown', async () => {
     const plugin = createNotificationsPackage({
       dispatcher: {

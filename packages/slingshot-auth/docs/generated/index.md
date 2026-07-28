@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-auth
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-auth`
-- Version: `0.2.5`
+- Version: `1.0.0`
 - Kind: Workspace package
 - Role: feature package
 - Description: Authentication, sessions, MFA, OAuth, WebAuthn, and passkeys for Slingshot

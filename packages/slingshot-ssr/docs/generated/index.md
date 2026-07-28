@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssr`
-- Version: `0.2.6`
+- Version: `0.2.7`
 - Kind: Workspace package
 - Role: feature package
 - Description: SSR, ISR, and page-routing plugin for Slingshot

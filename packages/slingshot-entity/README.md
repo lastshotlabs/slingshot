@@ -143,6 +143,12 @@ the application supplies operation methods itself.
 Primary-key creation is insert-only across standard adapters. In particular, MongoDB uses a
 strict insert and Redis uses `SET ... NX`, so create never overwrites an existing record.
 
+SQLite and PostgreSQL bootstrap reconcile framework-managed positional indexes against their
+configured uniqueness and ordered field sets. Changing an index definition therefore rebuilds
+the stale database index instead of letting `CREATE INDEX IF NOT EXISTS` preserve an obsolete
+constraint. PostgreSQL runtime CRUD also quotes generated column identifiers, including field
+names that collide with SQL keywords such as `order`.
+
 ### Operation Registry
 
 Policy and data-scope logic resolves operation semantics through a centralized registry

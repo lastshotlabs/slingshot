@@ -31,10 +31,16 @@ class ConflictPostgresPool {
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }
+    if (sql.startsWith('SELECT indexdef FROM pg_indexes')) {
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    }
 
     if (sql.startsWith('INSERT INTO conflict_parity_docs (')) {
       this.inserts.push(sql);
-      const columns = /^INSERT INTO [^(]+\(([^)]+)\) VALUES/.exec(sql)?.[1]?.split(', ');
+      const columns = /^INSERT INTO [^(]+\(([^)]+)\) VALUES/
+        .exec(sql)?.[1]
+        ?.split(', ')
+        .map(column => column.replace(/^"|"$/g, ''));
       if (!columns) throw new Error(`Unable to parse insert: ${sql}`);
       const row = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
       if (this.rows.some(existing => existing.id === row.id || existing.slug === row.slug)) {
@@ -46,7 +52,7 @@ class ConflictPostgresPool {
       return Promise.resolve({ rows: [], rowCount: 1 });
     }
 
-    if (sql === 'SELECT * FROM conflict_parity_docs WHERE id = $1 LIMIT 1') {
+    if (sql === 'SELECT * FROM conflict_parity_docs WHERE "id" = $1 LIMIT 1') {
       const row = this.rows.find(entry => entry.id === params[0]);
       return Promise.resolve({ rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 });
     }

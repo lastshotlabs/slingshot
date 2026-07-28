@@ -361,6 +361,7 @@ deck on a free local model, judge it on Haiku for a fraction of a cent:
 ```ts
 moderation: {
   provider: 'haiku',                 // ≠ defaultProvider
+  defaultPolicy: 'house',            // applied when a request omits moderation
   policies: {
     house: { rules: 'No explicit sexual content.', categories: ['nsfw'], blockAtOrAbove: 'medium' },
   },
@@ -370,6 +371,11 @@ moderation: {
 It **fails closed**. An undefined policy throws. A judge that errors blocks. An
 item the judge silently dropped is blocked, not waved through. `onError: 'allow'`
 exists and is an explicit, named choice.
+
+Configured policies never become silently inert. Set `defaultPolicy` to moderate
+every generation that does not name a policy itself. If policies exist without a
+default, an omitted request-level `moderation` throws; pass `moderation: false`
+when skipping moderation is deliberate.
 
 ## Background generation
 

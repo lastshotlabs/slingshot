@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { createMemoryOrganizationsRateLimitStore } from '../../src/lib/rateLimit';
 
 describe('rate limit edge cases', () => {
@@ -80,14 +80,19 @@ describe('rate limit edge cases', () => {
 
   test('extremely short window (1ms) ages out almost immediately', async () => {
     const store = createMemoryOrganizationsRateLimitStore();
-    // First hit within a 1ms window fills the limit of 1
-    const first = await store.hit('tiny', 1, 1);
-    expect(first.allowed).toBe(true);
-    // Second hit should be denied
-    expect((await store.hit('tiny', 1, 1)).allowed).toBe(false);
-    // After a small pause the window expires
-    await new Promise(r => setTimeout(r, 5));
-    expect((await store.hit('tiny', 1, 1)).allowed).toBe(true);
+    let now = 1_000;
+    const clock = spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      // Both hits occur at the exact same instant, independent of suite load.
+      expect((await store.hit('tiny', 1, 1)).allowed).toBe(true);
+      expect((await store.hit('tiny', 1, 1)).allowed).toBe(false);
+
+      // Advance just beyond the cutoff and prove the entry ages out.
+      now += 2;
+      expect((await store.hit('tiny', 1, 1)).allowed).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   // -------------------------------------------------------------------------

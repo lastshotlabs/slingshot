@@ -95,6 +95,10 @@ describe('build and publish scripts', () => {
       skipExisting: false,
     });
     expect(publishModule.rewriteWorkspaceSpecifier('workspace:^', '1.2.3')).toBe('^1.2.3');
+    expect(publishModule.shouldAdvanceDistTag('1.2.2', '1.2.3')).toBe(true);
+    expect(publishModule.shouldAdvanceDistTag('1.2.3', '1.2.3')).toBe(false);
+    expect(publishModule.shouldAdvanceDistTag('2.0.0', '1.2.3')).toBe(false);
+    expect(publishModule.shouldAdvanceDistTag(null, '1.2.3')).toBe(true);
 
     const { packages, versionByPackageName } = publishModule.collectPublishablePackages(
       tempDir,

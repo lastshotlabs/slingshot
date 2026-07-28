@@ -61,6 +61,11 @@ CI publishes the ephemeral five-store JSON report, while the committed
 [entity backend support matrix](/reference/entity-backend-support/) is generated from the stable
 profiles.
 
+Runtime SQLite and PostgreSQL entity bootstrap also reconciles framework-managed index definitions:
+if a positional index's uniqueness or ordered field list changes, Slingshot replaces the stale
+database index instead of silently preserving it through `CREATE INDEX IF NOT EXISTS`. PostgreSQL
+CRUD statements quote generated column identifiers, so schema fields such as `order` remain valid.
+
 ## Why this changed
 
 `Config-driven` was too broad. It mixed:

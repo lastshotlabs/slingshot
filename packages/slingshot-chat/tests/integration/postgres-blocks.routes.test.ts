@@ -51,13 +51,19 @@ class FakeChatRoutePostgresPool {
       return Promise.resolve({ rows: [], rowCount: null });
     }
 
+    if (sql.startsWith('SELECT indexdef FROM pg_indexes ')) {
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    }
+
     if (sql.startsWith(`INSERT INTO ${BLOCK_TABLE} (`)) {
       const match = /^INSERT INTO [^(]+\(([^)]+)\) VALUES/.exec(sql);
       if (!match?.[1]) {
         throw new Error(`Unable to parse insert columns: ${sql}`);
       }
 
-      const columns = match[1].split(',').map(column => column.trim());
+      const columns = match[1]
+        .split(',')
+        .map(column => column.trim().replace(/^"|"$/g, '').replaceAll('""', '"'));
       const row: PgRow = {};
       for (let i = 0; i < columns.length; i++) {
         row[columns[i] ?? `col_${i}`] = params[i];
@@ -83,7 +89,10 @@ class FakeChatRoutePostgresPool {
     if (
       sql ===
         'SELECT * FROM slingshot_chat_messages WHERE id = $1 AND deleted_at IS NULL LIMIT 1' ||
-      sql === 'SELECT * FROM slingshot_chat_messages WHERE id = $1 LIMIT 1'
+      sql === 'SELECT * FROM slingshot_chat_messages WHERE id = $1 LIMIT 1' ||
+      sql ===
+        'SELECT * FROM slingshot_chat_messages WHERE "id" = $1 AND "deleted_at" IS NULL LIMIT 1' ||
+      sql === 'SELECT * FROM slingshot_chat_messages WHERE "id" = $1 LIMIT 1'
     ) {
       return Promise.resolve({ rows: [], rowCount: 0 });
     }

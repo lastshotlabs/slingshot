@@ -97,7 +97,7 @@ function createFakePostgresInfra(): {
     const insert = /^INSERT INTO\s+([^\s(]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i.exec(sql);
     if (insert) {
       const table = insert[1];
-      const columns = insert[2].split(',').map(part => part.trim());
+      const columns = insert[2].split(',').map(part => part.trim().replace(/^"|"$/g, ''));
       const row = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
       const rows = (currentStore()[table] ??= []);
       const existingIndex = rows.findIndex(existing => existing['id'] === row['id']);
@@ -112,7 +112,8 @@ function createFakePostgresInfra(): {
     const selectByField =
       /^SELECT \* FROM\s+([^\s]+)\s+WHERE\s+([^\s=]+)\s*=\s*\$1\s+LIMIT 1/i.exec(sql);
     if (selectByField) {
-      const [, table, column] = selectByField;
+      const [, table, rawColumn] = selectByField;
+      const column = rawColumn.replace(/^"|"$/g, '');
       const row = (currentStore()[table] ?? []).find(candidate => candidate[column] === params[0]);
       return { rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 };
     }

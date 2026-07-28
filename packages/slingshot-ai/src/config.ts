@@ -174,6 +174,19 @@ export const aiPackageConfigSchema = z.object({
       provider: z.string().optional(),
       model: z.string().optional(),
       policies: z.record(z.string(), moderationPolicySchema).default({}),
+      /**
+       * Policy applied when a generation request omits `moderation`.
+       *
+       * When policies are configured without a default, callers must either
+       * name a policy per request or explicitly pass `moderation: false`.
+       * This keeps an accidentally omitted safety control from failing open.
+       */
+      defaultPolicy: z
+        .string()
+        .optional()
+        .describe(
+          'Moderation policy applied by default to generation requests that omit moderation.',
+        ),
       /** Fail CLOSED. A safety control that fails open is not a safety control. */
       onError: z.enum(['block', 'allow']).default('block'),
       maxBatchSize: z.number().int().positive().default(25),

@@ -70,6 +70,13 @@ function assertConfigCoherent(config: AiPackageConfig): void {
         `Configured: ${providerNames.join(', ')}.`,
     );
   }
+  const defaultPolicy = config.moderation.defaultPolicy;
+  if (defaultPolicy && !(defaultPolicy in config.moderation.policies)) {
+    throw new AiConfigError(
+      `moderation.defaultPolicy '${defaultPolicy}' is not a configured moderation policy. ` +
+        `Configured: ${Object.keys(config.moderation.policies).join(', ') || '(none)'}.`,
+    );
+  }
   const { softLimitUsd, hardLimitUsd } = config.spend;
   if (softLimitUsd !== undefined && hardLimitUsd !== undefined && softLimitUsd >= hardLimitUsd) {
     throw new AiConfigError(

@@ -32,7 +32,7 @@
     "directory": "packages/slingshot-push"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   },
   "files": [

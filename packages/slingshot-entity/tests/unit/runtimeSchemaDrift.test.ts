@@ -23,7 +23,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { createSqliteEntityAdapter } from '../../src/configDriven/sqliteAdapter';
-import { defineEntity, field } from '../../src/defineEntity';
+import { defineEntity, field, index } from '../../src/defineEntity';
 
 interface SessionRow {
   id: string;
@@ -79,5 +79,62 @@ describe('config-driven sqlite adapter — schema drift', () => {
     const found = (await v2.getById(created.id)) as SessionRow;
     expect(found.status).toBe('playing');
     expect(found.stagedRules).toEqual({ timers: { answerSeconds: 10 } });
+  });
+
+  test('rebuilds a positional unique index when its field set changes', async () => {
+    const db = new Database(':memory:');
+    const reactionEntity = (includeValue: boolean) =>
+      defineEntity('Reaction', {
+        namespace: 'community',
+        fields: {
+          id: field.string({ primary: true }),
+          targetId: field.string(),
+          targetType: field.string(),
+          userId: field.string(),
+          value: field.string(),
+        },
+        indexes: [
+          index(
+            includeValue
+              ? ['targetId', 'targetType', 'userId', 'value']
+              : ['targetId', 'targetType', 'userId'],
+            { unique: true },
+          ),
+        ],
+      });
+    const makeAdapter = (includeValue: boolean) => {
+      const entity = reactionEntity(includeValue);
+      return createSqliteEntityAdapter<Record<string, string>, Record<string, string>, never>(
+        db as never,
+        ((entity as { config?: never }).config ?? entity) as never,
+      );
+    };
+
+    await makeAdapter(false).create({
+      id: 'r1',
+      targetId: 'post-1',
+      targetType: 'post',
+      userId: 'user-1',
+      value: 'like',
+    });
+
+    await expect(
+      makeAdapter(true).create({
+        id: 'r2',
+        targetId: 'post-1',
+        targetType: 'post',
+        userId: 'user-1',
+        value: 'laugh',
+      }),
+    ).resolves.toMatchObject({ id: 'r2', value: 'laugh' });
+
+    const columns = db
+      .query<{ seqno: number; name: string }, never[]>(
+        'PRAGMA index_info("idx_community_reactions_0")',
+      )
+      .all()
+      .sort((left, right) => left.seqno - right.seqno)
+      .map(column => column.name);
+    expect(columns).toEqual(['target_id', 'target_type', 'user_id', 'value']);
   });
 });

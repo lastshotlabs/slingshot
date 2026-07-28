@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   publish:
@@ -34,28 +33,9 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Configure npm for GitHub Packages
-        # Write to $HOME/.npmrc so the auth token is picked up regardless of
-        # the cwd npm publish runs from. The publish script invokes
-        # `npm publish` from per-package staging dirs (`.tmp/publish/...`),
-        # and a project-local `.npmrc` at repo root is unreliably resolved by
-        # npm's config walk in some setups — $HOME is unambiguous.
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > $HOME/.npmrc
-          echo "@lastshotlabs:registry=https://npm.pkg.github.com" >> $HOME/.npmrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to GitHub Packages
-        run: bun scripts/publish.ts --target=github --publish --skip-existing
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Configure npm for the public registry
-        # The `@lastshotlabs` scope mapping — not publishConfig — is what decides
-        # where `npm publish` sends a scoped package, so it must be repointed at
-        # npmjs rather than merely removed. This overwrites the GitHub Packages
-        # npmrc written above, which is why it runs after that publish step.
+        # Write to $HOME/.npmrc so authentication is available from the
+        # per-package staging directories used by scripts/publish.ts.
         run: |
           echo "@lastshotlabs:registry=https://registry.npmjs.org" > $HOME/.npmrc
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> $HOME/.npmrc

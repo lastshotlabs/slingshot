@@ -67,6 +67,27 @@ function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
   }
 }
 
+function sqliteIndexMatches(
+  db: SqliteDb,
+  table: string,
+  indexName: string,
+  expectedColumns: readonly string[],
+  expectedUnique: boolean,
+): boolean {
+  const indexes = db.query<{ name: string; unique: number }>(`PRAGMA index_list(${table})`).all();
+  const existing = indexes.find(index => index.name === indexName);
+  if (!existing || Boolean(existing.unique) !== expectedUnique) return false;
+  const columns = db
+    .query<{ seqno: number; name: string }>(`PRAGMA index_info(${quoteSqliteIdent(indexName)})`)
+    .all()
+    .sort((left, right) => left.seqno - right.seqno)
+    .map(column => column.name);
+  return (
+    columns.length === expectedColumns.length &&
+    columns.every((value, index) => value === expectedColumns[index])
+  );
+}
+
 /**
  * Create a SQLite-backed {@link EntityAdapter} for the given entity config.
  *
@@ -159,9 +180,14 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (config.indexes) {
         for (let i = 0; i < config.indexes.length; i++) {
           const idx = config.indexes[i];
-          const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
+          const expectedColumns = idx.fields.map(toSnakeCase);
+          const colList = expectedColumns.map(quoteSqliteIdent).join(', ');
           const unique = idx.unique ? 'UNIQUE ' : '';
-          const idxName = quoteSqliteIdent(`idx_${rawTable}_${i}`);
+          const rawIndexName = `idx_${rawTable}_${i}`;
+          const idxName = quoteSqliteIdent(rawIndexName);
+          if (!sqliteIndexMatches(db, table, rawIndexName, expectedColumns, Boolean(idx.unique))) {
+            db.run(`DROP INDEX IF EXISTS ${idxName}`);
+          }
           db.run(`CREATE ${unique}INDEX IF NOT EXISTS ${idxName} ON ${table} (${colList})`);
         }
       }
@@ -170,8 +196,13 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (config.uniques) {
         for (let i = 0; i < config.uniques.length; i++) {
           const uq = config.uniques[i];
-          const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
-          const uidxName = quoteSqliteIdent(`uidx_${rawTable}_${i}`);
+          const expectedColumns = uq.fields.map(toSnakeCase);
+          const colList = expectedColumns.map(quoteSqliteIdent).join(', ');
+          const rawIndexName = `uidx_${rawTable}_${i}`;
+          const uidxName = quoteSqliteIdent(rawIndexName);
+          if (!sqliteIndexMatches(db, table, rawIndexName, expectedColumns, true)) {
+            db.run(`DROP INDEX IF EXISTS ${uidxName}`);
+          }
           db.run(`CREATE UNIQUE INDEX IF NOT EXISTS ${uidxName} ON ${table} (${colList})`);
         }
       }

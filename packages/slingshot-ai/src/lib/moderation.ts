@@ -210,7 +210,8 @@ export function createModerator(deps: ModeratorDeps): AiModerator {
       promptCacheKey: 'slingshot-ai:moderation',
       tags,
       spendScope,
-      // No `moderation` key — this call must not re-enter the moderator.
+      // Explicit opt-out: the judge must not recursively moderate its own verdict.
+      moderation: false,
     });
   }
 

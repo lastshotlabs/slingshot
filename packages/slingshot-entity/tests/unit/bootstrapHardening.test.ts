@@ -108,9 +108,12 @@ describe('entity bootstrap hardening', () => {
         if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
           return { rows: [], rowCount: 0 };
         }
-        if (failIndex && sql.includes('CREATE INDEX IF NOT EXISTS idx_slingshot_widgets_0')) {
+        if (failIndex && sql.includes('CREATE INDEX IF NOT EXISTS "idx_slingshot_widgets_0"')) {
           failIndex = false;
           throw new Error('index bootstrap failed');
+        }
+        if (sql.startsWith('SELECT indexdef FROM pg_indexes')) {
+          return { rows: [], rowCount: 0 };
         }
         if (
           sql.startsWith('CREATE TABLE IF NOT EXISTS') ||

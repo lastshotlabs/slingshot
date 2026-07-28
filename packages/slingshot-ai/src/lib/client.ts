@@ -697,8 +697,22 @@ export function createAiClient(options: CreateAiClientOptions): AiRuntime {
     value: unknown,
     text: string,
   ): Promise<AiVerdict | null> {
-    const request = req.moderation;
-    if (!request || !config.moderation.enabled) return null;
+    if (!config.moderation.enabled || req.moderation === false) return null;
+
+    const request =
+      req.moderation ??
+      (config.moderation.defaultPolicy
+        ? { policy: config.moderation.defaultPolicy, onBlocked: 'return' as const }
+        : undefined);
+    if (!request) {
+      const policies = Object.keys(config.moderation.policies);
+      if (policies.length === 0) return null;
+      throw new AiConfigError(
+        `Generation omitted moderation while policies are configured (${policies.join(', ')}). ` +
+          `Set moderation.defaultPolicy, name a policy on the request, or explicitly pass ` +
+          `moderation: false.`,
+      );
+    }
 
     const extracted = request.extract ? request.extract(value) : [text];
     const verdict = await moderator.moderate({

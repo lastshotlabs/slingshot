@@ -1284,13 +1284,13 @@ export interface EntityRouteConfig<
   defaults?: RouteOperationConfig<TDtoVariant, TInputVariant, TMwName>;
 
   /**
-   * Route keys to exclude from generation.
+   * CRUD or declared operation names to exclude from route generation.
    *
    * @remarks
-   * Each entry is a route key string in the format `'METHOD /path'` (e.g.
-   * `'DELETE /posts/:id'`). The route generator skips any generated route whose key
-   * matches an entry here, allowing you to suppress specific CRUD routes without
-   * disabling route generation entirely.
+   * Each entry is a CRUD name such as `'create'`, `'list'`, `'get'`, `'update'`,
+   * `'delete'`, or `'clear'`, or the name of an operation declared in
+   * `routes.operations`. Method/path strings such as `'DELETE /posts/:id'` are
+   * invalid and rejected during entity validation.
    */
   disable?: string[];
 

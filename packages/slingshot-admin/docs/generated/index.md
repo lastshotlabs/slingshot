@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-admin
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-admin`
-- Version: `0.2.3`
+- Version: `0.2.4`
 - Kind: Workspace package
 - Role: feature package
 - Description: Admin plugin for Slingshot

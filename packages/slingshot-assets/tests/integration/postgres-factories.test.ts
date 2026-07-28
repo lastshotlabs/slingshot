@@ -24,11 +24,14 @@ class FakeAssetPostgresPool {
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }
+    if (sql.startsWith('SELECT indexdef FROM pg_indexes')) {
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    }
 
     if (sql.startsWith(`INSERT INTO ${ASSET_TABLE} (`)) {
       const match = /^INSERT INTO [^(]+\(([^)]+)\) VALUES/.exec(sql);
       if (!match?.[1]) throw new Error(`Unable to parse insert columns: ${sql}`);
-      const columns = match[1].split(',').map(column => column.trim());
+      const columns = match[1].split(',').map(column => column.trim().replace(/^"|"$/g, ''));
       const row: PgRow = {};
       for (let i = 0; i < columns.length; i++) {
         row[columns[i] ?? `col_${i}`] = params[i];
@@ -43,7 +46,7 @@ class FakeAssetPostgresPool {
       return Promise.resolve({ rows: [], rowCount: 1 });
     }
 
-    if (sql === `SELECT * FROM ${ASSET_TABLE} WHERE id = $1 LIMIT 1`) {
+    if (sql === `SELECT * FROM ${ASSET_TABLE} WHERE "id" = $1 LIMIT 1`) {
       const id = String(params[0]);
       const row = this.rows.find(entry => String(entry.id) === id);
       return Promise.resolve({ rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 });
@@ -71,7 +74,7 @@ class FakeAssetPostgresPool {
       });
     }
 
-    if (sql === `DELETE FROM ${ASSET_TABLE} WHERE id = $1`) {
+    if (sql === `DELETE FROM ${ASSET_TABLE} WHERE "id" = $1`) {
       const id = String(params[0]);
       const before = this.rows.length;
       const nextRows = this.rows.filter(entry => String(entry.id) !== id);

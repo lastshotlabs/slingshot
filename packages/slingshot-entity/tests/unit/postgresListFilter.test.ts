@@ -19,6 +19,9 @@ class FakeListFilterPool {
     ) {
       return Promise.resolve({ rows: [], rowCount: null });
     }
+    if (sql.startsWith('SELECT indexdef FROM pg_indexes')) {
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    }
 
     if (sql.startsWith('INSERT INTO notes_table (')) {
       const match = /^INSERT INTO [^(]+\(([^)]+)\) VALUES/.exec(sql);
@@ -27,7 +30,7 @@ class FakeListFilterPool {
       }
 
       const row: PgRow = {};
-      const columns = match[1].split(',').map(column => column.trim());
+      const columns = match[1].split(',').map(column => column.trim().replace(/^"|"$/g, ''));
       for (let i = 0; i < columns.length; i++) {
         row[columns[i] ?? `col_${i}`] = params[i];
       }

@@ -23,6 +23,7 @@ import {
   type ResolvedEntityConfig,
   evaluateFilter,
 } from '@lastshotlabs/slingshot-core';
+import { quoteSqlIdent } from '../lib/naming';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -61,6 +62,24 @@ interface PgPool {
   }>;
 }
 
+function postgresIndexMatches(
+  indexDef: string,
+  expectedColumns: readonly string[],
+  expectedUnique: boolean,
+): boolean {
+  const unique = /^CREATE UNIQUE INDEX\b/i.test(indexDef.trim());
+  const columnsMatch = /\(([^()]*)\)\s*$/.exec(indexDef);
+  if (!columnsMatch) return false;
+  const columns = columnsMatch[1]
+    .split(',')
+    .map(value => value.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+  return (
+    unique === expectedUnique &&
+    columns.length === expectedColumns.length &&
+    columns.every((value, index) => value === expectedColumns[index])
+  );
+}
+
 /**
  * Create a config-driven Postgres entity adapter.
  *
@@ -93,9 +112,11 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
   config: ResolvedEntityConfig,
   operations?: Record<string, OperationConfig>,
 ): EntityAdapter<Entity, CreateInput, UpdateInput> & Record<string, unknown> {
-  const table = storageName(config, 'postgres');
+  const rawTable = storageName(config, 'postgres');
+  const table = rawTable;
   const pkField = config._pkField;
-  const pkColumn = toSnakeCase(pkField);
+  const column = (field: string): string => quoteSqlIdent(toSnakeCase(field));
+  const pkColumn = column(pkField);
   const ttlSeconds = config.ttl?.defaultSeconds;
   const ttlColumn = config._storageFields.ttlField;
   const customAutoDefault = config._conventions?.autoDefault;
@@ -129,7 +150,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       await withOptionalPostgresTransaction(pool, async queryable => {
         const cols: string[] = [];
         for (const [name, def] of Object.entries(config.fields)) {
-          const col = toSnakeCase(name);
+          const col = column(name);
           const pgType = pgColumnType(def.type);
           const notNull = !def.optional && !def.primary ? ' NOT NULL' : '';
           const pk = def.primary ? ' PRIMARY KEY NOT NULL' : '';
@@ -137,7 +158,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
 
         if (ttlSeconds) {
-          cols.push(`${ttlColumn} BIGINT NOT NULL`);
+          cols.push(`${quoteSqlIdent(ttlColumn)} BIGINT NOT NULL`);
         }
 
         await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
@@ -157,7 +178,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
         if (ttlSeconds) {
           await queryable.query(
-            `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${ttlColumn} BIGINT`,
+            `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${quoteSqlIdent(ttlColumn)} BIGINT`,
           );
         }
 
@@ -165,10 +186,23 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (config.indexes) {
           for (let i = 0; i < config.indexes.length; i++) {
             const idx = config.indexes[i];
-            const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
+            const colList = idx.fields.map(column).join(', ');
             const unique = idx.unique ? 'UNIQUE ' : '';
+            const indexName = `idx_${rawTable}_${i}`;
+            const existing = await queryable.query(
+              `SELECT indexdef FROM pg_indexes WHERE schemaname = ANY (current_schemas(false)) AND tablename = $1 AND indexname = $2`,
+              [rawTable, indexName],
+            );
+            const indexDef = existing.rows[0]?.['indexdef'];
+            const expectedColumns = idx.fields.map(toSnakeCase);
+            if (
+              typeof indexDef === 'string' &&
+              !postgresIndexMatches(indexDef, expectedColumns, Boolean(idx.unique))
+            ) {
+              await queryable.query(`DROP INDEX ${quoteSqlIdent(indexName)}`);
+            }
             await queryable.query(
-              `CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`,
+              `CREATE ${unique}INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})`,
             );
           }
         }
@@ -177,9 +211,22 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (config.uniques) {
           for (let i = 0; i < config.uniques.length; i++) {
             const uq = config.uniques[i];
-            const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
+            const colList = uq.fields.map(column).join(', ');
+            const indexName = `uidx_${rawTable}_${i}`;
+            const existing = await queryable.query(
+              `SELECT indexdef FROM pg_indexes WHERE schemaname = ANY (current_schemas(false)) AND tablename = $1 AND indexname = $2`,
+              [rawTable, indexName],
+            );
+            const indexDef = existing.rows[0]?.['indexdef'];
+            const expectedColumns = uq.fields.map(toSnakeCase);
+            if (
+              typeof indexDef === 'string' &&
+              !postgresIndexMatches(indexDef, expectedColumns, true)
+            ) {
+              await queryable.query(`DROP INDEX ${quoteSqlIdent(indexName)}`);
+            }
             await queryable.query(
-              `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`,
+              `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})`,
             );
           }
         }
@@ -221,7 +268,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
       if (!(key in config.fields)) continue;
 
-      const col = toSnakeCase(key);
+      const col = column(key);
       const def = config.fields[key];
       if (def.type === 'json') {
         conditions.push(`${col} = $${paramIdxRef.value++}`);
@@ -248,15 +295,15 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     if (config.softDelete) {
       if ('value' in config.softDelete) {
-        conditions.push(`${toSnakeCase(config.softDelete.field)} != $${paramIdxRef.value}`);
+        conditions.push(`${column(config.softDelete.field)} != $${paramIdxRef.value}`);
         params.push(config.softDelete.value);
         paramIdxRef.value++;
       } else {
-        conditions.push(`${toSnakeCase(config.softDelete.field)} IS NULL`);
+        conditions.push(`${column(config.softDelete.field)} IS NULL`);
       }
     }
     if (ttlSeconds) {
-      conditions.push(`${ttlColumn} > $${paramIdxRef.value}`);
+      conditions.push(`${quoteSqlIdent(ttlColumn)} > $${paramIdxRef.value}`);
       params.push(Date.now());
       paramIdxRef.value++;
     }
@@ -282,7 +329,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       try {
         await pool.query(
-          `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
+          `INSERT INTO ${table} (${columns.map(quoteSqlIdent).join(', ')}) VALUES (${placeholders})`,
           values,
         );
       } catch (error) {
@@ -326,7 +373,9 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       let paramIdx = 1;
-      const setClauses = entries.map(([col]) => `${col} = $${paramIdx++}`).join(', ');
+      const setClauses = entries
+        .map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`)
+        .join(', ');
       const values: unknown[] = entries.map(([, v]) => v);
       const { where, params } = buildWhereClause(id, filter, entries.length + 1);
       values.push(...params);
@@ -368,7 +417,9 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
         const entries = Object.entries(partial);
         let paramIdx = 1;
-        const setClauses = entries.map(([col]) => `${col} = $${paramIdx++}`).join(', ');
+        const setClauses = entries
+          .map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`)
+          .join(', ');
         const values: unknown[] = entries.map(([, v]) => v);
         const { where, params } = buildWhereClause(id, filter, entries.length + 1);
         values.push(...params);
@@ -396,16 +447,16 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       // Soft-delete
       if (config.softDelete) {
         if ('value' in config.softDelete) {
-          conditions.push(`${toSnakeCase(config.softDelete.field)} != $${paramIdx++}`);
+          conditions.push(`${column(config.softDelete.field)} != $${paramIdx++}`);
           params.push(config.softDelete.value);
         } else {
-          conditions.push(`${toSnakeCase(config.softDelete.field)} IS NULL`);
+          conditions.push(`${column(config.softDelete.field)} IS NULL`);
         }
       }
 
       // TTL
       if (ttlSeconds) {
-        conditions.push(`${ttlColumn} > $${paramIdx}`);
+        conditions.push(`${quoteSqlIdent(ttlColumn)} > $${paramIdx}`);
         params.push(Date.now());
       }
 

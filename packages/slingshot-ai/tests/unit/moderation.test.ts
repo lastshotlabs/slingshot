@@ -225,6 +225,53 @@ describe('moderation', () => {
     expect(provider.calls).toHaveLength(2);
   });
 
+  test('applies the configured default policy when a request omits moderation', async () => {
+    const provider = createFakeAiProvider({
+      capabilities: { structuredOutput: 'native' },
+      responses: [
+        { text: 'generated content' },
+        {
+          text: JSON.stringify({
+            items: [
+              {
+                index: 0,
+                allowed: false,
+                categories: ['nsfw'],
+                severity: 'high',
+                reason: 'blocked by house policy',
+              },
+            ],
+          }),
+        },
+      ],
+    });
+    const { client } = build(provider, { moderation: { defaultPolicy: 'house' } });
+
+    const result = await client.generate({
+      messages: [{ role: 'user', content: 'go' }],
+    });
+
+    expect(result.moderation?.allowed).toBe(false);
+    expect(provider.calls).toHaveLength(2);
+  });
+
+  test('configured policies cannot be silently skipped', async () => {
+    const provider = createFakeAiProvider({
+      responses: ['generated content', 'explicitly skipped'],
+    });
+    const { client } = build(provider);
+
+    await expect(client.generate({ messages: [{ role: 'user', content: 'go' }] })).rejects.toThrow(
+      /omitted moderation while policies are configured/,
+    );
+
+    const skipped = await client.generate({
+      messages: [{ role: 'user', content: 'go' }],
+      moderation: false,
+    });
+    expect(skipped.moderation).toBeNull();
+  });
+
   test('a custom moderator wins outright (the non-LLM swap point)', async () => {
     const custom: AiModerator = {
       moderate: async () => ({

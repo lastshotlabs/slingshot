@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-entity
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-entity`
-- Version: `0.2.8`
+- Version: `0.3.0`
 - Kind: Workspace package
 - Role: config-driven tooling package
 - Description: Config-driven entity CRUD, code generation, and search for Slingshot

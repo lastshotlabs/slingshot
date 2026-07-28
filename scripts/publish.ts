@@ -323,10 +323,99 @@ export async function packageVersionExists(
 ): Promise<boolean> {
   const spec = `${pkg.name}@${pkg.version}`;
   const result = await runCommand(
-    ['npm', 'view', spec, 'version', '--json', `--registry=${targetRegistry}`],
+    ['npm', 'view', spec, 'version', '--json', ...registryArgs(pkg.name, targetRegistry)],
     pkg.stageDir,
   );
   return result.exitCode === 0 && result.stdout.includes(pkg.version);
+}
+
+function registryArgs(packageName: string, targetRegistry: string): string[] {
+  const scope = packageName.startsWith('@') ? packageName.split('/')[0] : null;
+  return [
+    `--registry=${targetRegistry}`,
+    ...(scope ? [`--${scope}:registry=${targetRegistry}`] : []),
+  ];
+}
+
+function versionParts(version: string): readonly number[] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/** Return true when a registry tag may safely advance to `candidate`. */
+export function shouldAdvanceDistTag(current: string | null, candidate: string): boolean {
+  if (current === null) return true;
+  if (current === candidate) return false;
+  const currentParts = versionParts(current);
+  const candidateParts = versionParts(candidate);
+  if (!currentParts || !candidateParts) return false;
+  for (let i = 0; i < candidateParts.length; i++) {
+    if (candidateParts[i] > currentParts[i]) return true;
+    if (candidateParts[i] < currentParts[i]) return false;
+  }
+  return false;
+}
+
+function desiredPublishTag(pkg: PublishablePackage): string {
+  const configured = pkg.manifest.publishConfig?.['tag'];
+  return typeof configured === 'string' && configured.length > 0 ? configured : 'latest';
+}
+
+async function syncPublishTag(pkg: PublishablePackage, targetRegistry: string): Promise<void> {
+  const tag = desiredPublishTag(pkg);
+  const view = await runCommand(
+    [
+      'npm',
+      'view',
+      pkg.name,
+      `dist-tags.${tag}`,
+      '--json',
+      ...registryArgs(pkg.name, targetRegistry),
+    ],
+    pkg.stageDir,
+  );
+  let current: string | null = null;
+  if (view.exitCode === 0 && view.stdout.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(view.stdout);
+      if (typeof parsed === 'string') current = parsed;
+    } catch {
+      throw new Error(
+        `[publish] Could not parse ${pkg.name} dist-tags.${tag}: ${view.stdout.trim()}`,
+      );
+    }
+  }
+
+  if (!shouldAdvanceDistTag(current, pkg.version)) {
+    if (current !== pkg.version) {
+      console.warn(
+        `[publish] Leaving ${pkg.name} dist-tags.${tag} at ${current ?? '(unset)'}; ` +
+          `${pkg.version} would not advance it.`,
+      );
+    }
+    return;
+  }
+
+  const update = await runCommand(
+    [
+      'npm',
+      'dist-tag',
+      'add',
+      `${pkg.name}@${pkg.version}`,
+      tag,
+      ...registryArgs(pkg.name, targetRegistry),
+    ],
+    pkg.stageDir,
+  );
+  if (update.exitCode !== 0) {
+    throw new Error(
+      `[publish] Failed to move ${pkg.name} dist-tags.${tag} to ${pkg.version}.\n` +
+        (update.stderr.trim() ||
+          update.stdout.trim() ||
+          'npm dist-tag returned a non-zero exit code.'),
+    );
+  }
+  console.log(`[publish] Moved ${pkg.name} dist-tags.${tag} to ${pkg.version}.`);
 }
 
 export async function publishPackage(
@@ -343,6 +432,7 @@ export async function publishPackage(
     options.skipExisting &&
     (await packageVersionExists(pkg, options.targetRegistry))
   ) {
+    await syncPublishTag(pkg, options.targetRegistry);
     console.log(
       `[publish] Skipping ${pkg.name}@${pkg.version}; already present on ${options.target}.`,
     );
@@ -365,6 +455,7 @@ export async function publishPackage(
     // the version is present, so treat it as an idempotent skip instead of
     // failing the whole release partway through.
     if (/cannot publish over the previously published versions/i.test(`${stderr}\n${stdout}`)) {
+      await syncPublishTag(pkg, options.targetRegistry);
       console.log(
         `[publish] Skipping ${pkg.name}@${pkg.version}; already present on ${options.target}.`,
       );

@@ -27,7 +27,7 @@
     "directory": "packages/runtime-bun"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   },
   "files": [

@@ -1,5 +1,21 @@
 # @lastshotlabs/slingshot-ai
 
+## 0.4.3
+
+### Patch Changes
+
+- 50456ec: Fail closed when AI moderation policies are configured but a generation request accidentally
+  omits moderation, with an optional default policy for configure-once enforcement.
+
+  Reconcile changed SQLite and PostgreSQL entity indexes during runtime bootstrap, quote PostgreSQL
+  CRUD column identifiers, and correct the `routes.disable` authoring contract documentation.
+
+- Updated dependencies [50456ec]
+  - @lastshotlabs/slingshot-core@0.3.1
+  - @lastshotlabs/slingshot-entity@0.3.1
+  - @lastshotlabs/slingshot-orchestration@0.2.5
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.5
+
 ## 0.4.2
 
 ### Patch Changes

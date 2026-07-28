@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-assets
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [50456ec]
+  - @lastshotlabs/slingshot-core@0.3.1
+  - @lastshotlabs/slingshot-entity@0.3.1
+  - @lastshotlabs/slingshot-permissions@0.2.6
+
 ## 0.2.7
 
 ### Patch Changes

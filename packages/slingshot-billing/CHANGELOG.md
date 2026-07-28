@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-billing
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [50456ec]
+  - @lastshotlabs/slingshot-core@0.3.1
+  - @lastshotlabs/slingshot-entity@0.3.1
+
 ## 0.2.5
 
 ### Patch Changes

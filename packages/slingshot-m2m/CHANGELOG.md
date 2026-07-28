@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-m2m
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [50456ec]
+  - @lastshotlabs/slingshot-core@0.3.1
+  - @lastshotlabs/slingshot-auth@1.0.1
+
 ## 1.0.0
 
 ### Patch Changes

@@ -20,7 +20,11 @@ import type {
   EntityConformanceDriver,
   EntityConformanceHarness,
 } from '../conformance';
-import { CONFORMANCE_COMPOSITE_KEY, CONFORMANCE_COMPOSITE_OPERATIONS } from '../fixtures';
+import {
+  CONFORMANCE_COMPOSITE_KEY,
+  CONFORMANCE_COMPOSITE_OPERATIONS,
+  CONFORMANCE_VERSIONED_DEFINITIONS,
+} from '../fixtures';
 
 type CompositeEntry = {
   readonly config: EntityConformanceDefinition['config'];
@@ -207,7 +211,8 @@ export function createSqliteEntityConformanceDriver(): EntityConformanceDriver {
     async createHarness(
       definitions: readonly EntityConformanceDefinition[],
     ): Promise<EntityConformanceHarness> {
-      let resources = await createResources(definitions, profile);
+      const sqliteDefinitions = [...definitions, ...CONFORMANCE_VERSIONED_DEFINITIONS];
+      let resources = await createResources(sqliteDefinitions, profile);
       let destroyed = false;
 
       return {
@@ -260,7 +265,7 @@ export function createSqliteEntityConformanceDriver(): EntityConformanceDriver {
             throw new Error('[entity-conformance] Cannot reset a destroyed SQLite harness');
           }
           const previous = resources;
-          resources = await createResources(definitions, profile);
+          resources = await createResources(sqliteDefinitions, profile);
           await destroyResources(previous);
         },
         async destroy(): Promise<void> {

@@ -19,7 +19,11 @@ import type {
   EntityConformanceDriver,
   EntityConformanceHarness,
 } from '../conformance';
-import { CONFORMANCE_COMPOSITE_KEY, CONFORMANCE_COMPOSITE_OPERATIONS } from '../fixtures';
+import {
+  CONFORMANCE_COMPOSITE_KEY,
+  CONFORMANCE_COMPOSITE_OPERATIONS,
+  CONFORMANCE_VERSIONED_DEFINITIONS,
+} from '../fixtures';
 
 type CompositeEntry = {
   readonly config: EntityConformanceDefinition['config'];
@@ -271,7 +275,8 @@ export function createPostgresEntityConformanceDriver(
           '[entity-conformance] TEST_POSTGRES_URL is required for the PostgreSQL driver',
         );
       }
-      let resources = await createResources(definitions, profile, connectionString);
+      const postgresDefinitions = [...definitions, ...CONFORMANCE_VERSIONED_DEFINITIONS];
+      let resources = await createResources(postgresDefinitions, profile, connectionString);
       let destroyed = false;
 
       return {
@@ -324,7 +329,7 @@ export function createPostgresEntityConformanceDriver(
             throw new Error('[entity-conformance] Cannot reset a destroyed PostgreSQL harness');
           }
           const previous = resources;
-          resources = await createResources(definitions, profile, connectionString);
+          resources = await createResources(postgresDefinitions, profile, connectionString);
           await destroyResources(previous);
         },
         async destroy(): Promise<void> {

@@ -10,7 +10,12 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { HttpError, evaluateFilter } from '@lastshotlabs/slingshot-core';
+import {
+  EntityConcurrencyConflictError,
+  HttpError,
+  evaluateFilter,
+} from '@lastshotlabs/slingshot-core';
+import { resolveExpectedVersion } from '../concurrency/writeGuards';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -321,32 +326,35 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       return Promise.resolve(fromSqliteRow(row, config.fields) as Entity);
     },
 
-    update(id, input, filter) {
+    update(id, input, filter, options) {
       ensureTable();
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'update', options);
 
-      const conditions = [`${pkColumn} = ?`];
-      const checkParams: unknown[] = [id];
-      appendFilterConditions(filter, conditions, checkParams);
+      const scopedConditions = [`${pkColumn} = ?`];
+      const scopedParams: unknown[] = [id];
+      appendFilterConditions(filter, scopedConditions, scopedParams);
       if (config.softDelete) {
         const col = toSnakeCase(config.softDelete.field);
         if ('value' in config.softDelete) {
-          conditions.push(`${col} != ?`);
-          checkParams.push(config.softDelete.value);
+          scopedConditions.push(`${col} != ?`);
+          scopedParams.push(config.softDelete.value);
         } else {
-          conditions.push(`${col} IS NULL`);
+          scopedConditions.push(`${col} IS NULL`);
         }
       }
       if (ttlSeconds) {
-        conditions.push(`${ttlColumn} > ?`);
-        checkParams.push(Date.now());
+        scopedConditions.push(`${ttlColumn} > ?`);
+        scopedParams.push(Date.now());
+      }
+      const scopedWhere = `WHERE ${scopedConditions.join(' AND ')}`;
+      const conditions = [...scopedConditions];
+      const params = [...scopedParams];
+      if (expectedVersion !== undefined && concurrency) {
+        conditions.push(`${toSnakeCase(concurrency.field)} = ?`);
+        params.push(expectedVersion);
       }
       const where = `WHERE ${conditions.join(' AND ')}`;
-      const existing = db
-        .query<Record<string, unknown>>(`SELECT * FROM ${table} ${where}`)
-        .get(...checkParams);
-      if (!existing) {
-        return Promise.resolve(null);
-      }
 
       const updatePayload = applyOnUpdate(
         input as Record<string, unknown>,
@@ -357,12 +365,20 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (ttlSeconds) partial[ttlColumn] = expiresAt();
 
       const entries = Object.entries(partial);
-      if (entries.length === 0) {
-        return Promise.resolve(fromSqliteRow(existing, config.fields) as Entity);
+      if (entries.length === 0 && !concurrency) {
+        const current = db
+          .query<Record<string, unknown>>(`SELECT * FROM ${table} ${scopedWhere}`)
+          .get(...scopedParams);
+        return Promise.resolve(current ? (fromSqliteRow(current, config.fields) as Entity) : null);
       }
 
-      const setClauses = entries.map(([col]) => `${col} = ?`).join(', ');
-      const values = [...entries.map(([, v]) => v), ...checkParams];
+      const setParts = entries.map(([col]) => `${col} = ?`);
+      if (concurrency) {
+        const versionColumn = toSnakeCase(concurrency.field);
+        setParts.push(`${versionColumn} = ${versionColumn} + 1`);
+      }
+      const setClauses = setParts.join(', ');
+      const values = [...entries.map(([, v]) => v), ...params];
 
       let result: { changes: number };
       try {
@@ -377,7 +393,19 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
       // The guarded UPDATE is the source of truth: zero rows changed means the
       // CAS guard lost (the row no longer matched `where`), so return null.
-      if (result.changes === 0) return Promise.resolve(null);
+      if (result.changes === 0) {
+        if (expectedVersion !== undefined) {
+          const scoped = db
+            .query<Record<string, unknown>>(`SELECT 1 FROM ${table} ${scopedWhere}`)
+            .get(...scopedParams);
+          if (scoped) {
+            return Promise.reject(
+              new EntityConcurrencyConflictError(config.name, id, expectedVersion),
+            );
+          }
+        }
+        return Promise.resolve(null);
+      }
 
       // Read back by PRIMARY KEY, never by the guard `where`. If the update
       // changed a guarded column (e.g. a CAS `version` bump), re-selecting with
@@ -390,27 +418,37 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       return Promise.resolve(fromSqliteRow(updated, config.fields) as Entity);
     },
 
-    delete(id, filter) {
+    delete(id, filter, options) {
       ensureTable();
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'delete', options);
 
-      const conditions = [`${pkColumn} = ?`];
-      const params: unknown[] = [id];
-      appendFilterConditions(filter, conditions, params);
+      const scopedConditions = [`${pkColumn} = ?`];
+      const scopedParams: unknown[] = [id];
+      appendFilterConditions(filter, scopedConditions, scopedParams);
       if (config.softDelete) {
         const col = toSnakeCase(config.softDelete.field);
         if ('value' in config.softDelete) {
-          conditions.push(`${col} != ?`);
-          params.push(config.softDelete.value);
+          scopedConditions.push(`${col} != ?`);
+          scopedParams.push(config.softDelete.value);
         } else {
-          conditions.push(`${col} IS NULL`);
+          scopedConditions.push(`${col} IS NULL`);
         }
       }
       if (ttlSeconds) {
-        conditions.push(`${ttlColumn} > ?`);
-        params.push(Date.now());
+        scopedConditions.push(`${ttlColumn} > ?`);
+        scopedParams.push(Date.now());
+      }
+      const scopedWhere = `WHERE ${scopedConditions.join(' AND ')}`;
+      const conditions = [...scopedConditions];
+      const params = [...scopedParams];
+      if (expectedVersion !== undefined && concurrency) {
+        conditions.push(`${toSnakeCase(concurrency.field)} = ?`);
+        params.push(expectedVersion);
       }
       const where = `WHERE ${conditions.join(' AND ')}`;
 
+      let changes: number;
       if (config.softDelete) {
         const sdCol = toSnakeCase(config.softDelete.field);
         const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
@@ -419,15 +457,31 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
           'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
 
         const entries = Object.entries(partial);
-        const setClauses = entries.map(([col]) => `${col} = ?`).join(', ');
+        const setParts = entries.map(([col]) => `${col} = ?`);
+        if (concurrency) {
+          const versionColumn = toSnakeCase(concurrency.field);
+          setParts.push(`${versionColumn} = ${versionColumn} + 1`);
+        }
+        const setClauses = setParts.join(', ');
         const values = [...entries.map(([, v]) => v), ...params];
 
         const result = db.run(`UPDATE ${table} SET ${setClauses} ${where}`, values);
-        return Promise.resolve(result.changes > 0);
+        changes = result.changes;
       } else {
         const result = db.run(`DELETE FROM ${table} ${where}`, params);
-        return Promise.resolve(result.changes > 0);
+        changes = result.changes;
       }
+      if (changes === 0 && expectedVersion !== undefined) {
+        const scoped = db
+          .query<Record<string, unknown>>(`SELECT 1 FROM ${table} ${scopedWhere}`)
+          .get(...scopedParams);
+        if (scoped) {
+          return Promise.reject(
+            new EntityConcurrencyConflictError(config.name, id, expectedVersion),
+          );
+        }
+      }
+      return Promise.resolve(changes > 0);
     },
 
     list(opts) {

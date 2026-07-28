@@ -13,6 +13,8 @@ import {
   ENTITY_BACKEND_PROFILES,
   resolveEntityBackendRequirements,
 } from '../../src/configDriven/backendProfiles';
+import { generatePostgres } from '../../src/generators/postgres';
+import { generateSqlite } from '../../src/generators/sqlite';
 
 describe('optimistic concurrency contracts', () => {
   test('both definition paths inject and freeze identical resolved metadata', () => {
@@ -76,7 +78,7 @@ describe('optimistic concurrency contracts', () => {
     ).toThrow("concurrency field 'version' collides with a declared field");
   });
 
-  test('requires unsupported concurrency capabilities before backend implementation', () => {
+  test('requires and truthfully reports backend concurrency capabilities', () => {
     const entity = defineEntity('Guarded', {
       fields: { id: field.string({ primary: true }) },
       concurrency: { strategy: 'version' },
@@ -99,12 +101,11 @@ describe('optimistic concurrency contracts', () => {
     expect(ENTITY_BACKEND_PROFILES.memory.capabilities['concurrency.version-delete'].status).toBe(
       'supported',
     );
-    for (const profile of [
-      ENTITY_BACKEND_PROFILES.sqlite,
-      ENTITY_BACKEND_PROFILES.postgres,
-      ENTITY_BACKEND_PROFILES.mongo,
-      ENTITY_BACKEND_PROFILES.redis,
-    ]) {
+    for (const profile of [ENTITY_BACKEND_PROFILES.sqlite, ENTITY_BACKEND_PROFILES.postgres]) {
+      expect(profile.capabilities['concurrency.version-update'].status).toBe('supported');
+      expect(profile.capabilities['concurrency.version-delete'].status).toBe('supported');
+    }
+    for (const profile of [ENTITY_BACKEND_PROFILES.mongo, ENTITY_BACKEND_PROFILES.redis]) {
       expect(profile.capabilities['concurrency.version-update'].status).toBe('unsupported');
       expect(profile.capabilities['concurrency.version-delete'].status).toBe('unsupported');
     }
@@ -122,6 +123,24 @@ describe('optimistic concurrency contracts', () => {
       id: 42,
       expectedVersion: 7,
     });
+  });
+
+  test('generates atomic SQLite and PostgreSQL concurrency adapters', () => {
+    const entity = defineEntity('GeneratedGuarded', {
+      fields: { id: field.string({ primary: true }), title: field.string() },
+      concurrency: { strategy: 'version' },
+    });
+
+    for (const source of [generateSqlite(entity), generatePostgres(entity)]) {
+      expect(source).toContain('async update(id, input, filter, options)');
+      expect(source).toContain('async delete(id, filter, options)');
+      expect(source).toContain('version = version + 1');
+      expect(source).toContain('expectedVersion');
+      expect(source).toContain('EntityConcurrencyConflictError');
+      expect(source).toContain('SELECT 1 FROM ${table}');
+    }
+    expect(generateSqlite(entity)).toContain('version = ?');
+    expect(generatePostgres(entity)).toContain('version = $${paramIdx++}');
   });
 });
 

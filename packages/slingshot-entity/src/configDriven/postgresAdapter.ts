@@ -18,11 +18,13 @@
  */
 import {
   type EntityAdapter,
+  EntityConcurrencyConflictError,
   HttpError,
   type OperationConfig,
   type ResolvedEntityConfig,
   evaluateFilter,
 } from '@lastshotlabs/slingshot-core';
+import { resolveExpectedVersion } from '../concurrency/writeGuards';
 import { quoteSqlIdent } from '../lib/naming';
 import {
   applyDefaults,
@@ -352,8 +354,10 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       return fromPgRow(row, config.fields) as Entity;
     },
 
-    async update(id, input, filter) {
+    async update(id, input, filter, options) {
       await ensureTable();
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'update', options);
 
       const updatePayload = applyOnUpdate(
         input as Record<string, unknown>,
@@ -364,7 +368,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (ttlSeconds) partial[ttlColumn] = expiresAt();
 
       const entries = Object.entries(partial);
-      if (entries.length === 0) {
+      if (entries.length === 0 && !concurrency) {
         const { where, params } = buildWhereClause(id, filter, 1);
         const current = await pool.query(`SELECT * FROM ${table} WHERE ${where} LIMIT 1`, params);
         const currentRow = current.rows[0] as Record<string, unknown> | undefined;
@@ -373,16 +377,29 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       let paramIdx = 1;
-      const setClauses = entries
-        .map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`)
-        .join(', ');
+      const setParts = entries.map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`);
+      if (concurrency) {
+        const versionColumn = column(concurrency.field);
+        setParts.push(`${versionColumn} = ${versionColumn} + 1`);
+      }
+      const setClauses = setParts.join(', ');
       const values: unknown[] = entries.map(([, v]) => v);
-      const { where, params } = buildWhereClause(id, filter, entries.length + 1);
+      const writeScope = buildWhereClause(id, filter, entries.length + 1);
+      const classificationScope = buildWhereClause(id, filter, 1);
+      let where = writeScope.where;
+      const params = [...writeScope.params];
+      if (expectedVersion !== undefined && concurrency) {
+        where += ` AND ${column(concurrency.field)} = $${entries.length + params.length + 1}`;
+        params.push(expectedVersion);
+      }
       values.push(...params);
 
       let result: { rows: Record<string, unknown>[]; rowCount: number | null };
       try {
-        result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where}`, values);
+        result = await pool.query(
+          `UPDATE ${table} SET ${setClauses} WHERE ${where} RETURNING *`,
+          values,
+        );
       } catch (error) {
         if ((error as { code?: unknown }).code === '23505') {
           throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
@@ -391,24 +408,30 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       if ((result.rowCount ?? 0) === 0) {
+        if (expectedVersion !== undefined) {
+          const exists = await pool.query(
+            `SELECT 1 FROM ${table} WHERE ${classificationScope.where} LIMIT 1`,
+            classificationScope.params,
+          );
+          if (exists.rows[0]) {
+            throw new EntityConcurrencyConflictError(config.name, id, expectedVersion);
+          }
+        }
         return null;
       }
-
-      // The guarded UPDATE is the source of truth. Read by primary key so an
-      // update that changes one of its own guard fields still returns the row.
-      const readback = buildWhereClause(id, undefined, 1);
-      const updated = await pool.query(
-        `SELECT * FROM ${table} WHERE ${readback.where} LIMIT 1`,
-        readback.params,
-      );
-      const updatedRow = updated.rows[0] as Record<string, unknown> | undefined;
+      const updatedRow = result.rows[0] as Record<string, unknown> | undefined;
       if (!updatedRow) return null;
       return fromPgRow(updatedRow, config.fields) as Entity;
     },
 
-    async delete(id, filter) {
+    async delete(id, filter, options) {
       await ensureTable();
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'delete', options);
 
+      let rowCount: number;
+      let scopedWhere: string;
+      let scopedParams: unknown[];
       if (config.softDelete) {
         const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
         const partial = toPgRow(onUpdatePayload, config.fields);
@@ -417,19 +440,49 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
         const entries = Object.entries(partial);
         let paramIdx = 1;
-        const setClauses = entries
-          .map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`)
-          .join(', ');
+        const setParts = entries.map(([col]) => `${quoteSqlIdent(col)} = $${paramIdx++}`);
+        if (concurrency) {
+          const versionColumn = column(concurrency.field);
+          setParts.push(`${versionColumn} = ${versionColumn} + 1`);
+        }
+        const setClauses = setParts.join(', ');
         const values: unknown[] = entries.map(([, v]) => v);
-        const { where, params } = buildWhereClause(id, filter, entries.length + 1);
+        const writeScope = buildWhereClause(id, filter, entries.length + 1);
+        const classificationScope = buildWhereClause(id, filter, 1);
+        scopedWhere = classificationScope.where;
+        scopedParams = classificationScope.params;
+        let where = writeScope.where;
+        const params = [...writeScope.params];
+        if (expectedVersion !== undefined && concurrency) {
+          where += ` AND ${column(concurrency.field)} = $${entries.length + params.length + 1}`;
+          params.push(expectedVersion);
+        }
         values.push(...params);
         const result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where}`, values);
-        return (result.rowCount ?? 0) > 0;
+        rowCount = result.rowCount ?? 0;
       } else {
-        const { where, params } = buildWhereClause(id, filter, 1);
+        const scoped = buildWhereClause(id, filter, 1);
+        scopedWhere = scoped.where;
+        scopedParams = scoped.params;
+        let where = scoped.where;
+        const params = [...scoped.params];
+        if (expectedVersion !== undefined && concurrency) {
+          where += ` AND ${column(concurrency.field)} = $${params.length + 1}`;
+          params.push(expectedVersion);
+        }
         const result = await pool.query(`DELETE FROM ${table} WHERE ${where}`, params);
-        return (result.rowCount ?? 0) > 0;
+        rowCount = result.rowCount ?? 0;
       }
+      if (rowCount === 0 && expectedVersion !== undefined) {
+        const exists = await pool.query(
+          `SELECT 1 FROM ${table} WHERE ${scopedWhere} LIMIT 1`,
+          scopedParams,
+        );
+        if (exists.rows[0]) {
+          throw new EntityConcurrencyConflictError(config.name, id, expectedVersion);
+        }
+      }
+      return rowCount > 0;
     },
 
     async list(opts) {

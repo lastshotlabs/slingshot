@@ -65,6 +65,7 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
     ([, def]) => def.default !== undefined && !isAutoDefault(def.default),
   );
   const onUpdateFields = fields.filter(([, def]) => def.onUpdate === 'now');
+  const concurrency = config._concurrency;
 
   // Column definitions
   const colDefs: string[] = [];
@@ -85,6 +86,19 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
     `import type { ${name}Adapter, PaginatedResult } from './adapter';`,
     '',
   ];
+
+  if (concurrency) {
+    lines.push(
+      `class EntityConcurrencyPreconditionError extends Error { readonly code = 'ENTITY_CONCURRENCY_PRECONDITION_REQUIRED'; constructor(readonly entity: string, readonly operation: 'update' | 'delete') { super(\`\${operation} on "\${entity}" requires an expected version\`); this.name = 'EntityConcurrencyPreconditionError'; } }`,
+    );
+    lines.push(
+      `class EntityConcurrencyConflictError extends Error { readonly code = 'ENTITY_CONCURRENCY_CONFLICT'; constructor(readonly entity: string, readonly id: string | number, readonly expectedVersion: number) { super(\`Concurrent \${entity} write conflicted for id "\${String(id)}"\`); this.name = 'EntityConcurrencyConflictError'; } }`,
+    );
+    lines.push(
+      `class EntityConcurrencyExpectedVersionError extends Error { readonly code = 'ENTITY_CONCURRENCY_EXPECTED_VERSION_INVALID'; constructor() { super('Expected version must be a positive safe integer'); this.name = 'EntityConcurrencyExpectedVersionError'; } }`,
+    );
+    lines.push('');
+  }
 
   // --- Inlined helpers ---
   lines.push('function encodeCursor(values: Record<string, unknown>): string {');
@@ -336,8 +350,19 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('');
 
   // update
-  lines.push('    async update(id, input, filter) {');
+  lines.push('    async update(id, input, filter, options) {');
   lines.push('      await ensureTable();');
+  if (concurrency) {
+    lines.push('      const expectedVersion = options?.expectedVersion;');
+    if (concurrency.requiredOnWrite) {
+      lines.push(
+        `      if (expectedVersion === undefined) throw new EntityConcurrencyPreconditionError('${name}', 'update');`,
+      );
+    }
+    lines.push(
+      '      if (expectedVersion !== undefined && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) throw new EntityConcurrencyExpectedVersionError();',
+    );
+  }
   if (onUpdateFields.length > 0) {
     lines.push('      const updatePayload = applyOnUpdate(input as Record<string, unknown>);');
   } else {
@@ -346,7 +371,7 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('      const partial = toRow(updatePayload);');
   if (ttlSeconds) lines.push("      partial['_expires_at'] = expiresAt();");
   lines.push('      const entries = Object.entries(partial);');
-  lines.push('      if (entries.length === 0) {');
+  lines.push(`      if (entries.length === 0${concurrency ? ' && false' : ''}) {`);
   lines.push(
     `        const current = await pool.query(\`SELECT * FROM \${table} WHERE ${pkColumn} = $1\`, [id]);`,
   );
@@ -363,9 +388,12 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('        return fromRow(currentRow);');
   lines.push('      }');
   lines.push('      let paramIdx = 1;');
-  lines.push(
-    "      const setClauses = entries.map(([col]) => `${col} = $${paramIdx++}`).join(', ');",
-  );
+  lines.push('      const setParts = entries.map(([col]) => `${col} = $${paramIdx++}`);');
+  if (concurrency) {
+    const versionColumn = toSnakeCase(concurrency.field);
+    lines.push(`      setParts.push('${versionColumn} = ${versionColumn} + 1');`);
+  }
+  lines.push("      const setClauses = setParts.join(', ');");
   lines.push('      const values: unknown[] = entries.map(([, v]) => v);');
   lines.push(`      const conditions: string[] = [\`${pkColumn} = $\${paramIdx++}\`];`);
   lines.push('      values.push(id);');
@@ -389,17 +417,49 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('        }');
   lines.push('      }');
   lines.push("      const where = conditions.join(' AND ');");
+  if (concurrency) {
+    lines.push(
+      '      const scopedWhere = where.replace(/\\$(\\d+)/g, (_match, index: string) => `$${Number(index) - entries.length}`);',
+    );
+    lines.push('      const scopedValues = values.slice(entries.length);');
+    lines.push('      if (expectedVersion !== undefined) {');
+    lines.push(`        conditions.push(\`${toSnakeCase(concurrency.field)} = $\${paramIdx++}\`);`);
+    lines.push('        values.push(expectedVersion);');
+    lines.push('      }');
+    lines.push("      const guardedWhere = conditions.join(' AND ');");
+  }
   lines.push(
-    '      const result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where} RETURNING *`, values);',
+    `      const result = await pool.query(\`UPDATE \${table} SET \${setClauses} WHERE \${${concurrency ? 'guardedWhere' : 'where'}} RETURNING *\`, values);`,
   );
+  if (concurrency) {
+    lines.push('      if (!result.rows[0] && expectedVersion !== undefined) {');
+    lines.push(
+      '        const exists = await pool.query(`SELECT 1 FROM ${table} WHERE ${scopedWhere} LIMIT 1`, scopedValues);',
+    );
+    lines.push(
+      `        if (exists.rows[0]) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+    );
+    lines.push('      }');
+  }
   lines.push('      const updated = result.rows[0];');
   lines.push('      return updated ? fromRow(updated) : null;');
   lines.push('    },');
   lines.push('');
 
   // delete
-  lines.push('    async delete(id, filter) {');
+  lines.push('    async delete(id, filter, options) {');
   lines.push('      await ensureTable();');
+  if (concurrency) {
+    lines.push('      const expectedVersion = options?.expectedVersion;');
+    if (concurrency.requiredOnWrite) {
+      lines.push(
+        `      if (expectedVersion === undefined) throw new EntityConcurrencyPreconditionError('${name}', 'delete');`,
+      );
+    }
+    lines.push(
+      '      if (expectedVersion !== undefined && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) throw new EntityConcurrencyExpectedVersionError();',
+    );
+  }
   if (hasSoftDelete) {
     if (onUpdateFields.length > 0) {
       lines.push('      const partial = toRow(applyOnUpdate({}));');
@@ -414,9 +474,12 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
     }
     lines.push('      const entries = Object.entries(partial);');
     lines.push('      let paramIdx = 1;');
-    lines.push(
-      "      const setClauses = entries.map(([col]) => `${col} = $${paramIdx++}`).join(', ');",
-    );
+    lines.push('      const setParts = entries.map(([col]) => `${col} = $${paramIdx++}`);');
+    if (concurrency) {
+      const versionColumn = toSnakeCase(concurrency.field);
+      lines.push(`      setParts.push('${versionColumn} = ${versionColumn} + 1');`);
+    }
+    lines.push("      const setClauses = setParts.join(', ');");
     lines.push('      const values: unknown[] = entries.map(([, v]) => v);');
     lines.push('      const conditions: string[] = [`' + pkColumn + ' = ${paramIdx++}`];');
     lines.push('      values.push(id);');
@@ -438,9 +501,32 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
     lines.push('        }');
     lines.push('      }');
     lines.push('      const where = conditions.join(" AND ");');
+    if (concurrency) {
+      lines.push(
+        '      const scopedWhere = where.replace(/\\$(\\d+)/g, (_match, index: string) => `$${Number(index) - entries.length}`);',
+      );
+      lines.push('      const scopedValues = values.slice(entries.length);');
+      lines.push('      if (expectedVersion !== undefined) {');
+      lines.push(
+        `        conditions.push(\`${toSnakeCase(concurrency.field)} = $\${paramIdx++}\`);`,
+      );
+      lines.push('        values.push(expectedVersion);');
+      lines.push('      }');
+      lines.push('      const guardedWhere = conditions.join(" AND ");');
+    }
     lines.push(
-      '      const result = await pool.query(`UPDATE ${table} SET ${setClauses} WHERE ${where} RETURNING *`, values);',
+      `      const result = await pool.query(\`UPDATE \${table} SET \${setClauses} WHERE \${${concurrency ? 'guardedWhere' : 'where'}} RETURNING *\`, values);`,
     );
+    if (concurrency) {
+      lines.push('      if (!result.rows[0] && expectedVersion !== undefined) {');
+      lines.push(
+        '        const exists = await pool.query(`SELECT 1 FROM ${table} WHERE ${scopedWhere} LIMIT 1`, scopedValues);',
+      );
+      lines.push(
+        `        if (exists.rows[0]) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+      );
+      lines.push('      }');
+    }
     lines.push('      return (result.rows[0] != null);');
   } else {
     lines.push(`      const conditions: string[] = [\`${pkColumn} = $1\`];`);
@@ -458,9 +544,31 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
     lines.push('        }');
     lines.push('      }');
     lines.push('      const where = conditions.join(" AND ");');
+    if (concurrency) {
+      lines.push('      const scopedWhere = where;');
+      lines.push('      const scopedValues = [...values];');
+      lines.push('      let paramIdx = values.length + 1;');
+      lines.push('      if (expectedVersion !== undefined) {');
+      lines.push(
+        `        conditions.push(\`${toSnakeCase(concurrency.field)} = $\${paramIdx++}\`);`,
+      );
+      lines.push('        values.push(expectedVersion);');
+      lines.push('      }');
+      lines.push('      const guardedWhere = conditions.join(" AND ");');
+    }
     lines.push(
-      '      const result = await pool.query(`DELETE FROM ${table} WHERE ${where} RETURNING *`, values);',
+      `      const result = await pool.query(\`DELETE FROM \${table} WHERE \${${concurrency ? 'guardedWhere' : 'where'}} RETURNING *\`, values);`,
     );
+    if (concurrency) {
+      lines.push('      if (!result.rows[0] && expectedVersion !== undefined) {');
+      lines.push(
+        '        const exists = await pool.query(`SELECT 1 FROM ${table} WHERE ${scopedWhere} LIMIT 1`, scopedValues);',
+      );
+      lines.push(
+        `        if (exists.rows[0]) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+      );
+      lines.push('      }');
+    }
     lines.push('      return (result.rows[0] != null);');
   }
   lines.push('    },');

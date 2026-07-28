@@ -80,8 +80,6 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
     'transaction.rollback': 'Memory transactions do not restore earlier writes after failure.',
   }),
   sqlite: defineEntityBackendProfile('sqlite', true, {
-    'concurrency.version-update': 'Version concurrency is not implemented for SQLite yet.',
-    'concurrency.version-delete': 'Version concurrency is not implemented for SQLite yet.',
     'operation.arrayPush':
       'SQLite cannot expose array push until array mutation is implemented atomically.',
     'operation.arrayPull':
@@ -96,10 +94,7 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
     'atomic.computed-aggregate':
       'SQLite computed aggregate currently reads and writes in separate statements without a transaction.',
   }),
-  postgres: defineEntityBackendProfile('postgres', true, {
-    'concurrency.version-update': 'Version concurrency is not implemented for PostgreSQL yet.',
-    'concurrency.version-delete': 'Version concurrency is not implemented for PostgreSQL yet.',
-  }),
+  postgres: defineEntityBackendProfile('postgres', true, {}),
   mongo: defineEntityBackendProfile('mongo', true, {
     'concurrency.version-update': 'Version concurrency is not implemented for MongoDB yet.',
     'concurrency.version-delete': 'Version concurrency is not implemented for MongoDB yet.',

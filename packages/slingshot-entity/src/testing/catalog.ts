@@ -1453,6 +1453,51 @@ const VERSION_CONCURRENCY = [
       assertEqual(await target.getById('version-soft'), null, 'Soft-deleted visibility');
     },
   ),
+  defineCase(
+    'concurrency.version-transaction-scope',
+    'transaction-scoped adapters compare, classify, and increment on the active backend scope',
+    [
+      'crud.create',
+      'crud.read',
+      'crud.update',
+      'concurrency.version-update',
+      'transaction.rollback',
+    ],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      await target.create({ id: 'version-transaction', tenantId: 'alpha', title: 'initial' });
+      await transactions.manager.run(transactions.store, async scope => {
+        const scoped = transactions.adapter<
+          RecordValue,
+          Record<string, unknown>,
+          Record<string, unknown>
+        >(CONFORMANCE_VERSIONED_KEY, scope);
+        await expectErrorCode(
+          scoped.update(
+            'version-transaction',
+            { title: 'stale' },
+            { tenantId: 'alpha' },
+            { expectedVersion: 2 },
+          ),
+          'ENTITY_CONCURRENCY_CONFLICT',
+        );
+        const updated = await scoped.update(
+          'version-transaction',
+          { title: 'scoped' },
+          { tenantId: 'alpha' },
+          { expectedVersion: 1 },
+        );
+        assertEqual(updated?.version, 2, 'Scoped updated version');
+      });
+      assertEqual(
+        (await target.getById('version-transaction'))?.title,
+        'scoped',
+        'Scoped committed update',
+      );
+    },
+  ),
 ] as const;
 
 /** Complete, deeply frozen, backend-independent entity conformance catalog. */

@@ -13,6 +13,9 @@ export const CONFORMANCE_RECORDS_KEY = 'records';
 export const CONFORMANCE_TENANTS_KEY = 'tenants';
 export const CONFORMANCE_SOFT_DELETE_KEY = 'softDelete';
 export const CONFORMANCE_TTL_KEY = 'ttl';
+export const CONFORMANCE_VERSIONED_KEY = 'versioned';
+export const CONFORMANCE_VERSIONED_SOFT_DELETE_KEY = 'versionedSoftDelete';
+export const CONFORMANCE_VERSIONED_OPTIONAL_KEY = 'versionedOptional';
 export const CONFORMANCE_COMPOSITE_KEY = 'workflow';
 
 const Records = defineEntity('ConformanceRecord', {
@@ -72,6 +75,46 @@ const Ttl = defineEntity('ConformanceTtl', {
   },
   ttl: { defaultSeconds: 0.02 },
 });
+
+export const CONFORMANCE_VERSIONED_DEFINITIONS = [
+  {
+    key: CONFORMANCE_VERSIONED_KEY,
+    config: defineEntity('ConformanceVersioned', {
+      namespace: 'entity_conformance',
+      fields: {
+        id: field.string({ primary: true }),
+        tenantId: field.string(),
+        title: field.string(),
+      },
+      tenant: { field: 'tenantId' },
+      concurrency: { strategy: 'version' },
+    }),
+  },
+  {
+    key: CONFORMANCE_VERSIONED_SOFT_DELETE_KEY,
+    config: defineEntity('ConformanceVersionedSoftDelete', {
+      namespace: 'entity_conformance',
+      fields: {
+        id: field.string({ primary: true }),
+        title: field.string(),
+        deletedAt: field.date({ optional: true }),
+      },
+      softDelete: { field: 'deletedAt', strategy: 'non-null' },
+      concurrency: { strategy: 'version' },
+    }),
+  },
+  {
+    key: CONFORMANCE_VERSIONED_OPTIONAL_KEY,
+    config: defineEntity('ConformanceVersionedOptional', {
+      namespace: 'entity_conformance',
+      fields: {
+        id: field.string({ primary: true }),
+        title: field.string(),
+      },
+      concurrency: { strategy: 'version', requiredOnWrite: false },
+    }),
+  },
+] as const satisfies readonly EntityConformanceDefinition[];
 
 const Audit = defineEntity('ConformanceAudit', {
   namespace: 'entity_conformance',

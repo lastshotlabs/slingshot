@@ -215,10 +215,10 @@ describe('generated adapter.ts', () => {
       'getById(id: string, filter?: Record<string, unknown>): Promise<Message | null>;',
     );
     expect(adapter).toContain(
-      'update(id: string, input: UpdateMessageInput, filter?: Record<string, unknown>): Promise<Message | null>;',
+      'update(id: string, input: UpdateMessageInput, filter?: Record<string, unknown>, options?: EntityWriteOptions): Promise<Message | null>;',
     );
     expect(adapter).toContain(
-      'delete(id: string, filter?: Record<string, unknown>): Promise<boolean>;',
+      'delete(id: string, filter?: Record<string, unknown>, options?: EntityWriteOptions): Promise<boolean>;',
     );
     expect(adapter).toContain('list(opts?: ListOptions): Promise<PaginatedResult<Message>>;');
     expect(adapter).toContain('clear(): Promise<void>;');

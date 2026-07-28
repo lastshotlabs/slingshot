@@ -12,7 +12,11 @@ import type {
   EntityConformanceDriver,
   EntityConformanceHarness,
 } from '../conformance';
-import { CONFORMANCE_COMPOSITE_KEY, CONFORMANCE_COMPOSITE_OPERATIONS } from '../fixtures';
+import {
+  CONFORMANCE_COMPOSITE_KEY,
+  CONFORMANCE_COMPOSITE_OPERATIONS,
+  CONFORMANCE_VERSIONED_DEFINITIONS,
+} from '../fixtures';
 
 type CompositeEntry = {
   readonly config: EntityConformanceDefinition['config'];
@@ -87,7 +91,8 @@ export function createMemoryEntityConformanceDriver(): EntityConformanceDriver {
     async createHarness(
       definitions: readonly EntityConformanceDefinition[],
     ): Promise<EntityConformanceHarness> {
-      let composite = buildComposite(definitions, profile);
+      const memoryDefinitions = [...definitions, ...CONFORMANCE_VERSIONED_DEFINITIONS];
+      let composite = buildComposite(memoryDefinitions, profile);
       let destroyed = false;
 
       return {
@@ -110,7 +115,7 @@ export function createMemoryEntityConformanceDriver(): EntityConformanceDriver {
           if (destroyed) {
             throw new Error('[entity-conformance] Cannot reset a destroyed memory harness');
           }
-          composite = buildComposite(definitions, profile);
+          composite = buildComposite(memoryDefinitions, profile);
         },
         async destroy(): Promise<void> {
           if (destroyed) return;

@@ -75,8 +75,6 @@ function defineEntityBackendProfile(
  */
 export const ENTITY_BACKEND_PROFILES = deepFreeze({
   memory: defineEntityBackendProfile('memory', false, {
-    'concurrency.version-update': 'Version concurrency is not implemented for memory yet.',
-    'concurrency.version-delete': 'Version concurrency is not implemented for memory yet.',
     'operation.transaction':
       'Memory cannot expose transaction operations because it does not provide rollback.',
     'transaction.rollback': 'Memory transactions do not restore earlier writes after failure.',

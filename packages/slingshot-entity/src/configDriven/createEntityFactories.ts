@@ -291,15 +291,15 @@ function wrapWithSearchSync<
       await syncAfterCreate(entity as Record<string, unknown>);
       return entity;
     },
-    async update(id, input, filter) {
-      const entity = await adapter.update(id, input, filter);
+    async update(id, input, filter, options) {
+      const entity = await adapter.update(id, input, filter, options);
       if (!entity) return null;
 
       await syncAfterUpdate(entity as Record<string, unknown>);
       return entity;
     },
-    async delete(id, filter) {
-      const deleted = await adapter.delete(id, filter);
+    async delete(id, filter, options) {
+      const deleted = await adapter.delete(id, filter, options);
       if (!deleted) return false;
 
       await syncAfterDelete(String(id));

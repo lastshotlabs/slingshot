@@ -93,7 +93,18 @@ describe('optimistic concurrency contracts', () => {
         },
       ]),
     );
-    for (const profile of Object.values(ENTITY_BACKEND_PROFILES)) {
+    expect(ENTITY_BACKEND_PROFILES.memory.capabilities['concurrency.version-update'].status).toBe(
+      'supported',
+    );
+    expect(ENTITY_BACKEND_PROFILES.memory.capabilities['concurrency.version-delete'].status).toBe(
+      'supported',
+    );
+    for (const profile of [
+      ENTITY_BACKEND_PROFILES.sqlite,
+      ENTITY_BACKEND_PROFILES.postgres,
+      ENTITY_BACKEND_PROFILES.mongo,
+      ENTITY_BACKEND_PROFILES.redis,
+    ]) {
       expect(profile.capabilities['concurrency.version-update'].status).toBe('unsupported');
       expect(profile.capabilities['concurrency.version-delete'].status).toBe('unsupported');
     }

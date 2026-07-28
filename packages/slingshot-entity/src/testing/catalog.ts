@@ -10,6 +10,9 @@ import {
   CONFORMANCE_SOFT_DELETE_KEY,
   CONFORMANCE_TENANTS_KEY,
   CONFORMANCE_TTL_KEY,
+  CONFORMANCE_VERSIONED_KEY,
+  CONFORMANCE_VERSIONED_OPTIONAL_KEY,
+  CONFORMANCE_VERSIONED_SOFT_DELETE_KEY,
 } from './fixtures';
 
 type RecordValue = Record<string, unknown>;
@@ -89,6 +92,16 @@ async function expectConflict(promise: Promise<unknown>): Promise<void> {
     return;
   }
   throw new Error('Expected a 409 conflict rejection');
+}
+
+async function expectErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+  try {
+    await promise;
+  } catch (error) {
+    assertEqual(Reflect.get(error as object, 'code'), code, 'Error code');
+    return;
+  }
+  throw new Error(`Expected rejection with code ${code}`);
 }
 
 function defineCase(
@@ -1273,25 +1286,171 @@ const RACES = [
   ),
 ] as const;
 
-const RESERVED_CONCURRENCY = [
+const VERSION_CONCURRENCY = [
   defineCase(
-    'concurrency.version-update.reserved',
-    'reserved until guarded-update conformance lands in WP3 Phase 2',
-    ['concurrency.version-update'],
-    async () => {
-      throw new Error(
-        'A backend claimed version-update concurrency before its conformance case landed',
+    'concurrency.version-update',
+    'version initializes at one, guarded updates increment, and stale writers conflict',
+    ['crud.create', 'crud.read', 'crud.update', 'concurrency.version-update'],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      const created = await target.create({
+        id: 'version-update',
+        tenantId: 'alpha',
+        title: 'initial',
+      });
+      assertEqual(created.version, 1, 'Initial version');
+      const updated = await target.update(
+        'version-update',
+        { title: 'winner' },
+        { tenantId: 'alpha' },
+        { expectedVersion: 1 },
+      );
+      assertEqual(updated?.version, 2, 'Updated version');
+      await expectErrorCode(
+        target.update(
+          'version-update',
+          { title: 'stale' },
+          { tenantId: 'alpha' },
+          { expectedVersion: 1 },
+        ),
+        'ENTITY_CONCURRENCY_CONFLICT',
+      );
+      assertEqual((await target.getById('version-update'))?.title, 'winner', 'Winning update');
+    },
+  ),
+  defineCase(
+    'concurrency.version-precondition',
+    'required writes reject missing and invalid expected versions before mutation',
+    ['crud.create', 'crud.read', 'crud.update', 'concurrency.version-update'],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      await target.create({ id: 'version-required', tenantId: 'alpha', title: 'initial' });
+      await expectErrorCode(
+        target.update('version-required', { title: 'missing' }),
+        'ENTITY_CONCURRENCY_PRECONDITION_REQUIRED',
+      );
+      for (const expectedVersion of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        await expectErrorCode(
+          target.update('version-required', { title: 'invalid' }, undefined, { expectedVersion }),
+          'ENTITY_CONCURRENCY_EXPECTED_VERSION_INVALID',
+        );
+      }
+      assertEqual((await target.getById('version-required'))?.title, 'initial', 'Unchanged record');
+    },
+  ),
+  defineCase(
+    'concurrency.version-update-race',
+    'two same-version updates produce exactly one success and one typed conflict',
+    ['crud.create', 'crud.read', 'crud.update', 'concurrency.version-update'],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      await target.create({ id: 'version-race', tenantId: 'alpha', title: 'initial' });
+      const outcomes = await Promise.allSettled([
+        target.update('version-race', { title: 'one' }, undefined, { expectedVersion: 1 }),
+        target.update('version-race', { title: 'two' }, undefined, { expectedVersion: 1 }),
+      ]);
+      assertEqual(
+        outcomes.filter(outcome => outcome.status === 'fulfilled').length,
+        1,
+        'Race winners',
+      );
+      const rejected = outcomes.find(outcome => outcome.status === 'rejected');
+      assert(rejected?.status === 'rejected', 'Race must have one rejection');
+      assertEqual(
+        Reflect.get(rejected.reason as object, 'code'),
+        'ENTITY_CONCURRENCY_CONFLICT',
+        'Race conflict code',
+      );
+      assertEqual((await target.getById('version-race'))?.version, 2, 'Race final version');
+    },
+  ),
+  defineCase(
+    'concurrency.version-optional-guard',
+    'an omitted optional guard writes atomically and still increments the version',
+    ['crud.create', 'crud.update', 'concurrency.version-update'],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_OPTIONAL_KEY);
+      await target.create({ id: 'version-optional', title: 'initial' });
+      const updated = await target.update('version-optional', { title: 'unguarded' });
+      assertEqual(updated?.version, 2, 'Optional-guard increment');
+      await expectErrorCode(
+        target.update('version-optional', { title: 'stale' }, undefined, { expectedVersion: 1 }),
+        'ENTITY_CONCURRENCY_CONFLICT',
       );
     },
   ),
   defineCase(
-    'concurrency.version-delete.reserved',
-    'reserved until guarded-delete conformance lands in WP3 Phase 2',
-    ['concurrency.version-delete'],
-    async () => {
-      throw new Error(
-        'A backend claimed version-delete concurrency before its conformance case landed',
+    'concurrency.version-delete',
+    'guarded hard delete succeeds once and a stale delete conflicts',
+    ['crud.create', 'crud.delete', 'concurrency.version-delete'],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      await target.create({ id: 'delete-stale', tenantId: 'alpha', title: 'initial' });
+      await expectErrorCode(
+        target.delete('delete-stale', undefined, { expectedVersion: 2 }),
+        'ENTITY_CONCURRENCY_CONFLICT',
       );
+      assertEqual(
+        await target.delete('delete-stale', undefined, { expectedVersion: 1 }),
+        true,
+        'Guarded delete',
+      );
+    },
+  ),
+  defineCase(
+    'concurrency.version-scope',
+    'tenant-scoped misses remain not-found and do not reveal another tenant version',
+    [
+      'crud.create',
+      'crud.update',
+      'crud.delete',
+      'scope.tenant',
+      'concurrency.version-update',
+      'concurrency.version-delete',
+    ],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_KEY);
+      await target.create({ id: 'version-scope', tenantId: 'alpha', title: 'private' });
+      assertEqual(
+        await target.update(
+          'version-scope',
+          { title: 'leak' },
+          { tenantId: 'beta' },
+          { expectedVersion: 999 },
+        ),
+        null,
+        'Scoped update miss',
+      );
+      assertEqual(
+        await target.delete('version-scope', { tenantId: 'beta' }, { expectedVersion: 999 }),
+        false,
+        'Scoped delete miss',
+      );
+    },
+  ),
+  defineCase(
+    'concurrency.version-soft-delete',
+    'soft delete is guarded and hides the incremented record',
+    [
+      'crud.create',
+      'crud.read',
+      'crud.delete',
+      'lifecycle.soft-delete',
+      'concurrency.version-delete',
+    ],
+    async harness => {
+      const target = adapter(harness, CONFORMANCE_VERSIONED_SOFT_DELETE_KEY);
+      await target.create({ id: 'version-soft', title: 'visible' });
+      await expectErrorCode(
+        target.delete('version-soft', undefined, { expectedVersion: 2 }),
+        'ENTITY_CONCURRENCY_CONFLICT',
+      );
+      assertEqual(
+        await target.delete('version-soft', undefined, { expectedVersion: 1 }),
+        true,
+        'Soft delete',
+      );
+      assertEqual(await target.getById('version-soft'), null, 'Soft-deleted visibility');
     },
   ),
 ] as const;
@@ -1305,5 +1464,5 @@ export const ENTITY_CONFORMANCE_CATALOG: readonly EntityConformanceCase[] = deep
   ...NAMED_OPERATIONS,
   ...COMPOSITION_AND_REGRESSIONS,
   ...RACES,
-  ...RESERVED_CONCURRENCY,
+  ...VERSION_CONCURRENCY,
 ]);

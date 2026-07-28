@@ -10,11 +10,13 @@ import type {
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
 import {
+  EntityConcurrencyConflictError,
   HttpError,
   createEvictExpired,
   evaluateFilter,
   evictOldest,
 } from '@lastshotlabs/slingshot-core';
+import { resolveExpectedVersion } from '../concurrency/writeGuards';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -47,6 +49,7 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
   const pkField = config._pkField;
   const maxEntries = config.storage?.memory?.maxEntries ?? 10_000;
   const ttlMs = config.ttl ? config.ttl.defaultSeconds * 1000 : undefined;
+  const concurrency = config._concurrency;
 
   // Collect all unique constraints from both `uniques` and `indexes` with unique: true
   const uniqueConstraints: ReadonlyArray<readonly string[]> = [
@@ -167,6 +170,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
           config.fields,
           customAutoDefault,
         );
+        if (concurrency) {
+          record[concurrency.field] = concurrency.initialVersion;
+        }
         const pk = record[pkField] as string | number;
 
         if (store.has(pk)) {
@@ -210,8 +216,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
       return Promise.resolve({ ...entry.record } as unknown as Entity);
     },
 
-    update(id, input, filter) {
+    update(id, input, filter, options) {
       return serializeOnStore(store, () => {
+        const expectedVersion = resolveExpectedVersion(config, 'update', options);
         const entry = store.get(id);
         if (!entry || !isAlive(entry)) {
           if (entry) store.delete(id);
@@ -223,6 +230,15 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (filter && !matchesFilter(entry.record, filter)) {
           return Promise.resolve(null);
         }
+        if (
+          expectedVersion !== undefined &&
+          concurrency &&
+          entry.record[concurrency.field] !== expectedVersion
+        ) {
+          return Promise.reject(
+            new EntityConcurrencyConflictError(config.name, id, expectedVersion),
+          );
+        }
 
         const updatePayload = applyOnUpdate(
           input as Record<string, unknown>,
@@ -231,6 +247,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         );
         // Check unique constraints against the merged record before applying
         const merged = { ...entry.record, ...updatePayload };
+        if (concurrency) {
+          merged[concurrency.field] = (entry.record[concurrency.field] as number) + 1;
+        }
         const violated = findUniqueViolation(merged, id);
         if (violated) {
           return Promise.reject(
@@ -242,7 +261,7 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
           );
         }
 
-        Object.assign(entry.record, updatePayload);
+        Object.assign(entry.record, merged);
 
         // Refresh TTL on update
         if (ttlMs) entry.expiresAt = Date.now() + ttlMs;
@@ -251,8 +270,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
       });
     },
 
-    delete(id, filter) {
+    delete(id, filter, options) {
       return serializeOnStore(store, () => {
+        const expectedVersion = resolveExpectedVersion(config, 'delete', options);
         const entry = store.get(id);
         if (!entry || !isAlive(entry)) {
           if (entry) store.delete(id);
@@ -264,6 +284,15 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (filter && !matchesFilter(entry.record, filter)) {
           return Promise.resolve(false);
         }
+        if (
+          expectedVersion !== undefined &&
+          concurrency &&
+          entry.record[concurrency.field] !== expectedVersion
+        ) {
+          return Promise.reject(
+            new EntityConcurrencyConflictError(config.name, id, expectedVersion),
+          );
+        }
 
         if (config.softDelete) {
           // Soft delete: set the status field
@@ -272,6 +301,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
           // Apply onUpdate fields (e.g. updatedAt)
           const onUpdateFields = applyOnUpdate({}, config.fields, customOnUpdate);
           Object.assign(entry.record, onUpdateFields);
+          if (concurrency) {
+            entry.record[concurrency.field] = (entry.record[concurrency.field] as number) + 1;
+          }
         } else {
           store.delete(id);
         }

@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { ZodTypeAny, z } from 'zod';
 import { getContextOrNull } from './context/contextStore';
+import type { EntityWriteOptions } from './entityConfig';
 import type {
   RouteAuthConfig,
   RouteEventConfig,
@@ -230,8 +231,13 @@ export interface PackageEntityAdapter<
     id: string | number,
     input: TUpdateInput,
     filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
   ): Promise<TEntity | null>;
-  delete?(id: string | number, filter?: Record<string, unknown>): Promise<boolean>;
+  delete?(
+    id: string | number,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<boolean>;
   clear?(): Promise<void>;
 }
 

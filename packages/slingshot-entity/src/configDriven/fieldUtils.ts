@@ -142,7 +142,7 @@ export function resolveAutoDefault(
  * @returns `true` if `value` is one of `'uuid'`, `'cuid'`, or `'now'`.
  */
 export function isAutoDefault(value: string | number | boolean | undefined): value is AutoDefault {
-  return value === 'uuid' || value === 'now' || value === 'cuid';
+  return value === 'uuid' || value === 'now' || value === 'cuid' || value === 'version';
 }
 
 /**
@@ -190,7 +190,8 @@ export function applyDefaults(
 
     if (def.default !== undefined) {
       if (isAutoDefault(def.default)) {
-        record[name] = resolveAutoDefault(def.default, customAutoDefault);
+        record[name] =
+          def.default === 'version' ? 1 : resolveAutoDefault(def.default, customAutoDefault);
       } else if (typeof def.default === 'string' && customAutoDefault) {
         const custom = customAutoDefault(def.default);
         if (custom !== undefined) {

@@ -1273,6 +1273,29 @@ const RACES = [
   ),
 ] as const;
 
+const RESERVED_CONCURRENCY = [
+  defineCase(
+    'concurrency.version-update.reserved',
+    'reserved until guarded-update conformance lands in WP3 Phase 2',
+    ['concurrency.version-update'],
+    async () => {
+      throw new Error(
+        'A backend claimed version-update concurrency before its conformance case landed',
+      );
+    },
+  ),
+  defineCase(
+    'concurrency.version-delete.reserved',
+    'reserved until guarded-delete conformance lands in WP3 Phase 2',
+    ['concurrency.version-delete'],
+    async () => {
+      throw new Error(
+        'A backend claimed version-delete concurrency before its conformance case landed',
+      );
+    },
+  ),
+] as const;
+
 /** Complete, deeply frozen, backend-independent entity conformance catalog. */
 export const ENTITY_CONFORMANCE_CATALOG: readonly EntityConformanceCase[] = deepFreeze([
   ...CRUD,
@@ -1282,4 +1305,5 @@ export const ENTITY_CONFORMANCE_CATALOG: readonly EntityConformanceCase[] = deep
   ...NAMED_OPERATIONS,
   ...COMPOSITION_AND_REGRESSIONS,
   ...RACES,
+  ...RESERVED_CONCURRENCY,
 ]);

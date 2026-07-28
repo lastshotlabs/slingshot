@@ -75,11 +75,15 @@ function defineEntityBackendProfile(
  */
 export const ENTITY_BACKEND_PROFILES = deepFreeze({
   memory: defineEntityBackendProfile('memory', false, {
+    'concurrency.version-update': 'Version concurrency is not implemented for memory yet.',
+    'concurrency.version-delete': 'Version concurrency is not implemented for memory yet.',
     'operation.transaction':
       'Memory cannot expose transaction operations because it does not provide rollback.',
     'transaction.rollback': 'Memory transactions do not restore earlier writes after failure.',
   }),
   sqlite: defineEntityBackendProfile('sqlite', true, {
+    'concurrency.version-update': 'Version concurrency is not implemented for SQLite yet.',
+    'concurrency.version-delete': 'Version concurrency is not implemented for SQLite yet.',
     'operation.arrayPush':
       'SQLite cannot expose array push until array mutation is implemented atomically.',
     'operation.arrayPull':
@@ -94,8 +98,13 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
     'atomic.computed-aggregate':
       'SQLite computed aggregate currently reads and writes in separate statements without a transaction.',
   }),
-  postgres: defineEntityBackendProfile('postgres', true, {}),
+  postgres: defineEntityBackendProfile('postgres', true, {
+    'concurrency.version-update': 'Version concurrency is not implemented for PostgreSQL yet.',
+    'concurrency.version-delete': 'Version concurrency is not implemented for PostgreSQL yet.',
+  }),
   mongo: defineEntityBackendProfile('mongo', true, {
+    'concurrency.version-update': 'Version concurrency is not implemented for MongoDB yet.',
+    'concurrency.version-delete': 'Version concurrency is not implemented for MongoDB yet.',
     'operation.transaction':
       'MongoDB cannot expose transaction operations without a session transaction.',
     'atomic.batch':
@@ -105,6 +114,10 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
     'transaction.rollback': 'MongoDB composite operations do not use a session transaction.',
   }),
   redis: defineEntityBackendProfile('redis', true, {
+    'concurrency.version-update':
+      'Redis version concurrency requires an atomic Lua or WATCH/MULTI implementation.',
+    'concurrency.version-delete':
+      'Redis version concurrency requires an atomic Lua or WATCH/MULTI implementation.',
     'constraint.unique':
       'Redis does not maintain atomic secondary or compound unique-index reservations.',
     'operation.transition':
@@ -246,6 +259,18 @@ export function resolveEntityBackendRequirements(
     capability,
     requiredBy: 'entity adapter contract',
   }));
+  if (config._concurrency) {
+    requirements.push(
+      {
+        capability: 'concurrency.version-update',
+        requiredBy: 'entity concurrency update',
+      },
+      {
+        capability: 'concurrency.version-delete',
+        requiredBy: 'entity concurrency delete',
+      },
+    );
+  }
 
   for (const index of config.indexes ?? []) {
     if (index.unique) {

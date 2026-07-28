@@ -1,3 +1,5 @@
+import type { EntityWriteOptions } from '@lastshotlabs/slingshot-core';
+
 /**
  * The typed CRUD surface of a bare entity adapter.
  *
@@ -12,8 +14,17 @@ export interface BareEntityAdapterCrud {
     cursor?: string;
     sortDir?: 'asc' | 'desc';
   }): Promise<{ items: unknown[]; cursor?: string; nextCursor?: string; hasMore?: boolean }>;
-  update(id: string, data: unknown, filter?: Record<string, unknown>): Promise<unknown>;
-  delete(id: string, filter?: Record<string, unknown>): Promise<boolean>;
+  update(
+    id: string,
+    data: unknown,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<unknown>;
+  delete(
+    id: string,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<boolean>;
 }
 
 /**

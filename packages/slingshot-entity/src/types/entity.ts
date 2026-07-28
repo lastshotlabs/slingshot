@@ -8,9 +8,11 @@ import type {
   EntityStorageConventions,
   EntityStorageFieldMap,
   EntitySystemFields,
+  EntityVersionConcurrencyConfig,
   ResolvedEntityStorageConventions,
   ResolvedEntityStorageFieldMap,
   ResolvedEntitySystemFields,
+  ResolvedEntityVersionConcurrencyConfig,
   SoftDeleteConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { FieldDef } from './fields';
@@ -244,6 +246,8 @@ export interface EntityConfig<
   /** Optional namespace prefix applied to the derived storage name. */
   readonly namespace?: string;
   readonly fields: F;
+  /** Optional version-based optimistic concurrency. */
+  readonly concurrency?: EntityVersionConcurrencyConfig;
   /** Soft-delete configuration. When set, "deleted" records are filtered rather than removed. */
   readonly softDelete?: SoftDeleteConfig;
   /** Default field and direction for list queries that omit an explicit sort. */
@@ -370,4 +374,6 @@ export interface ResolvedEntityConfig<
   readonly _storageFields: ResolvedEntityStorageFieldMap;
   /** Resolved storage convention overrides. @see {@link ResolvedEntityStorageConventions} */
   readonly _conventions: ResolvedEntityStorageConventions;
+  /** Resolved concurrency metadata, present only when concurrency is enabled. */
+  readonly _concurrency?: ResolvedEntityVersionConcurrencyConfig;
 }

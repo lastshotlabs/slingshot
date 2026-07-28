@@ -86,7 +86,49 @@ export interface FieldTypeMap {
  * - `'now'`   — sets the field to the current timestamp at creation (or update when combined with `onUpdate`)
  * - `'cuid'`  — generates a CUID string (shorter and URL-safe alternative to UUID)
  */
-export type AutoDefault = 'uuid' | 'now' | 'cuid';
+export type AutoDefault = 'uuid' | 'now' | 'cuid' | 'version';
+
+/** Opt-in optimistic-concurrency configuration for an entity. */
+export interface EntityVersionConcurrencyConfig {
+  readonly strategy: 'version';
+  readonly field?: string;
+  readonly requiredOnWrite?: boolean;
+}
+
+/** Normalized optimistic-concurrency metadata attached by `defineEntity`. */
+export interface ResolvedEntityVersionConcurrencyConfig {
+  readonly strategy: 'version';
+  readonly field: string;
+  readonly requiredOnWrite: boolean;
+  readonly initialVersion: 1;
+}
+
+/** Per-write optimistic-concurrency options accepted by entity adapters. */
+export interface EntityWriteOptions {
+  readonly expectedVersion?: number;
+}
+
+/** Internal resolved shape of the generated version field. */
+export type EntityVersionFieldDef = FieldDef<'number', false, 'version', undefined> & {
+  readonly integer: true;
+  readonly min: 1;
+  readonly immutable: true;
+};
+
+/** Fields exposed by a resolved config after optional concurrency-field injection. */
+export type ResolvedConcurrencyFields<
+  F extends Record<string, FieldDef>,
+  C extends EntityVersionConcurrencyConfig | undefined,
+  S extends EntitySystemFields | undefined,
+> = C extends EntityVersionConcurrencyConfig
+  ? F & {
+      readonly [K in C['field'] extends string
+        ? C['field']
+        : S extends { readonly version?: infer V extends string }
+          ? V
+          : 'version']: EntityVersionFieldDef;
+    }
+  : F;
 
 /**
  * Options shared by all `field.*()` builders.
@@ -818,6 +860,8 @@ export interface EntityConfig<
   readonly namespace?: string;
   /** Field definitions built with `field.*()`. */
   readonly fields: F;
+  /** Optional version-based optimistic concurrency. */
+  readonly concurrency?: EntityVersionConcurrencyConfig;
   /** Soft-delete configuration. */
   readonly softDelete?: SoftDeleteConfig;
   /** Default sort for list operations. */
@@ -965,7 +1009,7 @@ export type InferEntity<F extends Record<string, FieldDef>> = {
 // - HasAutoDefault<'member' | undefined> → Exclude → 'member' → not auto → false
 type HasAutoDefault<D> = [Exclude<D, undefined>] extends [never]
   ? false
-  : Exclude<D, undefined> extends 'uuid' | 'now' | 'cuid'
+  : Exclude<D, undefined> extends AutoDefault
     ? true
     : false;
 
@@ -1101,9 +1145,14 @@ export interface EntityAdapter<Entity, CreateInput, UpdateInput> {
     id: string | number,
     input: UpdateInput,
     filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
   ): Promise<Entity | null>;
   /** Delete by primary key. Returns `true` when a row was removed or soft-deleted. */
-  delete(id: string | number, filter?: Record<string, unknown>): Promise<boolean>;
+  delete(
+    id: string | number,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<boolean>;
   /** List with optional filters and cursor pagination. */
   list(opts?: CursorPaginationOptions & Record<string, unknown>): Promise<PaginatedResult<Entity>>;
   /** Drop all records. Useful for tests and teardown. */
@@ -1378,6 +1427,8 @@ export interface ResolvedEntityConfig<
   readonly _storageFields: ResolvedEntityStorageFieldMap;
   /** Resolved storage convention overrides. @see {@link ResolvedEntityStorageConventions} */
   readonly _conventions: ResolvedEntityStorageConventions;
+  /** Resolved concurrency metadata, present only when concurrency is enabled. */
+  readonly _concurrency?: ResolvedEntityVersionConcurrencyConfig;
 }
 
 // ============================================================================
@@ -1443,8 +1494,26 @@ export interface ResolvedEntityConfig<
 export function defineEntity<
   F extends Record<string, FieldDef>,
   const TMwName extends string = string,
->(name: string, config: Omit<EntityConfig<F, TMwName>, 'name'>): ResolvedEntityConfig<F, TMwName> {
+  const C extends EntityVersionConcurrencyConfig | undefined = undefined,
+  const S extends EntitySystemFields | undefined = undefined,
+>(
+  name: string,
+  config: Omit<EntityConfig<F, TMwName>, 'name' | 'concurrency' | 'systemFields'> & {
+    readonly concurrency?: C;
+    readonly systemFields?: S;
+  },
+): ResolvedEntityConfig<ResolvedConcurrencyFields<F, C, S>, TMwName> {
   const fields = config.fields;
+
+  const concurrencyField = config.concurrency?.field ?? config.systemFields?.version ?? 'version';
+  if (config.concurrency && concurrencyField.trim().length === 0) {
+    throw new Error(`[defineEntity:${name}] concurrency field must not be empty`);
+  }
+  if (config.concurrency && Object.prototype.hasOwnProperty.call(fields, concurrencyField)) {
+    throw new Error(
+      `[defineEntity:${name}] concurrency field '${concurrencyField}' collides with a declared field`,
+    );
+  }
 
   // Find primary key
   let pkField: string | undefined;
@@ -1615,15 +1684,41 @@ export function defineEntity<
     onUpdate: config.conventions?.onUpdate,
   };
 
-  const resolved: ResolvedEntityConfig<F, TMwName> = {
+  const resolvedFields = config.concurrency
+    ? {
+        ...fields,
+        [concurrencyField]: {
+          type: 'number',
+          optional: false,
+          primary: false,
+          immutable: true,
+          private: false,
+          default: 'version',
+          integer: true,
+          min: 1,
+        },
+      }
+    : fields;
+  const resolvedConcurrency: ResolvedEntityVersionConcurrencyConfig | undefined = config.concurrency
+    ? {
+        strategy: 'version',
+        field: concurrencyField,
+        requiredOnWrite: config.concurrency.requiredOnWrite ?? true,
+        initialVersion: 1,
+      }
+    : undefined;
+
+  const resolved = {
     name,
     ...config,
+    fields: resolvedFields,
     _pkField: pkField,
     _storageName: storageName,
     _systemFields: resolvedSystemFields,
     _storageFields: resolvedStorageFields,
     _conventions: resolvedConventions,
-  };
+    _concurrency: resolvedConcurrency,
+  } as unknown as ResolvedEntityConfig<ResolvedConcurrencyFields<F, C, S>, TMwName>;
   deepFreezeEntity(resolved);
   return resolved;
 }

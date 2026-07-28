@@ -143,6 +143,22 @@ export const entityConfigSchema = z
       })
       .optional(),
     tenant: z.object({ field: z.string(), optional: z.boolean().optional() }).optional(),
+    concurrency: z
+      .object({
+        strategy: z.literal('version'),
+        field: z.string().min(1).optional(),
+        requiredOnWrite: z.boolean().optional(),
+      })
+      .optional(),
+    systemFields: z
+      .object({
+        createdBy: z.string().optional(),
+        updatedBy: z.string().optional(),
+        ownerField: z.string().optional(),
+        tenantField: z.string().optional(),
+        version: z.string().min(1).optional(),
+      })
+      .optional(),
     ttl: z.object({ defaultSeconds: z.number() }).optional(),
     storage: z
       .object({
@@ -159,6 +175,14 @@ export const entityConfigSchema = z
   .superRefine((config, ctx) => {
     const fieldNames = Object.keys(config.fields);
     const fieldDefs = config.fields;
+    const concurrencyField = config.concurrency?.field ?? config.systemFields?.version ?? 'version';
+    if (config.concurrency && fieldNames.includes(concurrencyField)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `concurrency field '${concurrencyField}' collides with a declared field`,
+        path: ['concurrency', 'field'],
+      });
+    }
 
     // Exactly one primary key
     const pkFields = Object.entries(fieldDefs).filter(([, def]) => def.primary);

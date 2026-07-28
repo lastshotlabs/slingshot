@@ -20,7 +20,7 @@ const STORES = [
 describe('entity backend profiles', () => {
   test('are exhaustive, unique, and deeply frozen', () => {
     expect(new Set(ENTITY_OPERATION_KINDS).size).toBe(19);
-    expect(new Set(ENTITY_BACKEND_CAPABILITIES).size).toBe(52);
+    expect(new Set(ENTITY_BACKEND_CAPABILITIES).size).toBe(54);
     expect(Object.keys(ENTITY_BACKEND_PROFILES).sort()).toEqual([...STORES].sort());
 
     for (const store of STORES) {

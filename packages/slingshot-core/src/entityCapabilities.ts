@@ -52,6 +52,8 @@ export type EntityBackendCapability =
   | 'atomic.upsert'
   | 'atomic.batch'
   | 'atomic.computed-aggregate'
+  | 'concurrency.version-update'
+  | 'concurrency.version-delete'
   | 'transaction.rollback';
 
 /**
@@ -91,6 +93,8 @@ export const ENTITY_BACKEND_CAPABILITIES = [
   'atomic.upsert',
   'atomic.batch',
   'atomic.computed-aggregate',
+  'concurrency.version-update',
+  'concurrency.version-delete',
   'transaction.rollback',
 ] as const satisfies readonly EntityBackendCapability[];
 

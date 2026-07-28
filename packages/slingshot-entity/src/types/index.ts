@@ -22,6 +22,11 @@ export type {
   ExtractInputVariants,
   ResolvedEntityConfig,
 } from './entity';
+export type {
+  EntityVersionConcurrencyConfig,
+  ResolvedEntityVersionConcurrencyConfig,
+  EntityWriteOptions,
+} from '@lastshotlabs/slingshot-core';
 
 export type { FilterExpression, FilterValue, FilterOperator } from './filter';
 

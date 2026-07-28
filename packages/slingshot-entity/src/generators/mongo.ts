@@ -222,6 +222,8 @@ export function generateMongo(config: ResolvedEntityConfig): string {
       lines.push(
         `    if (record['${fieldName}'] === undefined) record['${fieldName}'] = new Date();`,
       );
+    } else if (def.default === 'version') {
+      lines.push(`    if (record['${fieldName}'] === undefined) record['${fieldName}'] = 1;`);
     }
   }
   for (const [fieldName, def] of literalDefaultFields) {

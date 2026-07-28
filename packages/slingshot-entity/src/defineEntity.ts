@@ -3,7 +3,12 @@
  *
  * Validates config using Zod schema, resolves PK and storage name.
  */
-import type { EntityDtoConfig } from '@lastshotlabs/slingshot-core';
+import type {
+  EntityDtoConfig,
+  EntitySystemFields,
+  EntityVersionConcurrencyConfig,
+  ResolvedConcurrencyFields,
+} from '@lastshotlabs/slingshot-core';
 import type { DefineEntityConfig, FieldDef, ResolvedEntityConfig } from './types';
 import { entityConfigSchema } from './validation';
 
@@ -24,6 +29,11 @@ export type {
   DefineEntityConfig,
   ResolvedEntityConfig,
 } from './types';
+export type {
+  EntityVersionConcurrencyConfig,
+  ResolvedEntityVersionConcurrencyConfig,
+  EntityWriteOptions,
+} from '@lastshotlabs/slingshot-core';
 
 // Re-export builders
 export { field } from './builders/field';
@@ -74,7 +84,15 @@ export { index, relation } from './builders/entityHelpers';
 export function defineEntity<
   const F extends Record<string, FieldDef>,
   const D extends EntityDtoConfig = EntityDtoConfig,
->(name: string, config: Omit<DefineEntityConfig<F, D>, 'name'>): ResolvedEntityConfig<F, D> {
+  const C extends EntityVersionConcurrencyConfig | undefined = undefined,
+  const S extends EntitySystemFields | undefined = undefined,
+>(
+  name: string,
+  config: Omit<DefineEntityConfig<F, D>, 'name' | 'concurrency' | 'systemFields'> & {
+    readonly concurrency?: C;
+    readonly systemFields?: S;
+  },
+): ResolvedEntityConfig<ResolvedConcurrencyFields<F, C, S>, D> {
   // Validate using Zod schema — provides structured error messages with paths
   const fullConfig = { name, ...config };
   const result = entityConfigSchema.safeParse(fullConfig);
@@ -129,17 +147,51 @@ export function defineEntity<
     autoDefault: config.conventions?.autoDefault,
     onUpdate: config.conventions?.onUpdate,
   };
+  const concurrencyField = config.concurrency?.field ?? config.systemFields?.version ?? 'version';
+  if (config.concurrency && concurrencyField.trim().length === 0) {
+    throw new Error(`[defineEntity:${name}] concurrency field must not be empty`);
+  }
+  if (config.concurrency && Object.prototype.hasOwnProperty.call(config.fields, concurrencyField)) {
+    throw new Error(
+      `[defineEntity:${name}] concurrency field '${concurrencyField}' collides with a declared field`,
+    );
+  }
+  const resolvedFields = config.concurrency
+    ? {
+        ...config.fields,
+        [concurrencyField]: {
+          type: 'number',
+          optional: false,
+          primary: false,
+          immutable: true,
+          private: false,
+          default: 'version',
+          integer: true,
+          min: 1,
+        },
+      }
+    : config.fields;
+  const _concurrency = config.concurrency
+    ? {
+        strategy: 'version' as const,
+        field: concurrencyField,
+        requiredOnWrite: config.concurrency.requiredOnWrite ?? true,
+        initialVersion: 1 as const,
+      }
+    : undefined;
 
   const built = {
     name,
     ...config,
+    fields: resolvedFields,
     _pkField: pkField,
     _storageName: storageName,
     _systemFields,
     _storageFields,
     _conventions,
+    _concurrency,
   };
-  const resolved = built as unknown as ResolvedEntityConfig<F, D>;
+  const resolved = built as unknown as ResolvedEntityConfig<ResolvedConcurrencyFields<F, C, S>, D>;
   deepFreezeEntity(resolved);
   return resolved;
 }

@@ -58,7 +58,7 @@ export type FieldType =
  * const createdAtField = field.date({ default: 'now' });
  * ```
  */
-export type AutoDefault = 'uuid' | 'now' | 'cuid';
+export type AutoDefault = 'uuid' | 'now' | 'cuid' | 'version';
 
 /**
  * Options accepted by the `field.*()` builder functions.

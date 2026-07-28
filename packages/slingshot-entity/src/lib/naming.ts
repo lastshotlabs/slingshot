@@ -132,7 +132,7 @@ export function escapeJsString(value: string): string {
  * ```
  */
 export function isAutoDefault(d: unknown): boolean {
-  return d === 'uuid' || d === 'now' || d === 'cuid';
+  return d === 'uuid' || d === 'now' || d === 'cuid' || d === 'version';
 }
 
 /**

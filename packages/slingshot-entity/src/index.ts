@@ -71,6 +71,9 @@ export type {
   DefineEntityConfig,
   ExtractInputVariants,
   ResolvedEntityConfig,
+  EntityVersionConcurrencyConfig,
+  ResolvedEntityVersionConcurrencyConfig,
+  EntityWriteOptions,
   // Filter types
   FilterExpression,
   FilterValue,

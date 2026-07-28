@@ -570,6 +570,11 @@ export type {
   FieldDef,
   FieldOptions,
   AutoDefault,
+  EntityVersionConcurrencyConfig,
+  ResolvedEntityVersionConcurrencyConfig,
+  EntityWriteOptions,
+  EntityVersionFieldDef,
+  ResolvedConcurrencyFields,
   IndexDef,
   RelationDef,
   SoftDeleteConfig,
@@ -600,6 +605,11 @@ export type {
   SearchFieldConfig,
   GeoSearchConfig,
 } from './entityConfig';
+/** Transport-neutral optimistic-concurrency errors. */
+export {
+  EntityConcurrencyPreconditionError,
+  EntityConcurrencyConflictError,
+} from './entityConcurrency';
 /** Entity-definition DSL primitives re-exported for cross-package authoring. */
 export { defineEntity, field, index, relation } from './entityConfig';
 

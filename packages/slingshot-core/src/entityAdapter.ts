@@ -5,6 +5,8 @@
  * so the instance-scoped `SlingshotContext` can expose resolved entity
  * adapters without depending on `slingshot-entity`.
  */
+import type { EntityWriteOptions } from './entityConfig';
+
 export interface EntityCrudAdapter {
   create(data: unknown): Promise<unknown>;
   getById(id: string, filter?: Record<string, unknown>): Promise<unknown>;
@@ -14,8 +16,17 @@ export interface EntityCrudAdapter {
     cursor?: string;
     sortDir?: 'asc' | 'desc';
   }): Promise<{ items: unknown[]; cursor?: string; nextCursor?: string; hasMore?: boolean }>;
-  update(id: string, data: unknown, filter?: Record<string, unknown>): Promise<unknown>;
-  delete(id: string, filter?: Record<string, unknown>): Promise<boolean>;
+  update(
+    id: string,
+    data: unknown,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<unknown>;
+  delete(
+    id: string,
+    filter?: Record<string, unknown>,
+    options?: EntityWriteOptions,
+  ): Promise<boolean>;
 }
 
 /**

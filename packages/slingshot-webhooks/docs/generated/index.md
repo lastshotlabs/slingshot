@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-webhooks
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-webhooks`
-- Version: `0.2.6`
+- Version: `0.2.7`
 - Kind: Workspace package
 - Role: feature package
 - Description: Inbound and outbound webhook plugin with entity-backed endpoints for Slingshot

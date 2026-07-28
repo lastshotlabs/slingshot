@@ -47,6 +47,10 @@ function isSqliteUniqueViolation(error: unknown): boolean {
 }
 
 function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
+  if (db.inTransaction) {
+    fn();
+    return;
+  }
   let inTransaction = false;
   try {
     db.run('PRAGMA busy_timeout = 5000');

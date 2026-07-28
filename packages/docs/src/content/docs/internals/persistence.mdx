@@ -46,6 +46,14 @@ That same boundary now owns registry-backed events too. `buildContext()` attache
 event before teardown begins. Persistence factories still stay transport-agnostic; shutdown and
 external delivery policy live at the context layer, not in repository resolution.
 
+For SQLite entity work, `createContextStoreInfra()` installs one app-owned FIFO coordinator and
+transaction provider. Standard entity factories discover the coordinator through a private Reflect
+symbol and gate CRUD, list, clear, lazy initialization, and named operations. Scoped adapters get
+an infrastructure view bound to the held lease, so `transactions.run('sqlite', ...)` and
+declarative `op.transaction` share the same `BEGIN IMMEDIATE` boundary. During context destruction,
+`buildContext()` shuts the coordinator down before closing the database, rejecting queued work
+instead of leaving unresolved waiters.
+
 ## Writing a set of factories
 
 ```typescript

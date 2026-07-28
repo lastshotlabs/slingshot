@@ -164,6 +164,11 @@ the optional first `{ "type": "auth", "token": "..." }` message before normal ra
 room membership, or event dispatch. The actor resolver still receives the original upgrade request
 metadata, and authentication cannot replace an existing actor or occur after joining a room.
 
+The runtime-neutral SQLite handle also exposes optional `inTransaction` state. The entity layer
+uses that signal only to avoid opening a nested bootstrap transaction when a framework-owned
+SQLite scope already holds `BEGIN IMMEDIATE`; transaction ownership and FIFO coordination remain
+in the framework persistence layer.
+
 ## Switching runtimes
 
 Switching from Bun to Node requires one line:

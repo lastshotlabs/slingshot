@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,8 +9,10 @@ import type {
   OperationConfig,
   RuntimeSqliteDatabase,
   StoreInfra,
+  TransactionManager,
+  TransactionScope,
 } from '@lastshotlabs/slingshot-core';
-import { createUnsupportedTransactionManager } from '@lastshotlabs/slingshot-core';
+import { TransactionScopeMismatchError } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, resolveEntityBackendRequirements } from '../../configDriven';
 import { ENTITY_BACKEND_PROFILES } from '../../configDriven/backendProfiles';
 import type {
@@ -28,6 +31,90 @@ interface SqliteResources {
   readonly db: Database;
   readonly directory: string;
   readonly composite: Readonly<Record<string, unknown>>;
+}
+
+const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
+const RUN_SQLITE_ENTITY_OPERATION = Symbol.for('slingshot.runSqliteEntityOperation');
+
+function createSqliteTestInfra(db: Database): StoreInfra {
+  let tail = Promise.resolve();
+  const transactionContext = new AsyncLocalStorage<TransactionScope>();
+  let infra: StoreInfra;
+
+  function runExclusive<T>(operation: () => T | Promise<T>): Promise<T> {
+    const result = tail.then(operation);
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  const manager: TransactionManager = {
+    supports(store): store is 'sqlite' {
+      return store === 'sqlite';
+    },
+    async run(store, callback) {
+      const activeScope = transactionContext.getStore();
+      if (activeScope) {
+        if (store !== 'sqlite') {
+          throw new TransactionScopeMismatchError('sqlite', store);
+        }
+        return callback(activeScope);
+      }
+
+      return runExclusive(async () => {
+        const scope = Object.freeze({
+          store: 'sqlite',
+          id: globalThis.crypto.randomUUID(),
+        }) as unknown as TransactionScope;
+        db.run('BEGIN IMMEDIATE');
+        try {
+          const result = await transactionContext.run(scope, () => callback(scope));
+          db.run('COMMIT');
+          return result;
+        } catch (error) {
+          db.run('ROLLBACK');
+          throw error;
+        }
+      });
+    },
+  };
+
+  infra = {
+    appName: 'entity-conformance',
+    getTransactions: () => manager,
+    getRedis() {
+      throw new Error('[entity-conformance] Redis is unavailable in the SQLite driver');
+    },
+    getMongo() {
+      throw new Error('[entity-conformance] MongoDB is unavailable in the SQLite driver');
+    },
+    getSqliteDb() {
+      return db as RuntimeSqliteDatabase;
+    },
+    getPostgres() {
+      throw new Error('[entity-conformance] PostgreSQL is unavailable in the SQLite driver');
+    },
+  };
+  Object.defineProperties(infra, {
+    [RUN_SQLITE_ENTITY_OPERATION]: {
+      value: <T>(operation: () => T | Promise<T>): Promise<T> => runExclusive(operation),
+    },
+    [RESOLVE_TRANSACTION_SCOPE_INFRA]: {
+      value: (scope: TransactionScope): StoreInfra => {
+        if (scope !== transactionContext.getStore()) {
+          throw new Error('[entity-conformance] Invalid or closed SQLite transaction scope');
+        }
+        const scopedInfra = Object.create(infra) as StoreInfra;
+        Object.defineProperty(scopedInfra, RUN_SQLITE_ENTITY_OPERATION, {
+          value: async <T>(operation: () => T | Promise<T>): Promise<T> => operation(),
+        });
+        return Object.preventExtensions(scopedInfra);
+      },
+    },
+  });
+  return infra;
 }
 
 function supportedOperations(
@@ -76,22 +163,7 @@ async function createResources(
   db.run('PRAGMA journal_mode = WAL');
   db.run('PRAGMA busy_timeout = 5000');
 
-  const infra: StoreInfra = {
-    appName: 'entity-conformance',
-    getTransactions: () => createUnsupportedTransactionManager(),
-    getRedis() {
-      throw new Error('[entity-conformance] Redis is unavailable in the SQLite driver');
-    },
-    getMongo() {
-      throw new Error('[entity-conformance] MongoDB is unavailable in the SQLite driver');
-    },
-    getSqliteDb() {
-      return db as RuntimeSqliteDatabase;
-    },
-    getPostgres() {
-      throw new Error('[entity-conformance] PostgreSQL is unavailable in the SQLite driver');
-    },
-  };
+  const infra = createSqliteTestInfra(db);
 
   const entries: Record<string, CompositeEntry> = {};
   for (const definition of definitions) {

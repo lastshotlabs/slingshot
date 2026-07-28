@@ -26,6 +26,8 @@
  * The real `bun:sqlite` `Database` satisfies this interface.
  */
 export interface SqliteDb {
+  /** Whether the underlying connection is already owned by an outer transaction. */
+  readonly inTransaction?: boolean;
   /**
    * Execute a mutating SQL statement (INSERT, UPDATE, DELETE, DDL).
    *

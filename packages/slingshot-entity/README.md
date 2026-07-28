@@ -140,6 +140,12 @@ and Redis do not currently support rollback for `op.transaction`; SQLite and Pos
 Custom operations require a factory for the selected backend. Use manual adapter wiring when
 the application supplies operation methods itself.
 
+SQLite composite transactions and package-service `transactions.run('sqlite', ...)` scopes share
+one per-app FIFO coordinator. The coordinator holds `BEGIN IMMEDIATE` for the scope and gates every
+unscoped standard entity method, including lazy table initialization and named operations, until
+the scope commits or rolls back. Same-store nested scopes reuse the active scope; unrelated work
+waits outside the transaction instead of joining the shared connection implicitly.
+
 Primary-key creation is insert-only across standard adapters. In particular, MongoDB uses a
 strict insert and Redis uses `SET ... NX`, so create never overwrites an existing record.
 

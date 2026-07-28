@@ -1,10 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import type { EntityAdapter, StoreInfra } from '@lastshotlabs/slingshot-core';
-import {
-  EntityTransactionConflictError,
-  createUnsupportedTransactionManager,
+import type {
+  EntityAdapter,
+  StoreInfra,
+  TransactionManager,
+  TransactionScope,
 } from '@lastshotlabs/slingshot-core';
+import { EntityTransactionConflictError } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, defineEntity, field, op } from '../../src/index';
 
 const RecordEntity = defineEntity('TransactionRecord', {
@@ -99,9 +101,30 @@ interface Composite {
 }
 
 function sqliteInfra(db: Database): StoreInfra {
-  return {
+  const scope = Object.freeze({
+    store: 'sqlite',
+    id: 'sqlite-composition-test',
+  }) as unknown as TransactionScope;
+  const manager: TransactionManager = {
+    supports(store): store is 'sqlite' {
+      return store === 'sqlite';
+    },
+    async run(store, callback) {
+      if (store !== 'sqlite') throw new Error(`Unsupported store: ${store}`);
+      db.run('BEGIN IMMEDIATE');
+      try {
+        const result = await callback(scope);
+        db.run('COMMIT');
+        return result;
+      } catch (error) {
+        db.run('ROLLBACK');
+        throw error;
+      }
+    },
+  };
+  const infra: StoreInfra = {
     appName: 'transaction-test',
-    getTransactions: () => createUnsupportedTransactionManager(),
+    getTransactions: () => manager,
     getSqliteDb: () => db,
     getPostgres: () => {
       throw new Error('PostgreSQL not configured');
@@ -113,6 +136,10 @@ function sqliteInfra(db: Database): StoreInfra {
       throw new Error('Redis not configured');
     },
   };
+  Object.defineProperty(infra, Symbol.for('slingshot.resolveTransactionScopeInfra'), {
+    value: () => infra,
+  });
+  return infra;
 }
 
 const cases = [

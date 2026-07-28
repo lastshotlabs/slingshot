@@ -121,6 +121,18 @@ publish path should go through `ctx.events`, not raw `bus.emit(...)` plus sideca
 
 Core owns the types for entity definitions, operations, route configs, and channel configs. Those types are consumed by `@lastshotlabs/slingshot-entity`, by runtime route wiring, and by real feature packages such as community.
 
+### Transaction scopes
+
+`TransactionManager` is the app-owned boundary for package-service transactions. PostgreSQL and
+SQLite scopes can bind multiple entity adapters to one physical transaction without exposing a
+driver handle. Same-store nesting reuses the active scope, cross-store nesting fails before I/O,
+and retained adapters reject work after the callback closes.
+
+SQLite uses a per-app FIFO coordinator around its shared connection. An open
+`BEGIN IMMEDIATE` scope excludes unrelated entity CRUD, list, clear, initialization, and named
+operations until commit or rollback. This prevents an unscoped request from accidentally joining
+another request's transaction while its callback awaits.
+
 ### Consumer shape hardening
 
 Core now owns configurable entity field mapping and storage convention types:

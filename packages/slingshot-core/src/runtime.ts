@@ -47,6 +47,8 @@ export interface RuntimeSqliteRunResult {
  * runtime-portable. All SQLite interactions in slingshot go through this interface.
  */
 export interface RuntimeSqliteDatabase {
+  /** Whether the shared connection is currently inside a transaction. */
+  readonly inTransaction?: boolean;
   /**
    * Execute a SQL statement without returning rows.
    *

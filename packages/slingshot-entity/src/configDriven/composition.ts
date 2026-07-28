@@ -40,7 +40,6 @@ import type {
 import type { StoreType } from '@lastshotlabs/slingshot-core';
 import { assertCompositeEntityBackendRequirements } from './backendProfiles';
 import { createEntityFactories } from './createEntityFactories';
-import type { SqliteDb } from './operationExecutors/dbInterfaces';
 import { pipeExecutor } from './operationExecutors/pipe';
 import type { AdapterMap } from './operationExecutors/transaction';
 import { transactionExecutor } from './operationExecutors/transaction';
@@ -185,31 +184,12 @@ export function createCompositeFactories<
     };
     const adapters = buildIndividualAdapters(infra);
 
-    // Determine a transaction wrapper for backends that support it.
-    let wrapInTransaction: ((fn: () => Promise<void>) => Promise<void>) | undefined;
     const primaryKeys = Object.fromEntries(
       keys.map(key => [String(key), entities[key].config._pkField]),
     );
     const operationConfigs = Object.fromEntries(
       keys.map(key => [String(key), entities[key].operations]),
     );
-    if (storeType === 'sqlite') {
-      const db = infra.getSqliteDb() as unknown as SqliteDb;
-      wrapInTransaction = async fn => {
-        await Promise.all(Object.values(adapters).map(adapter => adapter.list({ limit: 1 })));
-        db.run('BEGIN');
-        try {
-          await fn();
-          db.run('COMMIT');
-        } catch (e) {
-          db.run('ROLLBACK');
-          throw e;
-        }
-      };
-    }
-    // Postgres transaction ops are handled separately below so they can execute on a
-    // single checked-out client. Mongo and Redis remain unwrapped for now.
-
     // Wire composite operations against the full adapters map.
     const compositeOpMethods: Record<string, unknown> = {};
     if (operations) {
@@ -217,12 +197,17 @@ export function createCompositeFactories<
       for (const [opName, op] of Object.entries(operations)) {
         if (op.kind === 'transaction') {
           compositeOpMethods[opName] =
-            storeType === 'postgres'
-              ? createPostgresTransactionMethod(opName, op, entities, keys, infra, scopedInfra =>
-                  buildIndividualAdapters(scopedInfra),
+            storeType === 'postgres' || storeType === 'sqlite'
+              ? createScopedTransactionMethod(
+                  storeType,
+                  opName,
+                  op,
+                  entities,
+                  keys,
+                  infra,
+                  scopedInfra => buildIndividualAdapters(scopedInfra),
                 )
               : transactionExecutor(op, adapterMap, {
-                  wrapInTransaction,
                   primaryKeys,
                   operationName: opName,
                   operationConfigs,
@@ -268,7 +253,8 @@ export function createCompositeFactories<
   };
 }
 
-function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
+function createScopedTransactionMethod<M extends Record<string, EntityEntry>>(
+  store: 'postgres' | 'sqlite',
   operationName: string,
   op: TransactionOpConfig,
   entities: M,
@@ -277,13 +263,13 @@ function createPostgresTransactionMethod<M extends Record<string, EntityEntry>>(
   buildAdapters: (scopedInfra: StoreInfra) => { [K in keyof M]: AdapterForEntry<M[K]> },
 ): (params: Record<string, unknown>) => Promise<TransactionStepResult[]> {
   return (params: Record<string, unknown>) =>
-    infra.getTransactions().run('postgres', async scope => {
+    infra.getTransactions().run(store, async scope => {
       const resolveScopeInfra = Reflect.get(infra, RESOLVE_TRANSACTION_SCOPE_INFRA) as
         | ((scope: TransactionScope) => StoreInfra)
         | undefined;
       if (typeof resolveScopeInfra !== 'function') {
         throw new Error(
-          '[slingshot-entity] PostgreSQL transaction scope infrastructure is unavailable.',
+          `[slingshot-entity] ${store} transaction scope infrastructure is unavailable.`,
         );
       }
       const scopedInfra = resolveScopeInfra.call(infra, scope);

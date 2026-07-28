@@ -62,6 +62,11 @@ Startup rejects an operation/backend pairing when the selected standard adapter 
 the required guarantee. Composite transaction rollback is currently supported by SQLite and Postgres;
 memory, MongoDB, and Redis fail startup for `op.transaction`.
 
+SQLite routes declarative and package-service transactions through one per-app FIFO coordinator.
+While a `BEGIN IMMEDIATE` scope is open, unrelated standard entity CRUD, list, clear,
+initialization, and named operations wait for that scope to commit or roll back. They cannot
+accidentally execute on the shared connection inside another request's transaction.
+
 </Aside>
 
 <Aside type="caution" title="Redis safety boundary">

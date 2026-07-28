@@ -31,6 +31,10 @@ import type { MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
 function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
+  if (db.inTransaction) {
+    fn();
+    return;
+  }
   let inTransaction = false;
   try {
     db.run('PRAGMA busy_timeout = 5000');

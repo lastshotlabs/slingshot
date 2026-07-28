@@ -529,6 +529,14 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
         }
         if (infra.sqliteDb) {
           try {
+            const shutdownSqliteCoordinator: unknown = Reflect.get(
+              storeInfra as object,
+              Symbol.for('slingshot.shutdownSqliteCoordinator'),
+              storeInfra,
+            ) as unknown;
+            if (typeof shutdownSqliteCoordinator === 'function') {
+              shutdownSqliteCoordinator.call(storeInfra);
+            }
             infra.sqliteDb.close();
           } catch {
             /* best-effort */

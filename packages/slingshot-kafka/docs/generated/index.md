@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-kafka
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-kafka`
-- Version: `0.2.4`
+- Version: `0.2.5`
 - Kind: Workspace package
 - Role: feature package
 - Description: Kafka event bus adapter and Kafka connectors for Slingshot

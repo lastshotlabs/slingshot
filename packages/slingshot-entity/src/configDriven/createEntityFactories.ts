@@ -34,6 +34,7 @@ import { createSqliteEntityAdapter } from './sqliteAdapter';
 const REGISTER_ENTITY = Symbol.for('slingshot.registerEntity');
 const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
 const RESOLVE_SEARCH_CLIENT = Symbol.for('slingshot.resolveSearchClient');
+const RUN_SQLITE_ENTITY_OPERATION = Symbol.for('slingshot.runSqliteEntityOperation');
 
 type OperationsInput<Ops extends Record<string, OperationConfig>> = Ops | ResolvedOperations<Ops>;
 
@@ -54,12 +55,40 @@ function reflectGet(target: object, key: string | symbol): unknown {
   return result;
 }
 
+function wrapWithSqliteCoordinator<AdapterT extends object>(
+  adapter: AdapterT,
+  infra: StoreInfra,
+): AdapterT {
+  const runOperation = reflectGet(infra, RUN_SQLITE_ENTITY_OPERATION);
+  if (typeof runOperation !== 'function') return adapter;
+
+  const wrappers = new Map<PropertyKey, (...args: unknown[]) => unknown>();
+  return new Proxy(adapter, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+
+      const existing = wrappers.get(property);
+      if (existing) return existing;
+      const wrapped = (...args: unknown[]): Promise<unknown> =>
+        (runOperation as <T>(operation: () => T | Promise<T>) => Promise<T>).call(infra, () =>
+          Reflect.apply(value, target, args),
+        );
+      wrappers.set(property, wrapped);
+      return wrapped;
+    },
+  });
+}
+
 /**
  * Adapt Bun's `RuntimeSqliteDatabase` shape to the entity runtime's local
  * `SqliteDb` interface.
  */
 function adaptRuntimeSqliteToEntityDb(db: RuntimeSqliteDatabase): SqliteDb {
   return {
+    get inTransaction(): boolean {
+      return db.inTransaction === true;
+    },
     run(sql: string, params?: unknown[]): { changes: number } {
       if (params !== undefined) {
         db.run(sql, ...params);
@@ -435,13 +464,19 @@ export function createEntityFactories<
 
   function maybeWrap<
     AdapterT extends EntityAdapter<InferEntity<F>, InferCreateInput<F>, InferUpdateInput<F>>,
-  >(adapter: AdapterT, infra?: StoreInfra): AdapterT {
+  >(
+    adapter: AdapterT,
+    infra?: StoreInfra,
+    store?: 'memory' | 'redis' | 'sqlite' | 'mongo' | 'postgres',
+  ): AdapterT {
     maybeRegisterEntity(config, infra);
 
+    const coordinated =
+      infra && store === 'sqlite' ? wrapWithSqliteCoordinator(adapter, infra) : adapter;
     const resolveSearchSync = createSearchSyncResolver(config, infra);
     let wrapped = resolveSearchSync
-      ? wrapWithSearchSync(adapter, config, resolveSearchSync)
-      : adapter;
+      ? wrapWithSearchSync(coordinated, config, resolveSearchSync)
+      : coordinated;
 
     if (infra && (normalizedOperations || config.search)) {
       const searchOps = normalizedOperations ?? deriveSearchOpsFromConfig(config);
@@ -456,7 +491,11 @@ export function createEntityFactories<
   return {
     memory: (infra?: StoreInfra) => {
       assertStore('memory');
-      return maybeWrap(createMemoryEntityAdapter<E, CI, UI>(config, normalizedOperations), infra);
+      return maybeWrap(
+        createMemoryEntityAdapter<E, CI, UI>(config, normalizedOperations),
+        infra,
+        'memory',
+      );
     },
 
     redis: (infra: StoreInfra) => {
@@ -469,6 +508,7 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
+        'redis',
       );
     },
 
@@ -481,6 +521,7 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
+        'sqlite',
       );
     },
 
@@ -500,6 +541,7 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
+        'mongo',
       );
     },
 
@@ -512,6 +554,7 @@ export function createEntityFactories<
           normalizedOperations,
         ),
         infra,
+        'postgres',
       );
     },
   };

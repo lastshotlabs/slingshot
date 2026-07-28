@@ -29,6 +29,12 @@ import {
 } from './internalRepoResolution';
 import { createFrameworkTransactionManager } from './transactions/frameworkTransactionManager';
 import { createPostgresTransactionProvider } from './transactions/postgresTransactionProvider';
+import {
+  RUN_SQLITE_ENTITY_OPERATION,
+  SHUTDOWN_SQLITE_COORDINATOR,
+  createSqliteTransactionCoordinator,
+  createSqliteTransactionProvider,
+} from './transactions/sqliteTransactionCoordinator';
 
 const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
@@ -229,16 +235,26 @@ export function createContextStoreInfra(
 ): FrameworkStoreInfra {
   const { appName, infra, bus, pluginState, entityRegistry } = options;
   const registeredEntities = new Set<string>();
-  const transactions = createFrameworkTransactionManager(
-    infra.postgres
+  const sqliteCoordinator = infra.sqliteDb ? createSqliteTransactionCoordinator() : null;
+  const transactions = createFrameworkTransactionManager([
+    ...(infra.postgres
       ? [
           createPostgresTransactionProvider({
             postgres: infra.postgres,
             getStoreInfra: () => storeInfra,
           }),
         ]
-      : [],
-  );
+      : []),
+    ...(infra.sqliteDb && sqliteCoordinator
+      ? [
+          createSqliteTransactionProvider({
+            db: infra.sqliteDb,
+            coordinator: sqliteCoordinator,
+            getStoreInfra: () => storeInfra,
+          }),
+        ]
+      : []),
+  ]);
   const storeInfra: FrameworkStoreInfra = {
     appName,
     getTransactions: () => transactions,
@@ -325,6 +341,25 @@ export function createContextStoreInfra(
         throw new Error('[slingshot] Transaction scope infrastructure is unavailable.');
       }
       return resolveScopeInfra.call(transactions, scope) as StoreInfra;
+    },
+  });
+
+  Object.defineProperty(storeInfra, SHUTDOWN_SQLITE_COORDINATOR, {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: () => sqliteCoordinator?.shutdown(),
+  });
+
+  Object.defineProperty(storeInfra, RUN_SQLITE_ENTITY_OPERATION, {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: <T>(operation: () => T | Promise<T>): Promise<T> => {
+      if (!sqliteCoordinator) {
+        return Promise.reject(new Error('[slingshot] SQLite is not configured for this app'));
+      }
+      return sqliteCoordinator.run(operation);
     },
   });
 

@@ -153,6 +153,7 @@ describe('createContextStoreInfra', () => {
     });
 
     expect(infra.getSqliteDb()).toBe(mockDb as unknown as ReturnType<typeof infra.getSqliteDb>);
+    expect(infra.getTransactions().supports('sqlite')).toBe(true);
   });
 
   test('getPostgres throws when postgres is not configured', () => {

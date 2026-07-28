@@ -86,4 +86,20 @@ support claim: unsupported configurations fail before backend infrastructure is 
 | `atomic.computed-aggregate` | ✅ Supported                                                        | ❌ SQLite computed aggregate currently reads and writes in separate statements without a transaction. | ✅ Supported | ❌ MongoDB computed aggregate reads and writes without a session transaction.         | ❌ Redis computed aggregate scans and writes in separate commands.         |
 | `transaction.rollback`      | ❌ Memory transactions do not restore earlier writes after failure. | ✅ Supported                                                                                          | ✅ Supported | ❌ MongoDB composite operations do not use a session transaction.                     | ❌ Redis composite operations do not provide rollback.                     |
 
+## Transaction manager guarantees
+
+The versioned conformance report requires every guarantee below to pass on both SQLite and
+PostgreSQL. Removing a guarantee, changing its cases, or recording a non-passing result makes
+report validation fail.
+
+| Guarantee                        | SQLite      | PostgreSQL  | Evidence cases                     |
+| -------------------------------- | ----------- | ----------- | ---------------------------------- |
+| `declarative.commit`             | ✅ Required | ✅ Required | `composition.transaction-commit`   |
+| `declarative.rollback`           | ✅ Required | ✅ Required | `composition.transaction-rollback` |
+| `scope.two-entity-commit`        | ✅ Required | ✅ Required | `scope.two-entity-commit`          |
+| `scope.two-entity-rollback`      | ✅ Required | ✅ Required | `scope.two-entity-rollback`        |
+| `scope.same-store-nesting`       | ✅ Required | ✅ Required | `scope.same-store-nesting`         |
+| `scope.cross-store-rejection`    | ✅ Required | ✅ Required | `scope.cross-store-rejection`      |
+| `scope.closed-adapter-rejection` | ✅ Required | ✅ Required | `scope.closed-adapter-rejection`   |
+
 {/* END GENERATED FILE */}

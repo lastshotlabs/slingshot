@@ -449,8 +449,14 @@ describe('framework transaction manager', () => {
     expect(harness.infra.getTransactions()).toBe(harness.manager as TransactionManager);
   });
 
-  test('hook services expose the explicitly supplied app manager unchanged', () => {
+  test('hook services run scoped work outside a request context', async () => {
     const harness = createHarness();
+    let writes = 0;
+    registerAdapter(harness.manager, () => ({
+      async create() {
+        writes += 1;
+      },
+    }));
     const services = buildHookServices({
       app: {},
       pluginState: new Map(),
@@ -461,5 +467,15 @@ describe('framework transaction manager', () => {
     });
 
     expect(services.transactions).toBe(harness.manager);
+    await services.transactions.run('postgres', async scope => {
+      const notes = harness.manager.resolveEntity({
+        plugin: 'notes',
+        entity: 'Note',
+        scope,
+      }) as { create(): Promise<void> };
+      await notes.create();
+    });
+    expect(writes).toBe(1);
+    expect(harness.events).toEqual(['open', 'commit', 'release']);
   });
 });

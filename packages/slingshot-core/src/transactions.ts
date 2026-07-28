@@ -38,7 +38,12 @@ export interface TransactionManager {
    * Run `callback` inside one real transaction.
    *
    * Same-store nested calls reuse the active scope. Cross-store nesting and unsupported
-   * stores reject before a second backend connection is opened.
+   * stores reject before a second backend connection is opened. Resolve participating
+   * entities with `{ scope }` inside the callback and await every scoped operation.
+   * Retained scopes/adapters close when the callback settles; pending work causes rollback.
+   *
+   * The boundary covers database work only. Arbitrary HTTP, queue, email, and object-storage
+   * effects are not made atomic by this API.
    */
   run<T>(
     store: TransactionStore,

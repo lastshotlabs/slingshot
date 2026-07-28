@@ -7,7 +7,10 @@ import {
   type EntityBackendCapability,
 } from '@lastshotlabs/slingshot-core';
 import { ENTITY_BACKEND_PROFILES } from '../packages/slingshot-entity/src/configDriven/backendProfiles';
-import { ENTITY_CONFORMANCE_STORES } from './entity-conformance-report';
+import {
+  ENTITY_CONFORMANCE_STORES,
+  TRANSACTION_GUARANTEE_CATALOG,
+} from './entity-conformance-report';
 
 export const ENTITY_SUPPORT_MATRIX_PATH = resolve(
   import.meta.dir,
@@ -90,6 +93,23 @@ export async function renderEntitySupportMatrix(): Promise<string> {
     }
     lines.push('');
   }
+
+  lines.push(
+    '## Transaction manager guarantees',
+    '',
+    'The versioned conformance report requires every guarantee below to pass on both SQLite and',
+    'PostgreSQL. Removing a guarantee, changing its cases, or recording a non-passing result makes',
+    'report validation fail.',
+    '',
+    '| Guarantee | SQLite | PostgreSQL | Evidence cases |',
+    '| --- | --- | --- | --- |',
+  );
+  for (const guarantee of TRANSACTION_GUARANTEE_CATALOG) {
+    lines.push(
+      `| \`${guarantee.id}\` | ✅ Required | ✅ Required | ${guarantee.caseIds.map(caseId => `\`${caseId}\``).join(', ')} |`,
+    );
+  }
+  lines.push('');
 
   lines.push('{/* END GENERATED FILE */}', '');
   return await format(lines.join('\n'), { parser: 'mdx' });

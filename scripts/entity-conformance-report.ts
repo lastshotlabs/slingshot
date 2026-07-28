@@ -32,19 +32,66 @@ export const ENTITY_CONFORMANCE_STORES = [
 
 export const ENTITY_CONFORMANCE_REPORT_PATH = resolve(
   import.meta.dir,
-  '../.tmp/entity-conformance/entity-conformance.v1.json',
+  '../.tmp/entity-conformance/entity-conformance.v2.json',
 );
+
+export const TRANSACTION_GUARANTEE_CATALOG = [
+  {
+    id: 'declarative.commit',
+    description: 'Declarative transaction commits cross-entity writes.',
+    caseIds: ['composition.transaction-commit'],
+  },
+  {
+    id: 'declarative.rollback',
+    description: 'Declarative transaction rolls back earlier cross-entity writes.',
+    caseIds: ['composition.transaction-rollback'],
+  },
+  {
+    id: 'scope.two-entity-commit',
+    description: 'Package-service scope commits two entity adapters atomically.',
+    caseIds: ['scope.two-entity-commit'],
+  },
+  {
+    id: 'scope.two-entity-rollback',
+    description: 'Package-service scope rolls back two entity adapters atomically.',
+    caseIds: ['scope.two-entity-rollback'],
+  },
+  {
+    id: 'scope.same-store-nesting',
+    description: 'Same-store nesting reuses the exact active scope.',
+    caseIds: ['scope.same-store-nesting'],
+  },
+  {
+    id: 'scope.cross-store-rejection',
+    description: 'Cross-store nesting rejects before independent work starts.',
+    caseIds: ['scope.cross-store-rejection'],
+  },
+  {
+    id: 'scope.closed-adapter-rejection',
+    description: 'Retained scoped adapters reject after callback closure.',
+    caseIds: ['scope.closed-adapter-rejection'],
+  },
+] as const;
+
+export interface TransactionGuaranteeEvidence {
+  readonly id: (typeof TRANSACTION_GUARANTEE_CATALOG)[number]['id'];
+  readonly description: string;
+  readonly stores: readonly ['sqlite', 'postgres'];
+  readonly caseIds: readonly string[];
+}
 
 /** Complete ephemeral evidence emitted by the entity conformance CI lane. */
 export interface EntityConformanceReport {
   /** Report schema version. */
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   /** Git revision exercised by this report. */
   readonly revision: string;
   /** Static semantic support claims in stable store order. */
   readonly profiles: Readonly<Record<StoreType, EntityBackendProfile>>;
   /** Per-store results in stable store and catalog order. */
   readonly results: readonly EntityConformanceResult[];
+  /** Required SQLite/PostgreSQL evidence for every public transaction guarantee. */
+  readonly transactionGuarantees: readonly TransactionGuaranteeEvidence[];
 }
 
 function sanitizeError(error: unknown): { readonly name: string; readonly message: string } {
@@ -144,10 +191,15 @@ export async function buildEntityConformanceReport(
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision,
     profiles: ENTITY_BACKEND_PROFILES,
     results,
+    transactionGuarantees: TRANSACTION_GUARANTEE_CATALOG.map(guarantee => ({
+      ...guarantee,
+      stores: ['sqlite', 'postgres'] as const,
+      caseIds: [...guarantee.caseIds],
+    })),
   };
 }
 
@@ -165,6 +217,9 @@ export function validateEntityConformanceReport(
   report: EntityConformanceReport,
 ): readonly string[] {
   const errors: string[] = [];
+  if (report.schemaVersion !== 2) {
+    errors.push(`Report schemaVersion must be 2; received ${String(report.schemaVersion)}.`);
+  }
   const profileStores = Object.keys(report.profiles);
   if (!sameStrings(profileStores, ENTITY_CONFORMANCE_STORES)) {
     errors.push(
@@ -253,6 +308,40 @@ export function validateEntityConformanceReport(
     for (const capability of ENTITY_BACKEND_CAPABILITIES) {
       if (profile.capabilities[capability].status === 'supported' && !evidence?.has(capability)) {
         errors.push(`${store}:${capability} is supported without passing evidence.`);
+      }
+    }
+  }
+
+  const catalogCaseIds = new Set(ENTITY_CONFORMANCE_CATALOG.map(testCase => testCase.id));
+  if (report.transactionGuarantees.length !== TRANSACTION_GUARANTEE_CATALOG.length) {
+    errors.push(
+      `Expected ${TRANSACTION_GUARANTEE_CATALOG.length} transaction guarantees; received ${report.transactionGuarantees.length}.`,
+    );
+  }
+  for (const [index, expected] of TRANSACTION_GUARANTEE_CATALOG.entries()) {
+    const actual = report.transactionGuarantees[index];
+    if (!actual || actual.id !== expected.id) {
+      errors.push(`Transaction guarantee ${index} must be '${expected.id}'.`);
+      continue;
+    }
+    if (!sameStrings(actual.stores, ['sqlite', 'postgres'])) {
+      errors.push(`${actual.id} must require SQLite and PostgreSQL evidence.`);
+    }
+    if (!sameStrings(actual.caseIds, expected.caseIds)) {
+      errors.push(`${actual.id} changed its required conformance cases.`);
+    }
+    for (const caseId of actual.caseIds) {
+      if (!catalogCaseIds.has(caseId)) {
+        errors.push(`${actual.id} references missing conformance case '${caseId}'.`);
+        continue;
+      }
+      for (const store of actual.stores) {
+        const result = report.results.find(
+          candidate => candidate.store === store && candidate.caseId === caseId,
+        );
+        if (result?.status !== 'passed') {
+          errors.push(`${store}:${caseId} must pass for transaction guarantee '${actual.id}'.`);
+        }
       }
     }
   }

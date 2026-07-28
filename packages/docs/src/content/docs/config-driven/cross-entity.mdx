@@ -57,6 +57,72 @@ See [Operations Reference](/config-driven/operations/) for the exact shape of ea
 Atomic batch, computed aggregate, and rollback support are store-specific; the generated
 [entity backend support matrix](/reference/entity-backend-support/) is the source of truth.
 
+### Imperative package-service transactions
+
+Use the application-owned manager when a package domain route or hook must make several typed
+entity changes atomically. Resolve every adapter _inside_ `run()` and pass the returned scope:
+
+```typescript
+route.post({
+  path: '/transfer',
+  auth: 'required',
+  async handler(ctx) {
+    return ctx.transactions.run('postgres', async scope => {
+      const accounts = ctx.entities.get(AccountEntity, { scope });
+      const ledger = ctx.entities.get(LedgerEntryEntity, { scope });
+
+      await accounts.debit({ id: ctx.body.from, amount: ctx.body.amount });
+      await accounts.credit({ id: ctx.body.to, amount: ctx.body.amount });
+      await ledger.create({
+        id: crypto.randomUUID(),
+        from: ctx.body.from,
+        to: ctx.body.to,
+        amount: ctx.body.amount,
+      });
+
+      return ctx.respond.json({ transferred: true });
+    });
+  },
+});
+```
+
+The same pattern is available outside a request through `HookServices`:
+
+```typescript
+await services.transactions.run('sqlite', async scope => {
+  const account = services.entities.get(AccountEntity, { scope });
+  const audit = services.entities.get(AuditEntity, { scope });
+  await account.update(accountId, { status: 'verified' });
+  await audit.create({ id: crypto.randomUUID(), accountId, action: 'verified' });
+});
+```
+
+SQLite and PostgreSQL provide real rollback scopes. Memory, MongoDB, and Redis reject before
+backend access. SQLite uses a per-app FIFO coordinator and `BEGIN IMMEDIATE`; unrelated standard
+entity operations wait outside the open transaction instead of joining its shared connection.
+
+### Scope rules and failure behavior
+
+- Same-store nested `run()` calls reuse the exact scope and do not open a second transaction.
+- Cross-store nesting rejects before opening another connection.
+- A scope belongs to one app and one callback. Forged, foreign-app, mismatched, or closed scopes
+  reject.
+- Resolve adapters with `{ scope }` inside `run()`. An adapter resolved before `run()` remains
+  unscoped; it does not become transactional later.
+- Await every scoped operation. Returning while a scoped promise is unsettled rolls back and
+  raises `UnsettledTransactionWorkError`.
+- Do not retain a scope or scoped adapter. Calls after the callback settles raise
+  `TransactionScopeClosedError`; detached timers are outside the transaction lifetime.
+- Guarded or required declarative mutations that do not apply raise
+  `EntityTransactionConflictError` with HTTP status 409.
+- A callback or binding failure rolls back. Commit failures report
+  `TransactionCommitError.outcome` as `rolled_back` or `unknown`; never assume an unknown outcome
+  committed or rolled back.
+
+Database rollback does not make arbitrary HTTP requests, email, queue publication, object-storage
+writes, or other external effects atomic. Framework-owned effects are delayed until commit where
+supported, but durable atomic publication requires the transactional outbox planned in WP4.
+
 ## When to move out of the entity DSL
 
 Move to a package domain route or raw plugin when:

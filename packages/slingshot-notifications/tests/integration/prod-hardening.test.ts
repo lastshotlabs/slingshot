@@ -94,6 +94,113 @@ describe('builder publish failure escalation (P-NOTIF-7)', () => {
     await builder.notify({ userId: 'user-1', type: 'mention' });
     expect(callback.mock.calls).toHaveLength(1);
   });
+
+  test('rejected async onPublishError callbacks are contained', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    events.publish = (() => {
+      throw new Error('publish failed');
+    }) as typeof events.publish;
+
+    const builder = createNotificationBuilder({
+      source: 'src',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: noopRateLimit,
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+      onPublishError: async () => {
+        throw new Error('async callback failed');
+      },
+    });
+
+    await expect(builder.notify({ userId: 'user-1', type: 'mention' })).resolves.not.toBeNull();
+    await Promise.resolve();
+  });
+
+  test('thrown onPublishError and publish-failure bus errors are contained', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    events.publish = (() => {
+      throw 'non-error publish failure';
+    }) as typeof events.publish;
+    bus.emit = (() => {
+      throw new Error('failure bus unavailable');
+    }) as typeof bus.emit;
+
+    const builder = createNotificationBuilder({
+      source: 'src',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: noopRateLimit,
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+      onPublishError: () => {
+        throw 'non-error callback failure';
+      },
+    });
+
+    await expect(builder.notify({ userId: 'user-1', type: 'mention' })).resolves.not.toBeNull();
+  });
+
+  test('publish failure after atomic dedup creation does not reject notify', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    events.publish = (() => {
+      throw new Error('dedup publish failed');
+    }) as typeof events.publish;
+
+    const builder = createNotificationBuilder({
+      source: 'src',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: noopRateLimit,
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+    });
+
+    await expect(
+      builder.notify({
+        userId: 'user-1',
+        type: 'mention',
+        dedupKey: 'new-deduplicated-notification',
+      }),
+    ).resolves.not.toBeNull();
+  });
+
+  test('schedule rejects when notification delivery is suppressed', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const builder = createNotificationBuilder({
+      source: 'src',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus: new InProcessAdapter(),
+      events: createNotificationsTestEvents(new InProcessAdapter()),
+      rateLimitBackend: {
+        check: () => Promise.resolve(false),
+        close: () => Promise.resolve(),
+      },
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+    });
+
+    await expect(
+      builder.schedule({
+        userId: 'user-1',
+        type: 'mention',
+        deliverAt: new Date(Date.now() + 60_000),
+      }),
+    ).rejects.toThrow('Scheduled notification was suppressed');
+  });
 });
 
 /**

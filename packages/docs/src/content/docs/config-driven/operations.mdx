@@ -67,6 +67,11 @@ While a `BEGIN IMMEDIATE` scope is open, unrelated standard entity CRUD, list, c
 initialization, and named operations wait for that scope to commit or roll back. They cannot
 accidentally execute on the shared connection inside another request's transaction.
 
+Release CI emits `entity-conformance.v2.json`. Its transaction guarantee catalog requires the
+same declarative commit/rollback, scoped two-entity commit/rollback, nesting, mismatch, and
+closed-adapter cases to pass on both SQLite and PostgreSQL. Weakening or removing one of those
+claims makes report validation fail.
+
 </Aside>
 
 <Aside type="caution" title="Redis safety boundary">

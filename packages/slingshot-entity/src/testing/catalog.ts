@@ -995,6 +995,127 @@ const COMPOSITION_AND_REGRESSIONS = [
     record => assertEqual(record.count, 1, 'Rolled-back increment'),
   ),
   defineCase(
+    'scope.two-entity-commit',
+    'scoped package work commits two typed entity adapters together',
+    ['crud.create', 'crud.read', 'transaction.rollback'],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      await transactions.manager.run(transactions.store, async scope => {
+        await transactions
+          .adapter<RecordValue, RecordValue, RecordValue>(CONFORMANCE_RECORDS_KEY, scope)
+          .create(recordInput('scope-commit-record'));
+        await transactions.adapter<RecordValue, RecordValue, RecordValue>('audits', scope).create({
+          id: 'scope-commit-audit',
+          recordId: 'scope-commit-record',
+          message: 'committed',
+        });
+      });
+      assert(await adapter(harness).getById('scope-commit-record'), 'Committed record must exist');
+      assert(
+        await adapter(harness, 'audits').getById('scope-commit-audit'),
+        'Committed audit must exist',
+      );
+    },
+  ),
+  defineCase(
+    'scope.two-entity-rollback',
+    'scoped package work rolls back two typed entity adapters together',
+    ['crud.create', 'crud.read', 'transaction.rollback'],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      try {
+        await transactions.manager.run(transactions.store, async scope => {
+          await transactions
+            .adapter<RecordValue, RecordValue, RecordValue>(CONFORMANCE_RECORDS_KEY, scope)
+            .create(recordInput('scope-rollback-record'));
+          await transactions
+            .adapter<RecordValue, RecordValue, RecordValue>('audits', scope)
+            .create({
+              id: 'scope-rollback-audit',
+              recordId: 'scope-rollback-record',
+              message: 'rollback',
+            });
+          throw new Error('injected scoped rollback');
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'injected scoped rollback') throw error;
+      }
+      assertEqual(
+        await adapter(harness).getById('scope-rollback-record'),
+        null,
+        'Rolled-back scoped record',
+      );
+      assertEqual(
+        await adapter(harness, 'audits').getById('scope-rollback-audit'),
+        null,
+        'Rolled-back scoped audit',
+      );
+    },
+  ),
+  defineCase(
+    'scope.same-store-nesting',
+    'same-store nested manager calls reuse the exact scope',
+    ['transaction.rollback'],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      await transactions.manager.run(transactions.store, async scope => {
+        await transactions.manager.run(transactions.store, nestedScope => {
+          assertEqual(nestedScope, scope, 'Nested transaction scope identity');
+        });
+      });
+    },
+  ),
+  defineCase(
+    'scope.cross-store-rejection',
+    'cross-store nesting rejects before opening independent work',
+    ['transaction.rollback'],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      const otherStore = {
+        sqlite: 'postgres',
+        postgres: 'sqlite',
+        mongo: 'sqlite',
+      } as const;
+      let rejected = false;
+      await transactions.manager.run(transactions.store, async () => {
+        try {
+          await transactions.manager.run(otherStore[transactions.store], async () => undefined);
+        } catch {
+          rejected = true;
+        }
+      });
+      assert(rejected, 'Cross-store nested transaction must reject');
+    },
+  ),
+  defineCase(
+    'scope.closed-adapter-rejection',
+    'a retained scoped adapter rejects after its callback closes',
+    ['crud.read', 'transaction.rollback'],
+    async harness => {
+      const transactions = harness.transactions;
+      assert(transactions, 'Claiming store must expose the scoped transaction harness');
+      let retained: Adapter | undefined;
+      await transactions.manager.run(transactions.store, scope => {
+        retained = transactions.adapter<RecordValue, RecordValue, RecordValue>(
+          CONFORMANCE_RECORDS_KEY,
+          scope,
+        );
+      });
+      assert(retained, 'Scoped adapter must be retained for the lifecycle assertion');
+      let rejected = false;
+      try {
+        await retained.getById('closed-scope');
+      } catch {
+        rejected = true;
+      }
+      assert(rejected, 'Closed scoped adapter must reject');
+    },
+  ),
+  defineCase(
     'composition.missing-rejection',
     'missing adapter and composite lookups reject deterministically',
     ['crud.read'],

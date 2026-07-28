@@ -78,6 +78,12 @@ Raw SQL belongs in the adapter or repo layer, not in the entity DSL itself.
 
 Use it when you need hand-written joins, database-specific query tuning, or reporting queries that do not map to the operation DSL. The route shell or package layer can still sit above that repo code.
 
+Framework transaction scopes intentionally expose no raw client, query method, Drizzle transaction,
+SQLite handle, or Mongo session. A custom repo that needs a driver-owned transaction must keep that
+contract private and must not pretend it participates in `transactions.run()` unless it is wired
+through the framework's scoped adapter resolver. Never capture an unscoped adapter before
+`run()` and assume it becomes scoped.
+
 ### Drizzle
 
 Drizzle is also an escape hatch, not the primary config-driven abstraction.

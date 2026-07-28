@@ -12,6 +12,7 @@ import type { EntityConformanceResult } from '../../packages/slingshot-entity/sr
 import {
   ENTITY_CONFORMANCE_STORES,
   type EntityConformanceReport,
+  TRANSACTION_GUARANTEE_CATALOG,
   expectedProfileSkipReason,
   validateEntityConformanceReport,
 } from '../../scripts/entity-conformance-report';
@@ -49,10 +50,15 @@ function passingReport(): EntityConformanceReport {
     }
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 'test-revision',
     profiles: ENTITY_BACKEND_PROFILES,
     results,
+    transactionGuarantees: TRANSACTION_GUARANTEE_CATALOG.map(guarantee => ({
+      ...guarantee,
+      stores: ['sqlite', 'postgres'] as const,
+      caseIds: [...guarantee.caseIds],
+    })),
   };
 }
 
@@ -149,5 +155,29 @@ describe('entity conformance evidence tooling', () => {
         profiles,
       }).join('\n'),
     ).toContain('redis:operation.increment is supported without passing evidence');
+  });
+
+  test('rejects weakened or non-passing transaction guarantee evidence', () => {
+    const report = passingReport();
+    const weakened: EntityConformanceReport = {
+      ...report,
+      transactionGuarantees: report.transactionGuarantees.slice(1),
+    };
+    expect(validateEntityConformanceReport(weakened).join('\n')).toContain(
+      'transaction guarantees',
+    );
+
+    const selected = report.results.find(
+      result => result.store === 'sqlite' && result.caseId === 'scope.two-entity-rollback',
+    );
+    if (!selected) throw new Error('Expected SQLite scoped rollback evidence');
+    const failed = replaceResult(report, 'sqlite', selected.caseId, {
+      ...selected,
+      status: 'failed',
+      error: { name: 'Error', message: 'synthetic scoped rollback failure' },
+    });
+    expect(validateEntityConformanceReport(failed).join('\n')).toContain(
+      "must pass for transaction guarantee 'scope.two-entity-rollback'",
+    );
   });
 });

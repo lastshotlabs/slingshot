@@ -140,6 +140,19 @@ For Postgres-backed production:
 - Wire `/health/ready` into platform readiness checks. Slingshot reports Postgres
   readiness through the built-in route when Postgres health checks are available.
 
+For transaction-sensitive package services:
+
+- Use `transactions.run('postgres' | 'sqlite', ...)` and resolve every participating typed entity
+  adapter with `{ scope }` inside the callback.
+- Confirm the generated backend matrix claims `transaction.rollback` for the selected store.
+- Treat unsupported-store, scope mismatch, closed-scope, unsettled-work, conflict, and unknown
+  commit-outcome errors as explicit operational paths.
+- Keep external HTTP, email, queue, and object-storage effects out of the atomicity claim. Use a
+  transactional outbox once WP4 is available when database state and publication must commit
+  together.
+- Run `bun run entity:conformance:report` in release CI. Its versioned artifact requires both
+  SQLite and PostgreSQL to pass every declared transaction guarantee.
+
 ## Runtime Reliability
 
 Set `NODE_ENV=production`, bind containers to `0.0.0.0`, and configure

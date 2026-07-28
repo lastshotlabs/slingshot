@@ -30,5 +30,7 @@ used by Slingshot feature packages.
 - **Changing runtime entity behavior**: update `src/configDriven/index.ts` or `src/createEntityPlugin.ts`
 - **Changing backend support claims**: update `src/configDriven/backendProfiles.ts` and its conformance coverage
 - **Proving backend behavior**: update the shared catalog and the matching driver under `src/testing/`
+- **Changing transaction guarantees**: add or update the shared scoped cases and
+  `TRANSACTION_GUARANTEE_CATALOG`; SQLite and PostgreSQL must both pass every declared guarantee
 - **Regenerating backend support docs**: run `bun run docs:entity-support`; never edit the generated matrix by hand
 - **Testing**: `packages/slingshot-entity/tests/`

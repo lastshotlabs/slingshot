@@ -5,6 +5,9 @@ import {
   type OperationConfig,
   type ResolvedEntityConfig,
   type StoreType,
+  type TransactionManager,
+  type TransactionScope,
+  type TransactionStore,
   deepFreeze,
 } from '@lastshotlabs/slingshot-core';
 import { ENTITY_CONFORMANCE_CATALOG } from './catalog';
@@ -44,6 +47,24 @@ export interface EntityConformanceHarness {
   ): EntityAdapter<Entity, CreateInput, UpdateInput>;
   /** Retrieve a named composite adapter installed by the driver. */
   composite(name: string): Readonly<Record<string, unknown>>;
+  /**
+   * Real scoped-transaction surface when the selected backend claims rollback.
+   *
+   * The shared catalog uses this instead of importing a driver or raw database
+   * client, keeping manager guarantees identical across SQLite and PostgreSQL.
+   */
+  readonly transactions?: {
+    readonly store: TransactionStore;
+    readonly manager: TransactionManager;
+    adapter<
+      Entity = Record<string, unknown>,
+      CreateInput = Record<string, unknown>,
+      UpdateInput = Record<string, unknown>,
+    >(
+      key: string,
+      scope: TransactionScope,
+    ): EntityAdapter<Entity, CreateInput, UpdateInput>;
+  };
   /** Clear every fixture entity and operation-owned collection. */
   reset(): Promise<void>;
   /** Idempotently close connections and remove temporary resources. */

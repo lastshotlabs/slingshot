@@ -30,7 +30,9 @@ type CompositeEntry = {
 interface SqliteResources {
   readonly db: Database;
   readonly directory: string;
+  readonly infra: StoreInfra;
   readonly composite: Readonly<Record<string, unknown>>;
+  readonly buildComposite: (infra: StoreInfra) => Readonly<Record<string, unknown>>;
 }
 
 const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
@@ -39,7 +41,6 @@ const RUN_SQLITE_ENTITY_OPERATION = Symbol.for('slingshot.runSqliteEntityOperati
 function createSqliteTestInfra(db: Database): StoreInfra {
   let tail = Promise.resolve();
   const transactionContext = new AsyncLocalStorage<TransactionScope>();
-  let infra: StoreInfra;
 
   function runExclusive<T>(operation: () => T | Promise<T>): Promise<T> {
     const result = tail.then(operation);
@@ -81,7 +82,7 @@ function createSqliteTestInfra(db: Database): StoreInfra {
     },
   };
 
-  infra = {
+  const infra: StoreInfra = {
     appName: 'entity-conformance',
     getTransactions: () => manager,
     getRedis() {
@@ -185,8 +186,10 @@ async function createResources(
       );
     }),
   );
-  const composite = createCompositeFactories(entries, operations).sqlite(infra);
-  return { db, directory, composite };
+  const factories = createCompositeFactories(entries, operations);
+  const buildComposite = (targetInfra: StoreInfra) => factories.sqlite(targetInfra);
+  const composite = buildComposite(infra);
+  return { db, directory, infra, composite, buildComposite };
 }
 
 async function destroyResources(resources: SqliteResources | undefined): Promise<void> {
@@ -208,6 +211,35 @@ export function createSqliteEntityConformanceDriver(): EntityConformanceDriver {
       let destroyed = false;
 
       return {
+        get transactions() {
+          return {
+            store: 'sqlite' as const,
+            manager: resources.infra.getTransactions(),
+            adapter<Entity, CreateInput, UpdateInput>(
+              key: string,
+              scope: TransactionScope,
+            ): EntityAdapter<Entity, CreateInput, UpdateInput> {
+              const resolveInfra = Reflect.get(resources.infra, RESOLVE_TRANSACTION_SCOPE_INFRA);
+              if (typeof resolveInfra !== 'function') {
+                throw new Error('[entity-conformance] SQLite scope resolver is unavailable');
+              }
+              const resolveAdapter = (): EntityAdapter<Entity, CreateInput, UpdateInput> => {
+                const scoped = resources.buildComposite(resolveInfra(scope) as StoreInfra)[key];
+                if (typeof scoped !== 'object' || scoped === null) {
+                  throw new Error(`[entity-conformance] Unknown scoped adapter '${key}'`);
+                }
+                return scoped as EntityAdapter<Entity, CreateInput, UpdateInput>;
+              };
+              const proxyTarget = resolveAdapter();
+              return new Proxy(proxyTarget, {
+                get(_target, property) {
+                  const value = Reflect.get(resolveAdapter(), property);
+                  return typeof value === 'function' ? value.bind(resolveAdapter()) : value;
+                },
+              });
+            },
+          };
+        },
         adapter<Entity, CreateInput, UpdateInput>(
           key: string,
         ): EntityAdapter<Entity, CreateInput, UpdateInput> {

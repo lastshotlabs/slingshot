@@ -168,6 +168,10 @@ Current important boundaries:
 - A standard `op.custom` requires a factory for the active backend.
 - Primary-key create is insert-only on every standard adapter; MongoDB and Redis do not overwrite
   existing records.
+- Framework transaction scopes contain only opaque identity. They never expose a PostgreSQL client,
+  SQLite handle, Drizzle transaction, raw query function, or MongoDB session.
+- Resolve scoped adapters through package or hook `entities.get(..., { scope })`; adapters resolved
+  before `transactions.run()` remain unscoped.
 
 Use manual adapter wiring when your application intentionally provides semantics outside the
 standard factory contract.

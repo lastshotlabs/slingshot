@@ -12,6 +12,7 @@ persistence, entity, and operation contracts live here.
 | src/context.ts       | Router context helpers and validation defaults                       |
 | src/context/index.ts | `SlingshotContext`, `getContext()`, and instance-scoped state        |
 | src/storeInfra.ts    | Shared repo resolution contracts and plugin-facing DI symbols        |
+| src/transactions.ts  | Opaque transaction scopes, manager, and typed lifecycle failures     |
 | src/eventBus.ts      | Event bus interface, in-process adapter, and client-safe event rules |
 | src/entityConfig.ts  | Shared entity field and config types                                 |
 | src/operations.ts    | Shared operation config types used by generators and runtime routing |
@@ -26,4 +27,6 @@ persistence, entity, and operation contracts live here.
 
 - **Changing plugin lifecycle contracts**: update `src/plugin.ts`, then check every plugin package and `../../src/app.ts`
 - **Adding shared DI or persistence hooks**: update `src/storeInfra.ts` and any caller that resolves repos
+- **Changing transaction contracts**: update `src/transactions.ts`, entity conformance guarantees,
+  package/hook examples, and verify generated declarations expose no driver types
 - **Expanding entity or operation types**: update `src/entityConfig.ts` or `src/operations.ts`, then follow into `packages/slingshot-entity/src/index.ts`

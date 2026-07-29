@@ -13,7 +13,11 @@ import type {
   EntityConformanceDriver,
   EntityConformanceHarness,
 } from '../conformance';
-import { CONFORMANCE_COMPOSITE_KEY, CONFORMANCE_COMPOSITE_OPERATIONS } from '../fixtures';
+import {
+  CONFORMANCE_COMPOSITE_KEY,
+  CONFORMANCE_COMPOSITE_OPERATIONS,
+  CONFORMANCE_VERSIONED_DEFINITIONS,
+} from '../fixtures';
 
 const DEFAULT_MONGO_URL = 'mongodb://localhost:27018/slingshot_test';
 
@@ -132,7 +136,8 @@ export function createMongoEntityConformanceDriver(
     async createHarness(
       definitions: readonly EntityConformanceDefinition[],
     ): Promise<EntityConformanceHarness> {
-      let resources = await createResources(definitions, profile, connectionString);
+      const mongoDefinitions = [...definitions, ...CONFORMANCE_VERSIONED_DEFINITIONS];
+      let resources = await createResources(mongoDefinitions, profile, connectionString);
       let destroyed = false;
 
       return {
@@ -156,7 +161,7 @@ export function createMongoEntityConformanceDriver(
             throw new Error('[entity-conformance] Cannot reset a destroyed MongoDB harness');
           }
           const previous = resources;
-          resources = await createResources(definitions, profile, connectionString);
+          resources = await createResources(mongoDefinitions, profile, connectionString);
           await destroyResources(previous);
         },
         async destroy(): Promise<void> {

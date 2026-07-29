@@ -44,6 +44,14 @@ const UniqueRecord = defineEntity('RedisConformanceUniqueRecord', {
   uniques: [{ fields: ['email'] }],
 });
 
+const VersionedRecord = defineEntity('RedisConformanceVersionedRecord', {
+  concurrency: { strategy: 'version' },
+  fields: {
+    id: field.string({ primary: true }),
+    value: field.string(),
+  },
+});
+
 const INCREMENT_OPERATIONS = {
   incrementCount: {
     kind: 'increment',
@@ -71,6 +79,46 @@ function noIoInfra(onRedisAccess: () => void): StoreInfra {
 function assertPassed(results: Awaited<ReturnType<typeof runEntityConformance>>): void {
   expect(results.filter(result => result.status === 'failed')).toEqual([]);
 }
+
+test('unsupported Redis requirements reject before infrastructure access', () => {
+  let redisAccesses = 0;
+  const infra = noIoInfra(() => {
+    redisAccesses += 1;
+  });
+  expect(() => createEntityFactories(UniqueRecord).redis(infra)).toThrow(/constraint\.unique/);
+  expect(() => createEntityFactories(VersionedRecord).redis(infra)).toThrow(
+    /concurrency\.version-update/,
+  );
+  expect(() => createEntityFactories(AtomicCounter, INCREMENT_OPERATIONS).redis(infra)).toThrow(
+    /atomic\.increment/,
+  );
+  expect(() =>
+    createCompositeFactories(
+      {
+        records: { config: AtomicCounter },
+        audits: { config: Audit },
+      },
+      {
+        rollbackPair: {
+          kind: 'transaction',
+          steps: [
+            {
+              op: 'create',
+              entity: 'records',
+              input: { id: 'param:recordId' },
+            },
+            {
+              op: 'create',
+              entity: 'audits',
+              input: { id: 'param:auditId', message: 'param:message' },
+            },
+          ],
+        },
+      },
+    ).redis(infra),
+  ).toThrow(/transaction\.rollback/);
+  expect(redisAccesses).toBe(0);
+});
 
 describe.skipIf(!TEST_REDIS_URL)('entity conformance — live Redis', () => {
   test('passes every claimed case for three consecutive catalog runs', async () => {
@@ -110,43 +158,6 @@ describe.skipIf(!TEST_REDIS_URL)('entity conformance — live Redis', () => {
       }
     }
   }, 30_000);
-
-  test('unsupported Redis requirements reject before infrastructure access', () => {
-    let redisAccesses = 0;
-    const infra = noIoInfra(() => {
-      redisAccesses += 1;
-    });
-    expect(() => createEntityFactories(UniqueRecord).redis(infra)).toThrow(/constraint\.unique/);
-    expect(() => createEntityFactories(AtomicCounter, INCREMENT_OPERATIONS).redis(infra)).toThrow(
-      /atomic\.increment/,
-    );
-    expect(() =>
-      createCompositeFactories(
-        {
-          records: { config: AtomicCounter },
-          audits: { config: Audit },
-        },
-        {
-          rollbackPair: {
-            kind: 'transaction',
-            steps: [
-              {
-                op: 'create',
-                entity: 'records',
-                input: { id: 'param:recordId' },
-              },
-              {
-                op: 'create',
-                entity: 'audits',
-                input: { id: 'param:auditId', message: 'param:message' },
-              },
-            ],
-          },
-        },
-      ).redis(infra),
-    ).toThrow(/transaction\.rollback/);
-    expect(redisAccesses).toBe(0);
-  });
 
   test('destroy is idempotent and prefix-scoped', async () => {
     if (!TEST_REDIS_URL) throw new Error('TEST_REDIS_URL is required');

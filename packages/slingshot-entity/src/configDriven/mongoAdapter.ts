@@ -11,7 +11,12 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { HttpError, evaluateFilter } from '@lastshotlabs/slingshot-core';
+import {
+  EntityConcurrencyConflictError,
+  HttpError,
+  evaluateFilter,
+} from '@lastshotlabs/slingshot-core';
+import { resolveExpectedVersion } from '../concurrency/writeGuards';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -487,9 +492,15 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       return fromMongoDoc(doc, config) as Entity;
     },
 
-    async update(id, input, filter) {
+    async update(id, input, filter, options) {
       const Model = await getReadyModel();
-      const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'update', options);
+      const scopedQuery = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
+      const query = { ...scopedQuery };
+      if (expectedVersion !== undefined && concurrency) {
+        query[concurrency.field] = expectedVersion;
+      }
 
       const updatePayload = applyOnUpdate(
         input as Record<string, unknown>,
@@ -512,37 +523,48 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
         $set[mongoTtlField] = new Date(Date.now() + ttlSeconds * 1000);
       }
 
-      if (Object.keys($set).length === 0) {
+      if (Object.keys($set).length === 0 && !concurrency) {
         const current = await Model.findOne(query).lean();
         if (!current) return null;
         return fromMongoDoc(current, config) as Entity;
       }
 
-      let result: { modifiedCount: number; matchedCount: number };
+      let updated: Record<string, unknown> | null;
       try {
-        result = await Model.updateOne(query, { $set });
+        const update: Record<string, unknown> = { $set };
+        if (concurrency) {
+          update.$inc = { [concurrency.field]: 1 };
+        }
+        updated = await Model.findOneAndUpdate(query, update, { returnDocument: 'after' }).lean();
       } catch (error) {
         if (isMongoDuplicateError(error)) {
           throw new HttpError(409, 'Unique constraint violated', 'UNIQUE_VIOLATION');
         }
         throw error;
       }
-      if ((result.modifiedCount || result.matchedCount || 0) === 0) {
+      if (!updated) {
+        if (expectedVersion !== undefined) {
+          const exists = await Model.findOne(scopedQuery).lean();
+          if (exists) {
+            throw new EntityConcurrencyConflictError(config.name, id, expectedVersion);
+          }
+        }
         return null;
       }
-
-      const updated = await Model.findOne({
-        [mongoPkField]: id,
-        ...baseFilter(),
-      }).lean();
-      if (!updated) return null;
       return fromMongoDoc(updated, config) as Entity;
     },
 
-    async delete(id, filter) {
+    async delete(id, filter, options) {
       const Model = await getReadyModel();
-      const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
+      const concurrency = config._concurrency;
+      const expectedVersion = resolveExpectedVersion(config, 'delete', options);
+      const scopedQuery = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
+      const query = { ...scopedQuery };
+      if (expectedVersion !== undefined && concurrency) {
+        query[concurrency.field] = expectedVersion;
+      }
 
+      let deleted: boolean;
       if (config.softDelete) {
         const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
         const $set: Record<string, unknown> = {
@@ -554,12 +576,23 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
             $set[name] = val;
           }
         }
-        const result = await Model.updateOne(query, { $set });
-        return (result.matchedCount || result.modifiedCount || 0) > 0;
+        const update: Record<string, unknown> = { $set };
+        if (concurrency) {
+          update.$inc = { [concurrency.field]: 1 };
+        }
+        deleted =
+          (await Model.findOneAndUpdate(query, update, { returnDocument: 'after' }).lean()) !==
+          null;
       } else {
-        const result = await Model.deleteOne(query);
-        return (result.deletedCount || 0) > 0;
+        deleted = (await Model.findOneAndDelete(query).lean()) !== null;
       }
+      if (!deleted && expectedVersion !== undefined) {
+        const exists = await Model.findOne(scopedQuery).lean();
+        if (exists) {
+          throw new EntityConcurrencyConflictError(config.name, id, expectedVersion);
+        }
+      }
+      return deleted;
     },
 
     async list(opts) {

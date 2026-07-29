@@ -96,8 +96,6 @@ export const ENTITY_BACKEND_PROFILES = deepFreeze({
   }),
   postgres: defineEntityBackendProfile('postgres', true, {}),
   mongo: defineEntityBackendProfile('mongo', true, {
-    'concurrency.version-update': 'Version concurrency is not implemented for MongoDB yet.',
-    'concurrency.version-delete': 'Version concurrency is not implemented for MongoDB yet.',
     'operation.transaction':
       'MongoDB cannot expose transaction operations without a session transaction.',
     'atomic.batch':

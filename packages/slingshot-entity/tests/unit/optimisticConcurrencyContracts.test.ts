@@ -13,6 +13,7 @@ import {
   ENTITY_BACKEND_PROFILES,
   resolveEntityBackendRequirements,
 } from '../../src/configDriven/backendProfiles';
+import { generateMongo } from '../../src/generators/mongo';
 import { generatePostgres } from '../../src/generators/postgres';
 import { generateSqlite } from '../../src/generators/sqlite';
 
@@ -101,14 +102,20 @@ describe('optimistic concurrency contracts', () => {
     expect(ENTITY_BACKEND_PROFILES.memory.capabilities['concurrency.version-delete'].status).toBe(
       'supported',
     );
-    for (const profile of [ENTITY_BACKEND_PROFILES.sqlite, ENTITY_BACKEND_PROFILES.postgres]) {
+    for (const profile of [
+      ENTITY_BACKEND_PROFILES.sqlite,
+      ENTITY_BACKEND_PROFILES.postgres,
+      ENTITY_BACKEND_PROFILES.mongo,
+    ]) {
       expect(profile.capabilities['concurrency.version-update'].status).toBe('supported');
       expect(profile.capabilities['concurrency.version-delete'].status).toBe('supported');
     }
-    for (const profile of [ENTITY_BACKEND_PROFILES.mongo, ENTITY_BACKEND_PROFILES.redis]) {
-      expect(profile.capabilities['concurrency.version-update'].status).toBe('unsupported');
-      expect(profile.capabilities['concurrency.version-delete'].status).toBe('unsupported');
-    }
+    expect(ENTITY_BACKEND_PROFILES.redis.capabilities['concurrency.version-update'].status).toBe(
+      'unsupported',
+    );
+    expect(ENTITY_BACKEND_PROFILES.redis.capabilities['concurrency.version-delete'].status).toBe(
+      'unsupported',
+    );
   });
 
   test('publishes stable transport-neutral errors', () => {
@@ -141,6 +148,14 @@ describe('optimistic concurrency contracts', () => {
     }
     expect(generateSqlite(entity)).toContain('version = ?');
     expect(generatePostgres(entity)).toContain('version = $${paramIdx++}');
+
+    const mongo = generateMongo(entity);
+    expect(mongo).toContain('async update(id, input, filter, options)');
+    expect(mongo).toContain('async delete(id, filter, options)');
+    expect(mongo).toContain("$inc: { 'version': 1 }");
+    expect(mongo).toContain("query['version'] = expectedVersion");
+    expect(mongo).toContain('EntityConcurrencyConflictError');
+    expect(mongo).toContain('Model.findOne(scopedQuery).lean()');
   });
 });
 

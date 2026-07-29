@@ -61,6 +61,7 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   );
   const onUpdateFields = fields.filter(([, def]) => def.onUpdate === 'now');
   const dateFields = new Set(fields.filter(([, def]) => def.type === 'date').map(([n]) => n));
+  const concurrency = config._concurrency;
 
   // Model name from collection
   const modelName = collectionName
@@ -76,6 +77,19 @@ export function generateMongo(config: ResolvedEntityConfig): string {
     `import type { ${name}Adapter, PaginatedResult } from './adapter';`,
     '',
   ];
+
+  if (concurrency) {
+    lines.push(
+      `class EntityConcurrencyPreconditionError extends Error { readonly code = 'ENTITY_CONCURRENCY_PRECONDITION_REQUIRED'; constructor(readonly entity: string, readonly operation: 'update' | 'delete') { super(\`\${operation} on "\${entity}" requires an expected version\`); this.name = 'EntityConcurrencyPreconditionError'; } }`,
+    );
+    lines.push(
+      `class EntityConcurrencyConflictError extends Error { readonly code = 'ENTITY_CONCURRENCY_CONFLICT'; constructor(readonly entity: string, readonly id: string | number, readonly expectedVersion: number) { super(\`Concurrent \${entity} write conflicted for id "\${String(id)}"\`); this.name = 'EntityConcurrencyConflictError'; } }`,
+    );
+    lines.push(
+      `class EntityConcurrencyExpectedVersionError extends Error { readonly code = 'ENTITY_CONCURRENCY_EXPECTED_VERSION_INVALID'; constructor() { super('Expected version must be a positive safe integer'); this.name = 'EntityConcurrencyExpectedVersionError'; } }`,
+    );
+    lines.push('');
+  }
 
   // --- Inlined helpers ---
   lines.push('function encodeCursor(values: Record<string, unknown>): string {');
@@ -138,6 +152,12 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   lines.push(
     '  updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, opts?: Record<string, unknown>): Promise<{ modifiedCount: number; matchedCount: number }>;',
   );
+  lines.push(
+    '  findOneAndUpdate(filter: Record<string, unknown>, update: Record<string, unknown>, opts?: Record<string, unknown>): { lean(): Promise<Record<string, unknown> | null> };',
+  );
+  lines.push(
+    '  findOneAndDelete(filter: Record<string, unknown>): { lean(): Promise<Record<string, unknown> | null> };',
+  );
   lines.push('  deleteOne(filter: Record<string, unknown>): Promise<{ deletedCount: number }>;');
   lines.push('  deleteMany(filter: Record<string, unknown>): Promise<{ deletedCount: number }>;');
   lines.push('}');
@@ -148,6 +168,26 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   );
   lines.push('  let cachedModel: MongoModel | null = null;');
   lines.push('');
+
+  if (concurrency) {
+    lines.push(
+      `  function resolveExpectedVersion(operation: 'update' | 'delete', options: { expectedVersion?: number } | undefined): number | undefined {`,
+    );
+    lines.push('    const expectedVersion = options?.expectedVersion;');
+    if (concurrency.requiredOnWrite) {
+      lines.push(
+        `    if (expectedVersion === undefined) throw new EntityConcurrencyPreconditionError('${name}', operation);`,
+      );
+    } else {
+      lines.push('    if (expectedVersion === undefined) return undefined;');
+    }
+    lines.push(
+      '    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new EntityConcurrencyExpectedVersionError();',
+    );
+    lines.push('    return expectedVersion;');
+    lines.push('  }');
+    lines.push('');
+  }
 
   // getModel
   lines.push('  function getModel(): MongoModel {');
@@ -315,8 +355,11 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   lines.push('');
 
   // update
-  lines.push('    async update(id, input, filter) {');
+  lines.push('    async update(id, input, filter, options) {');
   lines.push('      const Model = getModel();');
+  if (concurrency) {
+    lines.push("      const expectedVersion = resolveExpectedVersion('update', options);");
+  }
   if (onUpdateFields.length > 0) {
     lines.push('      const updatePayload = applyOnUpdate(input as Record<string, unknown>);');
   } else {
@@ -334,18 +377,35 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   }
   lines.push('      const query: Record<string, unknown> = { _id: id, ...baseFilter() };');
   lines.push('      if (filter) Object.assign(query, filter);');
+  if (concurrency) {
+    lines.push('      const scopedQuery = { ...query };');
+    lines.push(
+      `      if (expectedVersion !== undefined) query['${concurrency.field}'] = expectedVersion;`,
+    );
+  }
   lines.push(
-    "      const result = await Model.findOneAndUpdate(query, { $set }, { returnDocument: 'after' });",
+    concurrency
+      ? `      const result = await Model.findOneAndUpdate(query, { $set, $inc: { '${concurrency.field}': 1 } }, { returnDocument: 'after' }).lean();`
+      : "      const result = await Model.findOneAndUpdate(query, { $set }, { returnDocument: 'after' }).lean();",
   );
-  lines.push(
-    '      return result.value ? fromMongoDoc(result.value as Record<string, unknown>) : null;',
-  );
+  if (concurrency) {
+    lines.push('      if (!result && expectedVersion !== undefined) {');
+    lines.push('        const exists = await Model.findOne(scopedQuery).lean();');
+    lines.push(
+      `        if (exists) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+    );
+    lines.push('      }');
+  }
+  lines.push('      return result ? fromMongoDoc(result as Record<string, unknown>) : null;');
   lines.push('    },');
   lines.push('');
 
   // delete
-  lines.push('    async delete(id, filter) {');
+  lines.push('    async delete(id, filter, options) {');
   lines.push('      const Model = getModel();');
+  if (concurrency) {
+    lines.push("      const expectedVersion = resolveExpectedVersion('delete', options);");
+  }
   if (config.softDelete) {
     const sdField = config.softDelete.field;
     if (sdNonNull) {
@@ -361,15 +421,45 @@ export function generateMongo(config: ResolvedEntityConfig): string {
     }
     lines.push('      const query: Record<string, unknown> = { _id: id, ...baseFilter() };');
     lines.push('      if (filter) Object.assign(query, filter);');
+    if (concurrency) {
+      lines.push('      const scopedQuery = { ...query };');
+      lines.push(
+        `      if (expectedVersion !== undefined) query['${concurrency.field}'] = expectedVersion;`,
+      );
+    }
     lines.push(
-      "      const result = await Model.findOneAndUpdate(query, { $set }, { returnDocument: 'after' });",
+      concurrency
+        ? `      const result = await Model.findOneAndUpdate(query, { $set, $inc: { '${concurrency.field}': 1 } }, { returnDocument: 'after' }).lean();`
+        : "      const result = await Model.findOneAndUpdate(query, { $set }, { returnDocument: 'after' }).lean();",
     );
-    lines.push('      return result.value != null;');
+    if (concurrency) {
+      lines.push('      if (!result && expectedVersion !== undefined) {');
+      lines.push('        const exists = await Model.findOne(scopedQuery).lean();');
+      lines.push(
+        `        if (exists) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+      );
+      lines.push('      }');
+    }
+    lines.push('      return result != null;');
   } else {
     lines.push('      const query: Record<string, unknown> = { _id: id, ...baseFilter() };');
     lines.push('      if (filter) Object.assign(query, filter);');
-    lines.push('      const result = await Model.findOneAndDelete(query);');
-    lines.push('      return result.value != null;');
+    if (concurrency) {
+      lines.push('      const scopedQuery = { ...query };');
+      lines.push(
+        `      if (expectedVersion !== undefined) query['${concurrency.field}'] = expectedVersion;`,
+      );
+    }
+    lines.push('      const result = await Model.findOneAndDelete(query).lean();');
+    if (concurrency) {
+      lines.push('      if (!result && expectedVersion !== undefined) {');
+      lines.push('        const exists = await Model.findOne(scopedQuery).lean();');
+      lines.push(
+        `        if (exists) throw new EntityConcurrencyConflictError('${name}', id, expectedVersion);`,
+      );
+      lines.push('      }');
+    }
+    lines.push('      return result != null;');
   }
   lines.push('    },');
   lines.push('');

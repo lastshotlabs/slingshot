@@ -233,4 +233,26 @@ describe('createOutboxDispatcher', () => {
     });
     await dispatch;
   });
+
+  test('redacts credentials and tokens from persisted publication errors', async () => {
+    const { repository, calls } = fixture();
+    const dispatcher = createOutboxDispatcher({
+      repository,
+      bus: busWith(async () => {
+        throw new Error(
+          'connect postgres://admin:hunter2@db.example/app Bearer abc.def token=top-secret',
+        );
+      }),
+      config: { enabled: true },
+      random: () => 0.5,
+    });
+
+    await dispatcher.dispatchOnce();
+
+    const message = calls.released[0]?.errorMessage ?? '';
+    expect(message).toContain('[redacted]');
+    expect(message).not.toContain('hunter2');
+    expect(message).not.toContain('abc.def');
+    expect(message).not.toContain('top-secret');
+  });
 });

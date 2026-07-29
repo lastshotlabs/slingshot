@@ -17,6 +17,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import {
   createOutboxDispatcher,
+  createPostgresEventReliabilityOperations,
   createPostgresOutboxDispatchRepository,
   createPostgresOutboxRepository,
   createSqliteOutboxDispatchRepository,
@@ -264,5 +265,65 @@ describe('transactional event reliability live matrix', () => {
     const rows = await pool.query<{ id: string }>('SELECT id FROM inbox_projection ORDER BY id');
     expect(rows.rows.map(row => row.id)).toEqual(['race', 'retry']);
     await bus.shutdown?.();
+  });
+
+  test('PostgreSQL operations replay, audit, and retain only terminal rows', async () => {
+    const now = '2026-07-29T00:00:00.000Z';
+    const old = '2020-01-01T00:00:00.000Z';
+    const rows = [
+      { eventId: `dead-${randomUUID()}`, status: 'dead' },
+      { eventId: `pending-${randomUUID()}`, status: 'pending' },
+      { eventId: `delivered-${randomUUID()}`, status: 'delivered' },
+    ] as const;
+    for (const row of rows) {
+      await pool.query(
+        `INSERT INTO slingshot_event_outbox (
+          id, event_id, event_key, envelope_json, status, attempts,
+          available_at, created_at, delivered_at
+        ) VALUES ($1, $2, 'app:ready', $3::jsonb, $4, 3, $5, $5, $6)`,
+        [
+          randomUUID(),
+          row.eventId,
+          JSON.stringify({ stable: row.eventId }),
+          row.status,
+          old,
+          row.status === 'delivered' ? old : null,
+        ],
+      );
+    }
+    const operations = createPostgresEventReliabilityOperations(postgres);
+    const beforeReplay = await operations.list('dead', 100);
+    const target = beforeReplay.find(row => row.eventId === rows[0].eventId);
+    expect(target).toBeDefined();
+    expect(
+      await operations.retryEvent({
+        eventId: rows[0].eventId,
+        now,
+        actor: 'live-test',
+        reason: 'prove audit',
+      }),
+    ).toBe(true);
+    expect(await operations.purgeDelivered('2025-01-01T00:00:00.000Z', 100)).toBeGreaterThan(0);
+
+    const preserved = await pool.query<{
+      event_id: string;
+      envelope_json: { stable: string };
+      status: string;
+    }>(
+      `SELECT event_id, envelope_json, status FROM slingshot_event_outbox
+        WHERE event_id = ANY($1::text[]) ORDER BY event_id`,
+      [[rows[0].eventId, rows[1].eventId]],
+    );
+    expect(preserved.rows).toHaveLength(2);
+    expect(preserved.rows.every(row => row.status === 'pending')).toBe(true);
+    expect(preserved.rows.map(row => row.envelope_json.stable).sort()).toEqual(
+      [rows[0].eventId, rows[1].eventId].sort(),
+    );
+    const audit = await pool.query<{ replayed_count: number }>(
+      `SELECT replayed_count FROM slingshot_event_replay_audit
+        WHERE event_id = $1 AND actor = 'live-test'`,
+      [rows[0].eventId],
+    );
+    expect(audit.rows[0]?.replayed_count).toBe(1);
   });
 });

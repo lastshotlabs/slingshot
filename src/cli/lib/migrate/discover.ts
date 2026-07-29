@@ -14,6 +14,7 @@ export type Backend = 'postgres' | 'sqlite' | 'mongo';
 
 export interface ResolvedManifest {
   manifestPath: string;
+  appName: string;
   entities: Record<string, ResolvedEntityConfig>;
   db: {
     postgres?: string;
@@ -24,6 +25,11 @@ export interface ResolvedManifest {
      * Mongo is enabled in the config's auto-connect setting.
      */
     mongoEnabled?: boolean;
+  };
+  events?: {
+    reliability?: {
+      store?: 'postgres' | 'sqlite';
+    };
   };
 }
 
@@ -61,9 +67,11 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
   }
 
   const config = mod.default as {
+    name?: string;
     plugins?: unknown[];
     packages?: unknown[];
     db?: Record<string, unknown>;
+    events?: ResolvedManifest['events'];
   };
 
   const entities: Record<string, ResolvedEntityConfig> = {};
@@ -108,7 +116,13 @@ export async function loadManifest(configPath?: string): Promise<ResolvedManifes
     mongoEnabled: mongoSetting === 'single' || mongoSetting === 'separate' || mongoSetting === true,
   };
 
-  return { manifestPath: resolvedPath, entities, db };
+  return {
+    manifestPath: resolvedPath,
+    appName: config.name ?? 'Bun Core API',
+    entities,
+    db,
+    events: config.events,
+  };
 }
 
 export function pickBackend(manifest: ResolvedManifest, override?: string): Backend {

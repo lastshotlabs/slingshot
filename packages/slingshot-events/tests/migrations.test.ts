@@ -41,7 +41,8 @@ describe.each([
     expect(sql).toContain('event_id');
     expect(sql).toContain('slingshot_event_inbox');
     expect(sql).toContain('PRIMARY KEY (consumer_name, event_id)');
-    expect(sql.match(/CREATE INDEX IF NOT EXISTS/g)?.length).toBe(6);
+    expect(sql).toContain('slingshot_event_replay_audit');
+    expect(sql.match(/CREATE INDEX IF NOT EXISTS/g)?.length).toBe(7);
   });
 
   test('is idempotent through the checksum ledger', async () => {

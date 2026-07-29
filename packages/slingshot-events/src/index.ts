@@ -33,7 +33,11 @@ export { createTransactionalEventOutboxWriter } from './outbox/writer';
 export type { EnqueueTransactionScopeWork } from './outbox/writer';
 /** Lease-based acknowledged outbox dispatcher and store adapters. */
 export { createOutboxDispatcher } from './outbox/dispatcher';
-export type { OutboxDispatcher, OutboxDispatcherOptions } from './outbox/dispatcher';
+export type {
+  OutboxDispatcher,
+  OutboxDispatcherOptions,
+  OutboxLifecycleEvent,
+} from './outbox/dispatcher';
 export {
   createPostgresOutboxDispatchRepository,
   createPostgresOutboxRepository,
@@ -43,18 +47,26 @@ export {
   createSqliteOutboxRepository,
 } from './outbox/sqlite';
 export type {
+  EventReliabilityOperations,
   LeasedOutboxRow,
   NewOutboxRow,
+  OutboxOperationalRow,
+  OutboxOperationalStatus,
   OutboxDispatchRepository,
   OutboxRepository,
+  OutboxReplayAudit,
+  OutboxStatus,
 } from './outbox/repository';
 export { serializeOutboxEnvelope } from './outbox/repository';
 /** Governed transactionally deduplicated consumer implementation. */
 export { createTransactionalEventConsumer } from './consume';
-export type { ResolveTransactionScopeInfra } from './consume';
+export type { InboxLifecycleEvent, ResolveTransactionScopeInfra } from './consume';
 /** Transaction-bound inbox repository implementations. */
 export { createPostgresInboxRepository } from './inbox/postgres';
 export { createSqliteInboxRepository } from './inbox/sqlite';
 export type { InboxRepository, NewInboxReceipt } from './inbox/repository';
+/** Readiness, replay, listing, and bounded retention operations. */
+export { createPostgresEventReliabilityOperations } from './operations/postgres';
+export { createSqliteEventReliabilityOperations } from './operations/sqlite';
 /** Apply package-owned SQL migrations before reliability workers start. */
 export { initializeEventReliabilityStore } from './migrations/initialize';

@@ -12,13 +12,13 @@ import {
   TransactionalEventDeliveryUnavailableError,
   createTransactionalEventConsumer,
 } from '@lastshotlabs/slingshot-events';
-import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
+import type { EventReliabilityConfig, InboxLifecycleEvent } from '@lastshotlabs/slingshot-events';
 
 const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
 
 /** Root-owned inbox bridge bound after transaction infrastructure is created. */
 export interface FrameworkEventInboxConsumer extends TransactionalEventConsumer {
-  bind(infra: StoreInfra): void;
+  bind(infra: StoreInfra, onLifecycle?: (event: InboxLifecycleEvent) => void): void;
 }
 
 /** Create an inbox consumer bridge without opening infrastructure. */
@@ -29,7 +29,7 @@ export function createFrameworkEventInboxConsumer(
   let delegate: TransactionalEventConsumer | null = null;
   let bound = false;
   return Object.freeze({
-    bind(infra: StoreInfra): void {
+    bind(infra: StoreInfra, onLifecycle?: (event: InboxLifecycleEvent) => void): void {
       if (bound) throw new Error('[slingshot] Transactional event inbox is already bound.');
       bound = true;
       if (!config?.inbox) return;
@@ -40,8 +40,12 @@ export function createFrameworkEventInboxConsumer(
           'The application transaction manager cannot bind transactional inbox work.',
         );
       }
-      delegate = createTransactionalEventConsumer(config.store, bus, transactions, scope =>
-        resolveInfra.call(transactions, scope),
+      delegate = createTransactionalEventConsumer(
+        config.store,
+        bus,
+        transactions,
+        scope => resolveInfra.call(transactions, scope),
+        onLifecycle,
       );
     },
 

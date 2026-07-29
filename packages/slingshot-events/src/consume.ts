@@ -22,12 +22,18 @@ import type { EventReliabilityStore } from './types';
 /** Resolve the transaction-bound infrastructure view for one authentic open scope. */
 export type ResolveTransactionScopeInfra = (scope: TransactionScope) => StoreInfra;
 
+/** Bounded-cardinality inbox signal for framework metrics. */
+export interface InboxLifecycleEvent {
+  readonly action: 'duplicate' | 'handler_failure';
+}
+
 /** Build the governed durable consumer wrapper used by `events.consume()`. */
 export function createTransactionalEventConsumer(
   configuredStore: EventReliabilityStore,
   bus: SlingshotEventBus,
   transactions: TransactionManager,
   resolveInfra: ResolveTransactionScopeInfra,
+  onLifecycle?: (event: InboxLifecycleEvent) => void,
 ): TransactionalEventConsumer {
   return Object.freeze({
     consume<K extends EventKey>(
@@ -61,12 +67,20 @@ export function createTransactionalEventConsumer(
             processedAt: new Date().toISOString(),
             occurredAt: envelope.meta.occurredAt,
           };
-          if (!(await repository.insert(receipt))) return;
-          await handler(envelope, {
-            scope,
-            eventId: envelope.meta.eventId,
-            consumerName: options.name,
-          });
+          if (!(await repository.insert(receipt))) {
+            onLifecycle?.({ action: 'duplicate' });
+            return;
+          }
+          try {
+            await handler(envelope, {
+              scope,
+              eventId: envelope.meta.eventId,
+              consumerName: options.name,
+            });
+          } catch (error) {
+            onLifecycle?.({ action: 'handler_failure' });
+            throw error;
+          }
         });
       };
       bus.onEnvelope(key, listener, { durable: true, name: options.name });

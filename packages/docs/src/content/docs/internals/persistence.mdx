@@ -154,6 +154,14 @@ all handler writes therefore commit or roll back together. Concurrent delivery
 and broker redelivery skip an existing receipt, while a failed handler leaves
 no receipt and can be retried safely.
 
+The same store-bound operations layer powers event readiness, metrics, replay,
+and retention. Readiness reads bounded aggregate queries and cached transport
+health; it never waits for a broker reconnect. Hourly retention uses bounded
+batches and can delete only delivered outbox rows or expired inbox receipts.
+Operator replay changes dead rows back to pending without rewriting the stored
+envelope or event ID and records the actor, reason, and affected count in the
+replay-audit table.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — how `StoreInfra` is provided

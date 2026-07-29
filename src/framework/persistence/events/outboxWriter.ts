@@ -14,7 +14,7 @@ import { ENQUEUE_TRANSACTION_SCOPE_WORK } from '../transactions/frameworkTransac
 /** Root-owned bridge bound after framework transaction infrastructure is created. */
 export interface FrameworkEventOutboxWriter extends TransactionalEventOutboxWriter {
   /** Bind the one application-owned scope resolver exactly once. */
-  bind(infra: StoreInfra): void;
+  bind(infra: StoreInfra, onInserted?: () => void): void;
 }
 
 /** Create an outbox writer bridge without opening infrastructure. */
@@ -25,7 +25,7 @@ export function createFrameworkEventOutboxWriter(
   let bound = false;
 
   return Object.freeze({
-    bind(infra: StoreInfra): void {
+    bind(infra: StoreInfra, onInserted?: () => void): void {
       if (bound) {
         throw new Error('[slingshot] Transactional event outbox writer is already bound.');
       }
@@ -38,9 +38,13 @@ export function createFrameworkEventOutboxWriter(
           'The application transaction manager cannot bind transactional event work.',
         );
       }
-      delegate = createTransactionalEventOutboxWriter(config.store, (scope, work) => {
-        enqueue.call(transactions, scope, work);
-      });
+      delegate = createTransactionalEventOutboxWriter(
+        config.store,
+        (scope, work) => {
+          enqueue.call(transactions, scope, work);
+        },
+        onInserted,
+      );
     },
 
     write(envelope: EventEnvelope, scope?: TransactionScope): void {

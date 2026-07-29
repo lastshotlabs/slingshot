@@ -7,11 +7,16 @@
  */
 import type { UploadConfig } from '@config/types/upload';
 import type { InfrastructureResult } from '@framework/createInfrastructure';
-import { closeMetricsQueues, resetMetrics } from '@framework/metrics/registry';
+import { closeMetricsQueues, incrementCounter, resetMetrics } from '@framework/metrics/registry';
 import type { MetricsState } from '@framework/metrics/registry';
 import { createContextStoreInfra } from '@framework/persistence/createContextStoreInfra';
 import type { FrameworkEventInboxConsumer } from '@framework/persistence/events/inboxConsumer';
 import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
+import {
+  createEventReliabilityIndicators,
+  createFrameworkEventReliabilityOperations,
+  registerEventReliabilityMetrics,
+} from '@framework/persistence/events/reliabilityOperations';
 import { attachContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import type { ResolvedSecretBundle } from '@framework/secrets/resolveSecretBundle';
@@ -398,9 +403,26 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
   if (eventReliability) {
     await initializeEventReliabilityStore(storeInfra, eventReliability);
   }
-  eventOutboxWriter?.bind(storeInfra);
-  eventInboxConsumer?.bind(storeInfra);
+  const eventReliabilityOperations = eventReliability
+    ? createFrameworkEventReliabilityOperations(storeInfra, eventReliability)
+    : null;
+  const eventReliabilityMetrics =
+    eventReliability && eventReliabilityOperations
+      ? registerEventReliabilityMetrics(
+          metricsState,
+          eventReliabilityOperations,
+          eventReliability.store,
+        )
+      : null;
+  eventOutboxWriter?.bind(storeInfra, () => {
+    if (!eventReliability) return;
+    incrementCounter(metricsState, 'slingshot_event_outbox_inserted_total', {
+      store: eventReliability.store,
+    });
+  });
+  eventInboxConsumer?.bind(storeInfra, eventReliabilityMetrics?.inbox);
   let eventOutboxDispatcher: OutboxDispatcher | null = null;
+  let eventRetentionTimer: ReturnType<typeof setInterval> | null = null;
   if (eventReliability?.outbox && isAcknowledgedEventBus(bus)) {
     const repository =
       eventReliability.store === 'postgres'
@@ -410,9 +432,53 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       repository,
       bus,
       config: eventReliability.outbox,
+      onLifecycle: eventReliabilityMetrics?.outbox,
     });
     eventOutboxDispatcher.start();
   }
+  if (eventReliabilityOperations && (eventReliability?.outbox || eventReliability?.inbox)) {
+    const runRetention = async (): Promise<void> => {
+      const nowMs = Date.now();
+      let removed = 0;
+      if (eventReliability.outbox) {
+        const before = new Date(
+          nowMs - (eventReliability.outbox.deliveredRetentionDays ?? 7) * 86_400_000,
+        ).toISOString();
+        removed += await eventReliabilityOperations.purgeDelivered(before, 1_000);
+      }
+      if (eventReliability.inbox) {
+        const before = new Date(
+          nowMs - (eventReliability.inbox.retentionDays ?? 30) * 86_400_000,
+        ).toISOString();
+        removed += await eventReliabilityOperations.purgeInbox(before, 1_000);
+      }
+      if (removed > 0) {
+        incrementCounter(
+          metricsState,
+          'slingshot_event_reliability_retention_rows_total',
+          { store: eventReliability.store },
+          removed,
+        );
+      }
+    };
+    eventRetentionTimer = setInterval(() => void runRetention().catch(() => undefined), 3_600_000);
+    eventRetentionTimer.unref?.();
+  }
+  const reliabilityIndicators =
+    eventReliability?.outbox && eventReliabilityOperations && isAcknowledgedEventBus(bus)
+      ? createEventReliabilityIndicators(eventReliabilityOperations, bus, eventReliability)
+      : [];
+  const configuredHealth = infra.frameworkConfig.health;
+  const contextHealth =
+    reliabilityIndicators.length > 0
+      ? Object.freeze({
+          ...configuredHealth,
+          indicators: Object.freeze([
+            ...(configuredHealth?.indicators ?? []),
+            ...reliabilityIndicators,
+          ]),
+        })
+      : configuredHealth;
 
   // The decorated storeInfra (with REGISTER_ENTITY, RESOLVE_ENTITY_FACTORIES, etc.)
   // is only available after createContextStoreInfra runs. Update frameworkConfig so
@@ -436,7 +502,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       redis: infra.redis ?? undefined,
       mongo: configMongo,
       captcha: frozenCaptcha,
-      health: infra.frameworkConfig.health,
+      health: contextHealth,
     }),
     redis: infra.redis ?? null,
     mongo: contextMongo,
@@ -542,6 +608,10 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
           await eventOutboxDispatcher?.shutdown();
         } catch {
           /* best-effort */
+        }
+        if (eventRetentionTimer) {
+          clearInterval(eventRetentionTimer);
+          eventRetentionTimer = null;
         }
 
         try {

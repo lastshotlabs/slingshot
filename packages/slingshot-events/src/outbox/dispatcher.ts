@@ -12,6 +12,18 @@ export interface OutboxDispatcherOptions {
   readonly now?: () => Date;
   readonly random?: () => number;
   readonly onError?: (error: unknown) => void;
+  /** Bounded-cardinality lifecycle observer for metrics and structured logs. */
+  readonly onLifecycle?: (event: OutboxLifecycleEvent) => void;
+}
+
+/** Dispatcher signal that never exposes a raw event ID or tenant. */
+export interface OutboxLifecycleEvent {
+  readonly action: 'claimed' | 'acknowledged' | 'retried' | 'dead';
+  readonly count?: number;
+  readonly eventKey?: string;
+  readonly eventIdShort?: string;
+  readonly transport?: 'bullmq' | 'kafka';
+  readonly durationMs?: number;
 }
 
 /** Running transactional outbox worker. */
@@ -62,9 +74,13 @@ function errorDetails(error: unknown): { code: string; message: string } {
         : 'OUTBOX_PUBLISH_FAILED';
   const rawMessage =
     typeof candidate?.message === 'string' ? candidate.message : 'Durable publication failed.';
+  const sanitizedMessage = rawMessage
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]+@/gi, '$1[redacted]@')
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]')
+    .replace(/\b(token|secret|password|api[_-]?key)=([^\s&]+)/gi, '$1=[redacted]');
   return {
     code: rawCode.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 128),
-    message: rawMessage.replace(/[\r\n\t]+/g, ' ').slice(0, 1_024),
+    message: sanitizedMessage.replace(/[\r\n\t]+/g, ' ').slice(0, 1_024),
   };
 }
 
@@ -84,6 +100,7 @@ export function createOutboxDispatcher(options: OutboxDispatcherOptions): Outbox
 
   async function publish(row: LeasedOutboxRow): Promise<void> {
     const attempts = row.attempts + 1;
+    const startedAt = Date.now();
     try {
       const envelope = parseEnvelope(row);
       const receipt = await withTimeout(
@@ -104,12 +121,21 @@ export function createOutboxDispatcher(options: OutboxDispatcherOptions): Outbox
         owner,
         deliveredAt: now().toISOString(),
       });
+      options.onLifecycle?.({
+        action: 'acknowledged',
+        eventKey: row.eventKey,
+        eventIdShort: row.eventId.slice(0, 8),
+        transport: receipt.transport,
+        durationMs: Date.now() - startedAt,
+      });
     } catch (error) {
       const details = errorDetails(error);
       const exponent = Math.min(30, attempts - 1);
       const base = Math.min(config.retry.maxMs, config.retry.initialMs * 2 ** exponent);
       const jitter = base * config.retry.jitter * (random() * 2 - 1);
       const availableAt = new Date(now().getTime() + Math.max(0, base + jitter)).toISOString();
+      const dead =
+        error instanceof PermanentOutboxPublicationError || attempts >= config.maxAttempts;
       await options.repository.release({
         id: row.id,
         owner,
@@ -117,7 +143,13 @@ export function createOutboxDispatcher(options: OutboxDispatcherOptions): Outbox
         availableAt,
         errorCode: details.code,
         errorMessage: details.message,
-        dead: error instanceof PermanentOutboxPublicationError || attempts >= config.maxAttempts,
+        dead,
+      });
+      options.onLifecycle?.({
+        action: dead ? 'dead' : 'retried',
+        eventKey: row.eventKey,
+        eventIdShort: row.eventId.slice(0, 8),
+        durationMs: Date.now() - startedAt,
       });
       options.onError?.(error);
     }
@@ -133,6 +165,9 @@ export function createOutboxDispatcher(options: OutboxDispatcherOptions): Outbox
         now: now().toISOString(),
         leaseExpiresAt: new Date(now().getTime() + config.leaseMs).toISOString(),
       });
+      if (claimed.length > 0) {
+        options.onLifecycle?.({ action: 'claimed', count: claimed.length });
+      }
       let cursor = 0;
       const workers = Array.from(
         { length: Math.min(config.concurrency, claimed.length) },

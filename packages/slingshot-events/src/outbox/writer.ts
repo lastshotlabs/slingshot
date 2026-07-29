@@ -24,6 +24,7 @@ export type EnqueueTransactionScopeWork = (
 export function createTransactionalEventOutboxWriter(
   store: EventReliabilityStore,
   enqueue: EnqueueTransactionScopeWork,
+  onInserted?: () => void,
 ): TransactionalEventOutboxWriter {
   return Object.freeze({
     write(envelope: EventEnvelope, scope?: TransactionScope): void {
@@ -44,12 +45,13 @@ export function createTransactionalEventOutboxWriter(
         );
       }
 
-      enqueue(scope, infra => {
+      enqueue(scope, async infra => {
         const repository =
           store === 'postgres'
             ? createPostgresOutboxRepository(infra.getPostgres())
             : createSqliteOutboxRepository(infra.getSqliteDb());
-        return repository.insert(row);
+        await repository.insert(row);
+        onInserted?.();
       });
     },
   });

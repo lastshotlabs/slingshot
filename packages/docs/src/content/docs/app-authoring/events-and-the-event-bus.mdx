@@ -204,6 +204,18 @@ redeliveries. Treat the consumer name as durable deployment identity: changing
 it intentionally reprocesses retained events. External side effects are not
 made transactional and must use `envelope.meta.eventId` for idempotency.
 
+### Operate transactional delivery
+
+`/health/ready` reports cached transport health, oldest-pending age, dead rows,
+and expired leases without blocking on a broker reconnect. Dead rows are
+critical by default and can be configured as warnings. Prometheus metrics use
+bounded store, transport, and lifecycle-status labels.
+
+The `slingshot events outbox status` and `list` commands are read-only. Retry
+and retention commands require `--confirm` to exactly match the configured app
+name. Replays retain the original envelope and event ID and write an audit
+record; outbox purge deletes delivered rows only.
+
 ## Subscribe
 
 Subscribe in `setupPost` so all publishers are wired before any subscriber starts listening:

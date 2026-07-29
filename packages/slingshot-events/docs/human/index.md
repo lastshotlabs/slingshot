@@ -78,3 +78,33 @@ intentionally creates a new logical consumer and reprocesses retained events.
 Only SQL work performed through the supplied scope is covered. HTTP calls,
 email, object storage, and other external effects still require
 `envelope.meta.eventId` as the provider idempotency key.
+
+## Operations and readiness
+
+The framework adds two event-reliability indicators to `/health/ready`.
+Pending age and expired leases are warnings. Dead rows follow
+`events.reliability.readiness.deadRows`; the default is critical. Transport
+health uses the adapter's cached state, so readiness remains responsive during
+a broker outage instead of waiting on a new broker connection.
+
+Metrics use only bounded `store`, `transport`, and `status` labels. They cover
+outbox insertion, claims, acknowledgements, retry/dead transitions, publication
+latency, inbox duplicates, handler failures, retention, row counts, and expired
+leases. Structured dispatcher logs include the event key and only a shortened
+event ID.
+
+Use the CLI instead of editing reliability tables:
+
+```sh
+slingshot events outbox status
+slingshot events outbox list --status dead
+slingshot events outbox retry <event-id> --confirm '<exact app name>'
+slingshot events outbox retry --all-dead --confirm '<exact app name>'
+slingshot events outbox purge --delivered-before 7d --confirm '<exact app name>'
+slingshot events inbox purge --before 30d --confirm '<exact app name>'
+```
+
+Status and list are read-only. Every mutation requires the exact configured app
+name. Replay preserves the stored envelope and event ID and writes an audit
+record. Purge operations are bounded; outbox retention can delete only rows
+already marked `delivered`, never pending, leased, or dead work.

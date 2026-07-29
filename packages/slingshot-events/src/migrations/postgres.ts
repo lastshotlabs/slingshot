@@ -49,4 +49,20 @@ export const POSTGRES_EVENT_RELIABILITY_MIGRATIONS: readonly EventReliabilityMig
           ON slingshot_event_inbox (processed_at)`,
       ]),
     }),
+    Object.freeze({
+      version: 2,
+      checksum: 'wp4-pg-v2-replay-audit',
+      statements: Object.freeze([
+        `CREATE TABLE IF NOT EXISTS slingshot_event_replay_audit (
+          id UUID PRIMARY KEY,
+          event_id TEXT,
+          replayed_count INTEGER NOT NULL CHECK (replayed_count > 0),
+          actor TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        )`,
+        `CREATE INDEX IF NOT EXISTS slingshot_event_replay_audit_created_idx
+          ON slingshot_event_replay_audit (created_at)`,
+      ]),
+    }),
   ]);

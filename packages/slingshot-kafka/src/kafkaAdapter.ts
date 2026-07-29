@@ -8,6 +8,8 @@ import {
 } from 'kafkajs';
 import { z } from 'zod';
 import type {
+  AcknowledgedEventBus,
+  DurablePublishReceipt,
   EventBusSerializationOptions,
   EventEnvelope,
   HealthReport,
@@ -563,7 +565,7 @@ export function createKafkaAdapter(
        */
       logger?: Logger;
     },
-): SlingshotEventBus & {
+): AcknowledgedEventBus & {
   readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
   health(): KafkaAdapterHealth;
   /** {@link HealthCheck.getHealth} — synchronous, last-cached state. */
@@ -1391,6 +1393,7 @@ export function createKafkaAdapter(
   }
 
   const bus: SlingshotEventBus & {
+    publishEnvelope(envelope: EventEnvelope): Promise<DurablePublishReceipt>;
     readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
     health(): KafkaAdapterHealth;
     getHealth(): HealthReport;
@@ -1398,6 +1401,44 @@ export function createKafkaAdapter(
     _drainPendingBuffer(): Promise<void>;
     shutdown(): Promise<void>;
   } = {
+    async publishEnvelope(envelope: EventEnvelope): Promise<DurablePublishReceipt> {
+      if (isShutdown) throw new Error('Cannot publish after Kafka adapter shutdown.');
+      if (!isEventEnvelope(envelope, envelope.key)) {
+        throw new Error('publishEnvelope requires a valid governed event envelope.');
+      }
+
+      const eventListeners = envelopeListeners.get(envelope.key);
+      if (eventListeners) {
+        await Promise.all(Array.from(eventListeners, listener => listener(envelope)));
+      }
+
+      const topic = toTopicName(config.topicPrefix, envelope.key);
+      const serialized = eventSerializer.serialize(envelope.key, envelope);
+      await ensureTopic(topic);
+      const ensuredProducer = await ensureProducer();
+      await withTimeout(
+        ensuredProducer.send({
+          topic,
+          compression: config.compression ? COMPRESSION_CODEC[config.compression] : undefined,
+          messages: [
+            {
+              key: resolvePartitionKey(config, envelope.key, envelope.payload) ?? undefined,
+              value: Buffer.from(serialized),
+              headers: buildEnvelopeHeaders(envelope, eventSerializer.contentType),
+            },
+          ],
+        }),
+        config.producerTimeoutMs,
+        `kafka.producer.send[${topic}]`,
+      );
+      return {
+        eventId: envelope.meta.eventId,
+        acceptedAt: new Date().toISOString(),
+        transport: 'kafka',
+        durableDestinations: 1,
+      };
+    },
+
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       if (isShutdown) {
         logger.warn('[KafkaAdapter] emit() called after shutdown, ignoring.');

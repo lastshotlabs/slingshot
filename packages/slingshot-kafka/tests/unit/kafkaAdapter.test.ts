@@ -18,6 +18,41 @@ afterEach(async () => {
 });
 
 describe('kafkaAdapter', () => {
+  test('acknowledges a stable envelope only after the producer accepts it', async () => {
+    const bus = createKafkaAdapter({
+      brokers: ['localhost:19092'],
+      topicPrefix: 'custom.events',
+    });
+    const envelope = createRawEventEnvelope('auth:login', {
+      userId: 'u-outbox',
+      sessionId: 's-outbox',
+    });
+
+    const receipt = await bus.publishEnvelope(envelope);
+
+    expect(receipt).toMatchObject({
+      eventId: envelope.meta.eventId,
+      transport: 'kafka',
+      durableDestinations: 1,
+    });
+    expect(state.producerSendCalls[0]?.topic).toBe('custom.events.auth.login');
+    expect(state.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.event-id']).toBe(
+      envelope.meta.eventId,
+    );
+  });
+
+  test('rejects acknowledged publication when the producer rejects', async () => {
+    const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+    const envelope = createRawEventEnvelope('auth:login', {
+      userId: 'u-outbox',
+      sessionId: 's-outbox',
+    });
+    state.producerSendErrors.push(new Error('broker unavailable'));
+
+    await expect(bus.publishEnvelope(envelope)).rejects.toThrow('broker unavailable');
+    expect(bus.health().pendingBufferSize).toBe(0);
+  });
+
   test('exposes adapter introspection and topic naming', () => {
     const bus = createKafkaAdapter({
       brokers: ['localhost:19092'],

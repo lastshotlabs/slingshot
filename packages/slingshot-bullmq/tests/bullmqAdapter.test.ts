@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
-import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
+import { createEventSchemaRegistry, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
 import { shutdownBus } from './helpers/bus';
 
@@ -72,6 +72,37 @@ describe('bullmqAdapterOptionsSchema', () => {
       enqueueTimeoutMs: 0,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('createBullMQAdapter — acknowledged publication', () => {
+  test('waits for every durable destination and preserves envelope identity', async () => {
+    const bus = createBullMQAdapter({ connection: { host: 'localhost' } });
+    bus.on('auth:login', () => {}, { durable: true, name: 'audit' });
+    bus.on('auth:login', () => {}, { durable: true, name: 'analytics' });
+    const envelope = createRawEventEnvelope('auth:login', {
+      userId: 'u-1',
+      sessionId: 's-1',
+    });
+
+    const receipt = await bus.publishEnvelope(envelope);
+
+    expect(receipt).toMatchObject({
+      eventId: envelope.meta.eventId,
+      transport: 'bullmq',
+      durableDestinations: 2,
+    });
+    expect(fakeBullMQState.queues.flatMap(queue => queue.addCalls)).toHaveLength(2);
+  });
+
+  test('reports zero durable destinations without claiming delivery', async () => {
+    const bus = createBullMQAdapter({ connection: { host: 'localhost' } });
+    const envelope = createRawEventEnvelope('auth:login', {
+      userId: 'u-1',
+      sessionId: 's-1',
+    });
+
+    expect((await bus.publishEnvelope(envelope)).durableDestinations).toBe(0);
   });
 });
 

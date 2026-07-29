@@ -31,10 +31,17 @@ import {
   createNoopMetricsEmitter,
   createPluginStateMap,
   deepFreeze,
+  isAcknowledgedEventBus,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
-import { initializeEventReliabilityStore } from '@lastshotlabs/slingshot-events';
+import {
+  createOutboxDispatcher,
+  createPostgresOutboxDispatchRepository,
+  createSqliteOutboxDispatchRepository,
+  initializeEventReliabilityStore,
+} from '@lastshotlabs/slingshot-events';
+import type { OutboxDispatcher } from '@lastshotlabs/slingshot-events';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -389,6 +396,19 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     await initializeEventReliabilityStore(storeInfra, eventReliability);
   }
   eventOutboxWriter?.bind(storeInfra);
+  let eventOutboxDispatcher: OutboxDispatcher | null = null;
+  if (eventReliability?.outbox && isAcknowledgedEventBus(bus)) {
+    const repository =
+      eventReliability.store === 'postgres'
+        ? createPostgresOutboxDispatchRepository(storeInfra.getPostgres())
+        : createSqliteOutboxDispatchRepository(storeInfra.getSqliteDb());
+    eventOutboxDispatcher = createOutboxDispatcher({
+      repository,
+      bus,
+      config: eventReliability.outbox,
+    });
+    eventOutboxDispatcher.start();
+  }
 
   // The decorated storeInfra (with REGISTER_ENTITY, RESOLVE_ENTITY_FACTORIES, etc.)
   // is only available after createContextStoreInfra runs. Update frameworkConfig so
@@ -510,6 +530,12 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
 
         try {
           await this.kafkaConnectors?.stop();
+        } catch {
+          /* best-effort */
+        }
+
+        try {
+          await eventOutboxDispatcher?.shutdown();
         } catch {
           /* best-effort */
         }

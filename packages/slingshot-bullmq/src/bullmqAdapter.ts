@@ -4,13 +4,14 @@ import { Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import { ZodError, z } from 'zod';
 import type {
+  AcknowledgedEventBus,
+  DurablePublishReceipt,
   EventBusSerializationOptions,
   EventEnvelope,
   HealthReport,
   HealthState,
   Logger,
   MetricsEmitter,
-  SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
@@ -26,6 +27,7 @@ import {
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
 import {
+  BullMQAdapterError,
   DuplicateDurableSubscriptionError,
   DurableSubscriptionNameRequiredError,
   DurableSubscriptionOffError,
@@ -681,7 +683,7 @@ export function createBullMQAdapter(
        */
       metrics?: MetricsEmitter;
     },
-): SlingshotEventBus & {
+): AcknowledgedEventBus & {
   /** {@link HealthCheck.getHealth} — synchronous, last-cached state. */
   getHealth: () => HealthReport;
   /** {@link HealthCheck.checkHealth} — live probe (Redis ping + counts). */
@@ -1294,6 +1296,51 @@ export function createBullMQAdapter(
   }
 
   return {
+    async publishEnvelope(envelope: EventEnvelope): Promise<DurablePublishReceipt> {
+      if (isShutdown) throw new BullMQAdapterError('Cannot publish after adapter shutdown.');
+      if (!isEventEnvelope(envelope, envelope.key)) {
+        throw new BullMQAdapterError('publishEnvelope requires a valid governed event envelope.');
+      }
+
+      const fns = envelopeListeners.get(envelope.key);
+      if (fns) {
+        await Promise.all(Array.from(fns, listener => listener(envelope)));
+      }
+
+      const queuePrefix = `${prefix}:${envelope.key}:`;
+      const destinations = Array.from(durableQueues.entries()).filter(([name]) =>
+        name.startsWith(queuePrefix),
+      );
+      const durablePayload =
+        eventSerializer === JSON_SERIALIZER
+          ? (envelope as object)
+          : ({
+              __slingshot_serialized: Buffer.from(
+                eventSerializer.serialize(envelope.key, envelope),
+              ).toString('base64'),
+              __slingshot_content_type: eventSerializer.contentType,
+            } satisfies SerializedBullMQEnvelope);
+
+      await Promise.all(
+        destinations.map(async ([name, queue]) => {
+          await withTimeout(
+            queue.add(envelope.key, durablePayload, { jobId: envelope.meta.eventId }),
+            enqueueTimeoutMs,
+            `bullmq.add[${envelope.key}]`,
+          );
+          metrics.counter('bullmq.publish.count', 1, {
+            queue: (queue as { name?: string }).name ?? name,
+          });
+        }),
+      );
+      return {
+        eventId: envelope.meta.eventId,
+        acceptedAt: new Date().toISOString(),
+        transport: 'bullmq',
+        durableDestinations: destinations.length,
+      };
+    },
+
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       if (isShutdown) return;
 

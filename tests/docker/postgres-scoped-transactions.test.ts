@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
 import type { EventEnvelope, PackageDomainRouteContext } from '@lastshotlabs/slingshot-core';
-import { createInProcessAdapter, definePackage, domain, route } from '@lastshotlabs/slingshot-core';
+import {
+  createInProcessAdapter,
+  createRawEventEnvelope,
+  definePackage,
+  domain,
+  route,
+} from '@lastshotlabs/slingshot-core';
 import {
   createCompositeFactories,
   defineEntity,
@@ -10,6 +16,10 @@ import {
   field,
   op,
 } from '@lastshotlabs/slingshot-entity';
+import {
+  createPostgresOutboxDispatchRepository,
+  serializeOutboxEnvelope,
+} from '@lastshotlabs/slingshot-events';
 import { createApp } from '../../src/app';
 import { getContextStoreInfra } from '../../src/framework/persistence/internalRepoResolution';
 
@@ -300,6 +310,19 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
     return Number(result.rows[0]?.count ?? 0);
   }
 
+  async function waitForDeliveredOutbox(timeoutMs = 2_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const result = await adminPool.query<{ status: string }>(
+        `SELECT status FROM ${quotedSchema}.slingshot_event_outbox
+          ORDER BY created_at DESC LIMIT 1`,
+      );
+      if (result.rows[0]?.status === 'delivered') return;
+      await Bun.sleep(25);
+    }
+    throw new Error('outbox row was not acknowledged before the test deadline');
+  }
+
   function resetTrace(): void {
     checkoutCount = 0;
     transactionQueries.length = 0;
@@ -366,6 +389,7 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
     expect(committed.status).toBe(200);
     expect(await rowCount(`slingshot_${Account._storageName}`)).toBe(beforeAccounts + 1);
     expect(await rowCount('slingshot_event_outbox')).toBe(beforeOutbox + 1);
+    await waitForDeliveredOutbox();
 
     const rolledBack = await appResult.app.request('/phase4/outbox-rollback', {
       method: 'POST',
@@ -373,5 +397,32 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
     expect(rolledBack.status).toBe(500);
     expect(await rowCount(`slingshot_${Account._storageName}`)).toBe(beforeAccounts + 1);
     expect(await rowCount('slingshot_event_outbox')).toBe(beforeOutbox + 1);
+  });
+
+  test('two PostgreSQL dispatchers never claim the same row', async () => {
+    if (!appResult) throw new Error('app did not start');
+    const envelope = createRawEventEnvelope('app:shutdown', { signal: 'SIGTERM' });
+    const row = serializeOutboxEnvelope(envelope);
+    const availableAt = '2099-07-29T00:00:00.000Z';
+    await adminPool.query(
+      `INSERT INTO ${quotedSchema}.slingshot_event_outbox (
+        id, event_id, event_key, envelope_json, status, attempts,
+        available_at, created_at
+      ) VALUES ($1, $2, $3, $4::jsonb, 'pending', 0, $5, $5)`,
+      [row.id, row.eventId, row.eventKey, row.envelopeJson, availableAt],
+    );
+    const infra = getContextStoreInfra(appResult.ctx);
+    if (!infra) throw new Error('context StoreInfra was not attached');
+    const first = createPostgresOutboxDispatchRepository(infra.getPostgres());
+    const second = createPostgresOutboxDispatchRepository(infra.getPostgres());
+    const now = '2099-07-29T00:00:01.000Z';
+    const leaseExpiresAt = '2099-07-29T00:00:31.000Z';
+
+    const claims = await Promise.all([
+      first.claim({ owner: 'first', limit: 1, now, leaseExpiresAt }),
+      second.claim({ owner: 'second', limit: 1, now, leaseExpiresAt }),
+    ]);
+
+    expect(claims.flat().filter(claim => claim.id === row.id)).toHaveLength(1);
   });
 });

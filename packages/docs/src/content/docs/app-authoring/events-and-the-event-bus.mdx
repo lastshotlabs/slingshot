@@ -151,6 +151,32 @@ ctx.events.publish('blog:post.published', {
 definition, and keeps SSE and webhook filtering coherent. Use raw `bus.emit(...)` only for
 transport-specific behavior where you don't want the registered envelope.
 
+### Publish atomically with a database transaction
+
+When a database write and durable event must commit together, enable
+`events.reliability.outbox` and publish with the active transaction scope:
+
+```typescript
+await ctx.transactions.run('postgres', async transaction => {
+  await ctx.entities.get(posts, { scope: transaction }).create(input);
+  ctx.events.publish('blog:post.published', payload, {
+    requestTenantId: tenantId,
+    delivery: 'outbox',
+    transaction,
+  });
+});
+```
+
+This inserts the stable governed envelope in the same SQL transaction. A
+background dispatcher leases committed rows and waits for BullMQ or Kafka to
+acknowledge the original event ID before marking them delivered. Delivery is
+at least once: consumers must deduplicate on `envelope.meta.eventId`.
+
+An enabled outbox requires PostgreSQL or SQLite and an acknowledged event bus.
+BullMQ also needs at least one matching durable subscription; zero destinations
+keeps the row pending for retry. Broker I/O never runs inside the domain
+transaction.
+
 ## Subscribe
 
 Subscribe in `setupPost` so all publishers are wired before any subscriber starts listening:

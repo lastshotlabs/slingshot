@@ -146,6 +146,20 @@ waits outside the transaction instead of joining the shared connection implicitl
 Primary-key creation is insert-only across standard adapters. In particular, MongoDB uses a
 strict insert and Redis uses `SET ... NX`, so create never overwrites an existing record.
 
+### Optimistic Concurrency
+
+`concurrency: { strategy: 'version' }` injects an immutable version field into the resolved
+entity. Adapters own authoritative comparison and increment behavior: creates start at 1,
+successful updates and soft deletes increment once, and hard deletes compare without leaking
+tenant-scoped existence. Memory, SQLite, PostgreSQL, and MongoDB claim these atomic guarantees;
+Redis rejects the entity before connection or key creation.
+
+Runtime and generated CRUD routes share the canonical strong ETag codec. They compute tags from
+the raw entity before DTO projection, require or optionally accept `If-Match` according to
+`requiredOnWrite`, and map malformed, missing, wrong-identity, stale, and absent records to the
+documented 400/428/412/412/404 statuses. Migration snapshots remain format version 1; SQL
+add-column migrations use `NOT NULL DEFAULT 1`, while MongoDB backfills only missing fields.
+
 SQLite and PostgreSQL bootstrap reconcile framework-managed positional indexes against their
 configured uniqueness and ordered field sets. Changing an index definition therefore rebuilds
 the stale database index instead of letting `CREATE INDEX IF NOT EXISTS` preserve an obsolete

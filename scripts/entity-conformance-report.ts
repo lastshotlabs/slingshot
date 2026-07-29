@@ -32,7 +32,7 @@ export const ENTITY_CONFORMANCE_STORES = [
 
 export const ENTITY_CONFORMANCE_REPORT_PATH = resolve(
   import.meta.dir,
-  '../.tmp/entity-conformance/entity-conformance.v2.json',
+  '../.tmp/entity-conformance/entity-conformance.v3.json',
 );
 
 export const TRANSACTION_GUARANTEE_CATALOG = [
@@ -73,6 +73,37 @@ export const TRANSACTION_GUARANTEE_CATALOG = [
   },
 ] as const;
 
+export const CONCURRENCY_GUARANTEE_CATALOG = [
+  {
+    id: 'version.update',
+    description: 'Versioned updates validate, compare, race, increment, and preserve scope.',
+    stores: ['memory', 'sqlite', 'postgres', 'mongo'],
+    caseIds: [
+      'concurrency.version-update',
+      'concurrency.version-precondition',
+      'concurrency.version-update-race',
+      'concurrency.version-optional-guard',
+      'concurrency.version-scope',
+    ],
+  },
+  {
+    id: 'version.delete',
+    description: 'Versioned hard and soft deletes compare atomically and preserve scope.',
+    stores: ['memory', 'sqlite', 'postgres', 'mongo'],
+    caseIds: [
+      'concurrency.version-delete',
+      'concurrency.version-scope',
+      'concurrency.version-soft-delete',
+    ],
+  },
+  {
+    id: 'version.transaction-scope',
+    description: 'Transaction-scoped adapters preserve version compare-and-write semantics.',
+    stores: ['sqlite', 'postgres'],
+    caseIds: ['concurrency.version-transaction-scope'],
+  },
+] as const;
+
 export interface TransactionGuaranteeEvidence {
   readonly id: (typeof TRANSACTION_GUARANTEE_CATALOG)[number]['id'];
   readonly description: string;
@@ -80,10 +111,22 @@ export interface TransactionGuaranteeEvidence {
   readonly caseIds: readonly string[];
 }
 
+/** Required passing evidence for a public optimistic-concurrency guarantee. */
+export interface ConcurrencyGuaranteeEvidence {
+  /** Stable guarantee identifier. */
+  readonly id: (typeof CONCURRENCY_GUARANTEE_CATALOG)[number]['id'];
+  /** Human-readable guarantee summary. */
+  readonly description: string;
+  /** Backends that claim atomic version concurrency. */
+  readonly stores: readonly StoreType[];
+  /** Conformance cases that must pass on every claimed backend. */
+  readonly caseIds: readonly string[];
+}
+
 /** Complete ephemeral evidence emitted by the entity conformance CI lane. */
 export interface EntityConformanceReport {
   /** Report schema version. */
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   /** Git revision exercised by this report. */
   readonly revision: string;
   /** Static semantic support claims in stable store order. */
@@ -92,6 +135,8 @@ export interface EntityConformanceReport {
   readonly results: readonly EntityConformanceResult[];
   /** Required SQLite/PostgreSQL evidence for every public transaction guarantee. */
   readonly transactionGuarantees: readonly TransactionGuaranteeEvidence[];
+  /** Required backend evidence for every public optimistic-concurrency guarantee. */
+  readonly concurrencyGuarantees: readonly ConcurrencyGuaranteeEvidence[];
 }
 
 function sanitizeError(error: unknown): { readonly name: string; readonly message: string } {
@@ -191,13 +236,18 @@ export async function buildEntityConformanceReport(
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision,
     profiles: ENTITY_BACKEND_PROFILES,
     results,
     transactionGuarantees: TRANSACTION_GUARANTEE_CATALOG.map(guarantee => ({
       ...guarantee,
       stores: ['sqlite', 'postgres'] as const,
+      caseIds: [...guarantee.caseIds],
+    })),
+    concurrencyGuarantees: CONCURRENCY_GUARANTEE_CATALOG.map(guarantee => ({
+      ...guarantee,
+      stores: [...guarantee.stores],
       caseIds: [...guarantee.caseIds],
     })),
   };
@@ -217,8 +267,8 @@ export function validateEntityConformanceReport(
   report: EntityConformanceReport,
 ): readonly string[] {
   const errors: string[] = [];
-  if (report.schemaVersion !== 2) {
-    errors.push(`Report schemaVersion must be 2; received ${String(report.schemaVersion)}.`);
+  if (report.schemaVersion !== 3) {
+    errors.push(`Report schemaVersion must be 3; received ${String(report.schemaVersion)}.`);
   }
   const profileStores = Object.keys(report.profiles);
   if (!sameStrings(profileStores, ENTITY_CONFORMANCE_STORES)) {
@@ -341,6 +391,39 @@ export function validateEntityConformanceReport(
         );
         if (result?.status !== 'passed') {
           errors.push(`${store}:${caseId} must pass for transaction guarantee '${actual.id}'.`);
+        }
+      }
+    }
+  }
+
+  if (report.concurrencyGuarantees.length !== CONCURRENCY_GUARANTEE_CATALOG.length) {
+    errors.push(
+      `Expected ${CONCURRENCY_GUARANTEE_CATALOG.length} concurrency guarantees; received ${report.concurrencyGuarantees.length}.`,
+    );
+  }
+  for (const [index, expected] of CONCURRENCY_GUARANTEE_CATALOG.entries()) {
+    const actual = report.concurrencyGuarantees[index];
+    if (!actual || actual.id !== expected.id) {
+      errors.push(`Concurrency guarantee ${index} must be '${expected.id}'.`);
+      continue;
+    }
+    if (!sameStrings(actual.stores, expected.stores)) {
+      errors.push(`${actual.id} changed its required evidence stores.`);
+    }
+    if (!sameStrings(actual.caseIds, expected.caseIds)) {
+      errors.push(`${actual.id} changed its required conformance cases.`);
+    }
+    for (const caseId of actual.caseIds) {
+      if (!catalogCaseIds.has(caseId)) {
+        errors.push(`${actual.id} references missing conformance case '${caseId}'.`);
+        continue;
+      }
+      for (const store of actual.stores) {
+        const result = report.results.find(
+          candidate => candidate.store === store && candidate.caseId === caseId,
+        );
+        if (result?.status !== 'passed') {
+          errors.push(`${store}:${caseId} must pass for concurrency guarantee '${actual.id}'.`);
         }
       }
     }

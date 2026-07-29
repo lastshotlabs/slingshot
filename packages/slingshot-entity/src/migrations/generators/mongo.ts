@@ -88,6 +88,13 @@ export function generateMigrationMongo(plan: MigrationPlan): string {
       case 'addField': {
         const fieldKey = jsonString(change.name);
         schema.push(`// Field ${fieldKey} added — no migration needed (schemaless).`);
+        if (change.name === plan.concurrencyField) {
+          schema.push(`// Initialize optimistic-concurrency state only where it is absent:`);
+          schema.push(
+            `${coll}.updateMany({ [${fieldKey}]: { $exists: false } }, { $set: { [${fieldKey}]: 1 } });`,
+          );
+          break;
+        }
         if (
           change.field.default !== undefined &&
           change.field.default !== 'uuid' &&

@@ -131,5 +131,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: entity-conformance
-          path: .tmp/entity-conformance/entity-conformance.v2.json
+          path: .tmp/entity-conformance/entity-conformance.v3.json
           if-no-files-found: error

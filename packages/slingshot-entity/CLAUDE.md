@@ -5,19 +5,20 @@ used by Slingshot feature packages.
 
 ## Key Files
 
-| File                                            | What                                                               |
-| ----------------------------------------------- | ------------------------------------------------------------------ |
-| src/index.ts                                    | Public API surface for builders, generators, and runtime factories |
-| src/createEntityPlugin.ts                       | Root entity plugin factory                                         |
-| src/generate.ts                                 | Pure code generation entry point                                   |
-| src/defineEntity.ts                             | Entity definition API                                              |
-| src/defineOperations.ts                         | Custom operation definition API                                    |
-| src/configDriven/index.ts                       | Runtime entity factories and schema generation                     |
-| src/configDriven/backendProfiles.ts             | Backend capability profiles and startup validation                 |
-| src/testing/                                    | Shared entity conformance catalog and backend drivers              |
-| ../../scripts/entity-conformance-report.ts      | Five-store CI evidence and release validation                      |
-| ../../scripts/generate-entity-support-matrix.ts | Profile-driven generated support docs                              |
-| docs/human/index.md                             | Package guide synced into the docs site                            |
+| File                                                              | What                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| src/index.ts                                                      | Public API surface for builders, generators, and runtime factories |
+| src/createEntityPlugin.ts                                         | Root entity plugin factory                                         |
+| src/generate.ts                                                   | Pure code generation entry point                                   |
+| src/defineEntity.ts                                               | Entity definition API                                              |
+| src/defineOperations.ts                                           | Custom operation definition API                                    |
+| src/configDriven/index.ts                                         | Runtime entity factories and schema generation                     |
+| src/configDriven/backendProfiles.ts                               | Backend capability profiles and startup validation                 |
+| src/testing/                                                      | Shared entity conformance catalog and backend drivers              |
+| ../../scripts/entity-conformance-report.ts                        | Five-store CI evidence and release validation                      |
+| ../../scripts/generate-entity-support-matrix.ts                   | Profile-driven generated support docs                              |
+| ../docs/src/content/docs/entity-system/optimistic-concurrency.mdx | Public concurrency, ETag, migration, and rollout guide             |
+| docs/human/index.md                                               | Package guide synced into the docs site                            |
 
 ## Connections
 
@@ -32,5 +33,7 @@ used by Slingshot feature packages.
 - **Proving backend behavior**: update the shared catalog and the matching driver under `src/testing/`
 - **Changing transaction guarantees**: add or update the shared scoped cases and
   `TRANSACTION_GUARANTEE_CATALOG`; SQLite and PostgreSQL must both pass every declared guarantee
+- **Changing optimistic concurrency**: keep adapter, migration, runtime/generated HTTP, OpenAPI,
+  conformance, and `entity-system/optimistic-concurrency.mdx` behavior aligned
 - **Regenerating backend support docs**: run `bun run docs:entity-support`; never edit the generated matrix by hand
 - **Testing**: `packages/slingshot-entity/tests/`

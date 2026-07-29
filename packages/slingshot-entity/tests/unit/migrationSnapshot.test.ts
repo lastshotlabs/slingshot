@@ -54,6 +54,30 @@ describe('loadSnapshot', () => {
     });
   });
 
+  it('keeps snapshot version 1 and stores an injected concurrency field as an ordinary field', () => {
+    const ConcurrentUser = defineEntity('ConcurrentUser', {
+      fields: UserEntity.fields,
+      concurrency: { strategy: 'version', field: 'revision' },
+    });
+    saveSnapshot(TMP_DIR, ConcurrentUser);
+    const snapshot = loadSnapshot(TMP_DIR, ConcurrentUser);
+
+    expect(snapshot!.snapshotVersion).toBe(1);
+    expect(snapshot!.entity.fields).toMatchObject({
+      revision: expect.objectContaining({
+        type: 'number',
+        integer: true,
+        default: 'version',
+      }),
+    });
+    expect(snapshot!.entity._concurrency).toEqual({
+      strategy: 'version',
+      field: 'revision',
+      initialVersion: 1,
+      requiredOnWrite: true,
+    });
+  });
+
   it('snapshot has a valid ISO timestamp', () => {
     saveSnapshot(TMP_DIR, UserEntity);
     const snapshot = loadSnapshot(TMP_DIR, UserEntity);

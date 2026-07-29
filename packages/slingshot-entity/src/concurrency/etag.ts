@@ -3,8 +3,11 @@ const ENTITY_ETAG_PATTERN = /^"slingshot\.([A-Za-z0-9_-]+)"$/;
 
 /** The decoded identity and version carried by a Slingshot entity ETag. */
 export interface ParsedEntityEtag {
+  /** Resolved entity storage name encoded into the tag. */
   readonly storageName: string;
+  /** String form of the entity primary key encoded into the tag. */
   readonly id: string;
+  /** Positive entity version encoded into the tag. */
   readonly version: number;
 }
 

@@ -210,3 +210,12 @@ Production authoring should be reproducible:
 
 The preflight does not replace `hardening:full`; it catches environment-specific
 config risks that static tests cannot know.
+
+## Concurrent writes
+
+Enable [optimistic concurrency](/entity-system/optimistic-concurrency/) on mutable records where
+lost updates matter. Apply the generated SQL or MongoDB migration before requiring `If-Match`,
+verify that clients retain strong ETags, and monitor 412/428 responses during rollout. Redis is
+not a supported store for concurrency-enabled entities and startup fails before creating keys.
+Use `requiredOnWrite: false` only as a deliberate compatibility stage; omitted guards remain
+unconditional even though successful writes still increment the version.

@@ -1,0 +1,97 @@
+---
+title: Optimistic Concurrency
+description: Prevent lost entity updates with version guards, ETags, migrations, and backend capability checks
+---
+
+Optimistic concurrency prevents two writers from silently overwriting each other. Slingshot
+implements it as an opt-in entity version that is compared and incremented atomically by the
+storage adapter.
+
+## Enable version guards
+
+```typescript
+const Article = defineEntity('Article', {
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+  },
+  concurrency: {
+    strategy: 'version',
+    // field: 'revision',       // default: systemFields.version or "version"
+    // requiredOnWrite: false, // default: true
+  },
+});
+```
+
+The resolved entity gains an immutable positive-integer `version` field. Creates always persist
+version 1 and ignore caller-supplied versions. Every successful update, including an empty patch
+or soft delete, increments the version exactly once.
+
+With the default `requiredOnWrite: true`, adapter updates and deletes require an expected version:
+
+```typescript
+const current = await articles.getById(id);
+const updated = await articles.update(id, { title: 'Revised' }, undefined, {
+  expectedVersion: current!.version,
+});
+```
+
+Omitting the guard raises `EntityConcurrencyPreconditionError`; a stale guard raises
+`EntityConcurrencyConflictError`. Expected versions must be positive safe integers. With
+`requiredOnWrite: false`, omitted guards remain unconditional but still increment the version;
+supplying a guard still enables compare-and-write protection.
+
+## HTTP and ETags
+
+Generated and runtime entity routes emit one strong `ETag` on create, get, and update responses.
+The tag binds the storage name, primary key, and version, even when a response DTO hides those
+fields.
+
+Send that exact tag in `If-Match` for update or delete:
+
+```http
+PATCH /articles/article-1
+If-Match: "slingshot.WyJhcnRpY2xlcyIsImFydGljbGUtMSIsMV0"
+Content-Type: application/json
+
+{"title":"Revised"}
+```
+
+| Condition                                    | Status                      |
+| -------------------------------------------- | --------------------------- |
+| Required `If-Match` omitted                  | `428 Precondition Required` |
+| Malformed, weak, wildcard, or multiple tags  | `400 Bad Request`           |
+| Tag belongs to another entity or primary key | `412 Precondition Failed`   |
+| Record exists but its version is stale       | `412 Precondition Failed`   |
+| Scoped record does not exist                 | `404 Not Found`             |
+
+Conflict responses never reveal the current version. Generated OpenAPI documents the
+`If-Match` request header, `ETag` response header, and conditional error responses.
+
+## Backend support
+
+Memory, SQLite, PostgreSQL, and MongoDB provide atomic guarded updates and deletes. Redis rejects
+concurrency-enabled entities during startup before opening infrastructure or creating keys; it
+does not provide a best-effort implementation. See the generated
+[backend support matrix](/reference/entity-backend-support/).
+
+Transaction-scoped SQLite and PostgreSQL adapters use the same guard and conflict semantics as
+unscoped adapters.
+
+## Migrations
+
+Run the normal snapshot-backed migration workflow after enabling concurrency. Snapshot format
+remains version 1; the injected version is stored as an ordinary resolved field.
+
+- SQLite and PostgreSQL add the field as `NOT NULL DEFAULT 1`, which initializes existing rows.
+- MongoDB emits a targeted `updateMany` for documents where the version field is absent.
+- Fresh SQL migrations include the required version column and default.
+
+Review and apply the generated migration before deploying code that requires `If-Match`.
+
+## Rollout guidance
+
+For a compatibility rollout, start with `requiredOnWrite: false`, deploy the migration, update
+clients to retain ETags and send `If-Match`, then switch to the default required mode. Keep
+unconditional internal jobs intentional and short-lived; otherwise they can still overwrite a
+guarded client update.

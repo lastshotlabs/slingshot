@@ -284,6 +284,13 @@ That separation means:
 
 All running the same entity code.
 
+Concurrency-enabled entities are supported by memory, SQLite, PostgreSQL, and MongoDB adapters.
+Their update and delete implementations compare the expected version and mutate atomically;
+SQLite and PostgreSQL preserve those semantics inside transaction scopes. Redis rejects the
+configuration before connecting because it cannot yet provide the required atomic guarantee.
+See [Optimistic Concurrency](/entity-system/optimistic-concurrency/) and the generated
+[backend support matrix](/reference/entity-backend-support/).
+
 ## Next
 
 - [defineEntity](/entity-system/define-entity/) — the entity model contract

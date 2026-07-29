@@ -14,6 +14,12 @@ support claim: unsupported configurations fail before backend infrastructure is 
 > Memory is a development/test store. It is not a durable production store and does not provide
 > rollback durability for composite transactions.
 
+Version concurrency requires both `concurrency.version-update` and
+`concurrency.version-delete`. Memory, SQLite, PostgreSQL, and MongoDB perform atomic
+compare-and-write operations; Redis rejects the configuration before infrastructure access.
+See [Optimistic Concurrency](/entity-system/optimistic-concurrency/) for HTTP and migration
+behavior.
+
 ## CRUD and configuration features
 
 | Capability                   | Memory       | Sqlite       | Postgres     | Mongo        | Redis                                                                              |
@@ -103,5 +109,16 @@ report validation fail.
 | `scope.same-store-nesting`       | ✅ Required | ✅ Required | `scope.same-store-nesting`         |
 | `scope.cross-store-rejection`    | ✅ Required | ✅ Required | `scope.cross-store-rejection`      |
 | `scope.closed-adapter-rejection` | ✅ Required | ✅ Required | `scope.closed-adapter-rejection`   |
+
+## Optimistic-concurrency guarantees
+
+The versioned conformance report requires every listed case to pass on each backend shown.
+SQLite and PostgreSQL additionally prove parity through transaction-scoped adapters.
+
+| Guarantee                   | Required stores                         | Evidence cases                                                                                                                                                         |
+| --------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version.update`            | `memory`, `sqlite`, `postgres`, `mongo` | `concurrency.version-update`, `concurrency.version-precondition`, `concurrency.version-update-race`, `concurrency.version-optional-guard`, `concurrency.version-scope` |
+| `version.delete`            | `memory`, `sqlite`, `postgres`, `mongo` | `concurrency.version-delete`, `concurrency.version-scope`, `concurrency.version-soft-delete`                                                                           |
+| `version.transaction-scope` | `sqlite`, `postgres`                    | `concurrency.version-transaction-scope`                                                                                                                                |
 
 {/* END GENERATED FILE */}

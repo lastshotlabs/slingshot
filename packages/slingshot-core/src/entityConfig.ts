@@ -90,21 +90,29 @@ export type AutoDefault = 'uuid' | 'now' | 'cuid' | 'version';
 
 /** Opt-in optimistic-concurrency configuration for an entity. */
 export interface EntityVersionConcurrencyConfig {
+  /** Version comparison strategy. */
   readonly strategy: 'version';
+  /** Generated version field name. Defaults to `systemFields.version` or `version`. */
   readonly field?: string;
+  /** Whether writes without an expected version fail. Defaults to `true`. */
   readonly requiredOnWrite?: boolean;
 }
 
 /** Normalized optimistic-concurrency metadata attached by `defineEntity`. */
 export interface ResolvedEntityVersionConcurrencyConfig {
+  /** Resolved version comparison strategy. */
   readonly strategy: 'version';
+  /** Generated domain and storage field name. */
   readonly field: string;
+  /** Whether every update and delete requires an expected version. */
   readonly requiredOnWrite: boolean;
+  /** Initial version assigned by the adapter on create. */
   readonly initialVersion: 1;
 }
 
 /** Per-write optimistic-concurrency options accepted by entity adapters. */
 export interface EntityWriteOptions {
+  /** Positive version that must match the stored record before the write occurs. */
   readonly expectedVersion?: number;
 }
 

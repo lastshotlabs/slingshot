@@ -82,7 +82,7 @@ export function generateInitialMigrationPostgres(config: ResolvedEntityConfig): 
     const type = pgColType(def.type);
     const pk = def.primary ? ' PRIMARY KEY' : '';
     const notNull = !def.optional && !def.primary ? ' NOT NULL' : def.primary ? ' NOT NULL' : '';
-    const defClause = pgDefaultClause(def);
+    const defClause = name === config._concurrency?.field ? ' DEFAULT 1' : pgDefaultClause(def);
     colLines.push(`  ${col} ${type}${pk}${notNull}${defClause}`);
   }
 
@@ -152,7 +152,7 @@ export function generateInitialMigrationSqlite(config: ResolvedEntityConfig): st
     const type = sqliteColType(def.type);
     const pk = def.primary ? ' PRIMARY KEY' : '';
     const notNull = !def.optional && !def.primary ? ' NOT NULL' : def.primary ? ' NOT NULL' : '';
-    const defClause = sqliteDefaultClause(def);
+    const defClause = name === config._concurrency?.field ? ' DEFAULT 1' : sqliteDefaultClause(def);
     colLines.push(`  ${col} ${type}${pk}${notNull}${defClause}`);
   }
 

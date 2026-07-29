@@ -2,8 +2,11 @@
 '@lastshotlabs/slingshot': minor
 '@lastshotlabs/slingshot-core': minor
 '@lastshotlabs/slingshot-entity': minor
+'@lastshotlabs/slingshot-notifications': minor
 ---
 
-Add the opt-in version-concurrency entity contract, generated resolved version fields, typed write
-options and errors, and exhaustive backend capability requirements. Backend profiles remain
-unsupported until their atomic implementations land in later WP3 phases.
+Add opt-in version concurrency across entity contracts, memory, SQLite, PostgreSQL, and MongoDB;
+strong ETag conditional writes in runtime and generated routes; migration backfills; exhaustive
+conformance evidence; and public documentation. Redis rejects unsupported concurrency before
+infrastructure access. Notification preferences adopt optional guarded writes as the first
+production package path.

@@ -172,6 +172,7 @@ export function diffEntityConfig(
       postgres: storageName(current, 'postgres'),
       mongo: storageName(current, 'mongo'),
     },
+    concurrencyField: current._concurrency?.field,
     changes,
     hasBreakingChanges,
     warnings,

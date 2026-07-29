@@ -4,9 +4,14 @@
  * Covers the diff → MigrationPlan → SQL/Mongo script path for sqlite, postgres, and mongo
  * independently of the CLI wrapper.
  */
+import { Database } from 'bun:sqlite';
 import { describe, expect, it } from 'bun:test';
 import { defineEntity, field, index } from '../../src/index';
 import { diffEntityConfig } from '../../src/migrations/diff';
+import {
+  generateInitialMigrationPostgres,
+  generateInitialMigrationSqlite,
+} from '../../src/migrations/generators/initial';
 import { generateMigrationMongo } from '../../src/migrations/generators/mongo';
 import { generateMigrationPostgres } from '../../src/migrations/generators/postgres';
 import { generateMigrationSqlite } from '../../src/migrations/generators/sqlite';
@@ -35,6 +40,13 @@ const WidgetV2 = defineEntity('Widget', {
   },
   indexes: [index(['sku']), index(['tagLine'])],
   uniques: [{ fields: ['sku'] }],
+});
+
+const ConcurrentWidget = defineEntity('Widget', {
+  namespace: 'shop',
+  fields: WidgetV1.fields,
+  indexes: WidgetV1.indexes,
+  concurrency: { strategy: 'version' },
 });
 
 describe('diffEntityConfig', () => {
@@ -70,6 +82,16 @@ describe('diffEntityConfig', () => {
     expect(plan.storageNames.sqlite).toBe(WidgetV2._storageName);
     expect(plan.storageNames.mongo).toBe(WidgetV2._storageName);
     expect(plan.storageNames.postgres).toBe(`slingshot_${WidgetV2._storageName}`);
+  });
+
+  it('identifies the injected concurrency field without changing the snapshot format', () => {
+    const plan = diffEntityConfig(WidgetV1, ConcurrentWidget);
+    expect(plan.concurrencyField).toBe('version');
+    expect(plan.changes).toContainEqual({
+      type: 'addField',
+      name: 'version',
+      field: expect.objectContaining({ type: 'number', integer: true, default: 'version' }),
+    });
   });
 
   it('emits removals before additions for indexes (enables toggling unique)', () => {
@@ -153,6 +175,35 @@ describe('diffEntityConfig', () => {
 });
 
 describe('generateMigrationSqlite', () => {
+  it('backfills the injected version field for existing rows and enforces NOT NULL', () => {
+    const plan = diffEntityConfig(WidgetV1, ConcurrentWidget);
+    const sql = generateMigrationSqlite(plan);
+    expect(sql).toContain('ADD COLUMN "version" REAL NOT NULL DEFAULT 1;');
+
+    const db = new Database(':memory:');
+    try {
+      db.exec(
+        `CREATE TABLE "${plan.storageNames.sqlite}" ("id" TEXT PRIMARY KEY, "sku" TEXT NOT NULL, "price" REAL NOT NULL, "created_at" INTEGER NOT NULL);`,
+      );
+      db.query(
+        `INSERT INTO "${plan.storageNames.sqlite}" (id, sku, price, created_at) VALUES (?, ?, ?, ?)`,
+      ).run('existing', 'sku-1', 10, Date.now());
+      db.exec(sql);
+      expect(
+        db.query(`SELECT version FROM "${plan.storageNames.sqlite}" WHERE id = ?`).get('existing'),
+      ).toEqual({ version: 1 });
+      const versionColumn = db
+        .query(`PRAGMA table_info("${plan.storageNames.sqlite}")`)
+        .all() as Array<{ name: string; notnull: number; dflt_value: string | null }>;
+      expect(versionColumn.find(column => column.name === 'version')).toMatchObject({
+        notnull: 1,
+        dflt_value: '1',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('produces ALTER TABLE ADD COLUMN with quoted identifiers for added fields', () => {
     const plan = diffEntityConfig(WidgetV1, WidgetV2);
     const sql = generateMigrationSqlite(plan);
@@ -264,7 +315,23 @@ describe('generateMigrationSqlite', () => {
   });
 });
 
+describe('initial SQL migrations', () => {
+  it('includes the injected version field with a required default on fresh schemas', () => {
+    expect(generateInitialMigrationSqlite(ConcurrentWidget)).toContain(
+      '"version" REAL NOT NULL DEFAULT 1',
+    );
+    expect(generateInitialMigrationPostgres(ConcurrentWidget)).toContain(
+      '"version" NUMERIC NOT NULL DEFAULT 1',
+    );
+  });
+});
+
 describe('generateMigrationPostgres', () => {
+  it('adds the injected version field with an existing-row-safe required default', () => {
+    const sql = generateMigrationPostgres(diffEntityConfig(WidgetV1, ConcurrentWidget));
+    expect(sql).toContain('ADD COLUMN "version" NUMERIC NOT NULL DEFAULT 1;');
+  });
+
   it('targets the slingshot_-prefixed table name', () => {
     const plan = diffEntityConfig(WidgetV1, WidgetV2);
     const sql = generateMigrationPostgres(plan);
@@ -326,6 +393,14 @@ describe('generateMigrationPostgres', () => {
 });
 
 describe('generateMigrationMongo', () => {
+  it('backfills only documents missing the injected version field', () => {
+    const script = generateMigrationMongo(diffEntityConfig(WidgetV1, ConcurrentWidget));
+    expect(script).toContain(
+      'updateMany({ ["version"]: { $exists: false } }, { $set: { ["version"]: 1 } });',
+    );
+    expect(script).not.toContain('updateMany({}, { $set: { ["version"]');
+  });
+
   it('targets the collection via db.getCollection() (safe for hyphens / reserved names)', () => {
     const plan = diffEntityConfig(WidgetV1, WidgetV2);
     const script = generateMigrationMongo(plan);

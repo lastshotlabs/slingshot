@@ -120,6 +120,8 @@ export interface MigrationPlan {
   readonly storageName: string;
   /** Per-backend table/collection names derived from the current config's `storage` hints. */
   readonly storageNames: MigrationStorageNames;
+  /** Injected optimistic-concurrency field in the current config, when enabled. */
+  readonly concurrencyField?: string;
   /** Ordered list of schema changes. Removals are emitted before additions. */
   readonly changes: readonly MigrationChange[];
   /** True when at least one `changeFieldType` change is present. */

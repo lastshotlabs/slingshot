@@ -8,6 +8,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { ENTITY_BACKEND_PROFILES } from '../packages/slingshot-entity/src/configDriven/backendProfiles';
 import {
+  CONCURRENCY_GUARANTEE_CATALOG,
   ENTITY_CONFORMANCE_STORES,
   TRANSACTION_GUARANTEE_CATALOG,
 } from './entity-conformance-report';
@@ -78,6 +79,12 @@ export async function renderEntitySupportMatrix(): Promise<string> {
     '> Memory is a development/test store. It is not a durable production store and does not provide',
     '> rollback durability for composite transactions.',
     '',
+    'Version concurrency requires both `concurrency.version-update` and',
+    '`concurrency.version-delete`. Memory, SQLite, PostgreSQL, and MongoDB perform atomic',
+    'compare-and-write operations; Redis rejects the configuration before infrastructure access.',
+    'See [Optimistic Concurrency](/entity-system/optimistic-concurrency/) for HTTP and migration',
+    'behavior.',
+    '',
   ];
 
   for (const group of GROUPS) {
@@ -107,6 +114,22 @@ export async function renderEntitySupportMatrix(): Promise<string> {
   for (const guarantee of TRANSACTION_GUARANTEE_CATALOG) {
     lines.push(
       `| \`${guarantee.id}\` | ✅ Required | ✅ Required | ${guarantee.caseIds.map(caseId => `\`${caseId}\``).join(', ')} |`,
+    );
+  }
+  lines.push('');
+
+  lines.push(
+    '## Optimistic-concurrency guarantees',
+    '',
+    'The versioned conformance report requires every listed case to pass on each backend shown.',
+    'SQLite and PostgreSQL additionally prove parity through transaction-scoped adapters.',
+    '',
+    '| Guarantee | Required stores | Evidence cases |',
+    '| --- | --- | --- |',
+  );
+  for (const guarantee of CONCURRENCY_GUARANTEE_CATALOG) {
+    lines.push(
+      `| \`${guarantee.id}\` | ${guarantee.stores.map(store => `\`${store}\``).join(', ')} | ${guarantee.caseIds.map(caseId => `\`${caseId}\``).join(', ')} |`,
     );
   }
   lines.push('');

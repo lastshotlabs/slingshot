@@ -69,8 +69,7 @@ describe('Route Generation', () => {
 
   describe('structure', () => {
     it('generates valid TypeScript source', () => {
-      expect(routes).toContain("import { OpenAPIHono } from '@hono/zod-openapi'");
-      expect(routes).toContain("import { z } from 'zod'");
+      expect(routes).toContain("import { OpenAPIHono, z } from '@hono/zod-openapi'");
       expect(routes).toContain("from '@lastshotlabs/slingshot-core'");
     });
 

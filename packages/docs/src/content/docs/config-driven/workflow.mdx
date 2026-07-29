@@ -178,6 +178,11 @@ Use this sequence for implementation work:
 6. Update JSDoc, package docs, and example docs.
 7. Run the doc and example verification commands.
 
+When a mutable entity can receive competing writes, include
+[optimistic concurrency](/entity-system/optimistic-concurrency/) in the workflow: enable the
+version strategy, generate and apply the backfill migration, teach HTTP clients to retain ETags,
+and only then require `If-Match`. Storage capability validation remains part of app startup.
+
 ## Related Reading
 
 - [/config-driven-walkthrough/](/config-driven-walkthrough/)

@@ -89,6 +89,11 @@ export function generateMigrationSqlite(plan: MigrationPlan): string {
         const col = quoteSqlIdent(toSnakeCase(change.name));
         const type = sqliteColType(change.field.type);
         const def = defaultClause(change.field);
+        const isConcurrencyVersion = change.name === plan.concurrencyField;
+        if (isConcurrencyVersion) {
+          schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type} NOT NULL DEFAULT 1;`);
+          break;
+        }
         const needsManualBackfill = !change.field.optional && !change.field.primary && !def;
         if (needsManualBackfill) {
           schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type};`);

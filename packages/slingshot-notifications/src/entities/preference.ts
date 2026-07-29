@@ -32,6 +32,7 @@ function materializePreferenceRecord(row: Record<string, unknown>): Notification
  * Notification preference entity.
  */
 export const NotificationPreference = defineEntity('NotificationPreference', {
+  concurrency: { strategy: 'version', requiredOnWrite: false },
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     userId: field.string({ immutable: true }),

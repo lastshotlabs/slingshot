@@ -107,6 +107,7 @@ export default defineConfig({
           items: [
             { label: 'Data and Entities', slug: 'core-features/data-and-entities' },
             { label: 'Defining Entities', slug: 'entity-system/define-entity' },
+            { label: 'Optimistic Concurrency', slug: 'entity-system/optimistic-concurrency' },
             { label: 'Operations', slug: 'entity-system/operations' },
             { label: 'Storage and Adapters', slug: 'entity-system/storage-and-adapter-wiring' },
             {

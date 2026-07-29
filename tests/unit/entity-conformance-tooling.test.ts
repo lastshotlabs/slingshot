@@ -10,6 +10,7 @@ import { ENTITY_BACKEND_PROFILES } from '../../packages/slingshot-entity/src/con
 import { ENTITY_CONFORMANCE_CATALOG } from '../../packages/slingshot-entity/src/testing/catalog';
 import type { EntityConformanceResult } from '../../packages/slingshot-entity/src/testing/conformance';
 import {
+  CONCURRENCY_GUARANTEE_CATALOG,
   ENTITY_CONFORMANCE_STORES,
   type EntityConformanceReport,
   TRANSACTION_GUARANTEE_CATALOG,
@@ -50,13 +51,18 @@ function passingReport(): EntityConformanceReport {
     }
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision: 'test-revision',
     profiles: ENTITY_BACKEND_PROFILES,
     results,
     transactionGuarantees: TRANSACTION_GUARANTEE_CATALOG.map(guarantee => ({
       ...guarantee,
       stores: ['sqlite', 'postgres'] as const,
+      caseIds: [...guarantee.caseIds],
+    })),
+    concurrencyGuarantees: CONCURRENCY_GUARANTEE_CATALOG.map(guarantee => ({
+      ...guarantee,
+      stores: [...guarantee.stores],
       caseIds: [...guarantee.caseIds],
     })),
   };
@@ -178,6 +184,29 @@ describe('entity conformance evidence tooling', () => {
     });
     expect(validateEntityConformanceReport(failed).join('\n')).toContain(
       "must pass for transaction guarantee 'scope.two-entity-rollback'",
+    );
+  });
+
+  test('rejects weakened or non-passing concurrency guarantee evidence', () => {
+    const report = passingReport();
+    expect(
+      validateEntityConformanceReport({
+        ...report,
+        concurrencyGuarantees: report.concurrencyGuarantees.slice(1),
+      }).join('\n'),
+    ).toContain('concurrency guarantees');
+
+    const selected = report.results.find(
+      result => result.store === 'mongo' && result.caseId === 'concurrency.version-update-race',
+    );
+    if (!selected) throw new Error('Expected MongoDB concurrency evidence');
+    const failed = replaceResult(report, 'mongo', selected.caseId, {
+      ...selected,
+      status: 'failed',
+      error: { name: 'Error', message: 'synthetic concurrency failure' },
+    });
+    expect(validateEntityConformanceReport(failed).join('\n')).toContain(
+      "must pass for concurrency guarantee 'version.update'",
     );
   });
 });

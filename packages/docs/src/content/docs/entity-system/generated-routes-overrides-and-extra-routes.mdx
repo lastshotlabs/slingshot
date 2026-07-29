@@ -242,6 +242,14 @@ Disabled routes are not registered — they do not appear in OpenAPI docs.
 | Remove a generated route                | `routes.disable`                      |
 | Add a route outside the entity shell    | `domain()` + `route.*` in the package |
 
+## Conditional writes
+
+When an entity enables version concurrency, framework-owned create, get, update, and delete
+shells also own the ETag contract. Runtime routes, generated routes, and overrides receive the
+same validated write options; an override should pass `context.writeOptions` to adapter writes.
+Extra routes that implement their own mutation semantics must document and enforce their own
+preconditions. See [Optimistic Concurrency](/entity-system/optimistic-concurrency/).
+
 ## Next
 
 - [Config-Driven Domain example](/examples/config-driven-domain/) — entities, operations, overrides, and extra routes in a complete app

@@ -98,6 +98,10 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
         const col = quoteSqlIdent(toSnakeCase(change.name));
         const type = pgColType(change.field.type);
         const def = defaultClause(change.field);
+        if (change.name === plan.concurrencyField) {
+          schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type} NOT NULL DEFAULT 1;`);
+          break;
+        }
         schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type}${def};`);
         if (!change.field.optional && !change.field.primary) {
           schema.push(`-- NOTE: Set NOT NULL after backfilling existing rows:`);

@@ -65,7 +65,11 @@ export type {
   EventDefinitionRegistryOptions,
 } from './eventDefinitionRegistry';
 export { createEventDefinitionRegistry } from './eventDefinitionRegistry';
-export type { CreateEventPublisherOptions, SlingshotEvents } from './eventPublisher';
+export type {
+  CreateEventPublisherOptions,
+  SlingshotEvents,
+  TransactionalEventOutboxWriter,
+} from './eventPublisher';
 export { authorizeEventSubscriber, createEventPublisher } from './eventPublisher';
 export type {
   KafkaConnectorDropStats,

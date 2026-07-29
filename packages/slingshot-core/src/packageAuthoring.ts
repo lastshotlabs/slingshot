@@ -9,6 +9,7 @@ import type {
   RoutePermissionConfig,
   RouteRateLimitConfig,
 } from './entityRouteConfig';
+import type { SlingshotEvents } from './eventPublisher';
 import type { Actor } from './identity';
 import type { PluginSeedContext, PluginSetupContext } from './plugin';
 import type { PluginStateMap } from './pluginState';
@@ -370,6 +371,8 @@ export interface PackageDomainRouteContext<
   readonly entities: PackageEntityReader;
   /** Application-owned transaction manager for atomic package/domain work. */
   readonly transactions: TransactionManager;
+  /** Governed event publisher, including explicit transactional outbox delivery. */
+  readonly events: SlingshotEvents;
   /** Domain-local service bag declared on the domain module. */
   readonly services: TServices;
 }

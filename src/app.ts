@@ -16,6 +16,8 @@ import { mountOpenApiDocs, mountRoutes } from '@framework/mountRoutes';
 import { withSpan } from '@framework/otel/spans';
 import { getTracer } from '@framework/otel/tracer';
 import { compilePackages } from '@framework/packageAuthoring';
+import { createFrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
+import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import { ModelSchemasConfig, preloadModelSchemas } from '@framework/preloadSchemas';
 import { registerBoundaryAdapters } from '@framework/registerBoundaryAdapters';
 import { router as healthRouter } from '@framework/routes/health';
@@ -463,6 +465,7 @@ function freezeFrameworkSecurity(
 interface AppBootstrap {
   bus: SlingshotEventBus;
   events: SlingshotEvents;
+  eventOutboxWriter: FrameworkEventOutboxWriter;
   kafkaConnectors?: KafkaConnectorHandle;
   registrar: CoreRegistrar;
   drain: () => CoreRegistrarSnapshot;
@@ -615,7 +618,8 @@ async function prepareBootstrap<T extends object>(
     });
   }
   const definitions = createEventDefinitionRegistry({ schemaRegistry: eventSchemaRegistry });
-  const events = createEventPublisher({ definitions, bus });
+  const eventOutboxWriter = createFrameworkEventOutboxWriter(config.events?.reliability);
+  const events = createEventPublisher({ definitions, bus, outbox: eventOutboxWriter });
   events.register(
     defineEvent('app:ready', {
       ownerPlugin: 'slingshot-framework',
@@ -689,6 +693,7 @@ async function prepareBootstrap<T extends object>(
   return {
     bus,
     events,
+    eventOutboxWriter,
     kafkaConnectors,
     registrar,
     drain,
@@ -738,6 +743,8 @@ async function assembleApp<T extends object>(
       plugins: bootstrap.sortedPlugins,
       bus,
       events,
+      eventOutboxWriter: bootstrap.eventOutboxWriter,
+      eventReliability: config.events?.reliability,
       kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,
       capabilityProviders: bootstrap.capabilityProviders,

@@ -221,6 +221,12 @@ connections, migrations, plugin hooks, or background workers start. Omitting
 the section preserves the existing lifecycle and creates no reliability tables
 or timers.
 
+After infrastructure creation, app assembly applies the package-owned event
+reliability migrations and binds the governed publisher to the application
+transaction manager. This happens before package route handlers run, so a
+handler can publish to the outbox through `ctx.events` without a lazy first-use
+schema race.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — what's inside `SlingshotContext`

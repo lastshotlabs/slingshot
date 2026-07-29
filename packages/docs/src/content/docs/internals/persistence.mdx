@@ -125,6 +125,20 @@ afterEach(() => {
 
 `ctx.destroy()` is the full app cleanup path. It runs plugin teardown first, shuts down the event bus and any WS transport, then closes DB connections. Call it in `afterAll` or process teardown handlers.
 
+## Transaction-bound event outbox work
+
+The framework transaction manager owns one internal scoped-work scheduler in
+addition to scope-aware entity adapters. The governed event publisher uses that
+same scheduler for `delivery: 'outbox'`, so it cannot trust a caller-provided
+store label or create a second scope registry. The scheduler authenticates the
+scope, resolves the transaction-bound `StoreInfra`, and tracks the insert as
+pending work before the publisher returns.
+
+PostgreSQL inserts therefore use the checked-out transaction client, and SQLite
+inserts use the connection while its coordinator lease is held. A callback that
+throws, retains a scope, supplies a forged scope, or targets another store
+cannot leave an outbox row independently of its domain write.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — how `StoreInfra` is provided

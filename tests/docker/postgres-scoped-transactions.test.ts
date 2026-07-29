@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
-import type { PackageDomainRouteContext } from '@lastshotlabs/slingshot-core';
-import { definePackage, domain, route } from '@lastshotlabs/slingshot-core';
+import type { EventEnvelope, PackageDomainRouteContext } from '@lastshotlabs/slingshot-core';
+import { createInProcessAdapter, definePackage, domain, route } from '@lastshotlabs/slingshot-core';
 import {
   createCompositeFactories,
   defineEntity,
@@ -166,11 +166,57 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
                 });
               },
             }),
+            route.post({
+              path: '/outbox-commit',
+              auth: 'none',
+              async handler(ctx: PackageDomainRouteContext) {
+                const suffix = randomUUID();
+                return ctx.transactions.run('postgres', async scope => {
+                  await ctx.entities
+                    .get(accountModule, { scope })
+                    .create({ id: `outbox-${suffix}`, label: 'outbox-committed' });
+                  ctx.events.publish(
+                    'app:ready',
+                    { plugins: ['outbox-committed'] },
+                    { requestTenantId: null, delivery: 'outbox', transaction: scope },
+                  );
+                  return ctx.respond.json({ ok: true });
+                });
+              },
+            }),
+            route.post({
+              path: '/outbox-rollback',
+              auth: 'none',
+              async handler(ctx: PackageDomainRouteContext) {
+                const suffix = randomUUID();
+                return ctx.transactions.run('postgres', async scope => {
+                  await ctx.entities
+                    .get(accountModule, { scope })
+                    .create({ id: `outbox-${suffix}`, label: 'outbox-rolled-back' });
+                  ctx.events.publish(
+                    'app:ready',
+                    { plugins: ['outbox-rolled-back'] },
+                    { requestTenantId: null, delivery: 'outbox', transaction: scope },
+                  );
+                  throw new Error('rollback outbox');
+                });
+              },
+            }),
           ],
         }),
       ],
     });
 
+    const eventBus = Object.assign(createInProcessAdapter(), {
+      async publishEnvelope(envelope: EventEnvelope) {
+        return {
+          eventId: envelope.meta.eventId,
+          acceptedAt: new Date().toISOString(),
+          transport: 'kafka' as const,
+          durableDestinations: 1,
+        };
+      },
+    });
     appResult = await createApp({
       meta: { name: 'Phase 4 PostgreSQL Transaction Test' },
       db: {
@@ -189,6 +235,13 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
         },
       },
       logging: { onLog: () => {} },
+      eventBus,
+      events: {
+        reliability: {
+          store: 'postgres',
+          outbox: { enabled: true },
+        },
+      },
       packages: [transactionPackage],
     });
 
@@ -302,5 +355,23 @@ describe('PostgreSQL package-scoped transactions (docker)', () => {
     expect(transactionQueries.filter(query => query === 'ROLLBACK')).toHaveLength(1);
     expect(transactionQueries).not.toContain('COMMIT');
     expect(await rowCount(`slingshot_${Account._storageName}`)).toBe(2);
+  });
+
+  test('commits and rolls back PostgreSQL domain and outbox rows atomically', async () => {
+    if (!appResult) throw new Error('app did not start');
+    const beforeAccounts = await rowCount(`slingshot_${Account._storageName}`);
+    const beforeOutbox = await rowCount('slingshot_event_outbox');
+
+    const committed = await appResult.app.request('/phase4/outbox-commit', { method: 'POST' });
+    expect(committed.status).toBe(200);
+    expect(await rowCount(`slingshot_${Account._storageName}`)).toBe(beforeAccounts + 1);
+    expect(await rowCount('slingshot_event_outbox')).toBe(beforeOutbox + 1);
+
+    const rolledBack = await appResult.app.request('/phase4/outbox-rollback', {
+      method: 'POST',
+    });
+    expect(rolledBack.status).toBe(500);
+    expect(await rowCount(`slingshot_${Account._storageName}`)).toBe(beforeAccounts + 1);
+    expect(await rowCount('slingshot_event_outbox')).toBe(beforeOutbox + 1);
   });
 });

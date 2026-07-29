@@ -10,6 +10,7 @@ import type { InfrastructureResult } from '@framework/createInfrastructure';
 import { closeMetricsQueues, resetMetrics } from '@framework/metrics/registry';
 import type { MetricsState } from '@framework/metrics/registry';
 import { createContextStoreInfra } from '@framework/persistence/createContextStoreInfra';
+import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import { attachContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import type { ResolvedSecretBundle } from '@framework/secrets/resolveSecretBundle';
@@ -32,6 +33,8 @@ import {
   deepFreeze,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
+import { initializeEventReliabilityStore } from '@lastshotlabs/slingshot-events';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -224,6 +227,8 @@ export interface BuildContextParams {
   plugins: readonly SlingshotPlugin[];
   bus: SlingshotEventBus;
   events: SlingshotEvents;
+  eventOutboxWriter?: FrameworkEventOutboxWriter;
+  eventReliability?: EventReliabilityConfig;
   kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
   /**
@@ -344,6 +349,8 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     plugins,
     bus,
     events,
+    eventOutboxWriter,
+    eventReliability,
     kafkaConnectors,
     secretBundle,
   } = params;
@@ -378,6 +385,10 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     pluginState,
     entityRegistry: infra.frameworkConfig.entityRegistry,
   });
+  if (eventReliability) {
+    await initializeEventReliabilityStore(storeInfra, eventReliability);
+  }
+  eventOutboxWriter?.bind(storeInfra);
 
   // The decorated storeInfra (with REGISTER_ENTITY, RESOLVE_ENTITY_FACTORIES, etc.)
   // is only available after createContextStoreInfra runs. Update frameworkConfig so

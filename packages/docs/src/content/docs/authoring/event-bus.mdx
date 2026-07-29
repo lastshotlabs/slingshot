@@ -248,6 +248,28 @@ during bootstrap before opening reliability infrastructure. This feature
 provides at-least-once delivery; consumers must deduplicate by the stable event
 ID.
 
+```typescript
+await services.transactions.run('postgres', async transaction => {
+  const orders = services.entities.get(Order, { scope: transaction });
+  const order = await orders.create(input);
+
+  services.events.publish(
+    'orders:order.created',
+    { orderId: order.id },
+    {
+      requestTenantId: order.tenantId,
+      delivery: 'outbox',
+      transaction,
+    },
+  );
+});
+```
+
+The returned envelope is synchronous, but its insert is registered as pending
+transaction work. Commit waits for the insert; rollback removes both the domain
+write and outbox row. Missing, retained, forged, closed, and wrong-store scopes
+fail before outbox SQL.
+
 ## See also
 
 - [Internals: Event Bus](/internals/event-bus/) - `InProcessAdapter`, transport contract, and `SlingshotEventMap` extension

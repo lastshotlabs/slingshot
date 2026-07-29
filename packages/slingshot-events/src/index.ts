@@ -28,3 +28,8 @@ export type {
   TransactionalEventConsumerContext,
   TransactionalEventConsumerOptions,
 } from './types';
+/** Create the framework-bound transactional outbox writer. */
+export { createTransactionalEventOutboxWriter } from './outbox/writer';
+export type { EnqueueTransactionScopeWork } from './outbox/writer';
+/** Apply package-owned SQL migrations before reliability workers start. */
+export { initializeEventReliabilityStore } from './migrations/initialize';

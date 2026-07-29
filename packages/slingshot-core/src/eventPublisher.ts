@@ -8,6 +8,7 @@ import type {
 import { createDefaultSubscriberAuthorizer, eventHasExternalExposure } from './eventDefinition';
 import type { EventDefinitionRegistry } from './eventDefinitionRegistry';
 import { type EventEnvelope, createEventEnvelope } from './eventEnvelope';
+import type { TransactionScope } from './transactions';
 
 /**
  * High-level event API exposed on the Slingshot context.
@@ -41,6 +42,14 @@ export interface SlingshotEvents {
 export interface CreateEventPublisherOptions {
   definitions: EventDefinitionRegistry;
   bus: SlingshotEventBus;
+  /** Internal transactional outbox writer. Omit when outbox delivery is unavailable. */
+  outbox?: TransactionalEventOutboxWriter;
+}
+
+/** Narrow synchronous seam used to enqueue an outbox insert on an open transaction scope. */
+export interface TransactionalEventOutboxWriter {
+  /** Enqueue persistence; the transaction manager tracks asynchronous completion. */
+  write(envelope: EventEnvelope, scope?: TransactionScope): void;
 }
 
 function validateProjectedScope<K extends EventKey>(
@@ -130,6 +139,16 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
         source: ctx.source,
         requestTenantId: ctx.requestTenantId,
       });
+
+      if (ctx.delivery === 'outbox') {
+        if (!options.outbox) {
+          throw new Error(
+            'TRANSACTIONAL_EVENT_DELIVERY_UNAVAILABLE: Transactional event delivery is not configured.',
+          );
+        }
+        options.outbox.write(envelope, ctx.transaction);
+        return envelope;
+      }
 
       const busWithEnvelopeEmit = options.bus as SlingshotEventBus & {
         emit<K2 extends EventKey>(

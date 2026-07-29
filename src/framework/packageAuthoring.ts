@@ -1047,6 +1047,7 @@ function createPackagePlugin(
                   }
                   return infra.getTransactions();
                 })(),
+                events: ctx.events,
                 services,
               };
               const response = await routeDefinition.handler(routeContext);

@@ -20,6 +20,7 @@ import {
 
 const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
 const RESOLVE_TRANSACTION_SCOPE_INFRA = Symbol.for('slingshot.resolveTransactionScopeInfra');
+export const ENQUEUE_TRANSACTION_SCOPE_WORK = Symbol.for('slingshot.enqueueTransactionScopeWork');
 
 type ScopePhase = 'open' | 'settling' | 'committing' | 'closed';
 
@@ -32,11 +33,14 @@ interface ScopeState {
   readonly scope: TransactionScope;
   readonly session: FrameworkTransactionBackendSession;
   readonly pending: Set<Promise<unknown>>;
+  readonly implicitPending: Set<Promise<unknown>>;
   readonly effects: BufferedEffect[];
   readonly adapters: Map<string, object>;
   readonly methodWrappers: WeakMap<object, Map<PropertyKey, (...args: unknown[]) => unknown>>;
   scopedInfra?: StoreInfra;
   phase: ScopePhase;
+  hasImplicitFailure: boolean;
+  implicitFailure?: unknown;
 }
 
 /** One physical backend transaction opened for a framework scope. */
@@ -301,10 +305,12 @@ export function createFrameworkTransactionManager(
         scope,
         session,
         pending: new Set(),
+        implicitPending: new Set(),
         effects: [],
         adapters: new Map(),
         methodWrappers: new WeakMap(),
         phase: 'open',
+        hasImplicitFailure: false,
       };
       states.set(scope, state);
 
@@ -319,7 +325,9 @@ export function createFrameworkTransactionManager(
           hasPrimaryError = true;
         }
 
-        const unsettledCount = state.pending.size;
+        const unsettledCount = [...state.pending].filter(
+          promise => !state.implicitPending.has(promise),
+        ).length;
         state.phase = 'settling';
         await settlePending(state);
 
@@ -333,6 +341,12 @@ export function createFrameworkTransactionManager(
           await rollbackPreservingPrimary(session);
           state.phase = 'closed';
           throw new UnsettledTransactionWorkError(scope.id, unsettledCount);
+        }
+
+        if (state.hasImplicitFailure) {
+          await rollbackPreservingPrimary(session);
+          state.phase = 'closed';
+          throw state.implicitFailure;
         }
 
         const rollbackOnly = session.rollbackOnlyCause?.() ?? null;
@@ -440,6 +454,35 @@ export function createFrameworkTransactionManager(
         throw new TransactionScopeClosedError(scope.id);
       }
       return resolveScopedInfra(state);
+    },
+  });
+  Object.defineProperty(manager, ENQUEUE_TRANSACTION_SCOPE_WORK, {
+    enumerable: false,
+    configurable: false,
+    writable: false,
+    value: (scope: TransactionScope, work: (infra: StoreInfra) => void | Promise<void>): void => {
+      const state = states.get(scope);
+      if (!state) {
+        throw new TransactionScopeInvalidError();
+      }
+      if (state.phase !== 'open') {
+        throw new TransactionScopeClosedError(scope.id);
+      }
+      const result = work(resolveScopedInfra(state));
+      if (isPromiseLike(result)) {
+        const promise = trackPromise(state, result);
+        state.implicitPending.add(promise);
+        void promise.then(
+          () => state.implicitPending.delete(promise),
+          error => {
+            state.implicitPending.delete(promise);
+            if (!state.hasImplicitFailure) {
+              state.hasImplicitFailure = true;
+              state.implicitFailure = error;
+            }
+          },
+        );
+      }
     },
   });
 

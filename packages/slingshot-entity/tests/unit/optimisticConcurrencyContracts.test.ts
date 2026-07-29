@@ -15,6 +15,7 @@ import {
 } from '../../src/configDriven/backendProfiles';
 import { generateMongo } from '../../src/generators/mongo';
 import { generatePostgres } from '../../src/generators/postgres';
+import { generateRoutes } from '../../src/generators/routes';
 import { generateSqlite } from '../../src/generators/sqlite';
 
 describe('optimistic concurrency contracts', () => {
@@ -156,6 +157,26 @@ describe('optimistic concurrency contracts', () => {
     expect(mongo).toContain("query['version'] = expectedVersion");
     expect(mongo).toContain('EntityConcurrencyConflictError');
     expect(mongo).toContain('Model.findOne(scopedQuery).lean()');
+  });
+
+  test('generates the shared conditional HTTP and OpenAPI contract', () => {
+    const entity = defineEntity('GeneratedConditional', {
+      routes: {},
+      fields: { id: field.string({ primary: true }), title: field.string() },
+      concurrency: { strategy: 'version' },
+    });
+    const source = generateRoutes(entity);
+    expect(source).toContain('encodeEntityEtag');
+    expect(source).toContain('parseEntityEtag');
+    expect(source).toContain("c.req.header('If-Match')");
+    expect(source).toContain('adapter.update(id, input, undefined, conditional.options)');
+    expect(source).toContain('adapter.delete(id, undefined, conditional.options)');
+    expect(source).toContain("status: 428, error: 'If-Match header required'");
+    expect(source).toContain("status: 412, error: 'Entity version does not match'");
+    expect(source).toContain('headers: z.object({ ETag: z.string() })');
+    for (const status of [400, 404, 412, 428]) {
+      expect(source).toContain(`${status}: {`);
+    }
   });
 });
 

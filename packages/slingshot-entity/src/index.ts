@@ -206,6 +206,9 @@ export {
   planEntityRoutes,
   scoreEntityRouteSpecificity,
 } from './routing';
+/** Canonical strong ETag codec used by runtime and generated entity routes. */
+export { encodeEntityEtag, parseEntityEtag } from './concurrency/etag';
+export type { ParsedEntityEtag } from './concurrency/etag';
 /** Route-auth evaluation dependencies and result types for entity route assembly. */
 export type {
   EvaluateRouteAuthDeps,

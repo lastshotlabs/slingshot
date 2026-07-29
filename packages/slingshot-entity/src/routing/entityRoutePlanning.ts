@@ -1,4 +1,5 @@
 import type {
+  EntityWriteOptions,
   NamedOpHttpMethod,
   OperationConfig,
   ResolvedEntityConfig,
@@ -39,6 +40,7 @@ export interface EntityRouteExecutionContext<
   filter?: Record<string, unknown>;
   dataScopeBindings?: Record<string, unknown>;
   existingRecord?: unknown;
+  writeOptions?: EntityWriteOptions;
   getEntityAdapter(args: { plugin: string; entity: string }): BareEntityAdapter;
   setOpResult(opName: string, result: unknown): void;
 }

@@ -8,13 +8,14 @@
  * - Sets c.set('__opName', ...) and c.set('__opResult', ...) so the event
  *   emission middleware registered by applyRouteConfig can read the result.
  */
-import { OpenAPIHono } from '@hono/zod-openapi';
+import { OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context, Handler } from 'hono';
-import { type ZodTypeAny, z } from 'zod';
+import type { ZodTypeAny } from 'zod';
 import type {
   AppEnv,
   EntityRouteDataScopeConfig,
   EntityRoutePolicyConfig,
+  EntityWriteOptions,
   Logger,
   NamedOpHttpMethod,
   OperationConfig,
@@ -27,6 +28,7 @@ import type {
   TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
 import { createRoute, getActor, noopLogger, toOpenApiPath } from '@lastshotlabs/slingshot-core';
+import { encodeEntityEtag, parseEntityEtag } from '../concurrency/etag';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
@@ -217,7 +219,73 @@ type PlannedExecutionPrep = {
   filter?: Record<string, unknown>;
   dataScopeBindings?: Record<string, unknown>;
   existingRecord?: unknown;
+  writeOptions?: EntityWriteOptions;
 };
+
+type ConditionalWriteResolution =
+  | { readonly ok: true; readonly options: EntityWriteOptions | undefined }
+  | { readonly ok: false; readonly response: Response };
+
+function resolveConditionalWrite(
+  c: Context<AppEnv>,
+  config: ResolvedEntityConfig,
+  id: string | number,
+): ConditionalWriteResolution {
+  const concurrency = config._concurrency;
+  if (!concurrency) return { ok: true, options: undefined };
+
+  const value = c.req.header('If-Match');
+  if (value === undefined) {
+    if (concurrency.requiredOnWrite) {
+      return { ok: false, response: c.json({ error: 'If-Match header required' }, 428) };
+    }
+    return { ok: true, options: undefined };
+  }
+
+  let parsed;
+  try {
+    parsed = parseEntityEtag(value);
+  } catch {
+    return { ok: false, response: c.json({ error: 'Invalid If-Match header' }, 400) };
+  }
+  if (parsed.storageName !== config._storageName || parsed.id !== String(id)) {
+    return { ok: false, response: c.json({ error: 'Entity version does not match' }, 412) };
+  }
+  return { ok: true, options: { expectedVersion: parsed.version } };
+}
+
+function setEntityEtag(c: Context<AppEnv>, config: ResolvedEntityConfig, record: unknown): void {
+  const concurrency = config._concurrency;
+  if (!concurrency || typeof record !== 'object' || record === null) return;
+  const value = record as Record<string, unknown>;
+  const id = value[config._pkField];
+  const version = value[concurrency.field];
+  if ((typeof id !== 'string' && typeof id !== 'number') || typeof version !== 'number') {
+    throw new TypeError(`Concurrency record for "${config.name}" is missing its id or version`);
+  }
+  c.header('ETag', encodeEntityEtag(config._storageName, id, version));
+}
+
+function concurrencyErrorResponse(c: Context<AppEnv>, error: unknown): Response | null {
+  const code = (error as { code?: unknown }).code;
+  if (code === 'ENTITY_CONCURRENCY_PRECONDITION_REQUIRED') {
+    return c.json({ error: 'If-Match header required' }, 428);
+  }
+  if (code === 'ENTITY_CONCURRENCY_CONFLICT') {
+    return c.json({ error: 'Entity version does not match' }, 412);
+  }
+  return null;
+}
+
+function ifMatchHeaderSchema(required: boolean) {
+  return z
+    .string()
+    .optional()
+    .openapi({
+      param: { name: 'if-match', in: 'header', required },
+      description: 'Strong Slingshot entity ETag returned by the latest read or write',
+    });
+}
 
 function readJsonRecord(input: unknown): Record<string, unknown> {
   return typeof input === 'object' && input !== null
@@ -477,6 +545,7 @@ function defaultGeneratedExecutor(
     return async exec => {
       const result = await adapter.create(exec.input);
       exec.setOpResult('create', result);
+      setEntityEtag(exec.request, exec.entity, result);
       return exec.respond.json(result, 201);
     };
   }
@@ -505,6 +574,7 @@ function defaultGeneratedExecutor(
         return exec.respond.notFound();
       }
       exec.setOpResult('get', exec.existingRecord);
+      setEntityEtag(exec.request, exec.entity, exec.existingRecord);
       return exec.respond.json(exec.existingRecord);
     };
   }
@@ -515,11 +585,12 @@ function defaultGeneratedExecutor(
       if (!id) {
         return exec.respond.notFound();
       }
-      const result = await adapter.update(id, exec.input, exec.filter);
+      const result = await adapter.update(id, exec.input, exec.filter, exec.writeOptions);
       if (!result) {
         return exec.respond.notFound();
       }
       exec.setOpResult('update', result);
+      setEntityEtag(exec.request, exec.entity, result);
       return exec.respond.json(result);
     };
   }
@@ -537,7 +608,7 @@ function defaultGeneratedExecutor(
       // `community:reaction.removed`, which declares
       // targetId/targetType/containerId/userId and delivered none of them.
       const removed = await adapter.getById(id, exec.filter);
-      const ok = await adapter.delete(id, exec.filter);
+      const ok = await adapter.delete(id, exec.filter, exec.writeOptions);
       if (!ok) {
         return exec.respond.notFound();
       }
@@ -574,6 +645,7 @@ async function preparePlannedExecution(
   route: PlannedEntityRoute,
   c: Context<AppEnv>,
   adapter: BareEntityAdapter,
+  config: ResolvedEntityConfig,
   schemas: ReturnType<typeof buildEntityZodSchemas>,
   dataScopes: ReturnType<typeof normalizeDataScopes>,
 ): Promise<PlannedExecutionPrep | Response> {
@@ -692,6 +764,12 @@ async function preparePlannedExecution(
         typeof parsedParamsRecord.id === 'string'
           ? parsedParamsRecord.id
           : readRequiredParam(c, 'id');
+      let writeOptions: EntityWriteOptions | undefined;
+      if (route.generatedRouteKey === 'update' || route.generatedRouteKey === 'delete') {
+        const conditional = resolveConditionalWrite(c, config, id);
+        if (!conditional.ok) return conditional.response;
+        writeOptions = conditional.options;
+      }
       let body: Record<string, unknown> | null = null;
       if (route.generatedRouteKey === 'update') {
         const rawBody = readJsonRecord((await c.req.json()) as unknown);
@@ -737,6 +815,7 @@ async function preparePlannedExecution(
         filter,
         dataScopeBindings,
         existingRecord,
+        writeOptions,
       };
     }
 
@@ -879,6 +958,11 @@ function createPlannedRouteDefinition(
         responses: buildTypedRouteResponses(route.responses, {
           201: {
             content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
             description: 'Created',
           },
         }),
@@ -912,7 +996,15 @@ function createPlannedRouteDefinition(
         ...(route.description ? { description: route.description } : {}),
         request,
         responses: buildTypedRouteResponses(route.responses, {
-          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          200: {
+            content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
+            description: 'OK',
+          },
           404: {
             content: { 'application/json': { schema: errorSchema } },
             description: 'Not found',
@@ -921,10 +1013,19 @@ function createPlannedRouteDefinition(
       });
     }
     case 'update': {
-      const request = buildTypedRouteRequest(route.request) ?? {
-        params: z.object({ id: z.string() }),
-        body: { content: { 'application/json': { schema: cs.update } } },
-      };
+      const request =
+        buildTypedRouteRequest(route.request) ??
+        ({
+          params: z.object({ id: z.string() }),
+          ...(config._concurrency
+            ? {
+                headers: z.object({
+                  'if-match': ifMatchHeaderSchema(config._concurrency.requiredOnWrite),
+                }),
+              }
+            : {}),
+          body: { content: { 'application/json': { schema: cs.update } } },
+        } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'patch',
         path: toOpenApiPath(route.path),
@@ -933,7 +1034,31 @@ function createPlannedRouteDefinition(
         ...(route.description ? { description: route.description } : {}),
         request,
         responses: buildTypedRouteResponses(route.responses, {
-          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          200: {
+            content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
+            description: 'OK',
+          },
+          ...(config._concurrency
+            ? {
+                400: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Malformed If-Match',
+                },
+                412: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Version conflict',
+                },
+                428: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'If-Match required',
+                },
+              }
+            : {}),
           404: {
             content: { 'application/json': { schema: errorSchema } },
             description: 'Not found',
@@ -946,6 +1071,13 @@ function createPlannedRouteDefinition(
         buildTypedRouteRequest(route.request) ??
         ({
           params: z.object({ id: z.string() }),
+          ...(config._concurrency
+            ? {
+                headers: z.object({
+                  'if-match': ifMatchHeaderSchema(config._concurrency.requiredOnWrite),
+                }),
+              }
+            : {}),
         } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'delete',
@@ -954,7 +1086,29 @@ function createPlannedRouteDefinition(
         summary: route.summary ?? `Delete ${config.name}`,
         ...(route.description ? { description: route.description } : {}),
         request,
-        responses: buildTypedRouteResponses(route.responses, { 204: { description: 'Deleted' } }),
+        responses: buildTypedRouteResponses(route.responses, {
+          204: { description: 'Deleted' },
+          ...(config._concurrency
+            ? {
+                400: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Malformed If-Match',
+                },
+                404: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Not found',
+                },
+                412: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Version conflict',
+                },
+                428: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'If-Match required',
+                },
+              }
+            : {}),
+        }),
       });
     }
     default: {
@@ -1192,7 +1346,14 @@ export function buildBareEntityRoutes<
         routeDef,
         async c => {
           c.set('__routeKey' as never, route.routeKey as never);
-          const prep = await preparePlannedExecution(route, c, adapter, schemas, dataScopes);
+          const prep = await preparePlannedExecution(
+            route,
+            c,
+            adapter,
+            config,
+            schemas,
+            dataScopes,
+          );
           if (prep instanceof Response) {
             return prep;
           }
@@ -1227,12 +1388,19 @@ export function buildBareEntityRoutes<
             filter: prep.filter,
             dataScopeBindings: prep.dataScopeBindings,
             existingRecord: prep.existingRecord,
+            writeOptions: prep.writeOptions,
             getEntityAdapter,
             respond: helpers,
             setOpResult: helpers.setOpResult,
           };
 
-          return executor(execContext);
+          try {
+            return await executor(execContext);
+          } catch (error) {
+            const response = concurrencyErrorResponse(c, error);
+            if (response) return response;
+            throw error;
+          }
         },
         route.path,
       );
@@ -1381,6 +1549,11 @@ export function buildBareEntityRoutes<
         responses: {
           201: {
             content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
             description: 'Created',
           },
         },
@@ -1417,6 +1590,7 @@ export function buildBareEntityRoutes<
         const result = await adapter.create(bodyRecord);
         c.set('__opName' as never, 'create' as never);
         c.set('__opResult' as never, result as never);
+        setEntityEtag(c, config, result);
         const projected = applyEntityProjection(
           result,
           config,
@@ -1517,7 +1691,15 @@ export function buildBareEntityRoutes<
         tags: [tag],
         summary: `Get ${config.name} by ID`,
         responses: {
-          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          200: {
+            content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
+            description: 'OK',
+          },
           404: {
             content: { 'application/json': { schema: z.object({ error: z.string() }) } },
             description: 'Not found',
@@ -1557,6 +1739,7 @@ export function buildBareEntityRoutes<
 
         c.set('__opName' as never, 'get' as never);
         c.set('__opResult' as never, result as never);
+        setEntityEtag(c, config, result);
         const projected = applyEntityProjection(
           result,
           config,
@@ -1581,9 +1764,42 @@ export function buildBareEntityRoutes<
         path: toOpenApiPath(updatePath),
         tags: [tag],
         summary: `Update ${config.name}`,
-        request: { body: { content: { 'application/json': { schema: updateSchemas.update } } } },
+        request: {
+          ...(config._concurrency
+            ? {
+                headers: z.object({
+                  'if-match': ifMatchHeaderSchema(config._concurrency.requiredOnWrite),
+                }),
+              }
+            : {}),
+          body: { content: { 'application/json': { schema: updateSchemas.update } } },
+        },
         responses: {
-          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          200: {
+            content: { 'application/json': { schema: schemas.entity } },
+            ...(config._concurrency
+              ? {
+                  headers: z.object({ ETag: z.string() }),
+                }
+              : {}),
+            description: 'OK',
+          },
+          ...(config._concurrency
+            ? {
+                400: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Malformed If-Match',
+                },
+                412: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Version conflict',
+                },
+                428: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'If-Match required',
+                },
+              }
+            : {}),
           404: {
             content: { 'application/json': { schema: z.object({ error: z.string() }) } },
             description: 'Not found',
@@ -1592,6 +1808,8 @@ export function buildBareEntityRoutes<
       }),
       async c => {
         const id = readRequiredParam(c, 'id');
+        const conditional = resolveConditionalWrite(c, config, id);
+        if (!conditional.ok) return conditional.response;
         const raw = (await c.req.json()) as unknown;
         // Parse against the variant-filtered update schema so fields not allowed
         // by `routes.update.input` are silently stripped before reaching the adapter.
@@ -1642,10 +1860,18 @@ export function buildBareEntityRoutes<
           });
         }
 
-        const result = await adapter.update(id, bodyRecord, filter);
+        let result;
+        try {
+          result = await adapter.update(id, bodyRecord, filter, conditional.options);
+        } catch (error) {
+          const response = concurrencyErrorResponse(c, error);
+          if (response) return response;
+          throw error;
+        }
         if (!result) return c.json({ error: 'Not found' }, 404) as never;
         c.set('__opName' as never, 'update' as never);
         c.set('__opResult' as never, result as never);
+        setEntityEtag(c, config, result);
         const projected = applyEntityProjection(
           result,
           config,
@@ -1669,10 +1895,41 @@ export function buildBareEntityRoutes<
         path: toOpenApiPath(deletePath),
         tags: [tag],
         summary: `Delete ${config.name}`,
-        responses: { 204: { description: 'Deleted' } },
+        request: config._concurrency
+          ? {
+              headers: z.object({
+                'if-match': ifMatchHeaderSchema(config._concurrency.requiredOnWrite),
+              }),
+            }
+          : undefined,
+        responses: {
+          204: { description: 'Deleted' },
+          ...(config._concurrency
+            ? {
+                400: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Malformed If-Match',
+                },
+                404: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Not found',
+                },
+                412: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Version conflict',
+                },
+                428: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'If-Match required',
+                },
+              }
+            : {}),
+        },
       }),
       async c => {
         const id = readRequiredParam(c, 'id');
+        const conditional = resolveConditionalWrite(c, config, id);
+        if (!conditional.ok) return conditional.response;
         let filter: Record<string, unknown> | undefined;
 
         if (dataScopes.length > 0) {
@@ -1705,7 +1962,14 @@ export function buildBareEntityRoutes<
           });
         }
 
-        const ok = await adapter.delete(id, filter);
+        let ok: boolean;
+        try {
+          ok = await adapter.delete(id, filter, conditional.options);
+        } catch (error) {
+          const response = concurrencyErrorResponse(c, error);
+          if (response) return response;
+          throw error;
+        }
         if (!ok) return c.json({ error: 'Not found' }, 404) as never;
         const removedRecord = { ...(existing ?? {}), id };
         c.set('__opName' as never, 'delete' as never);

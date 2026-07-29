@@ -16,6 +16,10 @@ import { mountOpenApiDocs, mountRoutes } from '@framework/mountRoutes';
 import { withSpan } from '@framework/otel/spans';
 import { getTracer } from '@framework/otel/tracer';
 import { compilePackages } from '@framework/packageAuthoring';
+import {
+  type FrameworkEventInboxConsumer,
+  createFrameworkEventInboxConsumer,
+} from '@framework/persistence/events/inboxConsumer';
 import { createFrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import { ModelSchemasConfig, preloadModelSchemas } from '@framework/preloadSchemas';
@@ -466,6 +470,7 @@ interface AppBootstrap {
   bus: SlingshotEventBus;
   events: SlingshotEvents;
   eventOutboxWriter: FrameworkEventOutboxWriter;
+  eventInboxConsumer: FrameworkEventInboxConsumer;
   kafkaConnectors?: KafkaConnectorHandle;
   registrar: CoreRegistrar;
   drain: () => CoreRegistrarSnapshot;
@@ -619,7 +624,13 @@ async function prepareBootstrap<T extends object>(
   }
   const definitions = createEventDefinitionRegistry({ schemaRegistry: eventSchemaRegistry });
   const eventOutboxWriter = createFrameworkEventOutboxWriter(config.events?.reliability);
-  const events = createEventPublisher({ definitions, bus, outbox: eventOutboxWriter });
+  const eventInboxConsumer = createFrameworkEventInboxConsumer(config.events?.reliability, bus);
+  const events = createEventPublisher({
+    definitions,
+    bus,
+    outbox: eventOutboxWriter,
+    consumer: eventInboxConsumer,
+  });
   events.register(
     defineEvent('app:ready', {
       ownerPlugin: 'slingshot-framework',
@@ -694,6 +705,7 @@ async function prepareBootstrap<T extends object>(
     bus,
     events,
     eventOutboxWriter,
+    eventInboxConsumer,
     kafkaConnectors,
     registrar,
     drain,
@@ -744,6 +756,7 @@ async function assembleApp<T extends object>(
       bus,
       events,
       eventOutboxWriter: bootstrap.eventOutboxWriter,
+      eventInboxConsumer: bootstrap.eventInboxConsumer,
       eventReliability: config.events?.reliability,
       kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,

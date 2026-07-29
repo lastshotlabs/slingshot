@@ -10,6 +10,7 @@ import type { InfrastructureResult } from '@framework/createInfrastructure';
 import { closeMetricsQueues, resetMetrics } from '@framework/metrics/registry';
 import type { MetricsState } from '@framework/metrics/registry';
 import { createContextStoreInfra } from '@framework/persistence/createContextStoreInfra';
+import type { FrameworkEventInboxConsumer } from '@framework/persistence/events/inboxConsumer';
 import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import { attachContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
@@ -235,6 +236,7 @@ export interface BuildContextParams {
   bus: SlingshotEventBus;
   events: SlingshotEvents;
   eventOutboxWriter?: FrameworkEventOutboxWriter;
+  eventInboxConsumer?: FrameworkEventInboxConsumer;
   eventReliability?: EventReliabilityConfig;
   kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
@@ -357,6 +359,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     bus,
     events,
     eventOutboxWriter,
+    eventInboxConsumer,
     eventReliability,
     kafkaConnectors,
     secretBundle,
@@ -396,6 +399,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     await initializeEventReliabilityStore(storeInfra, eventReliability);
   }
   eventOutboxWriter?.bind(storeInfra);
+  eventInboxConsumer?.bind(storeInfra);
   let eventOutboxDispatcher: OutboxDispatcher | null = null;
   if (eventReliability?.outbox && isAcknowledgedEventBus(bus)) {
     const repository =

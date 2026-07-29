@@ -146,6 +146,14 @@ checks lease ownership. Context destruction stops and drains this worker before
 shutting down the event bus or closing PostgreSQL/SQLite, then releases any
 unfinished owner leases for immediate recovery.
 
+The transactional inbox bridge is bound to the same `StoreInfra` after
+migrations complete. Each durable named consumer opens an authentic framework
+transaction, inserts its `(consumer_name, event_id)` receipt with conflict-safe
+semantics, and invokes the handler only when that insert wins. The receipt and
+all handler writes therefore commit or roll back together. Concurrent delivery
+and broker redelivery skip an existing receipt, while a failed handler leaves
+no receipt and can be retried safely.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — how `StoreInfra` is provided

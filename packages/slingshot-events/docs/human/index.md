@@ -46,3 +46,35 @@ outbox keeps the row retryable. Kafka acknowledged publication awaits
 `producer.send()` directly. Neither acknowledged path uses the adapters'
 legacy in-memory retry buffer, so the SQL outbox remains the single retry
 authority.
+
+## Transactional consumers
+
+Use `events.consume()` for durable handlers whose SQL effects must be
+idempotent under broker redelivery:
+
+```ts
+events.consume(
+  'orders:order.created',
+  async (envelope, { scope }) => {
+    const projections = entities.get(OrderProjection, { scope });
+    await projections.upsert({ orderId: envelope.payload.orderId });
+  },
+  {
+    durable: true,
+    name: 'orders-projection-v1',
+    inbox: { store: 'postgres' },
+  },
+);
+```
+
+The framework inserts `(consumerName, eventId)` before invoking the handler,
+inside the same PostgreSQL or SQLite transaction. The first delivery commits
+the receipt and handler SQL effects together. A committed duplicate skips the
+handler; a thrown handler rolls back both and remains safe for broker retry.
+Concurrent duplicates serialize on the inbox primary key.
+
+Consumer names are persistent deployment identities. Renaming a consumer
+intentionally creates a new logical consumer and reprocesses retained events.
+Only SQL work performed through the supplied scope is covered. HTTP calls,
+email, object storage, and other external effects still require
+`envelope.meta.eventId` as the provider idempotency key.

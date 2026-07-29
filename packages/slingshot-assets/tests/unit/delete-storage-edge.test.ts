@@ -170,6 +170,7 @@ describe('deleteStorageFile middleware — onOrphanedKey callback', () => {
       get: mock(() => undefined),
       list: mock(() => []),
       register: mock(() => {}),
+      consume: mock(() => () => false),
     };
 
     const orphanRegistry = createOrphanedKeyRegistry();
@@ -230,6 +231,7 @@ describe('deleteStorageFile middleware — events publishing', () => {
       get: mock(() => undefined),
       list: mock(() => []),
       register: mock(() => {}),
+      consume: mock(() => () => false),
     };
 
     const middleware = createDeleteStorageFileMiddleware({
@@ -294,6 +296,7 @@ describe('deleteStorageFile middleware — events publishing', () => {
       get: mock(() => undefined),
       list: mock(() => []),
       register: mock(() => {}),
+      consume: mock(() => () => false),
     };
 
     const middleware = createDeleteStorageFileMiddleware({

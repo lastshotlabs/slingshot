@@ -49,5 +49,12 @@ export type {
   OutboxRepository,
 } from './outbox/repository';
 export { serializeOutboxEnvelope } from './outbox/repository';
+/** Governed transactionally deduplicated consumer implementation. */
+export { createTransactionalEventConsumer } from './consume';
+export type { ResolveTransactionScopeInfra } from './consume';
+/** Transaction-bound inbox repository implementations. */
+export { createPostgresInboxRepository } from './inbox/postgres';
+export { createSqliteInboxRepository } from './inbox/sqlite';
+export type { InboxRepository, NewInboxReceipt } from './inbox/repository';
 /** Apply package-owned SQL migrations before reliability workers start. */
 export { initializeEventReliabilityStore } from './migrations/initialize';

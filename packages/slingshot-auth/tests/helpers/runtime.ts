@@ -90,6 +90,9 @@ export function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
     list() {
       return [];
     },
+    consume() {
+      return () => false;
+    },
     publish<K extends keyof SlingshotEventMap>(
       key: K,
       payload: SlingshotEventMap[K],

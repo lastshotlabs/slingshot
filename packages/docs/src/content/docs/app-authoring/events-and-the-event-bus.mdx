@@ -177,6 +177,33 @@ BullMQ also needs at least one matching durable subscription; zero destinations
 keeps the row pending for retry. Broker I/O never runs inside the domain
 transaction.
 
+### Consume durably with inbox deduplication
+
+For a durable consumer that writes SQL projections or local state, use a
+stable name and the transaction scope supplied by `events.consume()`:
+
+```typescript
+events.consume(
+  'blog:post.published',
+  async (envelope, { scope }) => {
+    await ctx.entities
+      .get(postSearchProjection, { scope })
+      .upsert({ postId: envelope.payload.postId });
+  },
+  {
+    durable: true,
+    name: 'blog-search-projection-v1',
+    inbox: { store: 'postgres' },
+  },
+);
+```
+
+The inbox receipt and handler SQL effects commit or roll back together.
+Committed duplicate event IDs skip the handler, including concurrent
+redeliveries. Treat the consumer name as durable deployment identity: changing
+it intentionally reprocesses retained events. External side effects are not
+made transactional and must use `envelope.meta.eventId` for idempotency.
+
 ## Subscribe
 
 Subscribe in `setupPost` so all publishers are wired before any subscriber starts listening:

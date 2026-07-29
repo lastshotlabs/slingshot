@@ -222,10 +222,10 @@ the section preserves the existing lifecycle and creates no reliability tables
 or timers.
 
 After infrastructure creation, app assembly applies the package-owned event
-reliability migrations and binds the governed publisher to the application
-transaction manager. This happens before package route handlers run, so a
-handler can publish to the outbox through `ctx.events` without a lazy first-use
-schema race.
+reliability migrations and binds both the governed publisher and transactional
+inbox consumer to the application transaction manager. This happens before
+package route handlers run, so handlers can publish to the outbox or register a
+durable `ctx.events.consume()` handler without a lazy first-use schema race.
 
 ## See also
 

@@ -135,4 +135,102 @@ describe('createOutboxDispatcher', () => {
     expect(calls.releasedOwner).toBe(1);
     expect(await dispatcher.dispatchOnce()).toBe(0);
   });
+
+  test('retries a broker outage with the byte-identical envelope and event ID', async () => {
+    const { envelope, repository, calls } = fixture();
+    const received: string[] = [];
+    let available = false;
+    const dispatcher = createOutboxDispatcher({
+      repository,
+      bus: busWith(async published => {
+        received.push(JSON.stringify(published));
+        if (!available) throw new Error('broker unavailable');
+        return {
+          eventId: published.meta.eventId,
+          acceptedAt: new Date(0).toISOString(),
+          transport: 'bullmq',
+          durableDestinations: 1,
+        };
+      }),
+      config: { enabled: true, retry: { initialMs: 1, maxMs: 1, jitter: 0 } },
+    });
+
+    await dispatcher.dispatchOnce();
+    available = true;
+    await dispatcher.dispatchOnce();
+
+    expect(received).toEqual([JSON.stringify(envelope), JSON.stringify(envelope)]);
+    expect(calls.released).toHaveLength(1);
+    expect(calls.delivered).toBe(1);
+  });
+
+  test('re-publishes the same event after acceptance before finalize is lost', async () => {
+    const { envelope, repository } = fixture();
+    let finalizations = 0;
+    repository.markDelivered = async () => {
+      finalizations++;
+      return finalizations > 1;
+    };
+    const publishedIds: string[] = [];
+    const bus = busWith(async published => {
+      publishedIds.push(published.meta.eventId);
+      return {
+        eventId: published.meta.eventId,
+        acceptedAt: new Date(0).toISOString(),
+        transport: 'bullmq',
+        durableDestinations: 1,
+      };
+    });
+
+    await createOutboxDispatcher({
+      repository,
+      bus,
+      owner: 'crashed-after-accept',
+      config: { enabled: true },
+    }).dispatchOnce();
+    await createOutboxDispatcher({
+      repository,
+      bus,
+      owner: 'lease-recovery',
+      config: { enabled: true },
+    }).dispatchOnce();
+
+    expect(publishedIds).toEqual([envelope.meta.eventId, envelope.meta.eventId]);
+    expect(finalizations).toBe(2);
+  });
+
+  test('shutdown bounds an in-flight publication and releases its lease', async () => {
+    const { repository, calls } = fixture();
+    let resolvePublish:
+      | ((value: {
+          eventId: string;
+          acceptedAt: string;
+          transport: 'bullmq';
+          durableDestinations: number;
+        }) => void)
+      | undefined;
+    const dispatcher = createOutboxDispatcher({
+      repository,
+      bus: busWith(
+        envelope =>
+          new Promise(resolve => {
+            resolvePublish = value => resolve(value);
+            void envelope;
+          }),
+      ),
+      config: { enabled: true, shutdownGraceMs: 1 },
+    });
+
+    const dispatch = dispatcher.dispatchOnce();
+    await Promise.resolve();
+    await dispatcher.shutdown();
+    expect(calls.releasedOwner).toBe(1);
+    resolvePublish?.({
+      eventId: crypto.randomUUID(),
+      acceptedAt: new Date(0).toISOString(),
+      transport: 'bullmq',
+      durableDestinations: 1,
+    });
+    await dispatch;
+  });
 });

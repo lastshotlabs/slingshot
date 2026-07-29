@@ -9,6 +9,7 @@ import { createDefaultSubscriberAuthorizer, eventHasExternalExposure } from './e
 import type { EventDefinitionRegistry } from './eventDefinitionRegistry';
 import { type EventEnvelope, createEventEnvelope } from './eventEnvelope';
 import type { TransactionScope } from './transactions';
+import type { TransactionStore } from './transactions';
 
 /**
  * High-level event API exposed on the Slingshot context.
@@ -36,7 +37,38 @@ export interface SlingshotEvents {
     payload: SlingshotEventMap[K],
     ctx: EventPublishContext,
   ): EventEnvelope<K>;
+  /**
+   * Subscribe a durable named handler whose SQL effects are deduplicated in a
+   * transaction-bound inbox.
+   */
+  consume<K extends EventKey>(
+    key: K,
+    handler: (
+      envelope: EventEnvelope<K>,
+      context: TransactionalEventConsumerContext,
+    ) => void | Promise<void>,
+    options: TransactionalEventConsumerOptions,
+  ): TransactionalEventUnsubscribe;
 }
+
+/** Context supplied to one transactionally deduplicated event handler. */
+export interface TransactionalEventConsumerContext {
+  readonly scope: TransactionScope;
+  readonly eventId: string;
+  readonly consumerName: string;
+}
+
+/** Durable named-consumer options for SQL inbox deduplication. */
+export interface TransactionalEventConsumerOptions {
+  readonly durable: true;
+  readonly name: string;
+  readonly inbox: {
+    readonly store: Extract<TransactionStore, 'postgres' | 'sqlite'>;
+  };
+}
+
+/** Idempotent subscription cleanup function. */
+export type TransactionalEventUnsubscribe = () => boolean;
 
 /** Dependencies for building the {@link SlingshotEvents} publisher: the definition registry and the event bus to emit through. */
 export interface CreateEventPublisherOptions {
@@ -44,12 +76,26 @@ export interface CreateEventPublisherOptions {
   bus: SlingshotEventBus;
   /** Internal transactional outbox writer. Omit when outbox delivery is unavailable. */
   outbox?: TransactionalEventOutboxWriter;
+  /** Internal transactional inbox consumer bridge. */
+  consumer?: TransactionalEventConsumer;
 }
 
 /** Narrow synchronous seam used to enqueue an outbox insert on an open transaction scope. */
 export interface TransactionalEventOutboxWriter {
   /** Enqueue persistence; the transaction manager tracks asynchronous completion. */
   write(envelope: EventEnvelope, scope?: TransactionScope): void;
+}
+
+/** Narrow seam implemented by the transactional-events package. */
+export interface TransactionalEventConsumer {
+  consume<K extends EventKey>(
+    key: K,
+    handler: (
+      envelope: EventEnvelope<K>,
+      context: TransactionalEventConsumerContext,
+    ) => void | Promise<void>,
+    options: TransactionalEventConsumerOptions,
+  ): TransactionalEventUnsubscribe;
 }
 
 function validateProjectedScope<K extends EventKey>(
@@ -158,6 +204,22 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
       };
       busWithEnvelopeEmit.emit(key, envelope);
       return envelope;
+    },
+
+    consume<K extends EventKey>(
+      key: K,
+      handler: (
+        envelope: EventEnvelope<K>,
+        context: TransactionalEventConsumerContext,
+      ) => void | Promise<void>,
+      consumerOptions: TransactionalEventConsumerOptions,
+    ): TransactionalEventUnsubscribe {
+      if (!options.consumer) {
+        throw new Error(
+          'TRANSACTIONAL_EVENT_DELIVERY_UNAVAILABLE: Transactional event inbox is not configured.',
+        );
+      }
+      return options.consumer.consume(key, handler, consumerOptions);
     },
   };
 }

@@ -68,7 +68,11 @@ export { createEventDefinitionRegistry } from './eventDefinitionRegistry';
 export type {
   CreateEventPublisherOptions,
   SlingshotEvents,
+  TransactionalEventConsumer,
+  TransactionalEventConsumerContext,
+  TransactionalEventConsumerOptions,
   TransactionalEventOutboxWriter,
+  TransactionalEventUnsubscribe,
 } from './eventPublisher';
 export { authorizeEventSubscriber, createEventPublisher } from './eventPublisher';
 export type {

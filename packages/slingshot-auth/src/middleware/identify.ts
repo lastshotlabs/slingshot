@@ -13,32 +13,29 @@ import {
   createPluginStateMap,
   isPublicPath,
   publishPluginState,
-  sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { type SessionBindingField, computeSessionFingerprint } from '../lib/sessionFingerprint';
 import { AUTH_RUNTIME_KEY, type AuthRuntimeContext } from '../runtime';
 
 function readBearerToken(header: string | undefined): string | null {
   return header?.startsWith('Bearer ') ? header.slice(7) : null;
 }
 
-function computeFingerprint(
+function computeRequestFingerprint(
   c: Parameters<MiddlewareHandler<AppEnv>>[0],
-  fields: Array<'ip' | 'ua' | 'accept-language'>,
+  fields: readonly SessionBindingField[],
 ): string {
-  const parts = fields.map(f => {
-    if (f === 'ip') {
-      const ip = getClientIp(c);
-      // Session creation stores an unavailable socket address as an empty
-      // component. Use the same canonical value during verification so runtimes
-      // without requestIP support do not reject a freshly issued session.
-      return ip === 'unknown' ? '' : ip;
-    }
-    if (f === 'ua') return c.req.header('user-agent') ?? '';
-    return c.req.header('accept-language') ?? '';
+  const ip = getClientIp(c);
+  return computeSessionFingerprint(fields, {
+    // Session creation stores an unavailable socket address as an empty
+    // component. Use the same canonical value during verification so runtimes
+    // without requestIP support do not reject a freshly issued session.
+    ip: ip === 'unknown' ? undefined : ip,
+    ua: c.req.header('user-agent'),
+    acceptLanguage: c.req.header('accept-language'),
   });
-  return sha256(parts.join(':'));
 }
 
 /**
@@ -220,13 +217,10 @@ export const createIdentifyMiddleware =
 
               if (bindingCfg) {
                 const bindingOpts = typeof bindingCfg === 'object' ? bindingCfg : {};
-                const fields: Array<'ip' | 'ua' | 'accept-language'> = bindingOpts.fields ?? [
-                  'ip',
-                  'ua',
-                ];
+                const fields: SessionBindingField[] = bindingOpts.fields ?? ['ip', 'ua'];
                 const onMismatch = bindingOpts.onMismatch ?? 'unauthenticate';
 
-                const current = computeFingerprint(c, fields);
+                const current = computeRequestFingerprint(c, fields);
                 const storedFp = await sessionRepo.getSessionFingerprint(sessionId);
 
                 if (storedFp === null) {

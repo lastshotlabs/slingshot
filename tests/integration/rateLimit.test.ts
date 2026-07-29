@@ -9,9 +9,9 @@ describe('rateLimit middleware', () => {
       },
     });
 
-    await app.request('/health');
-    await app.request('/health');
-    const res = await app.request('/health');
+    await app.request('/');
+    await app.request('/');
+    const res = await app.request('/');
     expect(res.status).toBe(429);
   });
 
@@ -23,9 +23,22 @@ describe('rateLimit middleware', () => {
     });
 
     // Same request fingerprint
-    await app.request('/health');
-    await app.request('/health');
-    const res = await app.request('/health');
+    await app.request('/');
+    await app.request('/');
+    const res = await app.request('/');
     expect(res.status).toBe(429);
+  });
+
+  test('keeps framework health routes available after the request budget is exhausted', async () => {
+    const app = await createTestApp({
+      security: {
+        rateLimit: { windowMs: 60000, max: 1 },
+      },
+    });
+
+    await app.request('/');
+    expect((await app.request('/')).status).toBe(429);
+    expect((await app.request('/health')).status).toBe(200);
+    expect((await app.request('/health/ready')).status).toBe(200);
   });
 });

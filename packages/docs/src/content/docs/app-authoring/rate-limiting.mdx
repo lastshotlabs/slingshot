@@ -30,6 +30,7 @@ export default defineApp({
       max: 100, // 100 requests per window
       store: 'memory', // 'memory' | 'redis'
       fingerprintLimit: false, // see Bot Protection
+      onStoreError: 'allow', // preserve availability if the counter store is down
     },
   },
 });
@@ -44,6 +45,14 @@ security: {
 },
 db: { redis: process.env.REDIS_URL },
 ```
+
+The default `onStoreError: 'allow'` policy fails open when the limiter store is
+unavailable and emits a bounded warning, so a Redis failover does not turn into a
+total application outage. Set `onStoreError: 'deny'` only for deployments whose
+threat model explicitly prefers rejecting traffic during a limiter outage.
+
+`/health` and `/health/*` always bypass the global limiter. Readiness must remain
+reachable so it can report the degraded dependency instead of being masked by it.
 
 ## Disable rate limiting
 

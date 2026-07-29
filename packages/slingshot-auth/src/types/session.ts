@@ -2,13 +2,21 @@
  * Optional metadata captured at session creation time for auditing and display.
  *
  * Stored alongside the session token and surfaced via `GET /auth/sessions`.
- * Neither field is required — omitting them is valid for non-browser clients.
+ * Every field is optional — omitting them is valid for non-browser clients.
  */
 export interface SessionMetadata {
   /** Client IP address at session creation (after proxy header resolution). */
   ipAddress?: string;
   /** `User-Agent` header value at session creation. */
   userAgent?: string;
+  /**
+   * `Accept-Language` header value used for session-binding verification.
+   *
+   * Session stores may omit this value from their user-visible audit metadata;
+   * it is carried here so refresh requests use the same fingerprint vocabulary
+   * as authenticated request identification.
+   */
+  acceptLanguage?: string;
 }
 
 /**

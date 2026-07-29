@@ -188,6 +188,10 @@ export const rateLimitSchema = z.object({
   max: z.number().optional(),
   store: z.enum(['memory', 'redis']).optional(),
   fingerprintLimit: z.boolean().optional(),
+  onStoreError: z
+    .enum(['allow', 'deny'])
+    .optional()
+    .describe('Whether rate-limit store failures allow requests (default) or deny them.'),
   message: z.string().optional(),
   standardHeaders: z.boolean().optional(),
   keyGenerator: fnSchema.optional(),

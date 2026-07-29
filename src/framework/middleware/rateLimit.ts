@@ -14,6 +14,19 @@ export interface RateLimitOptions {
   max: number;
   /** Also rate-limit by HTTP fingerprint in addition to IP. Default: false */
   fingerprintLimit?: boolean;
+  /**
+   * Availability policy when the backing store or fingerprint limiter fails.
+   * `allow` preserves application availability and logs a bounded warning;
+   * `deny` propagates the failure to the application error handler.
+   * Default: `allow`.
+   */
+  onStoreError?: 'allow' | 'deny';
+}
+
+const STORE_WARNING_INTERVAL_MS = 60_000;
+
+function isHealthPath(path: string): boolean {
+  return path === '/health' || path.startsWith('/health/');
 }
 
 /**
@@ -83,6 +96,9 @@ function rateLimitSubject(c: Parameters<MiddlewareHandler<AppEnv>>[0]): string {
  *   remains a coarse, shared bucket by design — it is a bot-detection signal, not
  *   a per-user budget — so leave it off for endpoints real users hit in volume.
  *   Default: `false`.
+ * @param options.onStoreError - `allow` (default) fails open with a rate-limited
+ *   warning when the limiter store is unavailable. `deny` preserves fail-closed
+ *   behavior by propagating the store error.
  * @returns A Hono `MiddlewareHandler` that responds with `429 Too Many Requests`
  *   when the client's bucket is exhausted.
  *
@@ -99,12 +115,26 @@ export const rateLimit = ({
   windowMs,
   max,
   fingerprintLimit = false,
+  onStoreError = 'allow',
 }: RateLimitOptions): MiddlewareHandler<AppEnv> => {
   const opts = { windowMs, max };
+  let lastStoreWarningAt = 0;
+  const warnStoreFailure = (error: unknown): void => {
+    const now = Date.now();
+    if (now - lastStoreWarningAt < STORE_WARNING_INTERVAL_MS) return;
+    lastStoreWarningAt = now;
+    console.warn(
+      '[rate-limit] store unavailable; allowing request because onStoreError=allow',
+      error,
+    );
+  };
 
   return async (c, next) => {
     const ctx = getSlingshotCtx(c);
-    if (isPublicPath(c.req.path, ctx.publicPaths)) {
+    // Liveness/readiness must remain reachable when the dependency they report
+    // is degraded. Framework health endpoints therefore bypass the limiter even
+    // when an application did not repeat them in its public-path declarations.
+    if (isHealthPath(c.req.path) || isPublicPath(c.req.path, ctx.publicPaths)) {
       await next();
       return;
     }
@@ -115,15 +145,20 @@ export const rateLimit = ({
     const tenantId = c.get('tenantId');
     const prefix = tenantId ? `t:${tenantId}:` : '';
 
-    if (await adapter.trackAttempt(`${prefix}${rateLimitSubject(c)}`, opts)) {
-      return c.json({ error: 'Too Many Requests' }, 429);
-    }
-
-    if (fingerprintLimit) {
-      const fp = await getFingerprintBuilder(ctx).buildFingerprint(c.req.raw);
-      if (await adapter.trackAttempt(`${prefix}fp:${fp}`, opts)) {
+    try {
+      if (await adapter.trackAttempt(`${prefix}${rateLimitSubject(c)}`, opts)) {
         return c.json({ error: 'Too Many Requests' }, 429);
       }
+
+      if (fingerprintLimit) {
+        const fp = await getFingerprintBuilder(ctx).buildFingerprint(c.req.raw);
+        if (await adapter.trackAttempt(`${prefix}fp:${fp}`, opts)) {
+          return c.json({ error: 'Too Many Requests' }, 429);
+        }
+      }
+    } catch (error) {
+      if (onStoreError === 'deny') throw error;
+      warnStoreFailure(error);
     }
 
     await next();

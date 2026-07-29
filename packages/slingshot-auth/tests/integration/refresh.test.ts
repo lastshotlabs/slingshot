@@ -126,6 +126,89 @@ describe('POST /auth/refresh', () => {
     expect(res.status).toBe(200);
   });
 
+  test('uses the same accept-language fingerprint during identify and refresh', async () => {
+    runtime.signing = {
+      ...runtime.signing,
+      sessionBinding: {
+        fields: ['ua', 'accept-language'],
+        onMismatch: 'reject',
+      },
+    };
+    app = buildApp(runtime);
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'BoundBrowser/1.0',
+      'Accept-Language': 'en-US',
+    };
+    const login = await registerAndLogin(runtime, app, 'accept-language-refresh@example.com');
+    const session = await runtime.repos.session.getSessionByRefreshToken(
+      login.refreshToken,
+      runtime.config,
+    );
+    expect(session).not.toBeNull();
+    const { computeSessionFingerprint } = await import('../../src/lib/sessionFingerprint');
+    await runtime.repos.session.setSessionFingerprint(
+      session!.sessionId,
+      computeSessionFingerprint(['ua', 'accept-language'], {
+        ua: requestHeaders['User-Agent'],
+        acceptLanguage: requestHeaders['Accept-Language'],
+      }),
+    );
+
+    const res = await app.request('/auth/refresh', {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify({ refreshToken: login.refreshToken }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test('reject mismatch denies refresh without deleting the session', async () => {
+    runtime.signing = {
+      ...runtime.signing,
+      sessionBinding: { fields: ['ua'], onMismatch: 'reject' },
+    };
+    app = buildApp(runtime);
+    const login = await registerAndLogin(runtime, app, 'reject-refresh@example.com');
+    const session = await runtime.repos.session.getSessionByRefreshToken(
+      login.refreshToken,
+      runtime.config,
+    );
+    await runtime.repos.session.setSessionFingerprint(session!.sessionId, 'different');
+
+    const res = await app.request('/auth/refresh', {
+      ...jsonPost({ refreshToken: login.refreshToken }),
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'BoundBrowser/1.0' },
+    });
+    expect(res.status).toBe(401);
+    expect(
+      await runtime.repos.session.getSessionByRefreshToken(login.refreshToken, runtime.config),
+    ).not.toBeNull();
+  });
+
+  test('log-only mismatch emits the security event and continues refresh', async () => {
+    runtime.signing = {
+      ...runtime.signing,
+      sessionBinding: { fields: ['ua'], onMismatch: 'log-only' },
+    };
+    const emitted: string[] = [];
+    runtime.eventBus = makeEventBus(event => emitted.push(event));
+    app = buildApp(runtime);
+    const login = await registerAndLogin(runtime, app, 'log-only-refresh@example.com');
+    const session = await runtime.repos.session.getSessionByRefreshToken(
+      login.refreshToken,
+      runtime.config,
+    );
+    await runtime.repos.session.setSessionFingerprint(session!.sessionId, 'different');
+
+    const res = await app.request('/auth/refresh', {
+      ...jsonPost({ refreshToken: login.refreshToken }),
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'BoundBrowser/1.0' },
+    });
+    expect(res.status).toBe(200);
+    expect(emitted).toContain('security.auth.session.fingerprint_mismatch');
+  });
+
   // 2. New access token is a valid JWT string
   test('returns a valid JWT access token on refresh', async () => {
     const login = await registerAndLogin(runtime, app);

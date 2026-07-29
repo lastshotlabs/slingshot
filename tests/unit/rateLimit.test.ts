@@ -17,6 +17,7 @@ function buildRateLimitApp(opts: {
   fingerprintLimit?: boolean;
   rateLimitAdapter?: any;
   fingerprintBuilder?: any;
+  onStoreError?: 'allow' | 'deny';
 }) {
   const app = new Hono<AppEnv>();
   const rateLimitAdapter = opts.rateLimitAdapter ?? createMemoryRateLimitAdapter();
@@ -45,6 +46,7 @@ function buildRateLimitApp(opts: {
       max: opts.max,
       windowMs: opts.windowMs ?? 60_000,
       fingerprintLimit: opts.fingerprintLimit,
+      onStoreError: opts.onStoreError,
     }),
   );
 
@@ -192,5 +194,55 @@ describe('rateLimit middleware', () => {
 
     const priv2 = await app.request('/private');
     expect(priv2.status).toBe(429);
+  });
+
+  test('fails open by default when the rate-limit store is unavailable', async () => {
+    const app = buildRateLimitApp({
+      max: 1,
+      rateLimitAdapter: {
+        async trackAttempt() {
+          throw new Error('redis unavailable');
+        },
+      },
+    });
+
+    const res = await app.request('/api');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  test('can explicitly fail closed when the rate-limit store is unavailable', async () => {
+    const app = buildRateLimitApp({
+      max: 1,
+      onStoreError: 'deny',
+      rateLimitAdapter: {
+        async trackAttempt() {
+          throw new Error('redis unavailable');
+        },
+      },
+    });
+
+    const res = await app.request('/api');
+    expect(res.status).toBe(500);
+  });
+
+  test('health and readiness paths bypass an unavailable limiter store', async () => {
+    let attempts = 0;
+    const app = buildRateLimitApp({
+      max: 1,
+      onStoreError: 'deny',
+      rateLimitAdapter: {
+        async trackAttempt() {
+          attempts += 1;
+          throw new Error('redis unavailable');
+        },
+      },
+    });
+    app.get('/health', c => c.json({ status: 'ok' }));
+    app.get('/health/ready', c => c.json({ status: 'degraded' }));
+
+    expect((await app.request('/health')).status).toBe(200);
+    expect((await app.request('/health/ready')).status).toBe(200);
+    expect(attempts).toBe(0);
   });
 });

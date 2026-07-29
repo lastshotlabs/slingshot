@@ -42,6 +42,8 @@ export interface SecurityConfig {
     max: number;
     store?: 'memory' | 'redis';
     fingerprintLimit?: boolean;
+    /** Store failure policy. Defaults to `allow` so a limiter outage does not take down the app. */
+    onStoreError?: 'allow' | 'deny';
   };
   /**
    * Bot protection: CIDR blocklist and fingerprint-based rate limiting.

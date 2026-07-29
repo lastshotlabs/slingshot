@@ -9,13 +9,13 @@ import {
   buildHookServices,
   createConsoleLogger,
   generateSecureToken,
-  sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
 import type { HookServices } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
 import type { SessionMetadata } from '../lib/session/index.js';
+import { type SessionBindingField, computeSessionFingerprint } from '../lib/sessionFingerprint';
 import type { AuthRuntimeContext } from '../runtime';
 
 /**
@@ -249,13 +249,12 @@ async function createSessionWithRefreshToken(
   const bindingCfg = runtime.signing?.sessionBinding;
   if (bindingCfg) {
     const opts = typeof bindingCfg === 'object' ? bindingCfg : {};
-    const fields: Array<'ip' | 'ua' | 'accept-language'> = opts.fields ?? ['ip', 'ua'];
+    const fields: SessionBindingField[] = opts.fields ?? ['ip', 'ua'];
     if (fields.every(f => f === 'ip' || f === 'ua')) {
-      const fingerprint = sha256(
-        fields
-          .map(f => (f === 'ip' ? (metadata?.ipAddress ?? '') : (metadata?.userAgent ?? '')))
-          .join(':'),
-      );
+      const fingerprint = computeSessionFingerprint(fields, {
+        ip: metadata?.ipAddress,
+        ua: metadata?.userAgent,
+      });
       bestEffort(
         sessionRepo.setSessionFingerprint(sessionId, fingerprint),
         '[session-fingerprint]',
@@ -656,8 +655,9 @@ export const login = async (
  * @param metadata - Optional request metadata (IP, user-agent) for session-binding
  *   fingerprint verification. When `signing.sessionBinding` is configured and metadata
  *   is provided, the refresh request's fingerprint is compared against the stored
- *   session fingerprint. A mismatch invalidates the session as a token-theft
- *   countermeasure.
+ *   session fingerprint. Mismatch handling follows the configured `onMismatch`
+ *   policy: `log-only` continues, `reject` denies without revocation, and
+ *   `unauthenticate` denies and revokes the session.
  * @returns An object with the new `token`, rotated `refreshToken`, and `userId`.
  *
  * @throws {HttpError} 401 — Refresh token is invalid, expired, or fingerprint mismatch.
@@ -686,24 +686,30 @@ export const refresh = async (
   const bindingCfg = runtime.signing?.sessionBinding;
   if (bindingCfg && metadata) {
     const opts = typeof bindingCfg === 'object' ? bindingCfg : {};
-    const fields: Array<'ip' | 'ua' | 'accept-language'> = opts.fields ?? ['ip', 'ua'];
+    const fields: SessionBindingField[] = opts.fields ?? ['ip', 'ua'];
+    const onMismatch = opts.onMismatch ?? 'unauthenticate';
     const storedFp = await sessionRepo.getSessionFingerprint(sessionId);
     if (storedFp) {
-      const parts = fields.map(f => {
-        if (f === 'ip') return metadata.ipAddress ?? '';
-        if (f === 'ua') return metadata.userAgent ?? '';
-        return '';
+      const currentFp = computeSessionFingerprint(fields, {
+        ip: metadata.ipAddress,
+        ua: metadata.userAgent,
+        acceptLanguage: metadata.acceptLanguage,
       });
-      const currentFp = sha256(parts.join(':'));
       if (!timingSafeEqual(storedFp, currentFp)) {
-        // Fingerprint mismatch on refresh — likely stolen token. Revoke the session.
-        await sessionRepo.deleteSession(sessionId, runtime.config);
         runtime.eventBus.emit('security.auth.session.fingerprint_mismatch', {
           userId,
           sessionId,
-          meta: { reason: 'refresh_fingerprint_mismatch' },
+          meta: { reason: 'refresh_fingerprint_mismatch', onMismatch },
         });
-        throw new HttpError(401, 'Invalid or expired refresh token');
+        runtime.logger?.log(
+          `[refresh] fingerprint mismatch, onMismatch=${onMismatch}, sessionId=${sessionId}`,
+        );
+        if (onMismatch !== 'log-only') {
+          if (onMismatch === 'unauthenticate') {
+            await sessionRepo.deleteSession(sessionId, runtime.config);
+          }
+          throw new HttpError(401, 'Invalid or expired refresh token', 'FINGERPRINT_MISMATCH');
+        }
       }
     }
   }

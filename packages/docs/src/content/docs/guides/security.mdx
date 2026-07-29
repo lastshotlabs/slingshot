@@ -194,6 +194,13 @@ createAuthPlugin({
 
 `store` defaults to `'redis'` when Redis is available, `'memory'` otherwise. In-memory counters are per-process — with multiple server instances, each gets its own window. Use `'redis'` for accurate limits across instances.
 
+Framework route limiting fails open when its backing store is unavailable so an
+operational Redis incident does not also take down application or readiness
+routes. Set `security.rateLimit.onStoreError` to `'deny'` only when rejecting
+traffic is preferable to temporarily running without the limit. `/health` and
+its subpaths always bypass the framework limiter so they can report the failing
+dependency.
+
 ### Credential stuffing detection
 
 Detects distributed password stuffing attacks — many logins across many accounts from the same IP, or many IPs per account:

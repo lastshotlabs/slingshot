@@ -135,6 +135,7 @@ export const createRefreshRouter = (
       const result = await AuthService.refresh(rt, runtime, {
         ipAddress: ip !== 'unknown' ? ip : undefined,
         userAgent: c.req.header('user-agent') ?? undefined,
+        acceptLanguage: c.req.header('accept-language') ?? undefined,
       });
       setAuthCookie(
         c,

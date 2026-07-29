@@ -125,6 +125,7 @@
     "@lastshotlabs/slingshot-auth": "workspace:*",
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-entity": "workspace:*",
+    "@lastshotlabs/slingshot-events": "workspace:*",
     "@lastshotlabs/slingshot-organizations": "workspace:*",
     "@oclif/core": "^4.13.0",
     "@opentelemetry/api": "^1.9.1",

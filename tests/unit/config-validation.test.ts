@@ -42,6 +42,20 @@ describe('config validation', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
+    it('accepts transactional event reliability configuration', () => {
+      const result = validateAppConfig({
+        db: { sqlite: '/tmp/events.sqlite' },
+        events: {
+          reliability: {
+            store: 'sqlite',
+            outbox: { enabled: true },
+            inbox: { enabled: true },
+          },
+        },
+      });
+      expect(result.warnings).toHaveLength(0);
+    });
+
     it('accepts modelSchemas as object', () => {
       const result = validateAppConfig({
         routesDir: '/routes',
@@ -649,6 +663,20 @@ describe('config validation', () => {
       expect(result.warnings).toHaveLength(2);
       expect(result.warnings[0]).toContain('"ws.unknownWsKey"');
       expect(result.warnings[1]).toContain('"sse.unknownSseKey"');
+    });
+
+    it('rejects unknown transactional event reliability fields', () => {
+      expect(() =>
+        validateAppConfig({
+          events: {
+            reliability: {
+              store: 'sqlite',
+              inbox: { enabled: true },
+              retryForever: true,
+            },
+          },
+        }),
+      ).toThrow('retryForever');
     });
 
     it('does not warn on versioning as string array', () => {

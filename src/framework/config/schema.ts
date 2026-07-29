@@ -61,6 +61,7 @@
  * 4. Update JSDoc in both the section file and this file.
  */
 import { z } from 'zod';
+import { eventReliabilityConfigSchema } from '@lastshotlabs/slingshot-events';
 import { dbSchema, redisObjectSchema } from './sections/db';
 import { healthSchema } from './sections/health';
 import { jobsSchema } from './sections/jobs';
@@ -87,6 +88,16 @@ import { uploadPresignedSchema, uploadSchema } from './sections/upload';
 import { validationSchema } from './sections/validation';
 import { versioningObjectSchema } from './sections/versioning';
 import { wsSchema } from './sections/ws';
+
+/** Zod schema for top-level governed-event configuration. */
+export const eventsSchema = z
+  .object({
+    reliability: eventReliabilityConfigSchema
+      .optional()
+      .describe('Optional transactional outbox/inbox reliability configuration.'),
+  })
+  .strict()
+  .describe('Governed event delivery configuration.');
 
 /**
  * Zod schema for `CreateAppConfig` — the application-level configuration object.
@@ -152,6 +163,7 @@ export const appConfigSchema = z
     requestScopes: z.array(z.unknown()).optional(),
     configs: z.array(z.unknown()).optional(),
     eventBus: z.unknown().optional(),
+    events: eventsSchema.optional(),
     kafkaConnectors: z.unknown().optional(),
     secrets: z.unknown().optional(),
     runtime: z.unknown().optional(),
@@ -255,6 +267,8 @@ const SCHEMA_MAP: Record<string, z.ZodType> = {
   'security.captcha': captchaSchema,
   'security.csrf': csrfSchema,
   db: dbSchema,
+  events: eventsSchema,
+  'events.reliability': eventReliabilityConfigSchema,
   'db.redis': redisObjectSchema,
   jobs: jobsSchema,
   tenancy: tenancySchema,

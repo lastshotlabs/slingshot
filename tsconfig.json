@@ -22,6 +22,7 @@
       "@lastshotlabs/slingshot-core/content": ["./packages/slingshot-core/src/content.public.ts"],
       "@lastshotlabs/slingshot-core/faker": ["./packages/slingshot-core/src/faker/index.ts"],
       "@lastshotlabs/slingshot-entity": ["./packages/slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-events": ["./packages/slingshot-events/src/index.ts"],
       "@lastshotlabs/slingshot-entity/routing": [
         "./packages/slingshot-entity/src/routing/index.ts"
       ],

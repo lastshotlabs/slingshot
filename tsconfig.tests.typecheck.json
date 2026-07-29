@@ -44,6 +44,9 @@
       "path": "./packages/slingshot-entity/tsconfig.tests.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-events/tsconfig.tests.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-game-engine/tsconfig.tests.typecheck.json"
     },
     {

@@ -85,6 +85,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { DbConfig } from './config/types/db';
+import type { EventsConfig } from './config/types/events';
 import type { JobsConfig } from './config/types/jobs';
 import type { LoggingConfig } from './config/types/logging';
 import type { AppMeta } from './config/types/meta';
@@ -141,6 +142,7 @@ export type { MetricsConfig } from './config/types/metrics';
 export type { VersioningConfig } from './config/types/versioning';
 export type { AppMeta } from './config/types/meta';
 export type { DbConfig } from './config/types/db';
+export type { EventsConfig } from './config/types/events';
 export type { BotProtectionConfig, SecurityConfig } from './config/types/security';
 export type { TenancyConfig, TenantConfig } from './config/types/tenancy';
 export type { LoggingConfig } from './config/types/logging';
@@ -166,6 +168,8 @@ export interface CreateAppConfig<T extends object = object> {
   middleware?: MiddlewareHandler<AppEnv>[];
   /** Database connection and store routing configuration */
   db?: DbConfig;
+  /** Governed event delivery and optional transactional reliability. */
+  events?: EventsConfig;
   /** Job status endpoint configuration. Requires BullMQ + Redis. */
   jobs?: JobsConfig;
   /** Multi-tenancy configuration. When set, tenant middleware resolves tenant on each request. */
@@ -601,6 +605,15 @@ async function prepareBootstrap<T extends object>(
       schemaRegistry: eventSchemaRegistry,
       validation: 'off',
     });
+  if (config.events?.reliability) {
+    const { validateEventReliabilityTopology } = await import('@lastshotlabs/slingshot-events');
+    validateEventReliabilityTopology({
+      config: config.events.reliability,
+      bus,
+      postgresConfigured: typeof db.postgres === 'string' && db.postgres.length > 0,
+      sqliteConfigured: typeof db.sqlite === 'string' && db.sqlite.length > 0,
+    });
+  }
   const definitions = createEventDefinitionRegistry({ schemaRegistry: eventSchemaRegistry });
   const events = createEventPublisher({ definitions, bus });
   events.register(

@@ -92,6 +92,33 @@ export interface SubscriptionOpts {
   name?: string;
 }
 
+/** Broker acknowledgement returned after durable transport acceptance. */
+export interface DurablePublishReceipt {
+  /** Stable identity from the governed event envelope. */
+  readonly eventId: string;
+  /** ISO timestamp at which the transport accepted the publication. */
+  readonly acceptedAt: string;
+  /** Durable transport that accepted the envelope. */
+  readonly transport: 'bullmq' | 'kafka';
+  /** Number of durable destinations that accepted the envelope. */
+  readonly durableDestinations: number;
+}
+
+/**
+ * Optional event-bus capability used by the transactional outbox dispatcher.
+ *
+ * This is intentionally separate from fire-and-forget {@link SlingshotEventBus.emit}.
+ */
+export interface AcknowledgedEventBus extends SlingshotEventBus {
+  /** Publish an existing envelope and resolve only after durable transport acceptance. */
+  publishEnvelope(envelope: EventEnvelope): Promise<DurablePublishReceipt>;
+}
+
+/** Return whether an event bus exposes the acknowledged durable-publication capability. */
+export function isAcknowledgedEventBus(bus: SlingshotEventBus): bus is AcknowledgedEventBus {
+  return typeof Reflect.get(bus, 'publishEnvelope') === 'function';
+}
+
 /**
  * The typed in-process event bus shared across all Slingshot plugins.
  *

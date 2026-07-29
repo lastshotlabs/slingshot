@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { SlingshotEventMap } from './eventMap';
+import type { TransactionScope } from './transactions';
 
 /** Union of all registered event names — the string keys of the {@link SlingshotEventMap}. */
 export type EventKey = Extract<keyof SlingshotEventMap, string>;
@@ -37,6 +38,16 @@ export interface EventPublishContext {
   requestId?: string;
   correlationId?: string;
   source?: 'http' | 'system' | 'job' | 'connector';
+  /**
+   * Selects immediate in-process/bus delivery or atomic SQL outbox persistence.
+   * Omit to preserve the immediate v2 behavior.
+   */
+  delivery?: 'ephemeral' | 'outbox';
+  /**
+   * Framework-owned SQL transaction used by `delivery: 'outbox'`.
+   * Outbox delivery rejects missing, closed, forged, or mismatched scopes.
+   */
+  transaction?: TransactionScope;
 }
 
 /** Identifies the consumer an event would be delivered to when checking subscriber authorization. */

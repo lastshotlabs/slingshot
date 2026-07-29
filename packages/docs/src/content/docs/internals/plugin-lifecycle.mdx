@@ -213,6 +213,14 @@ default organization records exist on every boot. This is distinct from the
 `slingshot seed` CLI command, which generates faker-based entity fixtures for local
 development.
 
+### Event reliability bootstrap validation
+
+When `events.reliability` is configured, app assembly validates the selected SQL
+store and acknowledged event-bus capability before secrets, database
+connections, migrations, plugin hooks, or background workers start. Omitting
+the section preserves the existing lifecycle and creates no reliability tables
+or timers.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — what's inside `SlingshotContext`

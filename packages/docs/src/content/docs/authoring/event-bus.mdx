@@ -233,6 +233,21 @@ export default defineApp({
 
 BullMQ is the built-in option. Other brokers still work through the registry-backed custom event-bus path. See [Custom Event Bus](/examples/custom-event-bus/) for the full configuration.
 
+## Transactional delivery
+
+Ordinary `events.publish()` and `bus.emit()` remain immediate. Applications that
+need a domain write and its event to commit atomically can opt into
+`events.reliability` with a PostgreSQL or SQLite store. Transactional publication
+uses the existing governed envelope and an explicit `delivery: 'outbox'` plus
+framework-owned transaction scope.
+
+An enabled outbox requires an event bus implementing the separate
+`AcknowledgedEventBus.publishEnvelope()` capability. The framework rejects an
+in-process bus, a missing selected SQL store, and unsafe lease/retry settings
+during bootstrap before opening reliability infrastructure. This feature
+provides at-least-once delivery; consumers must deduplicate by the stable event
+ID.
+
 ## See also
 
 - [Internals: Event Bus](/internals/event-bus/) - `InProcessAdapter`, transport contract, and `SlingshotEventMap` extension

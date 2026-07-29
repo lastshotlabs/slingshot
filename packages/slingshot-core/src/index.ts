@@ -30,6 +30,8 @@ export type {
   SlingshotEventBus,
   SlingshotEventMap,
   DynamicEventBus,
+  AcknowledgedEventBus,
+  DurablePublishReceipt,
   SecurityEventKey,
   SubscriptionOpts,
 } from './eventBus';
@@ -73,7 +75,12 @@ export type {
   KafkaOutboundConnectorHealth,
 } from './kafkaConnectors';
 /** In-process event bus primitives and the built-in client-safe event allowlist. */
-export { InProcessAdapter, createInProcessAdapter, SECURITY_EVENT_TYPES } from './eventBus';
+export {
+  InProcessAdapter,
+  createInProcessAdapter,
+  isAcknowledgedEventBus,
+  SECURITY_EVENT_TYPES,
+} from './eventBus';
 /** Adapter that normalizes router behavior across Slingshot runtimes. */
 export { createRouterAdapter } from './routerAdapter';
 export type { RouterAdapterOptions } from './routerAdapter';

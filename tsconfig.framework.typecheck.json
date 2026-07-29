@@ -51,6 +51,9 @@
       "path": "./packages/slingshot-entity/tsconfig.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-events/tsconfig.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-gifs/tsconfig.typecheck.json"
     },
     {

@@ -122,6 +122,7 @@
     { "path": "./packages/slingshot-push/tsconfig.build.json" },
     { "path": "./packages/slingshot-notifications/tsconfig.build.json" },
     { "path": "./packages/slingshot-entity/tsconfig.build.json" },
+    { "path": "./packages/slingshot-events/tsconfig.build.json" },
     { "path": "./packages/slingshot-infra/tsconfig.build.json" },
     { "path": "./packages/slingshot-search/tsconfig.build.json" },
     { "path": "./packages/slingshot-ssg/tsconfig.build.json" },

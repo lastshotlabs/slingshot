@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-image
 
+## 2.0.0
+
+### Patch Changes
+
+- Updated dependencies [fd0069d]
+- Updated dependencies [d3effc1]
+  - @lastshotlabs/slingshot-core@0.4.0
+
 ## 1.0.1
 
 ### Patch Changes

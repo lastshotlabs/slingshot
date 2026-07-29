@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-organizations
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [fd0069d]
+- Updated dependencies [d3effc1]
+  - @lastshotlabs/slingshot-core@0.4.0
+  - @lastshotlabs/slingshot-entity@0.4.0
+  - @lastshotlabs/slingshot-auth@1.0.2
+
 ## 1.0.1
 
 ### Patch Changes

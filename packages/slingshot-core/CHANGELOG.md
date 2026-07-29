@@ -1,5 +1,22 @@
 # @lastshotlabs/slingshot-core
 
+## 0.4.0
+
+### Minor Changes
+
+- d3effc1: Add opt-in version concurrency across entity contracts, memory, SQLite, PostgreSQL, and MongoDB;
+  strong ETag conditional writes in runtime and generated routes; migration backfills; exhaustive
+  conformance evidence; and public documentation. Redis rejects unsupported concurrency before
+  infrastructure access. Notification preferences adopt optional guarded writes as the first
+  production package path.
+
+### Patch Changes
+
+- fd0069d: Serialize SQLite transaction scopes and all standard entity operations through a per-app FIFO
+  coordinator so unrelated work cannot join an awaited transaction on the shared connection.
+  Publish versioned SQLite/PostgreSQL transaction-manager conformance evidence and document the
+  opaque scoped package-service and hook-service contract.
+
 ## 0.3.1
 
 ### Patch Changes

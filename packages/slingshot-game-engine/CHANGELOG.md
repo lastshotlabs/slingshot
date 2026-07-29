@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-game-engine
 
+## 0.2.10
+
+### Patch Changes
+
+- e86a84d: Boot game-engine packages on SQLite without recursively freezing lazy entity-adapter proxies.
+- Updated dependencies [fd0069d]
+- Updated dependencies [d3effc1]
+  - @lastshotlabs/slingshot-core@0.4.0
+  - @lastshotlabs/slingshot-entity@0.4.0
+
 ## 0.2.9
 
 ### Patch Changes

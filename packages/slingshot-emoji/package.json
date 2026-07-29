@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-emoji",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Custom emoji management for Slingshot — CRUD with storage integration",
   "license": "MIT",
   "type": "module",

@@ -1,5 +1,46 @@
 # @lastshotlabs/slingshot
 
+## 2.0.0
+
+### Minor Changes
+
+- d3effc1: Add opt-in version concurrency across entity contracts, memory, SQLite, PostgreSQL, and MongoDB;
+  strong ETag conditional writes in runtime and generated routes; migration backfills; exhaustive
+  conformance evidence; and public documentation. Redis rejects unsupported concurrency before
+  infrastructure access. Notification preferences adopt optional guarded writes as the first
+  production package path.
+
+### Patch Changes
+
+- fd0069d: Serialize SQLite transaction scopes and all standard entity operations through a per-app FIFO
+  coordinator so unrelated work cannot join an awaited transaction on the shared connection.
+  Publish versioned SQLite/PostgreSQL transaction-manager conformance evidence and document the
+  opaque scoped package-service and hook-service contract.
+- Updated dependencies [fd0069d]
+- Updated dependencies [d3effc1]
+  - @lastshotlabs/slingshot-core@0.4.0
+  - @lastshotlabs/slingshot-entity@0.4.0
+  - @lastshotlabs/slingshot-notifications@0.3.0
+  - @lastshotlabs/slingshot-runtime-bun@0.2.6
+  - @lastshotlabs/slingshot-admin@0.2.6
+  - @lastshotlabs/slingshot-auth@1.0.2
+  - @lastshotlabs/slingshot-bullmq@0.2.6
+  - @lastshotlabs/slingshot-community@0.2.13
+  - @lastshotlabs/slingshot-deep-links@0.2.6
+  - @lastshotlabs/slingshot-infra@0.2.6
+  - @lastshotlabs/slingshot-interactions@0.2.9
+  - @lastshotlabs/slingshot-kafka@0.2.6
+  - @lastshotlabs/slingshot-mail@0.2.6
+  - @lastshotlabs/slingshot-orchestration@0.2.6
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.6
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.6
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.6
+  - @lastshotlabs/slingshot-organizations@1.0.2
+  - @lastshotlabs/slingshot-permissions@0.2.7
+  - @lastshotlabs/slingshot-postgres@0.3.2
+  - @lastshotlabs/slingshot-push@1.0.0
+  - @lastshotlabs/slingshot-webhooks@0.2.8
+
 ## 1.0.1
 
 ### Patch Changes

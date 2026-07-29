@@ -1,5 +1,22 @@
 # @lastshotlabs/slingshot-notifications
 
+## 0.3.0
+
+### Minor Changes
+
+- d3effc1: Add opt-in version concurrency across entity contracts, memory, SQLite, PostgreSQL, and MongoDB;
+  strong ETag conditional writes in runtime and generated routes; migration backfills; exhaustive
+  conformance evidence; and public documentation. Redis rejects unsupported concurrency before
+  infrastructure access. Notification preferences adopt optional guarded writes as the first
+  production package path.
+
+### Patch Changes
+
+- Updated dependencies [fd0069d]
+- Updated dependencies [d3effc1]
+  - @lastshotlabs/slingshot-core@0.4.0
+  - @lastshotlabs/slingshot-entity@0.4.0
+
 ## 0.2.12
 
 ### Patch Changes

@@ -638,6 +638,7 @@ async function prepareBootstrap<T extends object>(
     outbox: eventOutboxWriter,
     consumer: eventInboxConsumer,
   });
+  config.events?.registerContracts?.(events);
   events.register(
     defineEvent('app:ready', {
       ownerPlugin: 'slingshot-framework',

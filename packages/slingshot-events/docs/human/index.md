@@ -114,6 +114,10 @@ reliability:
 
 ```ts
 events: {
+  registerContracts(events) {
+    events.register(orderCreated);
+    events.registerVersionAdapter(orderCreatedV1ToV2);
+  },
   reliability: {
     store: 'postgres',
     outbox: { enabled: true },
@@ -122,6 +126,11 @@ events: {
   operator: { enabled: true },
 }
 ```
+
+Keep event definitions and adapters in this pure `registerContracts` callback
+when direct CLI replay is required. App bootstrap and CLI tooling invoke the
+same callback and construct the same replay validator; the CLI fails closed
+with `validator-unavailable` when it is omitted.
 
 The router is mounted at `/admin/events` by default. Production startup fails
 unless an authentication plugin publishes route auth and the permissions

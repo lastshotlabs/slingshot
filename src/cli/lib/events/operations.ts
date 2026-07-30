@@ -1,6 +1,15 @@
-import type { PostgresBundle } from '@lastshotlabs/slingshot-core';
-import type { EventReliabilityOperations } from '@lastshotlabs/slingshot-events';
+import type { PostgresBundle, SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import {
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createEventSchemaRegistry,
+  createEventVersionRegistry,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
+import type { EventReliabilityOperations } from '@lastshotlabs/slingshot-events';
+import type { EventReplayValidator } from '@lastshotlabs/slingshot-events';
+import {
+  createEventReplayValidator,
   createPostgresEventReliabilityOperations,
   createSqliteEventReliabilityOperations,
 } from '@lastshotlabs/slingshot-events';
@@ -11,6 +20,26 @@ export interface EventOperationsHandle {
   readonly store: 'postgres' | 'sqlite';
   readonly operations: EventReliabilityOperations;
   close(): Promise<void>;
+}
+
+/** Build the CLI replay validator from the same pure contract callback used at app boot. */
+export function createCliEventReplayValidator(
+  registerContracts: ((events: SlingshotEvents) => void) | undefined,
+): EventReplayValidator | undefined {
+  if (!registerContracts) return undefined;
+  const schemas = createEventSchemaRegistry();
+  const definitions = createEventDefinitionRegistry({ schemaRegistry: schemas });
+  const versions = createEventVersionRegistry();
+  const events = createEventPublisher({
+    definitions,
+    schemas,
+    versions,
+    bus: createInProcessAdapter({ schemaRegistry: schemas, validation: 'off' }),
+  });
+  registerContracts(events);
+  definitions.freeze();
+  versions.freeze();
+  return createEventReplayValidator({ definitions, schemas, versions });
 }
 
 /** Resolve the configured reliability store and open one CLI-owned connection. */
@@ -24,15 +53,19 @@ export async function openEventOperations(input: {
     throw new Error('events.reliability.store must be configured as postgres or sqlite.');
   }
   const connectionString = resolveConnectionString(manifest, store, input.dbUrl);
+  const replayValidator = createCliEventReplayValidator(manifest.events?.registerContracts);
   if (store === 'postgres') {
     const { Pool } = await import('pg');
     const pool = new Pool({ connectionString });
     return {
       appName: manifest.appName,
       store,
-      operations: createPostgresEventReliabilityOperations({
-        pool,
-      } as unknown as PostgresBundle),
+      operations: createPostgresEventReliabilityOperations(
+        {
+          pool,
+        } as unknown as PostgresBundle,
+        { replayValidator },
+      ),
       async close() {
         await pool.end();
       },
@@ -43,7 +76,7 @@ export async function openEventOperations(input: {
   return {
     appName: manifest.appName,
     store,
-    operations: createSqliteEventReliabilityOperations(db),
+    operations: createSqliteEventReliabilityOperations(db, { replayValidator }),
     async close() {
       db.close();
     },

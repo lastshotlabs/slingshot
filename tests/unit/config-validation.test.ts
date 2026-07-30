@@ -56,6 +56,21 @@ describe('config validation', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
+    it('accepts event operator and shared contract registration configuration', () => {
+      const result = validateAppConfig({
+        db: { sqlite: '/tmp/events.sqlite' },
+        events: {
+          registerContracts: () => {},
+          reliability: {
+            store: 'sqlite',
+            outbox: { enabled: true },
+          },
+          operator: { enabled: true },
+        },
+      });
+      expect(result.warnings).toHaveLength(0);
+    });
+
     it('accepts modelSchemas as object', () => {
       const result = validateAppConfig({
         routesDir: '/routes',

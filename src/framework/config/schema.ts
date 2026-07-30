@@ -92,6 +92,12 @@ import { wsSchema } from './sections/ws';
 /** Zod schema for top-level governed-event configuration. */
 export const eventsSchema = z
   .object({
+    registerContracts: z
+      .custom<(events: unknown) => void>(value => typeof value === 'function')
+      .optional()
+      .describe(
+        'Pure governed-event contract registration callback shared by app bootstrap and CLI tooling.',
+      ),
     reliability: eventReliabilityConfigSchema
       .optional()
       .describe('Optional transactional outbox/inbox reliability configuration.'),

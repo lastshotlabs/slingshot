@@ -7,6 +7,7 @@
  */
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import type { SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import { getEntityPluginToolingMetadata } from '@lastshotlabs/slingshot-entity';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-entity';
 
@@ -27,6 +28,7 @@ export interface ResolvedManifest {
     mongoEnabled?: boolean;
   };
   events?: {
+    registerContracts?: (events: SlingshotEvents) => void;
     reliability?: {
       store?: 'postgres' | 'sqlite';
     };

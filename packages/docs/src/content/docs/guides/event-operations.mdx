@@ -11,6 +11,10 @@ Enable `events.reliability` and `events.operator` together:
 
 ```ts
 events: {
+  registerContracts(events) {
+    events.register(orderCreated);
+    events.registerVersionAdapter(orderCreatedV1ToV2);
+  },
   reliability: {
     store: 'postgres',
     outbox: { enabled: true },
@@ -19,6 +23,11 @@ events: {
   operator: { enabled: true },
 }
 ```
+
+`registerContracts` must be pure: register only governed definitions and
+adjacent version adapters. Both app bootstrap and direct CLI tooling invoke it,
+so break-glass replay uses the same compatibility validator. Without it the CLI
+fails closed instead of replaying an event it cannot prove compatible.
 
 Production boot requires both route authentication and the permissions package.
 Grant `events:read` for status, lists, inspection, and replay-audit reads. Grant

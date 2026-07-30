@@ -1,3 +1,4 @@
+import type { SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
 
 /** Authenticated framework event-operator HTTP surface. */
@@ -9,6 +10,13 @@ export interface EventOperatorConfig {
 
 /** Top-level governed-event configuration. */
 export interface EventsConfig {
+  /**
+   * Register governed event definitions and version adapters without starting the app.
+   *
+   * The framework and direct event CLI both invoke this callback, allowing break-glass
+   * replay to use the same compatibility validator as the HTTP operator surface.
+   */
+  readonly registerContracts?: (events: SlingshotEvents) => void;
   /**
    * Optional transactional outbox/inbox reliability. Omit to preserve immediate
    * event delivery without migrations, workers, or additional topology.

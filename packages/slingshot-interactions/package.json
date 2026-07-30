@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-interactions",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "Interactive message components and dispatch orchestration for Slingshot",
   "license": "MIT",
   "type": "module",

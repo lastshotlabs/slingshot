@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-game-engine",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "Multiplayer game state engine plugin for Slingshot",
   "license": "MIT",
   "type": "module",

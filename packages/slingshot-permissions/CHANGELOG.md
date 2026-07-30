@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-permissions
 
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+
 ## 0.2.11
 
 ### Patch Changes

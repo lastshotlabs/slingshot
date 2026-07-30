@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-orchestration-bullmq",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "BullMQ-backed orchestration adapter for Slingshot tasks and workflows",
   "license": "MIT",
   "type": "module",

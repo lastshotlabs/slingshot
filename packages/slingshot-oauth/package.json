@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-oauth",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Social OAuth login plugin for Slingshot",
   "license": "MIT",
   "type": "module",

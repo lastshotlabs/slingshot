@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-kafka
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+
 ## 0.3.3
 
 ### Patch Changes

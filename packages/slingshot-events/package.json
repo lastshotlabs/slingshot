@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-events",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Transactional outbox and inbox reliability for Slingshot events",
   "license": "MIT",
   "type": "module",

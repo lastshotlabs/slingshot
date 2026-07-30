@@ -1,5 +1,41 @@
 # @lastshotlabs/slingshot
 
+## 3.1.4
+
+### Patch Changes
+
+- 5402653: Add trusted soft-delete list visibility, deterministic AI result fixtures, and BullMQ 6 support.
+
+  Entity adapters now accept `includeDeleted` consistently across all five stores without exposing
+  the option through generated public list routes. AI consumer tests can build complete results with
+  `makeAiResult`. BullMQ-backed event and orchestration adapters now support BullMQ 6 connection
+  lifecycle, scheduler, job-id, and Redis-client APIs.
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+  - @lastshotlabs/slingshot-entity@0.5.3
+  - @lastshotlabs/slingshot-auth@1.0.7
+  - @lastshotlabs/slingshot-bullmq@0.3.4
+  - @lastshotlabs/slingshot-mail@0.2.11
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.11
+  - @lastshotlabs/slingshot-webhooks@0.2.13
+  - @lastshotlabs/slingshot-runtime-bun@0.2.11
+  - @lastshotlabs/slingshot-admin@0.2.11
+  - @lastshotlabs/slingshot-community@0.2.18
+  - @lastshotlabs/slingshot-deep-links@0.2.11
+  - @lastshotlabs/slingshot-events@0.3.3
+  - @lastshotlabs/slingshot-infra@0.2.11
+  - @lastshotlabs/slingshot-interactions@0.2.14
+  - @lastshotlabs/slingshot-kafka@0.3.4
+  - @lastshotlabs/slingshot-notifications@0.4.4
+  - @lastshotlabs/slingshot-orchestration@0.2.11
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.11
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.11
+  - @lastshotlabs/slingshot-organizations@1.0.7
+  - @lastshotlabs/slingshot-permissions@0.2.12
+  - @lastshotlabs/slingshot-postgres@0.3.7
+  - @lastshotlabs/slingshot-push@2.0.4
+
 ## 3.1.3
 
 ### Patch Changes

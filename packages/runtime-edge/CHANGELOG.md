@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-runtime-edge
 
+## 4.0.3
+
+### Patch Changes
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+  - @lastshotlabs/slingshot-ssr@0.2.14
+
 ## 4.0.2
 
 ### Patch Changes

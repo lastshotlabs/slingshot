@@ -1,5 +1,19 @@
 # @lastshotlabs/slingshot-bullmq
 
+## 0.3.4
+
+### Patch Changes
+
+- 5402653: Add trusted soft-delete list visibility, deterministic AI result fixtures, and BullMQ 6 support.
+
+  Entity adapters now accept `includeDeleted` consistently across all five stores without exposing
+  the option through generated public list routes. AI consumer tests can build complete results with
+  `makeAiResult`. BullMQ-backed event and orchestration adapters now support BullMQ 6 connection
+  lifecycle, scheduler, job-id, and Redis-client APIs.
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+
 ## 0.3.3
 
 ### Patch Changes

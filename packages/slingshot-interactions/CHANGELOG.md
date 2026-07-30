@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-interactions
 
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [5402653]
+  - @lastshotlabs/slingshot-core@0.6.3
+  - @lastshotlabs/slingshot-entity@0.5.3
+  - @lastshotlabs/slingshot-permissions@0.2.12
+
 ## 0.2.13
 
 ### Patch Changes

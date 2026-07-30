@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-oidc",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OIDC discovery and JWKS plugin for Slingshot",
   "license": "MIT",
   "type": "module",

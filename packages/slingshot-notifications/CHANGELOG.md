@@ -1,5 +1,22 @@
 # @lastshotlabs/slingshot-notifications
 
+## 0.4.0
+
+### Minor Changes
+
+- 60a6f36: Add an opt-in production adoption path that commits immediate notification
+  creation with an outbox event, consumes delivery through a stable transactional
+  inbox name, and forwards the event ID as the delivery-provider idempotency key.
+
+### Patch Changes
+
+- Updated dependencies [e758f4e]
+- Updated dependencies [9bb9c77]
+- Updated dependencies [60a6f36]
+- Updated dependencies [935b839]
+  - @lastshotlabs/slingshot-core@0.5.0
+  - @lastshotlabs/slingshot-entity@0.4.1
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,21 @@
 # @lastshotlabs/slingshot-kafka
 
+## 0.3.0
+
+### Minor Changes
+
+- 71ce46f: Dispatch transactional outbox rows through acknowledged BullMQ and Kafka
+  publication with SQL leases, retry backoff, dead rows, crash recovery, and
+  bounded shutdown.
+
+### Patch Changes
+
+- Updated dependencies [e758f4e]
+- Updated dependencies [9bb9c77]
+- Updated dependencies [60a6f36]
+- Updated dependencies [935b839]
+  - @lastshotlabs/slingshot-core@0.5.0
+
 ## 0.2.6
 
 ### Patch Changes

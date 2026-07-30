@@ -1,5 +1,23 @@
 # @lastshotlabs/slingshot-core
 
+## 0.5.0
+
+### Minor Changes
+
+- e758f4e: Persist governed events atomically through explicit outbox delivery on authentic
+  PostgreSQL and SQLite transaction scopes.
+- 9bb9c77: Add the governed `events.consume()` API with PostgreSQL and SQLite
+  transactional inbox deduplication, rollback-safe handler effects, stable named
+  consumer identities, and concurrent redelivery protection.
+- 935b839: Add the initial transactional event reliability contracts, configuration,
+  topology validation, and PostgreSQL/SQLite outbox and inbox migrations.
+
+### Patch Changes
+
+- 60a6f36: Add an opt-in production adoption path that commits immediate notification
+  creation with an outbox event, consumes delivery through a stable transactional
+  inbox name, and forwards the event ID as the delivery-provider idempotency key.
+
 ## 0.4.0
 
 ### Minor Changes

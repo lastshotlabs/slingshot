@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-push",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Multi-provider push delivery plugin for Slingshot",
   "license": "MIT",
   "type": "module",

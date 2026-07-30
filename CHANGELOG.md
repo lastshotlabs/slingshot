@@ -1,5 +1,60 @@
 # @lastshotlabs/slingshot
 
+## 3.0.0
+
+### Minor Changes
+
+- e758f4e: Persist governed events atomically through explicit outbox delivery on authentic
+  PostgreSQL and SQLite transaction scopes.
+- fc3c519: Add transactional-event readiness, bounded metrics and retention, audited
+  replay operations, and safe outbox/inbox CLI commands.
+- 9bb9c77: Add the governed `events.consume()` API with PostgreSQL and SQLite
+  transactional inbox deduplication, rollback-safe handler effects, stable named
+  consumer identities, and concurrent redelivery protection.
+- 71ce46f: Dispatch transactional outbox rows through acknowledged BullMQ and Kafka
+  publication with SQL leases, retry backoff, dead rows, crash recovery, and
+  bounded shutdown.
+- 935b839: Add the initial transactional event reliability contracts, configuration,
+  topology validation, and PostgreSQL/SQLite outbox and inbox migrations.
+
+### Patch Changes
+
+- a75820f: Use one canonical session-binding fingerprint across authenticated requests and refresh rotation, honor every refresh mismatch policy without destructive rejection, and preserve application/readiness availability when the global rate-limit store is unavailable.
+- 60a6f36: Add an explicit CLI path for PostgreSQL auth schema migrations, reuse the
+  framework pool for auth, and fail readiness when an `assume-ready` deployment
+  has a missing or stale auth schema.
+- Updated dependencies [e758f4e]
+- Updated dependencies [fc3c519]
+- Updated dependencies [9bb9c77]
+- Updated dependencies [a75820f]
+- Updated dependencies [60a6f36]
+- Updated dependencies [71ce46f]
+- Updated dependencies [60a6f36]
+- Updated dependencies [935b839]
+  - @lastshotlabs/slingshot-core@0.5.0
+  - @lastshotlabs/slingshot-events@0.2.0
+  - @lastshotlabs/slingshot-auth@1.0.3
+  - @lastshotlabs/slingshot-postgres@0.3.3
+  - @lastshotlabs/slingshot-bullmq@0.3.0
+  - @lastshotlabs/slingshot-kafka@0.3.0
+  - @lastshotlabs/slingshot-notifications@0.4.0
+  - @lastshotlabs/slingshot-runtime-bun@0.2.7
+  - @lastshotlabs/slingshot-admin@0.2.7
+  - @lastshotlabs/slingshot-community@0.2.14
+  - @lastshotlabs/slingshot-deep-links@0.2.7
+  - @lastshotlabs/slingshot-entity@0.4.1
+  - @lastshotlabs/slingshot-infra@0.2.7
+  - @lastshotlabs/slingshot-interactions@0.2.10
+  - @lastshotlabs/slingshot-mail@0.2.7
+  - @lastshotlabs/slingshot-orchestration@0.2.7
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.7
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.7
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.7
+  - @lastshotlabs/slingshot-organizations@1.0.3
+  - @lastshotlabs/slingshot-permissions@0.2.8
+  - @lastshotlabs/slingshot-push@2.0.0
+  - @lastshotlabs/slingshot-webhooks@0.2.9
+
 ## 2.0.0
 
 ### Minor Changes

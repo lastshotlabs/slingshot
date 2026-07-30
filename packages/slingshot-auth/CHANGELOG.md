@@ -1,5 +1,21 @@
 # @lastshotlabs/slingshot-auth
 
+## 1.0.3
+
+### Patch Changes
+
+- a75820f: Use one canonical session-binding fingerprint across authenticated requests and refresh rotation, honor every refresh mismatch policy without destructive rejection, and preserve application/readiness availability when the global rate-limit store is unavailable.
+- 60a6f36: Add an explicit CLI path for PostgreSQL auth schema migrations, reuse the
+  framework pool for auth, and fail readiness when an `assume-ready` deployment
+  has a missing or stale auth schema.
+- Updated dependencies [e758f4e]
+- Updated dependencies [9bb9c77]
+- Updated dependencies [60a6f36]
+- Updated dependencies [60a6f36]
+- Updated dependencies [935b839]
+  - @lastshotlabs/slingshot-core@0.5.0
+  - @lastshotlabs/slingshot-postgres@0.3.3
+
 ## 1.0.2
 
 ### Patch Changes

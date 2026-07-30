@@ -3,6 +3,8 @@ version: 2
 updates:
   - package-ecosystem: bun
     directory: /
+    exclude-paths:
+      - packages/docs/**
     schedule:
       interval: weekly
       day: monday
@@ -20,11 +22,6 @@ updates:
         update-types:
           - minor
           - patch
-      major:
-        patterns:
-          - '*'
-        update-types:
-          - major
 
   - package-ecosystem: bun
     directory: /packages/docs
@@ -45,11 +42,6 @@ updates:
         update-types:
           - minor
           - patch
-      major:
-        patterns:
-          - '*'
-        update-types:
-          - major
 
   - package-ecosystem: github-actions
     directory: /

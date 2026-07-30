@@ -53,7 +53,7 @@
   "devDependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-ssr": "workspace:*",
-    "typescript": "*"
+    "typescript": "6.0.2"
   },
   "engines": {
     "node": ">=20"

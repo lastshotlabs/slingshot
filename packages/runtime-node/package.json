@@ -68,10 +68,10 @@
   },
   "devDependencies": {
     "@hono/node-server": "2.0.11",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/ws": "^8.18.1",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/ws": "8.18.1",
     "ws": "8.21.1",
-    "typescript": "*"
+    "typescript": "6.0.2"
   },
   "engines": {
     "node": ">=20"

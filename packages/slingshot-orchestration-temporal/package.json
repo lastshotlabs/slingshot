@@ -47,7 +47,7 @@
     "@lastshotlabs/slingshot-orchestration-engine": "workspace:*"
   },
   "devDependencies": {
-    "@temporalio/testing": "^1.16.0"
+    "@temporalio/testing": "1.21.1"
   },
   "peerDependencies": {
     "@temporalio/activity": "^1.16.0",

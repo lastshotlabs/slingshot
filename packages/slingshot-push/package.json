@@ -50,7 +50,7 @@
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-entity": "workspace:*",
-    "web-push": "^3.6.7"
+    "web-push": "3.6.7"
   },
   "peerDependencies": {
     "@lastshotlabs/slingshot-notifications": "workspace:*",
@@ -71,7 +71,7 @@
     }
   },
   "devDependencies": {
-    "@types/web-push": "^3.6.4"
+    "@types/web-push": "3.6.4"
   },
   "engines": {
     "node": ">=20"

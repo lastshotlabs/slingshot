@@ -51,7 +51,7 @@
     "zod": ">=4.0 <5"
   },
   "devDependencies": {
-    "kafkajs": "^2.2.4"
+    "kafkajs": "2.2.4"
   },
   "engines": {
     "node": ">=20"

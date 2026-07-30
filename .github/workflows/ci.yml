@@ -25,6 +25,9 @@ jobs:
         working-directory: packages/docs
         run: bun install --frozen-lockfile
 
+      - name: Verify dependency version policy
+        run: bun run deps:versions:check
+
       - name: Build
         run: bun run build
 

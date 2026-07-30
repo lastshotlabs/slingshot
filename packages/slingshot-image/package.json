@@ -34,7 +34,7 @@
     "typecheck": "tsc --noEmit"
   },
   "optionalDependencies": {
-    "sharp": ">=0.33"
+    "sharp": "0.35.3"
   },
   "peerDependencies": {
     "hono": ">=4.12.14 <5",
@@ -42,7 +42,7 @@
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0"
+    "@types/node": "20.19.39"
   },
   "engines": {
     "node": ">=20"

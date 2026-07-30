@@ -60,6 +60,7 @@ export interface TransactionManager {
 export function createUnsupportedTransactionManager(): TransactionManager {
   return Object.freeze({
     supports(_store: StoreType): _store is TransactionStore {
+      void _store;
       return false;
     },
     run<T>(store: TransactionStore, _callback: (scope: TransactionScope) => T | Promise<T>) {

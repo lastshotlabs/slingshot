@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-postgres
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-postgres`
-- Version: `0.3.2`
+- Version: `0.3.3`
 - Kind: Workspace package
 - Role: adapter package
 - Description: Postgres adapter and connection helper for Slingshot

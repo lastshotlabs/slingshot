@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-orchestr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-orchestration-temporal`
-- Version: `0.2.6`
+- Version: `0.2.7`
 - Kind: Workspace package
 - Role: feature package
 - Description: Temporal-backed orchestration adapter and worker supervisor for Slingshot

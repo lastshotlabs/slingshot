@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssr-tans
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssr-tanstack`
-- Version: `0.2.11`
+- Version: `0.2.12`
 - Kind: Workspace package
 - Role: feature package
 - Description: TanStack Router route source for slingshot-ssr — single-source routes for SSR + CSR apps

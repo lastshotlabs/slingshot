@@ -8,11 +8,14 @@ import type {
   AcknowledgedEventBus,
   HealthIndicator,
   HealthReport,
+  PluginStateKey,
   StoreInfra,
 } from '@lastshotlabs/slingshot-core';
+import { definePluginStateKey } from '@lastshotlabs/slingshot-core';
 import type {
   EventReliabilityConfig,
   EventReliabilityOperations,
+  EventReplayValidator,
   InboxLifecycleEvent,
   OutboxLifecycleEvent,
 } from '@lastshotlabs/slingshot-events';
@@ -25,6 +28,10 @@ interface CachedHealthBus {
   getHealth?: () => HealthReport;
   health?: () => { status?: string; state?: string; connected?: boolean };
 }
+
+/** Framework-internal typed slot for mounted event operator routes. */
+export const EVENT_RELIABILITY_OPERATIONS_KEY: PluginStateKey<EventReliabilityOperations> =
+  definePluginStateKey('slingshot:framework:event-reliability-operations');
 
 function transportHealthy(bus: AcknowledgedEventBus): boolean {
   const candidate = bus as AcknowledgedEventBus & CachedHealthBus;
@@ -41,10 +48,11 @@ function transportHealthy(bus: AcknowledgedEventBus): boolean {
 export function createFrameworkEventReliabilityOperations(
   infra: StoreInfra,
   config: EventReliabilityConfig,
+  replayValidator?: EventReplayValidator,
 ): EventReliabilityOperations {
   return config.store === 'postgres'
-    ? createPostgresEventReliabilityOperations(infra.getPostgres())
-    : createSqliteEventReliabilityOperations(infra.getSqliteDb());
+    ? createPostgresEventReliabilityOperations(infra.getPostgres(), { replayValidator })
+    : createSqliteEventReliabilityOperations(infra.getSqliteDb(), { replayValidator });
 }
 
 /** Create critical/warning readiness indicators from cached transport and bounded SQL queries. */

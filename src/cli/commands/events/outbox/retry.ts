@@ -26,8 +26,18 @@ export default class EventsOutboxRetry extends Command {
       requireExactConfirmation(handle.appName, flags.confirm);
       const now = new Date().toISOString();
       if (args['event-id']) {
+        const detail = await handle.operations.inspect(args['event-id']);
+        if (!detail || detail.status !== 'dead') {
+          this.log('No dead row matched.');
+          return;
+        }
+        const validation = await handle.operations.validateReplay(args['event-id']);
+        if (!validation.compatible) {
+          this.error(`Refusing incompatible replay: ${validation.reason}.`);
+        }
         const retried = await handle.operations.retryEvent({
           eventId: args['event-id'],
+          expectedVersion: detail.attempts,
           now,
           actor: flags.actor,
           reason: flags.reason,

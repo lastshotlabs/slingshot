@@ -48,6 +48,8 @@ export {
 } from './outbox/sqlite';
 export type {
   EventReliabilityOperations,
+  EventReliabilityOperationsOptions,
+  EventOperatorAudit,
   LeasedOutboxRow,
   NewOutboxRow,
   OutboxOperationalRow,

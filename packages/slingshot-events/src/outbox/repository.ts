@@ -1,4 +1,5 @@
 import type { EventEnvelope } from '@lastshotlabs/slingshot-core';
+import type { EventReplayValidation, EventReplayValidator } from '../replayValidation';
 
 /** Immutable outbox row inserted with a domain transaction. */
 export interface NewOutboxRow {
@@ -97,14 +98,28 @@ export interface OutboxReplayAudit {
   readonly createdAt: string;
 }
 
+/** Durable package-owned record for any event operator mutation. */
+export interface EventOperatorAudit {
+  readonly id: string;
+  readonly action: 'retry' | 'retry-dead' | 'purge-delivered' | 'purge-inbox';
+  readonly eventId: string | null;
+  readonly affectedCount: number;
+  readonly actor: string;
+  readonly reason: string;
+  readonly createdAt: string;
+}
+
 /** Read-only and explicitly mutating outbox/inbox operator contract. */
 export interface EventReliabilityOperations {
   status(now: string): Promise<OutboxOperationalStatus>;
   list(status: OutboxStatus, limit: number): Promise<readonly OutboxOperationalRow[]>;
   inspect(eventId: string): Promise<OutboxOperationalDetail | null>;
+  validateReplay(eventId: string): Promise<EventReplayValidation>;
   listReplayAudit(limit: number): Promise<readonly OutboxReplayAudit[]>;
   retryEvent(input: {
     readonly eventId: string;
+    /** Optimistic concurrency token from the inspected outbox row. */
+    readonly expectedVersion: number;
     readonly now: string;
     readonly actor: string;
     readonly reason: string;
@@ -115,8 +130,25 @@ export interface EventReliabilityOperations {
     readonly reason: string;
     readonly limit: number;
   }): Promise<number>;
-  purgeDelivered(before: string, limit: number): Promise<number>;
-  purgeInbox(before: string, limit: number): Promise<number>;
+  purgeDelivered(input: {
+    readonly before: string;
+    readonly limit: number;
+    readonly now: string;
+    readonly actor: string;
+    readonly reason: string;
+  }): Promise<number>;
+  purgeInbox(input: {
+    readonly before: string;
+    readonly limit: number;
+    readonly now: string;
+    readonly actor: string;
+    readonly reason: string;
+  }): Promise<number>;
+}
+
+/** Optional governed registries used by operator replay validation. */
+export interface EventReliabilityOperationsOptions {
+  readonly replayValidator?: EventReplayValidator;
 }
 
 /** Serialize a governed envelope without changing its stable identity. */

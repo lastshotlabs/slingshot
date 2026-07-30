@@ -22,6 +22,15 @@ function operations(status: OutboxOperationalStatus): EventReliabilityOperations
     async inspect() {
       return null;
     },
+    async validateReplay() {
+      return {
+        compatible: false,
+        eventKey: '',
+        storedVersion: 1,
+        currentVersion: null,
+        reason: 'validator-unavailable',
+      };
+    },
     async listReplayAudit() {
       return [];
     },

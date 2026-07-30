@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 export const EVENT_RELIABILITY_REPORT_PATH = resolve(
   import.meta.dir,
-  '../.tmp/event-reliability/event-reliability-conformance.v1.json',
+  '../.tmp/event-reliability/event-reliability-conformance.v2.json',
 );
 
 export const EVENT_RELIABILITY_CASES = [
@@ -16,6 +16,8 @@ export const EVENT_RELIABILITY_CASES = [
   { id: 'inbox.rollback-and-race', lane: 'live', live: true },
   { id: 'lifecycle.shutdown', lane: 'unit', live: false },
   { id: 'operations.health-and-replay', lane: 'live', live: true },
+  { id: 'operations.version-compatibility', lane: 'unit', live: false },
+  { id: 'operations.authorization-and-audit', lane: 'unit', live: false },
   { id: 'topology.unsupported-combinations', lane: 'unit', live: false },
   { id: 'adoption.notifications-outbox-inbox', lane: 'live', live: true },
   {
@@ -63,6 +65,8 @@ const LANE_COMMANDS: Readonly<Record<Lane, readonly string[]>> = {
     'tests/unit/event-inbox-consumer.test.ts',
     'tests/unit/event-reliability-bootstrap.test.ts',
     'tests/unit/event-reliability-operations.test.ts',
+    'tests/unit/event-operations-router.test.ts',
+    'packages/slingshot-events/tests/replayValidation.test.ts',
     'packages/slingshot-events/tests/dispatcher.test.ts',
     'packages/slingshot-notifications/tests/unit/builder.test.ts',
   ],
@@ -96,7 +100,7 @@ export interface EventReliabilityConformanceResult {
 }
 
 export interface EventReliabilityConformanceReport {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly revision: string;
   readonly results: readonly EventReliabilityConformanceResult[];
 }
@@ -111,7 +115,7 @@ export function validateEventReliabilityConformanceReport(
   report: EventReliabilityConformanceReport,
 ): readonly string[] {
   const errors: string[] = [];
-  if (report.schemaVersion !== 1) errors.push('Report schemaVersion must be 1.');
+  if (report.schemaVersion !== 2) errors.push('Report schemaVersion must be 2.');
   if (report.results.length !== EVENT_RELIABILITY_CASES.length) {
     errors.push(
       `Expected ${EVENT_RELIABILITY_CASES.length} cases; received ${report.results.length}.`,
@@ -185,7 +189,7 @@ export async function buildEventReliabilityConformanceReport(): Promise<EventRel
     laneResults.set(lane, await runLane(lane));
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: gitRevision(),
     results: EVENT_RELIABILITY_CASES.map(definition => {
       const lane = laneResults.get(definition.lane);

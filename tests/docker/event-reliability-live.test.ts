@@ -347,12 +347,21 @@ describe('transactional event reliability live matrix', () => {
     expect(
       await operations.retryEvent({
         eventId: rows[0].eventId,
+        expectedVersion: target!.attempts,
         now,
         actor: 'live-test',
         reason: 'prove audit',
       }),
     ).toBe(true);
-    expect(await operations.purgeDelivered('2025-01-01T00:00:00.000Z', 100)).toBeGreaterThan(0);
+    expect(
+      await operations.purgeDelivered({
+        before: '2025-01-01T00:00:00.000Z',
+        limit: 100,
+        now,
+        actor: 'live-test',
+        reason: 'prove retention audit',
+      }),
+    ).toBeGreaterThan(0);
 
     const preserved = await pool.query<{
       event_id: string;

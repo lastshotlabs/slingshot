@@ -42,7 +42,8 @@ describe.each([
     expect(sql).toContain('slingshot_event_inbox');
     expect(sql).toContain('PRIMARY KEY (consumer_name, event_id)');
     expect(sql).toContain('slingshot_event_replay_audit');
-    expect(sql.match(/CREATE INDEX IF NOT EXISTS/g)?.length).toBe(7);
+    expect(sql).toContain('slingshot_event_operator_audit');
+    expect(sql.match(/CREATE INDEX IF NOT EXISTS/g)?.length).toBe(8);
   });
 
   test('is idempotent through the checksum ledger', async () => {
@@ -57,7 +58,9 @@ describe.each([
     const fixture = createProvider(new Map([[1, migrations[0]!.checksum]]));
     await applyEventReliabilityMigrations(fixture.provider, migrations);
 
-    expect(fixture.statements).toEqual([...migrations[1]!.statements]);
+    expect(fixture.statements).toEqual(
+      migrations.slice(1).flatMap(migration => migration.statements),
+    );
   });
 
   test('rejects a changed checksum for an applied version', async () => {

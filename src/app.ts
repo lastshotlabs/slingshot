@@ -24,6 +24,7 @@ import { createFrameworkEventOutboxWriter } from '@framework/persistence/events/
 import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import { ModelSchemasConfig, preloadModelSchemas } from '@framework/preloadSchemas';
 import { registerBoundaryAdapters } from '@framework/registerBoundaryAdapters';
+import { registerEventOperatorPermissions } from '@framework/routes/eventOperations';
 import { router as healthRouter } from '@framework/routes/health';
 import { router as homeRouter } from '@framework/routes/home';
 import {
@@ -92,7 +93,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { DbConfig } from './config/types/db';
-import type { EventsConfig } from './config/types/events';
+import type { EventOperatorConfig, EventsConfig } from './config/types/events';
 import type { JobsConfig } from './config/types/jobs';
 import type { LoggingConfig } from './config/types/logging';
 import type { AppMeta } from './config/types/meta';
@@ -110,6 +111,7 @@ import type { WsConfig } from './config/types/ws';
 
 export type { SecretsConfig } from './config/types/secrets';
 export type { PermissionsConfig } from './config/types/permissions';
+export type { EventOperatorConfig } from './config/types/events';
 export type { FrameworkSecretsLiteral } from '@framework/secrets';
 
 export type { BreachedPasswordConfig };
@@ -484,6 +486,7 @@ interface AppBootstrap {
   runtime: SlingshotRuntime;
   tracingConfig: TracingConfig | undefined;
   isProd: boolean;
+  eventOperator?: EventOperatorConfig;
   /** Capability-name → providing-package-name map produced by `compilePackages`. */
   capabilityProviders: ReadonlyMap<string, string>;
 }
@@ -722,6 +725,7 @@ async function prepareBootstrap<T extends object>(
     runtime,
     tracingConfig,
     isProd,
+    eventOperator: config.events?.operator,
     capabilityProviders: compiledPackages?.capabilityProviders ?? new Map<string, string>(),
   };
 }
@@ -868,6 +872,7 @@ async function mountAppRoutes<T extends object>(
       secretBundle.framework,
       assembly.isProd,
       infra.postgres,
+      config.events?.operator,
     );
     return Promise.resolve();
   });
@@ -970,6 +975,20 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
     events.definitions.freeze();
     events.versions.freeze();
     finalizeContext(ctx, drain());
+
+    if (assembly.eventOperator?.enabled) {
+      const hasPermissions = registerEventOperatorPermissions(ctx);
+      if (assembly.isProd && !ctx.routeAuth) {
+        throw new Error(
+          '[security] events.operator requires an authentication plugin that publishes route auth.',
+        );
+      }
+      if (assembly.isProd && !hasPermissions) {
+        throw new Error(
+          '[security] events.operator requires the permissions package and evaluator.',
+        );
+      }
+    }
 
     if (tenantCacheCarrier.cache) {
       publishPluginState(ctx.pluginState, 'tenantResolutionCache', tenantCacheCarrier.cache);

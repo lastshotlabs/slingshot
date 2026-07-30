@@ -8,7 +8,7 @@ import { renderEventReliabilitySupport } from '../../scripts/generate-event-reli
 
 function validReport(): EventReliabilityConformanceReport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 'abc123',
     results: EVENT_RELIABILITY_CASES.map(entry => ({
       ...entry,

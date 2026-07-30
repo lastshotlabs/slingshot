@@ -13,7 +13,8 @@ export type EventReplayIncompatibility =
   | 'unknown-event'
   | 'future-version'
   | 'missing-adapter'
-  | 'invalid-payload';
+  | 'invalid-payload'
+  | 'validator-unavailable';
 
 /** Compatibility result produced before durable replay or publication. */
 export type EventReplayValidation =

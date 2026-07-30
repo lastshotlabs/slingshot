@@ -158,7 +158,7 @@ For transaction-sensitive package services:
 - Run `bun run entity:conformance:report` in release CI. Its versioned artifact requires both
   SQLite and PostgreSQL to pass every declared transaction guarantee.
 - Run `bun run events:conformance:report` with PostgreSQL, Redis/BullMQ, and Kafka available.
-  Preserve `event-reliability-conformance.v1.json` even when the lane fails.
+  Preserve `event-reliability-conformance.v2.json` even when the lane fails.
 
 ## Runtime Reliability
 

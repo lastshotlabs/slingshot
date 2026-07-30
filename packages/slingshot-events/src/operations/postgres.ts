@@ -2,6 +2,7 @@ import type { PostgresBundle } from '@lastshotlabs/slingshot-core';
 import { projectStoredEventEnvelope, redactOperatorText } from '../operatorProjection';
 import type {
   EventReliabilityOperations,
+  EventReliabilityOperationsOptions,
   OutboxOperationalDetail,
   OutboxOperationalRow,
   OutboxOperationalStatus,
@@ -40,6 +41,7 @@ function operationalRow(row: Record<string, unknown>): OutboxOperationalRow {
 /** Create PostgreSQL-backed reliability operations for health and CLI tooling. */
 export function createPostgresEventReliabilityOperations(
   postgres: PostgresBundle,
+  options: EventReliabilityOperationsOptions = {},
 ): EventReliabilityOperations {
   const db = postgres.pool as unknown as Queryable;
   return {
@@ -97,6 +99,34 @@ export function createPostgresEventReliabilityOperations(
           : null,
       };
     },
+    async validateReplay(eventId) {
+      const result = await db.query(
+        `SELECT event_key, envelope_json
+           FROM slingshot_event_outbox
+          WHERE event_id = $1 AND status = 'dead' LIMIT 1`,
+        [eventId],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        return {
+          compatible: false,
+          eventKey: '',
+          storedVersion: 1,
+          currentVersion: null,
+          reason: 'invalid-envelope',
+        };
+      }
+      if (!options.replayValidator) {
+        return {
+          compatible: false,
+          eventKey: String(row.event_key),
+          storedVersion: projectStoredEventEnvelope(String(row.envelope_json)).schemaVersion,
+          currentVersion: null,
+          reason: 'validator-unavailable',
+        };
+      }
+      return options.replayValidator.validate(String(row.envelope_json), String(row.event_key));
+    },
     async listReplayAudit(limit): Promise<readonly OutboxReplayAudit[]> {
       const result = await db.query(
         `SELECT id, event_id, replayed_count, actor, reason, created_at
@@ -120,14 +150,21 @@ export function createPostgresEventReliabilityOperations(
               SET status = 'pending', attempts = 0, available_at = $1,
                   lease_owner = NULL, lease_expires_at = NULL,
                   last_error_code = NULL, last_error_message = NULL
-            WHERE event_id = $2 AND status = 'dead'
+            WHERE event_id = $2 AND status = 'dead' AND attempts = $6
         RETURNING event_id
          )
          INSERT INTO slingshot_event_replay_audit
            (id, event_id, replayed_count, actor, reason, created_at)
          SELECT $3, event_id, 1, $4, $5, $1 FROM retried
       RETURNING event_id`,
-        [input.now, input.eventId, crypto.randomUUID(), input.actor, input.reason],
+        [
+          input.now,
+          input.eventId,
+          crypto.randomUUID(),
+          input.actor,
+          input.reason,
+          input.expectedVersion,
+        ],
       );
       return result.rowCount === 1;
     },
@@ -155,28 +192,46 @@ export function createPostgresEventReliabilityOperations(
       );
       return Number(result.rows[0]?.replayed_count ?? 0);
     },
-    async purgeDelivered(before, limit): Promise<number> {
+    async purgeDelivered(input): Promise<number> {
       const result = await db.query(
-        `DELETE FROM slingshot_event_outbox
-          WHERE id IN (
+        `WITH purged AS (
+          DELETE FROM slingshot_event_outbox
+           WHERE id IN (
             SELECT id FROM slingshot_event_outbox
              WHERE status = 'delivered' AND delivered_at < $1
              ORDER BY delivered_at LIMIT $2
-          )`,
-        [before, limit],
+           )
+        RETURNING id
+         ), audited AS (
+          INSERT INTO slingshot_event_operator_audit
+            (id, action, event_id, affected_count, actor, reason, created_at)
+          SELECT $3, 'purge-delivered', NULL, COUNT(*)::int, $4, $5, $6 FROM purged
+        RETURNING affected_count
+         )
+         SELECT affected_count FROM audited`,
+        [input.before, input.limit, crypto.randomUUID(), input.actor, input.reason, input.now],
       );
-      return result.rowCount ?? 0;
+      return Number(result.rows[0]?.affected_count ?? 0);
     },
-    async purgeInbox(before, limit): Promise<number> {
+    async purgeInbox(input): Promise<number> {
       const result = await db.query(
-        `DELETE FROM slingshot_event_inbox
-          WHERE (consumer_name, event_id) IN (
+        `WITH purged AS (
+          DELETE FROM slingshot_event_inbox
+           WHERE (consumer_name, event_id) IN (
             SELECT consumer_name, event_id FROM slingshot_event_inbox
              WHERE processed_at < $1 ORDER BY processed_at LIMIT $2
-          )`,
-        [before, limit],
+           )
+        RETURNING event_id
+         ), audited AS (
+          INSERT INTO slingshot_event_operator_audit
+            (id, action, event_id, affected_count, actor, reason, created_at)
+          SELECT $3, 'purge-inbox', NULL, COUNT(*)::int, $4, $5, $6 FROM purged
+        RETURNING affected_count
+         )
+         SELECT affected_count FROM audited`,
+        [input.before, input.limit, crypto.randomUUID(), input.actor, input.reason, input.now],
       );
-      return result.rowCount ?? 0;
+      return Number(result.rows[0]?.affected_count ?? 0);
     },
   };
 }

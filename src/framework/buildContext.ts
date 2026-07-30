@@ -13,6 +13,7 @@ import { createContextStoreInfra } from '@framework/persistence/createContextSto
 import type { FrameworkEventInboxConsumer } from '@framework/persistence/events/inboxConsumer';
 import type { FrameworkEventOutboxWriter } from '@framework/persistence/events/outboxWriter';
 import {
+  EVENT_RELIABILITY_OPERATIONS_KEY,
   createEventReliabilityIndicators,
   createFrameworkEventReliabilityOperations,
   registerEventReliabilityMetrics,
@@ -38,6 +39,7 @@ import {
   createPluginStateMap,
   deepFreeze,
   isAcknowledgedEventBus,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
@@ -404,8 +406,13 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
   if (eventReliability) {
     await initializeEventReliabilityStore(storeInfra, eventReliability);
   }
+  const eventReplayValidator = createEventReplayValidator({
+    definitions: events.definitions,
+    schemas: events.schemas,
+    versions: events.versions,
+  });
   const eventReliabilityOperations = eventReliability
-    ? createFrameworkEventReliabilityOperations(storeInfra, eventReliability)
+    ? createFrameworkEventReliabilityOperations(storeInfra, eventReliability, eventReplayValidator)
     : null;
   const eventReliabilityMetrics =
     eventReliability && eventReliabilityOperations
@@ -422,6 +429,9 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     });
   });
   eventInboxConsumer?.bind(storeInfra, eventReliabilityMetrics?.inbox);
+  if (eventReliabilityOperations) {
+    publishPluginState(pluginState, EVENT_RELIABILITY_OPERATIONS_KEY, eventReliabilityOperations);
+  }
   let eventOutboxDispatcher: OutboxDispatcher | null = null;
   let eventRetentionTimer: ReturnType<typeof setInterval> | null = null;
   if (eventReliability?.outbox && isAcknowledgedEventBus(bus)) {
@@ -433,11 +443,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       repository,
       bus,
       config: eventReliability.outbox,
-      replayValidator: createEventReplayValidator({
-        definitions: events.definitions,
-        schemas: events.schemas,
-        versions: events.versions,
-      }),
+      replayValidator: eventReplayValidator,
       onLifecycle: eventReliabilityMetrics?.outbox,
     });
     eventOutboxDispatcher.start();
@@ -450,13 +456,25 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
         const before = new Date(
           nowMs - (eventReliability.outbox.deliveredRetentionDays ?? 7) * 86_400_000,
         ).toISOString();
-        removed += await eventReliabilityOperations.purgeDelivered(before, 1_000);
+        removed += await eventReliabilityOperations.purgeDelivered({
+          before,
+          limit: 1_000,
+          now: new Date(nowMs).toISOString(),
+          actor: 'slingshot-retention',
+          reason: 'configured delivered-event retention',
+        });
       }
       if (eventReliability.inbox) {
         const before = new Date(
           nowMs - (eventReliability.inbox.retentionDays ?? 30) * 86_400_000,
         ).toISOString();
-        removed += await eventReliabilityOperations.purgeInbox(before, 1_000);
+        removed += await eventReliabilityOperations.purgeInbox({
+          before,
+          limit: 1_000,
+          now: new Date(nowMs).toISOString(),
+          actor: 'slingshot-retention',
+          reason: 'configured inbox-receipt retention',
+        });
       }
       if (removed > 0) {
         incrementCounter(

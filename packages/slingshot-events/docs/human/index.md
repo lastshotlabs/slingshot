@@ -108,3 +108,38 @@ Status and list are read-only. Every mutation requires the exact configured app
 name. Replay preserves the stored envelope and event ID and writes an audit
 record. Purge operations are bounded; outbox retention can delete only rows
 already marked `delivered`, never pending, leased, or dead work.
+
+For an authenticated HTTP surface, enable the operator router alongside
+reliability:
+
+```ts
+events: {
+  reliability: {
+    store: 'postgres',
+    outbox: { enabled: true },
+    inbox: { enabled: true },
+  },
+  operator: { enabled: true },
+}
+```
+
+The router is mounted at `/admin/events` by default. Production startup fails
+unless an authentication plugin publishes route auth and the permissions
+package publishes its evaluator. Grant the `viewer` resource role for
+`events:read`, or `operator` for both `events:read` and `events:operate`, on the
+`event-operations` resource type.
+
+Inspection returns an allowlisted projection. Payload credentials, cookies,
+authorization values, tokens, secrets, passwords, API keys, and private keys
+are recursively redacted; the stored envelope is never returned or rewritten.
+Replay validates the stored schema version, applies an explicitly registered
+ascending adapter chain in memory, and validates the adapted payload before
+making the row retryable. A missing adapter, future version, unknown event, or
+invalid payload fails closed without mutating the outbox.
+
+Every HTTP mutation requires an authenticated actor and a non-empty reason of
+at most 500 characters. Replay and retention mutations write the package-owned
+SQL ledger atomically with the mutation and also write the framework audit log.
+See `operations/runbook.md` and import
+`operations/grafana-event-reliability.json` for the shipped response procedure
+and starter dashboard.

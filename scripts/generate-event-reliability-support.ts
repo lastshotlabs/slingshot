@@ -26,9 +26,9 @@ description: Generated support matrix for transactional outbox and inbox deliver
 In-process transport cannot satisfy acknowledged outbox delivery. It remains available for
 ephemeral events and test-only inbox wrappers.
 
-Release evidence is emitted as \`event-reliability-conformance.v1.json\`. CI rejects missing
-live combinations, failed or manually skipped cases, and delivered claims without acknowledged
-receipt evidence.
+Release evidence is emitted as \`event-reliability-conformance.v2.json\`. CI rejects missing
+live combinations, failed or manually skipped cases, delivered claims without acknowledged
+receipt evidence, replay-version incompatibility, and operator authorization/audit failures.
 `;
 }
 

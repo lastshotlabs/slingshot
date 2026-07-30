@@ -1,0 +1,56 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Outbox rows by status",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (store, status) (slingshot_event_outbox_rows)",
+          "legendFormat": "{{store}} / {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Expired leases",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum by (store) (slingshot_event_outbox_expired_leases)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Dispatch outcomes",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (store, transport, status) (rate(slingshot_event_outbox_dispatch_total[5m]))",
+          "legendFormat": "{{store}} / {{transport}} / {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Inbox handler failures",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (store) (rate(slingshot_event_inbox_handler_failures_total[5m]))"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["slingshot", "events", "reliability"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "Slingshot Event Reliability",
+  "uid": "slingshot-event-reliability",
+  "version": 1
+}

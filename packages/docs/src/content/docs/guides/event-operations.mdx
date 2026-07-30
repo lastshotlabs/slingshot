@@ -1,0 +1,47 @@
+---
+title: Event operations
+description: Inspect, replay, and retain transactional event delivery safely.
+---
+
+Slingshot's optional event operator surface provides authenticated inspection,
+schema-compatible replay, and bounded retention for the transactional outbox
+and inbox.
+
+Enable `events.reliability` and `events.operator` together:
+
+```ts
+events: {
+  reliability: {
+    store: 'postgres',
+    outbox: { enabled: true },
+    inbox: { enabled: true },
+  },
+  operator: { enabled: true },
+}
+```
+
+Production boot requires both route authentication and the permissions package.
+Grant `events:read` for status, lists, inspection, and replay-audit reads. Grant
+`events:operate` for retries and retention. The built-in `event-operations`
+resource roles are `viewer` and `operator`.
+
+The default route prefix is `/admin/events`:
+
+- `GET /outbox/status`, `/outbox`, and `/outbox/:eventId`
+- `POST /outbox/:eventId/retry` and `/outbox/retry-dead`
+- `DELETE /outbox/delivered` and `/inbox`
+- `GET /replay-audit`
+
+Mutation bodies require a `reason` containing 1–500 characters and accept a
+bounded `limit` where applicable. Retention endpoints also require an ISO
+`before` query parameter.
+
+Operator inspection never returns raw stored envelopes. It recursively redacts
+credential-like values and exposes only bounded metadata and payload previews.
+Replay preserves the stable event ID and stored bytes, adapting older payloads
+only in memory through explicit adjacent version adapters. Incompatible replay
+returns `409` without changing durable state.
+
+Every mutation writes package-owned SQL audit evidence and the framework audit
+provider. Use the shipped package runbook and Grafana dashboard as the starting
+point for alerts and incident response.

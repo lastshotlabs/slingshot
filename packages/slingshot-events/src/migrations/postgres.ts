@@ -65,4 +65,23 @@ export const POSTGRES_EVENT_RELIABILITY_MIGRATIONS: readonly EventReliabilityMig
           ON slingshot_event_replay_audit (created_at)`,
       ]),
     }),
+    Object.freeze({
+      version: 3,
+      checksum: 'wp5-pg-v3-operator-audit',
+      statements: Object.freeze([
+        `CREATE TABLE IF NOT EXISTS slingshot_event_operator_audit (
+          id UUID PRIMARY KEY,
+          action TEXT NOT NULL CHECK (
+            action IN ('retry', 'retry-dead', 'purge-delivered', 'purge-inbox')
+          ),
+          event_id TEXT,
+          affected_count INTEGER NOT NULL CHECK (affected_count >= 0),
+          actor TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        )`,
+        `CREATE INDEX IF NOT EXISTS slingshot_event_operator_audit_created_idx
+          ON slingshot_event_operator_audit (created_at)`,
+      ]),
+    }),
   ]);

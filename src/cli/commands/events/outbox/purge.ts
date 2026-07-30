@@ -16,6 +16,8 @@ export default class EventsOutboxPurge extends Command {
     }),
     limit: Flags.integer({ default: 1000, min: 1, max: 10000 }),
     confirm: Flags.string({ description: 'Exact configured app name required for mutation.' }),
+    reason: Flags.string({ default: 'operator retention purge' }),
+    actor: Flags.string({ default: 'slingshot-cli' }),
   };
 
   async run(): Promise<void> {
@@ -23,10 +25,13 @@ export default class EventsOutboxPurge extends Command {
     const handle = await openEventOperations({ config: flags.config, dbUrl: flags['db-url'] });
     try {
       requireExactConfirmation(handle.appName, flags.confirm);
-      const count = await handle.operations.purgeDelivered(
-        durationBefore(flags['delivered-before']),
-        flags.limit,
-      );
+      const count = await handle.operations.purgeDelivered({
+        before: durationBefore(flags['delivered-before']),
+        limit: flags.limit,
+        now: new Date().toISOString(),
+        actor: flags.actor,
+        reason: flags.reason,
+      });
       this.log(`Purged ${count} delivered outbox row(s).`);
     } finally {
       await handle.close();

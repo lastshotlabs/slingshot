@@ -2,6 +2,7 @@ import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { projectStoredEventEnvelope, redactOperatorText } from '../operatorProjection';
 import type {
   EventReliabilityOperations,
+  EventReliabilityOperationsOptions,
   OutboxOperationalDetail,
   OutboxOperationalRow,
   OutboxOperationalStatus,
@@ -44,6 +45,7 @@ function operationalRow(row: SqliteOperationalRow): OutboxOperationalRow {
 /** Create SQLite-backed reliability operations for health and CLI tooling. */
 export function createSqliteEventReliabilityOperations(
   db: RuntimeSqliteDatabase,
+  options: EventReliabilityOperationsOptions = {},
 ): EventReliabilityOperations {
   return {
     async status(now): Promise<OutboxOperationalStatus> {
@@ -111,6 +113,34 @@ export function createSqliteEventReliabilityOperations(
           : null,
       };
     },
+    async validateReplay(eventId) {
+      const row = db
+        .query<{ event_key: string; envelope_json: string }>(
+          `SELECT event_key, envelope_json
+             FROM slingshot_event_outbox
+            WHERE event_id = ? AND status = 'dead' LIMIT 1`,
+        )
+        .get(eventId);
+      if (!row) {
+        return {
+          compatible: false,
+          eventKey: '',
+          storedVersion: 1,
+          currentVersion: null,
+          reason: 'invalid-envelope',
+        };
+      }
+      if (!options.replayValidator) {
+        return {
+          compatible: false,
+          eventKey: row.event_key,
+          storedVersion: projectStoredEventEnvelope(row.envelope_json).schemaVersion,
+          currentVersion: null,
+          reason: 'validator-unavailable',
+        };
+      }
+      return options.replayValidator.validate(row.envelope_json, row.event_key);
+    },
     async listReplayAudit(limit) {
       return db
         .query<{
@@ -143,9 +173,9 @@ export function createSqliteEventReliabilityOperations(
                 SET status = 'pending', attempts = 0, available_at = ?,
                     lease_owner = NULL, lease_expires_at = NULL,
                     last_error_code = NULL, last_error_message = NULL
-              WHERE event_id = ? AND status = 'dead'`,
+              WHERE event_id = ? AND status = 'dead' AND attempts = ?`,
           )
-          .run(input.now, input.eventId).changes;
+          .run(input.now, input.eventId, input.expectedVersion).changes;
         if (retried === 1) {
           db.run(
             `INSERT INTO slingshot_event_replay_audit
@@ -190,28 +220,54 @@ export function createSqliteEventReliabilityOperations(
         return result.changes;
       })();
     },
-    async purgeDelivered(before, limit): Promise<number> {
-      return db
-        .prepare(
-          `DELETE FROM slingshot_event_outbox
+    async purgeDelivered(input): Promise<number> {
+      return db.transaction(() => {
+        const count = db
+          .prepare(
+            `DELETE FROM slingshot_event_outbox
             WHERE id IN (
               SELECT id FROM slingshot_event_outbox
                WHERE status = 'delivered' AND delivered_at < ?
                ORDER BY delivered_at LIMIT ?
             )`,
-        )
-        .run(before, limit).changes;
+          )
+          .run(input.before, input.limit).changes;
+        db.run(
+          `INSERT INTO slingshot_event_operator_audit
+            (id, action, event_id, affected_count, actor, reason, created_at)
+           VALUES (?, 'purge-delivered', NULL, ?, ?, ?, ?)`,
+          crypto.randomUUID(),
+          count,
+          input.actor,
+          input.reason,
+          input.now,
+        );
+        return count;
+      })();
     },
-    async purgeInbox(before, limit): Promise<number> {
-      return db
-        .prepare(
-          `DELETE FROM slingshot_event_inbox
+    async purgeInbox(input): Promise<number> {
+      return db.transaction(() => {
+        const count = db
+          .prepare(
+            `DELETE FROM slingshot_event_inbox
             WHERE rowid IN (
               SELECT rowid FROM slingshot_event_inbox
                WHERE processed_at < ? ORDER BY processed_at LIMIT ?
             )`,
-        )
-        .run(before, limit).changes;
+          )
+          .run(input.before, input.limit).changes;
+        db.run(
+          `INSERT INTO slingshot_event_operator_audit
+            (id, action, event_id, affected_count, actor, reason, created_at)
+           VALUES (?, 'purge-inbox', NULL, ?, ?, ?, ?)`,
+          crypto.randomUUID(),
+          count,
+          input.actor,
+          input.reason,
+          input.now,
+        );
+        return count;
+      })();
     },
   };
 }

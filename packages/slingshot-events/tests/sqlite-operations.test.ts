@@ -130,6 +130,7 @@ describe('SQLite event reliability operations', () => {
       expect(
         await operations.retryEvent({
           eventId: 'event-dead',
+          expectedVersion: 3,
           now: '2026-02-01T00:00:00Z',
           actor: 'operator',
           reason: 'broker restored',
@@ -195,8 +196,24 @@ describe('SQLite event reliability operations', () => {
         db as unknown as RuntimeSqliteDatabase,
       );
 
-      expect(await operations.purgeDelivered('2025-01-01T00:00:00Z', 100)).toBe(1);
-      expect(await operations.purgeInbox('2025-01-01T00:00:00Z', 100)).toBe(1);
+      expect(
+        await operations.purgeDelivered({
+          before: '2025-01-01T00:00:00Z',
+          limit: 100,
+          now: '2026-01-01T00:00:00Z',
+          actor: 'retention',
+          reason: 'expired',
+        }),
+      ).toBe(1);
+      expect(
+        await operations.purgeInbox({
+          before: '2025-01-01T00:00:00Z',
+          limit: 100,
+          now: '2026-01-01T00:00:00Z',
+          actor: 'retention',
+          reason: 'expired',
+        }),
+      ).toBe(1);
       expect(
         (
           db.query('SELECT status FROM slingshot_event_outbox ORDER BY status').all() as Array<{
@@ -209,6 +226,45 @@ describe('SQLite event reliability operations', () => {
           event_id: string;
         }>,
       ).toEqual([{ event_id: 'new' }]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('writes a package-owned audit record for retention mutations', async () => {
+    const db = database();
+    try {
+      const operations = createSqliteEventReliabilityOperations(
+        db as unknown as RuntimeSqliteDatabase,
+      );
+      insertOutbox(db, {
+        id: 'delivered-audit',
+        status: 'delivered',
+        createdAt: '2025-01-01T00:00:00Z',
+        deliveredAt: '2025-01-01T00:00:00Z',
+      });
+      await operations.purgeDelivered({
+        before: '2026-01-01T00:00:00Z',
+        limit: 2,
+        now: '2026-02-01T00:00:00Z',
+        actor: 'operator',
+        reason: 'retention window elapsed',
+      });
+      expect(
+        db
+          .query(
+            `SELECT action, event_id, affected_count, actor, reason, created_at
+             FROM slingshot_event_operator_audit`,
+          )
+          .get(),
+      ).toEqual({
+        action: 'purge-delivered',
+        event_id: null,
+        affected_count: 1,
+        actor: 'operator',
+        reason: 'retention window elapsed',
+        created_at: '2026-02-01T00:00:00Z',
+      });
     } finally {
       db.close();
     }

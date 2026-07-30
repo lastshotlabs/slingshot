@@ -95,8 +95,31 @@ export const eventsSchema = z
     reliability: eventReliabilityConfigSchema
       .optional()
       .describe('Optional transactional outbox/inbox reliability configuration.'),
+    operator: z
+      .object({
+        enabled: z.literal(true),
+        path: z
+          .string()
+          .regex(/^\/[A-Za-z0-9/_-]*$/)
+          .optional()
+          .describe('Operator route prefix. Defaults to /admin/events.'),
+      })
+      .strict()
+      .optional()
+      .describe(
+        'Authenticated event operations surface requiring route auth, permissions, and audit persistence.',
+      ),
   })
   .strict()
+  .superRefine((events, ctx) => {
+    if (events.operator?.enabled && !events.reliability) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['operator'],
+        message: 'events.operator requires events.reliability to be configured.',
+      });
+    }
+  })
   .describe('Governed event delivery configuration.');
 
 /**

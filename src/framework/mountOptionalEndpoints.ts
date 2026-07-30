@@ -4,10 +4,12 @@
  * Mounts the jobs status endpoint, /metrics endpoint, and upload presigned-URL
  * endpoint when each is enabled in the app config.
  */
+import type { EventOperatorConfig } from '@config/types/events';
 import type { JobsConfig } from '@config/types/jobs';
 import type { MetricsConfig } from '@config/types/metrics';
 import type { PresignedUrlConfig, UploadConfig } from '@config/types/upload';
 import type { MetricsState } from '@framework/metrics/registry';
+import { createEventOperationsRouter } from '@framework/routes/eventOperations';
 import { createJobsRouter } from '@framework/routes/jobs';
 import { createMetricsRouter } from '@framework/routes/metrics';
 import { createUploadsRouter } from '@framework/routes/uploads';
@@ -88,6 +90,7 @@ export function mountOptionalEndpoints(
   },
   isProd: boolean,
   postgres?: PostgresBundle | null,
+  eventOperator?: EventOperatorConfig,
 ): void {
   // Security validation runs before infrastructure creation so config errors
   // take priority over missing infrastructure (Redis) errors.
@@ -166,6 +169,10 @@ export function mountOptionalEndpoints(
         allowExternalKeys: upload.allowExternalKeys,
       }),
     );
+  }
+
+  if (eventOperator?.enabled) {
+    app.route('/', createEventOperationsRouter(eventOperator));
   }
 
   // Silently absorb browser service-worker probes. Without this, every

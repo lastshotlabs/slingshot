@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { format, resolveConfig } from 'prettier';
+import { format } from 'prettier';
 
 export const repoRoot = resolve(import.meta.dir, '..');
 
@@ -148,7 +148,19 @@ export async function generateMaturityOutputs(root = repoRoot): Promise<Record<s
     .join('\n');
   const runtime = `/** Generated package stability metadata. Do not edit by hand. */\nexport const PACKAGE_MATURITY = Object.freeze({\n${runtimeRows}\n} as const);\n\n/** Public package name represented in generated maturity metadata. */\nexport type MaturePackageName = keyof typeof PACKAGE_MATURITY;\n`;
 
-  const prettierConfig = (await resolveConfig(resolve(root, 'package.json'))) ?? {};
+  // Keep generation independent of repository Prettier plugins. Loading the
+  // import-sorting plugin here makes a docs-only generator depend on its glob
+  // stack and has caused Bun/Linux ESM interop failures in GitHub Actions.
+  const prettierConfig = {
+    semi: true,
+    singleQuote: true,
+    trailingComma: 'all',
+    printWidth: 100,
+    tabWidth: 2,
+    bracketSpacing: true,
+    arrowParens: 'avoid',
+    endOfLine: 'lf',
+  } as const;
   return {
     [outputPaths.report]: await format(JSON.stringify(report), {
       ...prettierConfig,

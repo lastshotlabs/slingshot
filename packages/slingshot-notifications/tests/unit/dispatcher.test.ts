@@ -106,6 +106,42 @@ describe('createIntervalDispatcher', () => {
     errorSpy.mockRestore();
   });
 
+  test('stop() aborts an in-flight retry delay', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const onDeadLetter = mock(() => {});
+    events.publish = mock(() => {
+      throw new Error('publish failed');
+    }) as typeof events.publish;
+
+    await adapters.createBuilder('community').schedule({
+      userId: 'user-1',
+      type: 'community:mention',
+      targetType: 'community:thread',
+      targetId: 'thread-1',
+      deliverAt: new Date(Date.now() - 1_000),
+    });
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      retry: { maxAttempts: 3, initialDelayMs: 10_000 },
+      onDeadLetter,
+    });
+
+    const tick = dispatcher.tick();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await dispatcher.stop();
+
+    expect(await tick).toBe(0);
+    expect(onDeadLetter).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+  });
+
   test('logs dispatcher tick failures instead of surfacing unhandled rejections', async () => {
     const adapters = createNotificationsTestAdapters();
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});

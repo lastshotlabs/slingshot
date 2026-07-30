@@ -59,13 +59,13 @@ describe('createInMemoryRateLimitStore', () => {
 
   it('resets count when the window expires', async () => {
     const store = createInMemoryRateLimitStore();
-    store.increment('key-a', 1); // 1ms window
-    store.increment('key-a', 1);
-    const beforeExpiry = store.increment('key-a', 1);
+    store.increment('key-a', 50);
+    store.increment('key-a', 50);
+    const beforeExpiry = store.increment('key-a', 50);
     expect(beforeExpiry.count).toBe(3);
 
-    // Wait for the 1ms window to expire.
-    await new Promise(r => setTimeout(r, 5));
+    // Keep a meaningful margin between the synchronous assertions and expiry.
+    await new Promise(r => setTimeout(r, 75));
 
     const afterExpiry = store.increment('key-a', 60_000);
     expect(afterExpiry.count).toBe(1);

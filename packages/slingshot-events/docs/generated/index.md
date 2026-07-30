@@ -36,7 +36,7 @@ bun add @lastshotlabs/slingshot-events
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `zod`: `^4.3.6`
+- `zod`: `4.3.6`
 
 ## Peer Dependencies
 

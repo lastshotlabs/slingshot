@@ -35,6 +35,7 @@ bun add @lastshotlabs/slingshot
 - `build:packages`: `bun scripts/build.ts --packages-only`
 - `changeset`: `changeset`
 - `check:unsafe-full-adapter`: `bun scripts/check-unsafe-full-adapter.ts`
+- `deps:versions:check`: `bun scripts/check-dependency-version-policy.ts`
 - `dev`: `bun --watch src/index.ts`
 - `docs:api`: `bun packages/docs/generate-api.ts`
 - `docs:build`: `bun run docs:generate && bun run docs:install && cd packages/docs && bun run build`
@@ -58,7 +59,7 @@ bun add @lastshotlabs/slingshot
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`
 - `format`: `prettier --write .`
 - `format:check`: `prettier --check .`
-- `hardening:core`: `bun run maturity:check && bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test`
+- `hardening:core`: `bun run deps:versions:check && bun run maturity:check && bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test`
 - `hardening:full`: `bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci`
 - `lint`: `eslint src/ --cache && bun run --filter '@lastshotlabs/slingshot-*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
@@ -98,15 +99,15 @@ bun add @lastshotlabs/slingshot
 
 ## Dependencies
 
-- `@asteasolutions/zod-to-openapi`: `^8.4.1`
+- `@asteasolutions/zod-to-openapi`: `8.4.3`
 - `@hono/zod-openapi`: `1.2.2`
 - `@lastshotlabs/slingshot-auth`: `workspace:*`
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `@lastshotlabs/slingshot-events`: `workspace:*`
 - `@lastshotlabs/slingshot-organizations`: `workspace:*`
-- `@oclif/core`: `^4.13.0`
-- `@opentelemetry/api`: `^1.9.1`
+- `@oclif/core`: `4.13.0`
+- `@opentelemetry/api`: `1.9.1`
 - `@scalar/hono-api-reference`: `0.10.0`
 
 ## Peer Dependencies

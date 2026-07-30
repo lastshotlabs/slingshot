@@ -41,7 +41,7 @@ bun add @lastshotlabs/slingshot-orchestration-engine
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `better-sqlite3`: `^12.8.0`
+- `better-sqlite3`: `12.8.0`
 
 ## Peer Dependencies
 

@@ -179,7 +179,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: event-reliability-conformance
-          path: .tmp/event-reliability/event-reliability-conformance.v1.json
+          path: .tmp/event-reliability/event-reliability-conformance.v2.json
           if-no-files-found: error
 
       - name: Stop reliability services

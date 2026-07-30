@@ -36,7 +36,7 @@ bun add @lastshotlabs/slingshot-interactions
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
-- `zod`: `>=4.0 <5`
+- `zod`: `4.3.6`
 
 ## Peer Dependencies
 

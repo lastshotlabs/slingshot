@@ -35,7 +35,7 @@ bun add @lastshotlabs/slingshot-infra
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `yaml`: `^2.7.0`
+- `yaml`: `2.8.3`
 
 ## Peer Dependencies
 

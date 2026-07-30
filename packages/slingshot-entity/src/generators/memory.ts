@@ -3,6 +3,7 @@
  */
 import { fieldEntries, isAutoDefault, memoryMaxEntries } from '../lib/naming';
 import type { ResolvedEntityConfig } from '../types';
+import { appendRuntimeFilterEvaluator } from './runtimeListHelpers';
 
 /**
  * Generate the in-memory adapter implementation source code for an entity.
@@ -51,7 +52,13 @@ export function generateMemory(config: ResolvedEntityConfig): string {
   const ttlMs = ttlSeconds ? ttlSeconds * 1000 : undefined;
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = config.pagination?.cursor.fields ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
   const hasSoftDelete = !!config.softDelete;
   const sdNonNull = config.softDelete !== undefined && 'strategy' in config.softDelete;
@@ -190,21 +197,7 @@ export function generateMemory(config: ResolvedEntityConfig): string {
     lines.push('');
   }
 
-  // matchesFilter
-  lines.push(
-    '  function matchesFilter(record: Record<string, unknown>, filter: Record<string, unknown>): boolean {',
-  );
-  lines.push('    for (const [key, val] of Object.entries(filter)) {');
-  lines.push('      if (val === undefined) continue;');
-  lines.push("      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-  lines.push('      const rVal = record[key];');
-  lines.push('      if (rVal instanceof Date && val instanceof Date) {');
-  lines.push('        if (rVal.getTime() !== val.getTime()) return false;');
-  lines.push('      } else if (rVal !== val) return false;');
-  lines.push('    }');
-  lines.push('    return true;');
-  lines.push('  }');
-  lines.push('');
+  appendRuntimeFilterEvaluator(lines);
 
   // compareForSort
   const cursorFieldsStr = cursorFields.map(f => `'${f}'`).join(', ');
@@ -428,7 +421,13 @@ export function generateMemory(config: ResolvedEntityConfig): string {
   lines.push('    async list(opts) {');
   lines.push(`      const sortDir = opts?.sortDir ?? '${defaultSortDir}';`);
   lines.push(`      const rawLimit = opts?.limit ?? ${defaultLimit};`);
-  lines.push(`      const limit = Math.min(rawLimit, ${maxLimit});`);
+  lines.push(
+    `      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > ${maxLimit}) throw new RangeError(\`list limit must be an integer between 1 and ${maxLimit}; received \${String(rawLimit)}\`);`,
+  );
+  lines.push('      const limit = rawLimit;');
+  lines.push(
+    '      const filter = resolveListFilter(opts as Record<string, unknown> | undefined);',
+  );
   lines.push('');
   lines.push(`      const visible: Array<Record<string, unknown>> = [];`);
   lines.push('      for (const [pk, entry] of store) {');
@@ -439,7 +438,7 @@ export function generateMemory(config: ResolvedEntityConfig): string {
     lines.push('        if (!recordVisible(entry.record)) continue;');
   }
   lines.push(
-    '        if (opts && !matchesFilter(entry.record as Record<string, unknown>, opts as Record<string, unknown>)) continue;',
+    '        if (filter && !matchesFilter(entry.record as Record<string, unknown>, filter)) continue;',
   );
   lines.push('        visible.push(entry.record as Record<string, unknown>);');
   lines.push('      }');

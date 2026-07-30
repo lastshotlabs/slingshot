@@ -3,6 +3,7 @@
  */
 import { fieldEntries, isAutoDefault, storageName } from '../lib/naming';
 import type { ResolvedEntityConfig } from '../types';
+import { appendRuntimeMongoFilterBuilder } from './runtimeListHelpers';
 
 /**
  * Generate the Mongoose/MongoDB adapter implementation source code for an entity.
@@ -52,7 +53,13 @@ export function generateMongo(config: ResolvedEntityConfig): string {
     config.softDelete !== undefined && 'value' in config.softDelete ? config.softDelete.value : '';
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = config.pagination?.cursor.fields ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
   const fields = fieldEntries(config);
   const autoDefaultFields = fields.filter(([, def]) => isAutoDefault(def.default));
@@ -327,6 +334,11 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   lines.push('  }');
   lines.push('');
 
+  appendRuntimeMongoFilterBuilder(
+    lines,
+    fields.map(([fieldName, def]) => ({ name: fieldName, primary: def.primary === true })),
+  );
+
   // --- Return adapter ---
   lines.push('  return {');
 
@@ -469,20 +481,16 @@ export function generateMongo(config: ResolvedEntityConfig): string {
   lines.push('      const Model = getModel();');
   lines.push(`      const sortDir = opts?.sortDir ?? '${defaultSortDir}';`);
   lines.push(`      const rawLimit = opts?.limit ?? ${defaultLimit};`);
-  lines.push(`      const limit = Math.min(rawLimit, ${maxLimit});`);
-  lines.push('      const query: Record<string, unknown> = { ...baseFilter() };');
-  lines.push('');
-  lines.push('      if (opts) {');
-  lines.push('        for (const [key, val] of Object.entries(opts as Record<string, unknown>)) {');
-  lines.push('          if (val === undefined) continue;');
-  lines.push("          if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-  // Known fields check
-  const knownFieldSet = fields.map(([n]) => `'${n}'`).join(', ');
-  lines.push(`          if (![${knownFieldSet}].includes(key)) continue;`);
-  lines.push(`          if (key === '${pkField}') { query['_id'] = val; }`);
-  lines.push('          else { query[key] = val; }');
-  lines.push('        }');
-  lines.push('      }');
+  lines.push(
+    `      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > ${maxLimit}) throw new RangeError(\`list limit must be an integer between 1 and ${maxLimit}; received \${String(rawLimit)}\`);`,
+  );
+  lines.push('      const limit = rawLimit;');
+  lines.push(
+    '      const listFilter = resolveListFilter(opts as Record<string, unknown> | undefined);',
+  );
+  lines.push(
+    '      const query: Record<string, unknown> = { ...baseFilter(), ...buildMongoListFilter(listFilter) };',
+  );
   lines.push('');
 
   // Cursor
@@ -519,7 +527,9 @@ export function generateMongo(config: ResolvedEntityConfig): string {
       lines.push('          orClauses.push(clause);');
       lines.push('        }');
     }
-    lines.push("        query['$or'] = orClauses;");
+    lines.push('        const filterQuery = { ...query };');
+    lines.push('        for (const key of Object.keys(query)) delete query[key];');
+    lines.push("        query['$and'] = [filterQuery, { $or: orClauses }];");
   }
   lines.push('      }');
   lines.push('');

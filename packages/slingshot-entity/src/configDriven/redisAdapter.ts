@@ -59,7 +59,13 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = config.pagination?.cursor.fields ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
 
   function rkey(pk: string | number): string {
@@ -187,7 +193,12 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
     async list(opts) {
       const sortDir = opts?.sortDir ?? defaultSortDir;
       const rawLimit = opts?.limit ?? defaultLimit;
-      const limit = Math.min(rawLimit, maxLimit);
+      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > maxLimit) {
+        throw new RangeError(
+          `list limit must be an integer between 1 and ${maxLimit}; received ${String(rawLimit)}`,
+        );
+      }
+      const limit = rawLimit;
       const filter = resolveListFilter(opts as Record<string, unknown> | undefined);
 
       const allKeys = await scanAllKeys();

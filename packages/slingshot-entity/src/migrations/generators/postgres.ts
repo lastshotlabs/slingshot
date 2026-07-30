@@ -6,7 +6,13 @@
  * markers delimit each logical block so users can override specific sections
  * without replacing the whole file (CLAUDE.md rule 13).
  */
-import { escapeSqlString, pgColType, quoteSqlIdent, toSnakeCase } from '../../lib/naming';
+import {
+  escapeSqlString,
+  pgColType,
+  quoteSqlIdent,
+  sqlIndexName,
+  toSnakeCase,
+} from '../../lib/naming';
 import type { FieldDef } from '../../types';
 import type { MigrationPlan } from '../types';
 
@@ -19,10 +25,6 @@ function defaultClause(def: FieldDef): string {
   if (typeof def.default === 'number') return ` DEFAULT ${def.default}`;
   if (typeof def.default === 'boolean') return ` DEFAULT ${def.default}`;
   return '';
-}
-
-function indexName(table: string, cols: readonly string[], prefix: 'idx' | 'uidx'): string {
-  return `${prefix}_${table}_${cols.map(f => toSnakeCase(f)).join('_')}`;
 }
 
 /**
@@ -172,26 +174,38 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
       case 'addIndex': {
         const cols = change.index.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
         const unique = change.index.unique ? 'UNIQUE ' : '';
-        const name = quoteSqlIdent(indexName(table, change.index.fields, 'idx'));
-        indexes.push(`CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
+        const name = quoteSqlIdent(sqlIndexName(table, change.index.fields, 'idx'));
+        const nullsNotDistinct =
+          change.index.unique && plan.tenant && change.index.fields.includes(plan.tenant.field)
+            ? ' NULLS NOT DISTINCT'
+            : '';
+        indexes.push(
+          `CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols})${nullsNotDistinct};`,
+        );
         break;
       }
 
       case 'removeIndex': {
-        const name = quoteSqlIdent(indexName(table, change.index.fields, 'idx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.index.fields, 'idx'));
         indexes.push(`DROP INDEX IF EXISTS ${name};`);
         break;
       }
 
       case 'addUnique': {
         const cols = change.unique.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
-        const name = quoteSqlIdent(indexName(table, change.unique.fields, 'uidx'));
-        indexes.push(`CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
+        const name = quoteSqlIdent(sqlIndexName(table, change.unique.fields, 'uidx'));
+        const nullsNotDistinct =
+          plan.tenant && change.unique.fields.includes(plan.tenant.field)
+            ? ' NULLS NOT DISTINCT'
+            : '';
+        indexes.push(
+          `CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols})${nullsNotDistinct};`,
+        );
         break;
       }
 
       case 'removeUnique': {
-        const name = quoteSqlIdent(indexName(table, change.unique.fields, 'uidx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.unique.fields, 'uidx'));
         indexes.push(`DROP INDEX IF EXISTS ${name};`);
         break;
       }

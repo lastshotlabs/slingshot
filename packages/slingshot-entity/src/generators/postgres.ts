@@ -1,8 +1,16 @@
 /**
  * Generator: postgres.ts — PostgreSQL adapter. Imports only `pg`.
  */
-import { fieldEntries, isAutoDefault, pgColType, storageName, toSnakeCase } from '../lib/naming';
+import {
+  fieldEntries,
+  isAutoDefault,
+  pgColType,
+  sqlIndexName,
+  storageName,
+  toSnakeCase,
+} from '../lib/naming';
 import type { ResolvedEntityConfig } from '../types';
+import { appendRuntimeSqlFilterBuilder } from './runtimeListHelpers';
 
 /**
  * Generate the PostgreSQL adapter implementation source code for an entity.
@@ -55,9 +63,13 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   const sdValue = sdConfig !== null && 'value' in sdConfig ? sdConfig.value : '';
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = (config.pagination?.cursor != null
-    ? config.pagination.cursor.fields
-    : undefined) ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
   const fields = fieldEntries(config);
   const autoDefaultFields = fields.filter(([, def]) => isAutoDefault(def.default));
@@ -66,6 +78,8 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   );
   const onUpdateFields = fields.filter(([, def]) => def.onUpdate === 'now');
   const concurrency = config._concurrency;
+  const tenantField = config._systemFields.tenantField;
+  const hasTenantField = tenantField in config.fields;
 
   // Column definitions
   const colDefs: string[] = [];
@@ -173,6 +187,16 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('}');
   lines.push('');
 
+  appendRuntimeSqlFilterBuilder(
+    lines,
+    'postgres',
+    fields.map(([fieldName, def]) => ({
+      name: fieldName,
+      column: toSnakeCase(fieldName),
+      type: def.type,
+    })),
+  );
+
   // --- Factory ---
   lines.push(`export function createPostgres${name}Adapter(pool: Pool): ${name}Adapter {`);
   lines.push(`  const table = '${table}';`);
@@ -196,18 +220,34 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
       const idx = config.indexes[i];
       const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
       const unique = idx.unique ? 'UNIQUE ' : '';
+      const indexName = sqlIndexName(table, idx.fields, 'idx');
+      const nullsNotDistinct =
+        idx.unique && hasTenantField && idx.fields.includes(tenantField)
+          ? ' NULLS NOT DISTINCT'
+          : '';
+      if (nullsNotDistinct) {
+        lines.push(`        await client.query(\`DROP INDEX IF EXISTS ${indexName}\`);`);
+      }
       lines.push(
-        `        await client.query(\`CREATE ${unique}INDEX IF NOT EXISTS idx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `        await client.query(\`CREATE ${unique}INDEX IF NOT EXISTS ${indexName} ON \${table} (${colList})${nullsNotDistinct}\`);`,
       );
+      lines.push(`        await client.query(\`DROP INDEX IF EXISTS idx_\${table}_${i}\`);`);
     }
   }
   if (config.uniques) {
     for (let i = 0; i < config.uniques.length; i++) {
       const uq = config.uniques[i];
       const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
+      const indexName = sqlIndexName(table, uq.fields, 'uidx');
+      const nullsNotDistinct =
+        hasTenantField && uq.fields.includes(tenantField) ? ' NULLS NOT DISTINCT' : '';
+      if (nullsNotDistinct) {
+        lines.push(`        await client.query(\`DROP INDEX IF EXISTS ${indexName}\`);`);
+      }
       lines.push(
-        `        await client.query(\`CREATE UNIQUE INDEX IF NOT EXISTS uidx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `        await client.query(\`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON \${table} (${colList})${nullsNotDistinct}\`);`,
       );
+      lines.push(`        await client.query(\`DROP INDEX IF EXISTS uidx_\${table}_${i}\`);`);
     }
   }
   lines.push("        await client.query('COMMIT');");
@@ -581,7 +621,10 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('      await ensureTable();');
   lines.push(`      const sortDir = opts?.sortDir ?? '${defaultSortDir}';`);
   lines.push(`      const rawLimit = opts?.limit ?? ${defaultLimit};`);
-  lines.push(`      const limit = Math.min(rawLimit, ${maxLimit});`);
+  lines.push(
+    `      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > ${maxLimit}) throw new RangeError(\`list limit must be an integer between 1 and ${maxLimit}; received \${String(rawLimit)}\`);`,
+  );
+  lines.push('      const limit = rawLimit;');
   lines.push('      const conditions: string[] = [];');
   lines.push('      const params: unknown[] = [];');
   lines.push('      let paramIdx = 1;');
@@ -599,27 +642,13 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   }
 
   // Filter
-  lines.push('      if (opts) {');
-  lines.push('        for (const [key, val] of Object.entries(opts as Record<string, unknown>)) {');
-  lines.push('          if (val === undefined) continue;');
-  lines.push("          if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-  lines.push('          const fieldMeta: Record<string, { col: string; type: string }> = {');
-  for (const [fieldName, def] of fields) {
-    lines.push(
-      `            '${fieldName}': { col: '${toSnakeCase(fieldName)}', type: '${def.type}' },`,
-    );
-  }
-  lines.push('          };');
-  lines.push('          const meta = fieldMeta[key];');
-  lines.push('          if (!meta) continue;');
-  lines.push('          conditions.push(`${meta.col} = $${paramIdx++}`);');
-  lines.push("          if (meta.type === 'json') params.push(JSON.stringify(val));");
   lines.push(
-    "          else if (meta.type === 'date') params.push(val instanceof Date ? val : new Date(String(val)));",
+    '      const listFilter = resolveListFilter(opts as Record<string, unknown> | undefined);',
   );
-  lines.push('          else params.push(val);');
-  lines.push('        }');
-  lines.push('      }');
+  lines.push('      const compiledFilter = buildListFilterSql(listFilter, paramIdx);');
+  lines.push('      if (compiledFilter.sql) conditions.push(`(${compiledFilter.sql})`);');
+  lines.push('      params.push(...compiledFilter.params);');
+  lines.push('      paramIdx = compiledFilter.nextIndex;');
 
   // Cursor
   lines.push('      if (opts?.cursor) {');

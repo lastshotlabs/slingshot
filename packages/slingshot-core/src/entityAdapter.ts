@@ -6,12 +6,13 @@
  * adapters without depending on `slingshot-entity`.
  */
 import type { EntityWriteOptions } from './entityConfig';
+import type { FilterExpression } from './operations';
 
 export interface EntityCrudAdapter {
   create(data: unknown): Promise<unknown>;
   getById(id: string, filter?: Record<string, unknown>): Promise<unknown>;
   list(opts: {
-    filter?: unknown;
+    filter?: FilterExpression;
     limit?: number;
     cursor?: string;
     sortDir?: 'asc' | 'desc';

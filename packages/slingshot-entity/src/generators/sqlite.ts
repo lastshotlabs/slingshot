@@ -9,6 +9,7 @@ import {
   toSnakeCase,
 } from '../lib/naming';
 import type { ResolvedEntityConfig } from '../types';
+import { appendRuntimeSqlFilterBuilder } from './runtimeListHelpers';
 
 /**
  * Generate the Bun SQLite adapter implementation source code for an entity.
@@ -62,9 +63,13 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   const sdValue = sdConfig !== null && 'value' in sdConfig ? sdConfig.value : '';
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = (config.pagination?.cursor != null
-    ? config.pagination.cursor.fields
-    : undefined) ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
   const fields = fieldEntries(config);
   const autoDefaultFields = fields.filter(([, def]) => isAutoDefault(def.default));
@@ -183,6 +188,16 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   lines.push(`  return record as ${name};`);
   lines.push('}');
   lines.push('');
+
+  appendRuntimeSqlFilterBuilder(
+    lines,
+    'sqlite',
+    fields.map(([fieldName, def]) => ({
+      name: fieldName,
+      column: toSnakeCase(fieldName),
+      type: def.type,
+    })),
+  );
 
   // --- Factory function ---
   lines.push(`export function createSqlite${name}Adapter(db: Database): ${name}Adapter {`);
@@ -615,7 +630,10 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   lines.push('      ensureTable();');
   lines.push(`      const sortDir = opts?.sortDir ?? '${defaultSortDir}';`);
   lines.push(`      const rawLimit = opts?.limit ?? ${defaultLimit};`);
-  lines.push(`      const limit = Math.min(rawLimit, ${maxLimit});`);
+  lines.push(
+    `      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > ${maxLimit}) throw new RangeError(\`list limit must be an integer between 1 and ${maxLimit}; received \${String(rawLimit)}\`);`,
+  );
+  lines.push('      const limit = rawLimit;');
   lines.push('      const conditions: string[] = [];');
   lines.push('      const params: unknown[] = [];');
   if (hasSoftDelete) {
@@ -632,32 +650,12 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   }
 
   // Filter params
-  lines.push('      if (opts) {');
-  lines.push('        for (const [key, val] of Object.entries(opts as Record<string, unknown>)) {');
-  lines.push('          if (val === undefined) continue;');
-  lines.push("          if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-
-  // Build a set of known field names and their snake_case/types
-  lines.push('          const fieldMeta: Record<string, { col: string; type: string }> = {');
-  for (const [fieldName, def] of fields) {
-    lines.push(
-      `            '${fieldName}': { col: '${toSnakeCase(fieldName)}', type: '${def.type}' },`,
-    );
-  }
-  lines.push('          };');
-  lines.push('          const meta = fieldMeta[key];');
-  lines.push('          if (!meta) continue;');
-  lines.push('          conditions.push(`${meta.col} = ?`);');
   lines.push(
-    "          if (meta.type === 'json' || meta.type === 'string[]') params.push(JSON.stringify(val));",
+    '      const listFilter = resolveListFilter(opts as Record<string, unknown> | undefined);',
   );
-  lines.push(
-    "          else if (meta.type === 'date') params.push(val instanceof Date ? val.getTime() : val);",
-  );
-  lines.push("          else if (meta.type === 'boolean') params.push(val ? 1 : 0);");
-  lines.push('          else params.push(val);');
-  lines.push('        }');
-  lines.push('      }');
+  lines.push('      const compiledFilter = buildListFilterSql(listFilter);');
+  lines.push('      if (compiledFilter.sql) conditions.push(`(${compiledFilter.sql})`);');
+  lines.push('      params.push(...compiledFilter.params);');
 
   // Cursor
   lines.push('      if (opts?.cursor) {');

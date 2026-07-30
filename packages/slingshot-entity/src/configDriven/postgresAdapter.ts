@@ -25,7 +25,7 @@ import {
   evaluateFilter,
 } from '@lastshotlabs/slingshot-core';
 import { resolveExpectedVersion } from '../concurrency/writeGuards';
-import { quoteSqlIdent } from '../lib/naming';
+import { quoteSqlIdent, sqlIndexName } from '../lib/naming';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -128,8 +128,16 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = config.pagination?.cursor.fields ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
+  const tenantField = config._systemFields.tenantField;
+  const hasTenantField = tenantField in config.fields;
 
   /**
    * Idempotent table initializer — runs once per adapter instance.
@@ -190,7 +198,12 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
             const idx = config.indexes[i];
             const colList = idx.fields.map(column).join(', ');
             const unique = idx.unique ? 'UNIQUE ' : '';
-            const indexName = `idx_${rawTable}_${i}`;
+            const indexName = sqlIndexName(rawTable, idx.fields, 'idx');
+            const legacyIndexName = `idx_${rawTable}_${i}`;
+            const nullsNotDistinct =
+              idx.unique && hasTenantField && idx.fields.includes(tenantField)
+                ? ' NULLS NOT DISTINCT'
+                : '';
             const existing = await queryable.query(
               `SELECT indexdef FROM pg_indexes WHERE schemaname = ANY (current_schemas(false)) AND tablename = $1 AND indexname = $2`,
               [rawTable, indexName],
@@ -199,13 +212,15 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
             const expectedColumns = idx.fields.map(toSnakeCase);
             if (
               typeof indexDef === 'string' &&
-              !postgresIndexMatches(indexDef, expectedColumns, Boolean(idx.unique))
+              (!postgresIndexMatches(indexDef, expectedColumns, Boolean(idx.unique)) ||
+                (Boolean(nullsNotDistinct) && !indexDef.includes('NULLS NOT DISTINCT')))
             ) {
               await queryable.query(`DROP INDEX ${quoteSqlIdent(indexName)}`);
             }
             await queryable.query(
-              `CREATE ${unique}INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})`,
+              `CREATE ${unique}INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})${nullsNotDistinct}`,
             );
+            await queryable.query(`DROP INDEX IF EXISTS ${quoteSqlIdent(legacyIndexName)}`);
           }
         }
 
@@ -214,7 +229,10 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
           for (let i = 0; i < config.uniques.length; i++) {
             const uq = config.uniques[i];
             const colList = uq.fields.map(column).join(', ');
-            const indexName = `uidx_${rawTable}_${i}`;
+            const indexName = sqlIndexName(rawTable, uq.fields, 'uidx');
+            const legacyIndexName = `uidx_${rawTable}_${i}`;
+            const nullsNotDistinct =
+              hasTenantField && uq.fields.includes(tenantField) ? ' NULLS NOT DISTINCT' : '';
             const existing = await queryable.query(
               `SELECT indexdef FROM pg_indexes WHERE schemaname = ANY (current_schemas(false)) AND tablename = $1 AND indexname = $2`,
               [rawTable, indexName],
@@ -223,13 +241,15 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
             const expectedColumns = uq.fields.map(toSnakeCase);
             if (
               typeof indexDef === 'string' &&
-              !postgresIndexMatches(indexDef, expectedColumns, true)
+              (!postgresIndexMatches(indexDef, expectedColumns, true) ||
+                (Boolean(nullsNotDistinct) && !indexDef.includes('NULLS NOT DISTINCT')))
             ) {
               await queryable.query(`DROP INDEX ${quoteSqlIdent(indexName)}`);
             }
             await queryable.query(
-              `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})`,
+              `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteSqlIdent(indexName)} ON ${table} (${colList})${nullsNotDistinct}`,
             );
+            await queryable.query(`DROP INDEX IF EXISTS ${quoteSqlIdent(legacyIndexName)}`);
           }
         }
       });
@@ -490,7 +510,12 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       const sortDir = opts?.sortDir ?? defaultSortDir;
       const rawLimit = opts?.limit ?? defaultLimit;
-      const limit = Math.min(rawLimit, maxLimit);
+      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > maxLimit) {
+        throw new RangeError(
+          `list limit must be an integer between 1 and ${maxLimit}; received ${String(rawLimit)}`,
+        );
+      }
+      const limit = rawLimit;
       const filter = resolveListFilter(opts as Record<string, unknown> | undefined);
 
       const conditions: string[] = [];

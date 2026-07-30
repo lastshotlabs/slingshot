@@ -6,7 +6,13 @@
  * markers delimit each logical block so users can override specific sections
  * without replacing the whole file (CLAUDE.md rule 13).
  */
-import { escapeSqlString, quoteSqlIdent, sqliteColType, toSnakeCase } from '../../lib/naming';
+import {
+  escapeSqlString,
+  quoteSqlIdent,
+  sqlIndexName,
+  sqliteColType,
+  toSnakeCase,
+} from '../../lib/naming';
 import type { FieldDef } from '../../types';
 import type { MigrationPlan } from '../types';
 
@@ -18,10 +24,6 @@ function defaultClause(def: FieldDef): string {
   if (typeof def.default === 'number') return ` DEFAULT ${def.default}`;
   if (typeof def.default === 'boolean') return ` DEFAULT ${def.default ? 1 : 0}`;
   return '';
-}
-
-function indexName(table: string, cols: readonly string[], prefix: 'idx' | 'uidx'): string {
-  return `${prefix}_${table}_${cols.map(f => toSnakeCase(f)).join('_')}`;
 }
 
 /**
@@ -152,26 +154,26 @@ export function generateMigrationSqlite(plan: MigrationPlan): string {
       case 'addIndex': {
         const cols = change.index.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
         const unique = change.index.unique ? 'UNIQUE ' : '';
-        const name = quoteSqlIdent(indexName(table, change.index.fields, 'idx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.index.fields, 'idx'));
         indexes.push(`CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
         break;
       }
 
       case 'removeIndex': {
-        const name = quoteSqlIdent(indexName(table, change.index.fields, 'idx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.index.fields, 'idx'));
         indexes.push(`DROP INDEX IF EXISTS ${name};`);
         break;
       }
 
       case 'addUnique': {
         const cols = change.unique.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
-        const name = quoteSqlIdent(indexName(table, change.unique.fields, 'uidx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.unique.fields, 'uidx'));
         indexes.push(`CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
         break;
       }
 
       case 'removeUnique': {
-        const name = quoteSqlIdent(indexName(table, change.unique.fields, 'uidx'));
+        const name = quoteSqlIdent(sqlIndexName(table, change.unique.fields, 'uidx'));
         indexes.push(`DROP INDEX IF EXISTS ${name};`);
         break;
       }

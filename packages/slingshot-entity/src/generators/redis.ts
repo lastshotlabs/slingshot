@@ -4,6 +4,7 @@
  */
 import { fieldEntries, isAutoDefault, storageName } from '../lib/naming';
 import type { ResolvedEntityConfig } from '../types';
+import { appendRuntimeFilterEvaluator } from './runtimeListHelpers';
 
 /**
  * Generate the Redis adapter implementation source code for an entity.
@@ -60,9 +61,13 @@ export function generateRedis(config: ResolvedEntityConfig): string {
   const sdValue = sdConfig !== null && 'value' in sdConfig ? sdConfig.value : '';
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
-  const cursorFields = (config.pagination?.cursor != null
-    ? config.pagination.cursor.fields
-    : undefined) ?? [pkField];
+  const cursorFields = [
+    ...new Set([
+      ...(config.defaultSort ? [config.defaultSort.field] : []),
+      ...(config.pagination?.cursor.fields ?? [pkField]),
+      pkField,
+    ]),
+  ];
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
   const fields = fieldEntries(config);
   const autoDefaultFields = fields.filter(([, def]) => isAutoDefault(def.default));
@@ -227,20 +232,7 @@ export function generateRedis(config: ResolvedEntityConfig): string {
     lines.push('');
   }
 
-  lines.push(
-    '  function matchesFilter(record: Record<string, unknown>, filter: Record<string, unknown>): boolean {',
-  );
-  lines.push('    for (const [key, val] of Object.entries(filter)) {');
-  lines.push('      if (val === undefined) continue;');
-  lines.push("      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-  lines.push('      const rVal = record[key];');
-  lines.push('      if (rVal instanceof Date && val instanceof Date) {');
-  lines.push('        if (rVal.getTime() !== val.getTime()) return false;');
-  lines.push('      } else if (rVal !== val) return false;');
-  lines.push('    }');
-  lines.push('    return true;');
-  lines.push('  }');
-  lines.push('');
+  appendRuntimeFilterEvaluator(lines);
 
   lines.push(
     `  async function loadMatchingRecord(pk: ${pkType}, filter: Record<string, unknown>): Promise<Record<string, unknown> | null> {`,
@@ -476,7 +468,13 @@ export function generateRedis(config: ResolvedEntityConfig): string {
   lines.push('    async list(opts) {');
   lines.push(`      const sortDir = opts?.sortDir ?? '${defaultSortDir}';`);
   lines.push(`      const rawLimit = opts?.limit ?? ${defaultLimit};`);
-  lines.push(`      const limit = Math.min(rawLimit, ${maxLimit});`);
+  lines.push(
+    `      if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > ${maxLimit}) throw new RangeError(\`list limit must be an integer between 1 and ${maxLimit}; received \${String(rawLimit)}\`);`,
+  );
+  lines.push('      const limit = rawLimit;');
+  lines.push(
+    '      const filter = resolveListFilter(opts as Record<string, unknown> | undefined);',
+  );
   lines.push('');
   lines.push('      const allKeys = await scanAllKeys();');
   lines.push('      const records: Array<Record<string, unknown>> = [];');
@@ -490,20 +488,7 @@ export function generateRedis(config: ResolvedEntityConfig): string {
   if (hasSoftDelete) {
     lines.push('        if (!isVisible(record)) continue;');
   }
-  lines.push('        if (opts) {');
-  lines.push('          let matches = true;');
-  lines.push(
-    '          for (const [key, val] of Object.entries(opts as Record<string, unknown>)) {',
-  );
-  lines.push('            if (val === undefined) continue;');
-  lines.push("            if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;");
-  lines.push('            const rVal = record[key];');
-  lines.push('            if (rVal instanceof Date && val instanceof Date) {');
-  lines.push('              if (rVal.getTime() !== val.getTime()) { matches = false; break; }');
-  lines.push('            } else if (rVal !== val) { matches = false; break; }');
-  lines.push('          }');
-  lines.push('          if (!matches) continue;');
-  lines.push('        }');
+  lines.push('        if (filter && !matchesFilter(record, filter)) continue;');
   lines.push('        records.push(record);');
   lines.push('      }');
   lines.push('');

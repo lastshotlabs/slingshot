@@ -219,16 +219,16 @@ describe('Memory adapter — cursor pagination', () => {
     expect(result.hasMore).toBe(true);
   });
 
-  test('limit exceeding maxLimit is clamped', async () => {
+  test('limit exceeding maxLimit is rejected instead of silently truncated', async () => {
     const adapter = taskAdapter();
     // maxLimit is 50 for Task entity
     for (let i = 0; i < 60; i++) {
       await adapter.create({ title: `Task ${i}` });
     }
 
-    const result = await adapter.list({ limit: 100 });
-    expect(result.items).toHaveLength(50);
-    expect(result.hasMore).toBe(true);
+    expect(() => adapter.list({ limit: 100 })).toThrow(
+      'list limit must be an integer between 1 and 50; received 100',
+    );
   });
 });
 

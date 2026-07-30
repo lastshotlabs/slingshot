@@ -137,7 +137,7 @@ export type AuditLogAdapter = {
 };
 
 export type AutoModRuleAdapter = {
-  list(input: { filter?: Record<string, unknown>; limit?: number }): Promise<{
+  list(input: { filter?: Record<string, unknown>; limit?: number; cursor?: string }): Promise<{
     items: Array<{
       tenantId?: string | null;
       containerId?: string | null;
@@ -147,6 +147,8 @@ export type AutoModRuleAdapter = {
       priority?: number;
       name?: string;
     }>;
+    hasMore?: boolean;
+    nextCursor?: string;
   }>;
 };
 

@@ -108,7 +108,7 @@ describe('entity bootstrap hardening', () => {
         if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
           return { rows: [], rowCount: 0 };
         }
-        if (failIndex && sql.includes('CREATE INDEX IF NOT EXISTS "idx_slingshot_widgets_0"')) {
+        if (failIndex && sql.includes('CREATE INDEX IF NOT EXISTS "idx_slingshot_widgets_slug"')) {
           failIndex = false;
           throw new Error('index bootstrap failed');
         }
@@ -118,6 +118,7 @@ describe('entity bootstrap hardening', () => {
         if (
           sql.startsWith('CREATE TABLE IF NOT EXISTS') ||
           sql.startsWith('ALTER TABLE') ||
+          sql.startsWith('DROP INDEX IF EXISTS') ||
           sql.startsWith('CREATE INDEX IF NOT EXISTS') ||
           sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS')
         ) {

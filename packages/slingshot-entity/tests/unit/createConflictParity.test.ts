@@ -26,6 +26,7 @@ class ConflictPostgresPool {
     if (
       sql.startsWith('CREATE TABLE IF NOT EXISTS') ||
       sql.startsWith('ALTER TABLE') ||
+      sql.startsWith('DROP INDEX IF EXISTS') ||
       sql.startsWith('CREATE INDEX IF NOT EXISTS') ||
       sql.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS')
     ) {

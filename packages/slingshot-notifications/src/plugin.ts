@@ -537,8 +537,14 @@ export function createNotificationsPackage(
             // Page through everything; the underlying adapter accepts a
             // generic `opts` map. Deletion happens one record at a time so a
             // partial failure does not poison the rest of the sweep.
-            const all = await notifications.list({ limit: 500 });
-            for (const row of all.items) {
+            const rows: NotificationRecord[] = [];
+            let cursor: string | undefined;
+            do {
+              const page = await notifications.list({ limit: 200, cursor });
+              rows.push(...page.items);
+              cursor = page.hasMore ? page.nextCursor : undefined;
+            } while (cursor);
+            for (const row of rows) {
               const created =
                 row.createdAt instanceof Date
                   ? row.createdAt.getTime()

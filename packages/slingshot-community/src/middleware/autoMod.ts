@@ -91,15 +91,25 @@ async function evaluateRules(args: {
 }): Promise<ModerationDecision> {
   if (!args.adapter || args.bodyText.length === 0) return 'allow';
 
-  const result = await args.adapter.list({ filter: { enabled: true }, limit: 500 });
-  const rules = result.items
+  const rules: AutoModRuleRecord[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await args.adapter.list({
+      filter: { enabled: true },
+      limit: 200,
+      cursor,
+    });
+    rules.push(...page.items);
+    cursor = page.hasMore ? page.nextCursor : undefined;
+  } while (cursor);
+  const applicableRules = rules
     .filter(rule => rule.enabled !== false)
     .filter(rule => rule.tenantId == null || rule.tenantId === args.tenantId)
     .filter(rule => rule.containerId == null || rule.containerId === args.containerId)
     .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
 
   let decision: ModerationDecision = 'allow';
-  for (const rule of rules) {
+  for (const rule of applicableRules) {
     if (ruleMatches(rule, args.bodyText)) {
       decision = strongestDecision(decision, toModerationDecision(rule.decision));
       if (decision === 'reject') return decision;

@@ -328,6 +328,28 @@ export function memoryMaxEntries(config: ResolvedEntityConfig): number {
 }
 
 /**
+ * Build a deterministic, definition-derived SQL index name.
+ *
+ * PostgreSQL truncates identifiers at 63 bytes, so long names retain a stable
+ * hash suffix instead of becoming collision-prone implicit truncations.
+ */
+export function sqlIndexName(
+  table: string,
+  fields: readonly string[],
+  prefix: 'idx' | 'uidx',
+): string {
+  const full = `${prefix}_${table}_${fields.map(toSnakeCase).join('_')}`;
+  if (full.length <= 63) return full;
+  let hash = 2_166_136_261;
+  for (const char of full) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  const suffix = (hash >>> 0).toString(16).padStart(8, '0');
+  return `${full.slice(0, 54)}_${suffix}`;
+}
+
+/**
  * Return the fields of an entity config as `[name, def]` pairs.
  *
  * A convenience wrapper over `Object.entries(config.fields)` that preserves

@@ -62,7 +62,31 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
+export type ListFilterOperator =
+  | { readonly $ne: string | number | boolean | null }
+  | { readonly $gt: string | number }
+  | { readonly $gte: string | number }
+  | { readonly $lt: string | number }
+  | { readonly $lte: string | number }
+  | { readonly $in: ReadonlyArray<string | number> }
+  | { readonly $nin: ReadonlyArray<string | number> }
+  | { readonly $contains: string };
+
+export type ListFilterExpression = {
+  readonly $and?: ReadonlyArray<ListFilterExpression>;
+  readonly $or?: ReadonlyArray<ListFilterExpression>;
+  readonly [key: string]:
+    | string
+    | number
+    | boolean
+    | null
+    | ListFilterOperator
+    | ReadonlyArray<ListFilterExpression>
+    | undefined;
+};
+
 export interface ListOptions {
+  filter?: ListFilterExpression;
   limit?: number;
   cursor?: string;
   sortDir?: 'asc' | 'desc';

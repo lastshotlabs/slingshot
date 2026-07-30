@@ -967,13 +967,14 @@ describe('cursor pagination', () => {
     expect(result.hasMore).toBe(true);
   });
 
-  it('respects maxLimit from config', async () => {
+  it('rejects limits above maxLimit instead of silently truncating', async () => {
     const adapter = createMemoryEntityAdapter(PaginatedEntity);
     for (let i = 0; i < 15; i++) {
       await adapter.create({ id: `p-${String(i).padStart(2, '0')}`, name: `Item ${i}` });
     }
-    const result = await adapter.list({ limit: 100 }); // exceeds maxLimit
-    expect(result.items.length).toBe(10); // capped at maxLimit
+    expect(() => adapter.list({ limit: 100 })).toThrow(
+      'list limit must be an integer between 1 and 10; received 100',
+    );
   });
 
   it('paginates through all records', async () => {

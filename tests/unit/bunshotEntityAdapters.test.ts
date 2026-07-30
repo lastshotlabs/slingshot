@@ -226,13 +226,14 @@ describe('generated memory adapter', () => {
     expect(result.hasMore).toBe(true);
   });
 
-  it('respects maxLimit from config', async () => {
+  it('rejects limits above maxLimit instead of silently truncating', async () => {
     const adapter = createAdapter();
     for (let i = 0; i < 15; i++) {
       await adapter.create({ subject: `Item ${i}` });
     }
-    const result = await adapter.list({ limit: 100 });
-    expect(result.items.length).toBe(10); // maxLimit = 10
+    await expect(adapter.list({ limit: 100 })).rejects.toThrow(
+      'list limit must be an integer between 1 and 10; received 100',
+    );
   });
 
   it('paginates through all records', async () => {

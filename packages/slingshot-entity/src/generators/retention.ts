@@ -42,8 +42,8 @@ export function hasRetention(config: ResolvedEntityConfig): boolean {
  * called, returns an `async () => number` job. The job:
  * 1. Computes a cutoff date from the configured `after` duration string
  *    (e.g. `'90d'`).
- * 2. Calls `adapter.list()` with the configured `when` filter merged with a
- *    `updatedAt < cutoff` constraint (limit 1000).
+ * 2. Pages through every record matching the configured `when` filter merged
+ *    with an `updatedAt < cutoff` constraint.
  * 3. Hard-deletes each matched record via `adapter.delete()`.
  * 4. Returns the count of deleted records.
  *
@@ -74,6 +74,7 @@ export function generateRetentionJob(config: ResolvedEntityConfig): string {
 
   const name = config.name;
   const pkField = config._pkField;
+  const pageLimit = config.pagination?.maxLimit ?? 200;
   const { after, when } = retention;
 
   // Serialize the `when` filter as a JSON literal in the generated source
@@ -88,7 +89,13 @@ export function generateRetentionJob(config: ResolvedEntityConfig): string {
   lines.push(`    const cutoffMs = Date.now() - parseDuration(${JSON.stringify(after)});`);
   lines.push(`    const cutoff = new Date(cutoffMs);`);
   lines.push(`    const filter = { ...${whenJson}, updatedAt: { $lt: cutoff } };`);
-  lines.push(`    const { items } = await adapter.list({ filter, limit: 1000 });`);
+  lines.push(`    const items: ${name}[] = [];`);
+  lines.push(`    let cursor: string | undefined;`);
+  lines.push(`    do {`);
+  lines.push(`      const page = await adapter.list({ filter, limit: ${pageLimit}, cursor });`);
+  lines.push(`      items.push(...page.items);`);
+  lines.push(`      cursor = page.hasMore ? page.nextCursor : undefined;`);
+  lines.push(`    } while (cursor);`);
   lines.push(
     `    for (const item of items) await adapter.delete((item as Record<string, unknown>)[${JSON.stringify(pkField)}] as string);`,
   );

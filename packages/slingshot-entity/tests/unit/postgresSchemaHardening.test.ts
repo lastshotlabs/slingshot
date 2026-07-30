@@ -11,15 +11,7 @@ describe('config-driven Postgres schema hardening', () => {
       async query(sql: string, params: unknown[] = []): Promise<QueryResult> {
         queries.push({ sql, params });
         if (sql.startsWith('SELECT indexdef FROM pg_indexes')) {
-          return {
-            rows: [
-              {
-                indexdef:
-                  'CREATE UNIQUE INDEX idx_community_reactions_0 ON public.community_reactions USING btree (target_id, target_type, user_id)',
-              },
-            ],
-            rowCount: 1,
-          };
+          return { rows: [], rowCount: 0 };
         }
         return { rows: [], rowCount: sql.startsWith('INSERT') ? 1 : 0 };
       },
@@ -45,9 +37,11 @@ describe('config-driven Postgres schema hardening', () => {
       value: 'laugh',
     });
 
-    expect(queries.map(query => query.sql)).toContain('DROP INDEX "idx_community_reactions_0"');
     expect(queries.map(query => query.sql)).toContain(
-      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_community_reactions_0" ON community_reactions ("target_id", "target_type", "user_id", "value")',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_community_reactions_target_id_target_type_user_id_value" ON community_reactions ("target_id", "target_type", "user_id", "value")',
+    );
+    expect(queries.map(query => query.sql)).toContain(
+      'DROP INDEX IF EXISTS "idx_community_reactions_0"',
     );
   });
 

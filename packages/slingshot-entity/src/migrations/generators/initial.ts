@@ -15,6 +15,7 @@ import {
   escapeSqlString,
   pgColType,
   quoteSqlIdent,
+  sqlIndexName,
   sqliteColType,
   storageName,
   toSnakeCase,
@@ -42,10 +43,6 @@ function sqliteDefaultClause(def: FieldDef): string {
   return '';
 }
 
-function indexName(table: string, cols: readonly string[], prefix: 'idx' | 'uidx'): string {
-  return `${prefix}_${table}_${cols.map(f => toSnakeCase(f)).join('_')}`;
-}
-
 /**
  * Generate the initial PostgreSQL `CREATE TABLE` migration for an entity.
  *
@@ -60,6 +57,8 @@ function indexName(table: string, cols: readonly string[], prefix: 'idx' | 'uidx
 export function generateInitialMigrationPostgres(config: ResolvedEntityConfig): string {
   const table = storageName(config, 'postgres');
   const qTable = quoteSqlIdent(table);
+  const tenantField = config._systemFields.tenantField;
+  const hasTenantField = tenantField in config.fields;
   const sections: string[] = [];
 
   sections.push(
@@ -122,13 +121,21 @@ export function generateInitialMigrationPostgres(config: ResolvedEntityConfig): 
   for (const idx of config.indexes ?? []) {
     const cols = idx.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
     const unique = idx.unique ? 'UNIQUE ' : '';
-    const name = quoteSqlIdent(indexName(table, idx.fields, 'idx'));
-    indexes.push(`CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
+    const name = quoteSqlIdent(sqlIndexName(table, idx.fields, 'idx'));
+    const nullsNotDistinct =
+      idx.unique && hasTenantField && idx.fields.includes(tenantField) ? ' NULLS NOT DISTINCT' : '';
+    indexes.push(
+      `CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols})${nullsNotDistinct};`,
+    );
   }
   for (const uq of config.uniques ?? []) {
     const cols = uq.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
-    const name = quoteSqlIdent(indexName(table, uq.fields, 'uidx'));
-    indexes.push(`CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
+    const name = quoteSqlIdent(sqlIndexName(table, uq.fields, 'uidx'));
+    const nullsNotDistinct =
+      hasTenantField && uq.fields.includes(tenantField) ? ' NULLS NOT DISTINCT' : '';
+    indexes.push(
+      `CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols})${nullsNotDistinct};`,
+    );
   }
   indexes.push('-- --- end:indexes ---');
   sections.push(indexes.join('\n'));
@@ -192,12 +199,12 @@ export function generateInitialMigrationSqlite(config: ResolvedEntityConfig): st
   for (const idx of config.indexes ?? []) {
     const cols = idx.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
     const unique = idx.unique ? 'UNIQUE ' : '';
-    const name = quoteSqlIdent(indexName(table, idx.fields, 'idx'));
+    const name = quoteSqlIdent(sqlIndexName(table, idx.fields, 'idx'));
     indexes.push(`CREATE ${unique}INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
   }
   for (const uq of config.uniques ?? []) {
     const cols = uq.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');
-    const name = quoteSqlIdent(indexName(table, uq.fields, 'uidx'));
+    const name = quoteSqlIdent(sqlIndexName(table, uq.fields, 'uidx'));
     indexes.push(`CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${qTable} (${cols});`);
   }
   indexes.push('-- --- end:indexes ---');

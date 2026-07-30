@@ -62,9 +62,16 @@ CI publishes the ephemeral five-store JSON report, while the committed
 profiles.
 
 Runtime SQLite and PostgreSQL entity bootstrap also reconciles framework-managed index definitions:
-if a positional index's uniqueness or ordered field list changes, Slingshot replaces the stale
-database index instead of silently preserving it through `CREATE INDEX IF NOT EXISTS`. PostgreSQL
-CRUD statements quote generated column identifiers, so schema fields such as `order` remain valid.
+indexes use stable names derived from their ordered fields and uniqueness, and bootstrap removes
+legacy positional names after creating the current definition. PostgreSQL tenant-scoped unique
+indexes treat `NULL` tenant values as equal, so global rows cannot bypass uniqueness. PostgreSQL CRUD
+statements quote generated column identifiers, so schema fields such as `order` remain valid.
+
+Generated and config-driven `list()` implementations share the same consumer contract across
+backends: pagination follows the configured default sort plus deterministic cursor tie-breakers,
+nested filters support comparison, membership, containment, and logical operators, and a requested
+limit above the configured maximum is rejected rather than silently truncated. Callers that need to
+scan a full collection must follow `nextCursor` in bounded pages.
 
 ## Why this changed
 

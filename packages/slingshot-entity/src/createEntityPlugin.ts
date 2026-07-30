@@ -813,7 +813,17 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           for (const cascade of config.routes.cascades) {
             const handler = async (payload: Record<string, unknown>): Promise<void> => {
               const filter = resolveFilterParams(cascade.batch.filter, payload);
-              const { items } = await adapter.list({ filter, limit: 1000 });
+              const items: unknown[] = [];
+              let cursor: string | undefined;
+              do {
+                const page = await adapter.list({
+                  filter,
+                  limit: config.pagination?.maxLimit ?? 200,
+                  cursor,
+                });
+                items.push(...page.items);
+                cursor = page.hasMore ? page.nextCursor : undefined;
+              } while (cursor);
 
               if (cascade.batch.action === 'delete') {
                 const BATCH_SIZE = 50;

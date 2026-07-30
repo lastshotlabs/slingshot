@@ -62,6 +62,13 @@ The stock CRUD list route is part of that contract. For entities mounted through
 generated route path exposes: indexed fields, enum fields, boolean fields, the tenant field, and
 `limit` / `cursor` / `sortDir`. Runtime row scoping still wins over caller-supplied filters.
 
+Direct adapter callers can pass a nested `filter` using equality, comparison, `$in` / `$nin`,
+`$contains`, `$and`, and `$or`. The declared `defaultSort.field` leads the effective cursor,
+with configured cursor fields and the primary key appended as deterministic tie-breakers.
+Requests above `pagination.maxLimit` are rejected with a descriptive range error instead of
+silently returning an incomplete page; callers that need every record must follow
+`nextCursor` while `hasMore` is true.
+
 Entity runtime assembly now has a few explicit invariants:
 
 - entity adapters are published during `setupRoutes`, not delayed until `setupPost`
@@ -163,11 +170,14 @@ the raw entity before DTO projection, require or optionally accept `If-Match` ac
 documented 400/428/412/412/404 statuses. Migration snapshots remain format version 1; SQL
 add-column migrations use `NOT NULL DEFAULT 1`, while MongoDB backfills only missing fields.
 
-SQLite and PostgreSQL bootstrap reconcile framework-managed positional indexes against their
-configured uniqueness and ordered field sets. Changing an index definition therefore rebuilds
-the stale database index instead of letting `CREATE INDEX IF NOT EXISTS` preserve an obsolete
-constraint. PostgreSQL runtime CRUD also quotes generated column identifiers, including field
-names that collide with SQL keywords such as `order`.
+SQLite migration output and PostgreSQL runtime/migration output use deterministic
+definition-derived index names, including a stable hash suffix for identifiers beyond
+PostgreSQL's length limit. PostgreSQL bootstrap creates the current index before removing its
+legacy positional predecessor, so changing a field set cannot silently preserve an obsolete
+constraint. Unique composites containing the configured/system tenant field use
+`NULLS NOT DISTINCT`; single-tenant rows with a null tenant therefore retain the same namespace
+uniqueness as tenant-scoped rows. PostgreSQL runtime CRUD also quotes generated column
+identifiers, including field names that collide with SQL keywords such as `order`.
 
 ### Operation Registry
 

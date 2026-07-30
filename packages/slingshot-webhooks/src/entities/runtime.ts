@@ -718,7 +718,7 @@ async function migrateLegacyEndpointRows(
   let cursor: string | undefined;
 
   while (true) {
-    const page = await endpoints.listRaw({ limit: 500, cursor });
+    const page = await endpoints.listRaw({ limit: 200, cursor });
     for (const record of page.items) {
       const patch: Record<string, unknown> = {};
       const ownerType = record.ownerType ?? (record.tenantId ? 'tenant' : undefined);
@@ -938,7 +938,7 @@ export function buildWebhookRuntimeAdapter(
       let cursor: string | undefined;
 
       while (true) {
-        const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
+        const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 200, cursor });
         // Decrypt per-record rather than via Promise.all so a single broken
         // row does not abort the entire batch. Endpoints whose secret cannot
         // be decrypted are skipped and the failure is already logged inside

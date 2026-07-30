@@ -36,7 +36,7 @@ bun add @lastshotlabs/slingshot-entity
 
 ## Dependencies
 
-- `@faker-js/faker`: `>=10.0 <11`
+- `@faker-js/faker`: `10.4.0`
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies

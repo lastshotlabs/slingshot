@@ -42,7 +42,7 @@ bun add @lastshotlabs/slingshot-push
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
-- `web-push`: `^3.6.7`
+- `web-push`: `3.6.7`
 
 ## Peer Dependencies
 

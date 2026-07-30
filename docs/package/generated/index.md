@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `3.1.0`
+- Version: `3.1.1`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven TypeScript backend framework for typed APIs, entities, events, workflows, and production operations.

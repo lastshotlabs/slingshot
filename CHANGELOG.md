@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot
 
+## 3.1.1
+
+### Patch Changes
+
+- 09f9084: Rewrite the npm README and package metadata around the current authoring model,
+  production capabilities, package maturity channels, operational CLI, and absolute
+  documentation links.
+
 ## 3.1.0
 
 ### Minor Changes

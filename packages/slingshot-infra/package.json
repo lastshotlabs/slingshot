@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
-    "yaml": "2.8.3"
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
     "zod": ">=4.0 <5",
@@ -59,8 +59,8 @@
     }
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "3.1093.0",
-    "@aws-sdk/client-ssm": "3.1093.0"
+    "@aws-sdk/client-s3": "3.1098.0",
+    "@aws-sdk/client-ssm": "3.1098.0"
   },
   "engines": {
     "node": ">=20"

@@ -42,7 +42,7 @@ export const Asset = defineEntity('Asset', {
       auth: 'userAuth',
       event: {
         key: 'assets:asset.created',
-        payload: ['id', 'key', 'ownerUserId', 'mimeType'],
+        payload: ['id', 'key', 'ownerUserId', 'mimeType', 'size'],
         exposure: ['client-safe'],
         scope: {
           userId: 'record:ownerUserId',
@@ -58,7 +58,7 @@ export const Asset = defineEntity('Asset', {
       auth: 'userAuth',
       event: {
         key: 'assets:asset.deleted',
-        payload: ['id', 'key'],
+        payload: ['id', 'key', 'ownerUserId', 'size'],
         exposure: ['client-safe'],
         scope: {
           resourceType: 'assets:asset',

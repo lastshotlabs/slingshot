@@ -596,6 +596,7 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
         externalId: row.externalId ?? undefined,
         emailVerified: row.emailVerified ?? false,
         suspended: row.suspended ?? false,
+        suspendedAt: row.suspendedAt ?? undefined,
         suspendedReason: row.suspendedReason ?? undefined,
         userMetadata: row.userMetadata ?? undefined,
         appMetadata: row.appMetadata ?? undefined,

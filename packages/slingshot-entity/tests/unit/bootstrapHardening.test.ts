@@ -298,4 +298,22 @@ describe('entity bootstrap hardening', () => {
     expect(postgresSource).toContain("await client.query('COMMIT');");
     expect(postgresSource).toContain("await client.query('ROLLBACK');");
   });
+
+  test('generated postgres adapters decode NUMERIC fields as JavaScript numbers', () => {
+    const Metric = defineEntity('Metric', {
+      fields: {
+        id: field.string({ primary: true }),
+        score: field.number(),
+        count: field.integer(),
+      },
+    });
+
+    const postgresSource = generatePostgres(Metric);
+    expect(postgresSource).toContain(
+      "case 'score': return typeof val === 'number' ? val : Number(val);",
+    );
+    expect(postgresSource).toContain(
+      "case 'count': return typeof val === 'number' ? val : Number(val);",
+    );
+  });
 });

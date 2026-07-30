@@ -122,6 +122,8 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
       lines.push(
         `    case '${fieldName}': return val instanceof Date ? val : typeof val === 'number' ? new Date(val) : typeof val === 'string' ? new Date(val) : val;`,
       );
+    } else if (def.type === 'number' || def.type === 'integer') {
+      lines.push(`    case '${fieldName}': return typeof val === 'number' ? val : Number(val);`);
     } else if (def.type === 'json') {
       lines.push(`    case '${fieldName}': return JSON.stringify(val);`);
     }

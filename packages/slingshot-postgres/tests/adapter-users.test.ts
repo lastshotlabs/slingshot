@@ -137,6 +137,7 @@ describe('adapter-users — getUser', () => {
 
   test('getUser returns user data when found', async () => {
     const now = new Date();
+    const suspendedAt = new Date(now.getTime() - 1_000);
     mockDbImpl = {
       select: () =>
         resolvingBuilder([
@@ -150,7 +151,7 @@ describe('adapter-users — getUser', () => {
             emailVerified: true,
             suspended: false,
             suspendedReason: null,
-            suspendedAt: null,
+            suspendedAt,
             userMetadata: {},
             appMetadata: {},
             createdAt: now,
@@ -163,6 +164,7 @@ describe('adapter-users — getUser', () => {
     expect(user?.id).toBe('user-1');
     expect(user?.email).toBe('user@example.com');
     expect(user?.suspended).toBe(false);
+    expect(user?.suspendedAt).toBe(suspendedAt);
   });
 
   test('getUser returns null when user not found', async () => {

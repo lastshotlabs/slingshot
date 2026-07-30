@@ -38,6 +38,12 @@ function boundedReason(value: unknown): string | null {
   return reason.length > 0 && reason.length <= MAX_REASON_LENGTH ? reason : null;
 }
 
+function authenticatedActorId(c: Context<AppEnv>): string {
+  const actorId = getActor(c).id;
+  if (!actorId) throw new Error('[events] authenticated operator actor is unavailable');
+  return actorId;
+}
+
 async function writeAudit(
   c: Context<AppEnv>,
   input: {
@@ -202,7 +208,7 @@ export function createEventOperationsRouter(config: EventOperatorConfig) {
       eventId,
       expectedVersion: detail.attempts,
       now: new Date().toISOString(),
-      actor: getActor(c).id!,
+      actor: authenticatedActorId(c),
       reason: mutation.reason,
     });
     const status = retried ? 200 : 409;
@@ -236,7 +242,7 @@ export function createEventOperationsRouter(config: EventOperatorConfig) {
           eventId: row.eventId,
           expectedVersion: row.attempts,
           now: new Date().toISOString(),
-          actor: getActor(c).id!,
+          actor: authenticatedActorId(c),
           reason: mutation.reason,
         })
       ) {
@@ -264,7 +270,7 @@ export function createEventOperationsRouter(config: EventOperatorConfig) {
       before,
       limit: mutation.limit,
       now: new Date().toISOString(),
-      actor: getActor(c).id!,
+      actor: authenticatedActorId(c),
       reason: mutation.reason,
     });
     await writeAudit(c, {
@@ -288,7 +294,7 @@ export function createEventOperationsRouter(config: EventOperatorConfig) {
       before,
       limit: mutation.limit,
       now: new Date().toISOString(),
-      actor: getActor(c).id!,
+      actor: authenticatedActorId(c),
       reason: mutation.reason,
     });
     await writeAudit(c, {

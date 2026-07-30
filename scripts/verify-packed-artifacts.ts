@@ -158,6 +158,58 @@ function normalizePackedPath(target: string): string {
   return target.replace(/^\.\//, '').replaceAll('\\', '/');
 }
 
+function findRootPackedSurfaceErrors(artifact: PackedArtifact, rootDir: string): string[] {
+  const errors: string[] = [];
+  if (!artifact.files.has('README.md')) {
+    errors.push('README.md is absent from the tarball');
+  } else if (
+    readFileSync(join(artifact.pkg.stageDir, 'README.md'), 'utf8') !==
+    readFileSync(join(rootDir, 'README.md'), 'utf8')
+  ) {
+    errors.push('packed README.md does not match the repository README');
+  }
+
+  const commandRoot = join(rootDir, 'src', 'cli', 'commands');
+  const commandSources = walkFiles(commandRoot).filter(path => path.endsWith('.ts'));
+  const expectedCommandIds = new Set(
+    commandSources.map(path =>
+      relative(commandRoot, path).replace(/\.ts$/, '').replaceAll('\\', ':').replaceAll('/', ':'),
+    ),
+  );
+  for (const sourcePath of commandSources) {
+    const outputPath = `dist/cli/commands/${relative(commandRoot, sourcePath)
+      .replace(/\.ts$/, '.js')
+      .replaceAll('\\', '/')}`;
+    if (!artifact.files.has(outputPath)) {
+      errors.push(`CLI command output "${outputPath}" is absent from the tarball`);
+    }
+  }
+  if (!artifact.files.has('dist/cli/dev-runner.js')) {
+    errors.push('CLI dev runner is absent from the tarball');
+  }
+
+  const manifest = JSON.parse(
+    readFileSync(join(artifact.pkg.stageDir, '.oclif.manifest.json'), 'utf8'),
+  ) as {
+    commands?: Record<string, { id?: string }> | Array<{ id?: string }>;
+  };
+  const commands = Array.isArray(manifest.commands)
+    ? manifest.commands
+    : Object.values(manifest.commands ?? {});
+  const actualCommandIds = new Set(commands.flatMap(command => (command.id ? [command.id] : [])));
+  for (const id of expectedCommandIds) {
+    if (!actualCommandIds.has(id)) {
+      errors.push(`CLI command "${id}" is absent from the packed oclif manifest`);
+    }
+  }
+  if (actualCommandIds.size !== expectedCommandIds.size) {
+    errors.push(
+      `packed oclif manifest has ${actualCommandIds.size} commands; expected ${expectedCommandIds.size}`,
+    );
+  }
+  return errors;
+}
+
 export function findPackedManifestErrors(
   manifest: PackageManifest,
   packedFiles: ReadonlySet<string>,
@@ -455,6 +507,13 @@ export async function verifyPackedArtifacts(rootDir = process.cwd()): Promise<vo
           error => `${artifact.pkg.name}: ${error}`,
         ),
       );
+      if (artifact.pkg.name === ROOT_PACKAGE) {
+        manifestErrors.push(
+          ...findRootPackedSurfaceErrors(artifact, rootDir).map(
+            error => `${artifact.pkg.name}: ${error}`,
+          ),
+        );
+      }
     }
     if (manifestErrors.length > 0) {
       throw new Error(

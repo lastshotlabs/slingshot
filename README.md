@@ -1,226 +1,281 @@
 # Slingshot
 
-A config-driven backend framework for TypeScript. Hono under the hood, plugins on top,
-typed entities and generated routes everywhere in between.
+Build a typed backend by declaring packages, entities, routes, and infrastructure—not by
+assembling the same plumbing for every service.
 
-> **Status: pre-1.0.** Public API surface is mostly stable but still evolving. The
-> production-track plugins listed below are hardening for 1.0; experimental plugins are
-> labelled as such. No external consumers yet — feedback welcome.
+Slingshot is a TypeScript backend framework built on
+[Hono](https://hono.dev/). One `app.config.ts` can produce:
 
-## What you get
+- typed routes and generated OpenAPI documentation;
+- entity CRUD, validation, operations, and migrations;
+- swappable Memory, SQLite, PostgreSQL, MongoDB, and Redis-backed infrastructure;
+- events, permissions, realtime, jobs, workflows, webhooks, and observability;
+- production startup checks, health/readiness endpoints, and operational tooling.
 
-A single `app.config.ts` declares your app: which plugins are loaded, which database
-adapters back them, where secrets come from, what events are exposed. From that one file
-you get:
+The root framework, core contracts, and entity system are stable and published on npm's
+`latest` channel. Package maturity is declared and checked per package—see
+[Package maturity](#package-maturity).
 
-- A typed Hono app with all your routes mounted, OpenAPI generated, and middleware composed
-  in dependency order.
-- Entity-backed CRUD with generated handlers, validation, and adapter pluggability across
-  Memory, SQLite, Postgres, and Mongo.
-- Cross-cutting features — auth, permissions, orchestration, webhooks, mail,
-  notifications, search, multi-tenancy — that you opt into per-plugin and configure
-  consistently.
-- A CLI that handles bootstrapping (`slingshot init`), migrations (`slingshot migrate`),
-  local dev (`slingshot dev`), and production starts (`slingshot start`).
+[Documentation](https://lastshotlabs.github.io/slingshot/) ·
+[Quick start](https://lastshotlabs.github.io/slingshot/quick-start/) ·
+[Examples](https://github.com/lastshotlabs/slingshot/tree/main/examples) ·
+[npm packages](https://www.npmjs.com/org/lastshotlabs)
 
-You don't build the framework. You declare an app.
+## Start in one minute
 
-## Registry setup
-
-`@lastshotlabs/*` packages are published publicly on
-[npm](https://www.npmjs.com/org/lastshotlabs). No registry override or authentication is
-required to install them.
-
-## Install
+Slingshot supports Bun and Node.js 20 or newer. The examples use Bun.
 
 ```bash
-bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-core
+mkdir my-api && cd my-api
+bun init -y
+bun add @lastshotlabs/slingshot hono zod
 ```
 
-Add whichever feature plugins you need — see [Capabilities](#capabilities) below.
+Create `app.config.ts`:
 
-## Quickstart
+```ts
+import { defineApp, definePackage, domain, route } from '@lastshotlabs/slingshot';
 
-```typescript title="app.config.ts"
-import { defineApp } from '@lastshotlabs/slingshot';
-import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+const api = definePackage({
+  name: 'api',
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          summary: 'Health check',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+  ],
+});
 
 export default defineApp({
   port: 3000,
-  security: { signing: { secret: process.env.JWT_SECRET! } },
-  plugins: [
-    createAuthPlugin({
-      auth: { primaryField: 'email', roles: ['user', 'admin'], defaultRole: 'user' },
-      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-    }),
-  ],
+  packages: [api],
 });
 ```
+
+Start it:
 
 ```bash
-slingshot start
+bunx slingshot start
+curl http://localhost:3000/health
+# {"ok":true}
 ```
 
-That's a real, working app: registration, login, JWT sessions, route protection. Swap
-`memory` for `sqlite` / `postgres` to make it durable.
+The OpenAPI UI is available at `http://localhost:3000/docs`.
 
-For programmatic composition (tests, dynamic configs), `createServer()` takes the same
-shape:
+From here:
 
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+- [define an entity](https://lastshotlabs.github.io/slingshot/quick-start/#step-2-add-a-data-model)
+  to generate CRUD routes;
+- [compose an app](https://lastshotlabs.github.io/slingshot/composing-an-app/) from
+  packages, contracts, capabilities, and events;
+- [prepare for production](https://lastshotlabs.github.io/slingshot/guides/production-readiness/)
+  with durable stores, explicit tenancy, secrets, migrations, and readiness checks.
 
-await createServer({
-  port: 3000,
-  security: { signing: { secret: process.env.JWT_SECRET! } },
-  plugins: [
-    createAuthPlugin({
-      /* ... */
-    }),
-  ],
+You can also run `slingshot init my-api` for the interactive application scaffold.
+
+## The authoring model
+
+```text
+app.config.ts
+└── defineApp(...)
+    ├── runtime, databases, security, tenancy, observability
+    └── definePackage(...)
+        ├── entities      → CRUD, operations, validation, storage
+        ├── routes        → typed domain endpoints
+        ├── events        → governed, versioned messages
+        └── contracts     → typed capabilities shared between packages
+```
+
+The framework validates and orders the graph at startup, builds a per-app context, mounts
+middleware and routes, connects infrastructure, and freezes registries before serving
+traffic. Package boundaries remain explicit:
+
+- **Contracts and capabilities** expose typed services without reaching into another
+  package's internals.
+- **Governed events** carry versioned envelopes and support transactional outbox/inbox
+  delivery.
+- **Entities** provide a backend-neutral authoring model with conformance-tested adapters.
+- **Request and execution context** carries actor, tenant, correlation, causation, and
+  idempotency identity across supported boundaries.
+
+## Define data once
+
+```ts
+import { defineEntity, field } from '@lastshotlabs/slingshot';
+
+export const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
 });
 ```
 
-## Capabilities
+Mounting this entity in a package generates create, list, read, update, and delete routes
+with request validation and OpenAPI schemas. Add domain operations when CRUD is not the
+right abstraction.
 
-Slingshot ships as ~30 packages across four maturity tiers. Reach for `core` and
-`entity` first; layer in production plugins as you need them; stay clear of the
-experimental and deferred tiers unless you're actively contributing.
+[Entity guide](https://lastshotlabs.github.io/slingshot/core-features/data-and-entities/) ·
+[Operations](https://lastshotlabs.github.io/slingshot/entity-system/operations/) ·
+[Backend support](https://lastshotlabs.github.io/slingshot/reference/entity-backend-support/)
 
-### Core path — start here
+## Production capabilities
 
-| Package            | Purpose                                                         |
-| ------------------ | --------------------------------------------------------------- |
-| `slingshot-core`   | Plugin contract, app context, event bus, persistence resolution |
-| `slingshot-entity` | `defineEntity`, generated CRUD, code generation, search hooks   |
+Slingshot includes production-oriented contracts beyond route generation:
 
-### Production path — hardening for 1.0
+- **Migration engine v2** — deterministic risk plans, explicit rename intent, approval
+  digests, deployment locks, checksums, resumable execution, and verification.
+- **Transactional events** — PostgreSQL and SQLite outbox/inbox persistence,
+  acknowledged BullMQ/Kafka delivery, bounded retries, retention, replay validation, and
+  authenticated operator routes.
+- **Tenant boundaries** — explicit single- or multi-tenant modes, immutable execution
+  snapshots, boundary conformance evidence, and optional PostgreSQL row-level security.
+- **Operational safety** — startup validation, liveness/readiness, metrics, tracing,
+  audit logging, rate limiting, secrets providers, graceful shutdown, and packed-artifact
+  checks.
+- **Runtime choice** — Bun, Node.js, and edge runtime packages with explicit capability
+  boundaries.
 
-| Package                                     | Purpose                                                                          |
-| ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `slingshot-permissions`                     | RBAC, grants, evaluators, adapter factories                                      |
-| `slingshot-organizations`                   | Multi-tenancy, org membership, scoping                                           |
-| `slingshot-orchestration-engine`            | Task and workflow runtime; in-process and durable engines                        |
-| `slingshot-orchestration-bullmq`            | BullMQ-backed orchestration adapter (Redis)                                      |
-| `slingshot-orchestration-temporal`          | Temporal-backed orchestration adapter                                            |
-| `slingshot-orchestration`                   | Mounts the orchestration runtime as a Slingshot plugin                           |
-| `slingshot-bullmq`                          | Durable event-bus adapter (Redis)                                                |
-| `slingshot-assets`                          | File uploads, presigned URLs, storage adapters                                   |
-| `slingshot-search`                          | Search plugin with Meilisearch / Typesense / Elasticsearch / Algolia / DB-native |
-| `slingshot-webhooks`                        | Outbound delivery + inbound providers, governed by event registry                |
-| `slingshot-kafka`                           | Kafka adapters and producer integration                                          |
-| `slingshot-admin`                           | Admin route surface and ops tooling                                              |
-| `slingshot-mail`                            | Transactional mail with Resend / SES / Postmark / SendGrid providers             |
-| `slingshot-notifications`                   | Notification storage, preference resolution, dispatcher                          |
-| `slingshot-push`                            | Web push & mobile push adapters                                                  |
-| `slingshot-ai`                              | Provider-neutral AI generation, moderation, usage, and spend controls            |
-| `slingshot-billing`                         | Billing, checkout, donations, webhooks, and entitlement resolution               |
-| `slingshot-ssr` / `slingshot-ssg`           | Server-side rendering and static-site generation                                 |
-| `slingshot-runtime-bun` / `-node` / `-edge` | Runtime adapters                                                                 |
-| `slingshot-postgres`                        | Postgres connection helper and auth adapter                                      |
+These features have configuration and deployment requirements. Do not treat a memory
+adapter or an omitted production setting as a durable default. Follow the
+[production-readiness guide](https://lastshotlabs.github.io/slingshot/guides/production-readiness/)
+before deploying.
 
-### Experimental — API may change
+## Package maturity
 
-`slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
+Slingshot publishes 44 public packages. Their category, stability, required npm channel,
+and evidence gates come from the repository's versioned `package-maturity.json`; CI and
+the publish workflow reject drift.
 
-### Deferred — not actively maintained
+### Core
 
-`slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`,
-`slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`,
-`slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
+| Package                          | Purpose                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| `@lastshotlabs/slingshot`        | App assembly, configuration, server lifecycle, CLI   |
+| `@lastshotlabs/slingshot-core`   | Neutral contracts, context, events, transactions     |
+| `@lastshotlabs/slingshot-entity` | Entity authoring, adapters, CRUD, migration planning |
+
+### Production path
+
+| Area                      | Packages                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Access and administration | `slingshot-admin`, `slingshot-organizations`, `slingshot-permissions`                                |
+| Data and delivery         | `slingshot-assets`, `slingshot-postgres`, `slingshot-search`, `slingshot-webhooks`                   |
+| Messaging                 | `slingshot-bullmq`, `slingshot-kafka`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push` |
+| Orchestration             | `slingshot-orchestration`, `-engine`, `-bullmq`, `-temporal`                                         |
+| Rendering and runtimes    | `slingshot-ssg`, `slingshot-ssr`, `slingshot-runtime-bun`, `-node`, `-edge`                          |
+
+Core and production-path packages are stable and use the `latest` dist-tag.
+
+### Experimental
+
+Authentication and identity packages currently use the `next` channel:
+
+```bash
+bun add \
+  @lastshotlabs/slingshot-auth@next \
+  @lastshotlabs/slingshot-oauth@next
+```
+
+`slingshot-auth`, `slingshot-m2m`, `slingshot-oauth`, `slingshot-oidc`, and
+`slingshot-scim` emit a warning when their factory is used. Their APIs may change while
+the identity surface is hardened.
+
+### Deferred
+
+Deferred packages remain published and independently pack-verified, but are not the
+default production recommendation. They include AI, billing, community/chat features,
+media and interaction helpers, the game engine, infrastructure helpers,
+`slingshot-events`, and `slingshot-ssr-tanstack`.
+
+Read the
+[generated maturity table](https://lastshotlabs.github.io/slingshot/core-features/generated-maturity/)
+before choosing a package. A package's version number alone is not its maturity claim.
 
 ## CLI
 
-```bash
-slingshot init              # scaffold a new app
-slingshot dev               # local dev server (--watch)
-slingshot start             # production start (uses ./app.config.ts)
-slingshot migrate generate  # create a migration from the current schema
-slingshot migrate apply     # apply pending migrations
-slingshot migrate status    # report applied vs pending
-slingshot migrate dev       # generate + apply in one step (development)
-slingshot generate          # regenerate entity code
-slingshot deploy            # deploy hooks (provider-specific)
-```
-
-Run `slingshot <command> --help` for the flags on each.
-
-## Architecture at a glance
-
-When `createServer()` (or `slingshot start`) runs, the bootstrap walks a fixed sequence:
-
-1. Validate the root config.
-2. Sort plugins by their declared `dependencies`.
-3. Resolve framework secrets from the configured provider.
-4. Build infrastructure (DB pools, caches, queues, runtime adapters).
-5. Construct the per-instance Slingshot context, frozen at the end of bootstrap.
-6. Mount plugin middleware in dependency order (`setupMiddleware`).
-7. Register routes (`setupRoutes`), then mount OpenAPI docs.
-8. Run post-route hooks (`setupPost`) — typically event-bus subscriptions.
-9. Freeze the context and start listening.
-
-Plugins reach across packages through three mechanisms:
-
-- **Events** — typed via `defineEvent`; published from anywhere, subscribed from anywhere.
-- **Capabilities** — typed values one plugin exposes (`auth.lifecycle`,
-  `mail.sender`, etc.) for others to consume without imports.
-- **HookServices** — typed accessor bag on out-of-request callbacks (auth lifecycle hooks,
-  workflow hooks, dead-letter callbacks) so background code can read entities, resolve
-  capabilities, and publish events without capturing the `app` reference manually.
-
-## Examples
-
-Working apps in [`examples/`](examples/):
-
-| Example                                                        | What it shows                                              |
-| -------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`with-auth`](examples/with-auth/)                             | Minimal auth setup                                         |
-| [`organizations`](examples/organizations/)                     | Multi-tenant org scoping                                   |
-| [`config-driven-domain`](examples/config-driven-domain/)       | Entity definitions, generated routes, custom operations    |
-| [`content-platform`](examples/content-platform/)               | Content + assets + permissions composition                 |
-| [`webhooks`](examples/webhooks/)                               | Outbound webhook delivery with the registry-governed model |
-| [`orchestration`](examples/orchestration/)                     | In-process tasks and workflows (memory / sqlite adapters)  |
-| [`orchestration-bullmq`](examples/orchestration-bullmq/)       | Durable orchestration with BullMQ + Redis                  |
-| [`collaboration-workspace`](examples/collaboration-workspace/) | 12-plugin community workspace, end-to-end                  |
-| [`game-engine`](examples/game-engine/)                         | Multiplayer game runtime with phases, turns, scoring       |
-
-## Documentation
-
-The full documentation lives at [`packages/docs/`](packages/docs/) and is published at
-**https://lastshotlabs.github.io/slingshot/**. Key entry points:
-
-- **Getting started** — `getting-started`, `first-steps`, `quick-start`, `installation`
-- **Composing an app** — `composing-an-app`, `app-authoring/app-config`, `authoring/plugin-interface`
-- **Authoring routes** — `authoring-routes`, `app-authoring/routes-and-handlers`,
-  `app-authoring/validation`, `entity-system/route-policy`
-- **Working with data** — `core-features/data-and-entities`, `entity-system/define-entity`,
-  `entity-system/operations`, `entity-system/storage-and-adapter-wiring`
-- **Security** — `core-features/auth`, `core-features/permissions`, `guides/security`,
-  `guides/multi-tenancy`
-- **Operations** — `core-features/jobs-and-orchestration`, `app-authoring/health-checks`,
-  `app-authoring/metrics`, `app-authoring/distributed-tracing`, `guides/observability`
-- **Production** — `guides/production-readiness`, `guides/deployment`, `guides/runtime`,
-  `guides/secrets`, `guides/horizontal-scaling`
-
-## Tests
+The package installs the `slingshot` executable.
 
 ```bash
-bun run test              # default non-Docker suite (root + isolated + per-package)
-bun run test:docker       # Docker-backed integration suite (Postgres, Mongo, Redis, etc.)
-bun run test:e2e          # end-to-end suite
-bun run test:all          # composition: test → test:docker → test:e2e
+slingshot init my-api          # scaffold an application
+slingshot dev                  # run the development server
+slingshot start                # boot app.config.ts
+slingshot generate             # regenerate entity artifacts
+
+slingshot migrate generate     # generate migrations
+slingshot migrate plan         # inspect deterministic risk and approval plan
+slingshot migrate apply        # apply pending migrations
+slingshot migrate verify       # verify history, checksums, and plan invariants
+slingshot migrate status       # report applied and pending migrations
+
+slingshot events outbox status # inspect event delivery health
+slingshot events outbox list   # list bounded operational projections
+slingshot events outbox retry  # audited break-glass replay
+slingshot infra check          # audit deployment infrastructure
+slingshot secrets check        # validate required secrets
 ```
 
-`test:all` is a composition of the other entrypoints — not a separate universe.
+Run `slingshot <command> --help` for command-specific flags.
+
+## Install only what you use
+
+The root package provides the application framework and CLI. Feature packages and
+provider SDKs are installed separately so an app controls its runtime surface.
+
+```bash
+# Durable PostgreSQL support
+bun add @lastshotlabs/slingshot-postgres pg
+
+# Permissions and organizations
+bun add @lastshotlabs/slingshot-permissions @lastshotlabs/slingshot-organizations
+
+# Durable jobs and workflows
+bun add @lastshotlabs/slingshot-orchestration \
+  @lastshotlabs/slingshot-orchestration-bullmq bullmq
+
+# Node runtime
+bun add @lastshotlabs/slingshot-runtime-node
+```
+
+See the complete
+[installation matrix](https://lastshotlabs.github.io/slingshot/installation/) for optional
+peers and provider packages.
+
+## Published package surface
+
+`@lastshotlabs/slingshot` publishes:
+
+- the compiled framework and TypeScript declarations;
+- the `slingshot` CLI and its command manifest;
+- entry points for the default framework, `mongo`, `redis`, `queue`, and `testing`;
+- this README, the license, and package metadata.
+
+Repository examples and documentation sources are intentionally not part of the npm
+tarball. Use the absolute links in this README when viewing it on npm.
+
+## Documentation and support
+
+- [Documentation](https://lastshotlabs.github.io/slingshot/)
+- [Quick start](https://lastshotlabs.github.io/slingshot/quick-start/)
+- [Examples](https://github.com/lastshotlabs/slingshot/tree/main/examples)
+- [Release notes](https://github.com/lastshotlabs/slingshot/releases)
+- [Issues](https://github.com/lastshotlabs/slingshot/issues)
 
 ## Contributing
 
-Internal docs in [`slingshot-specs/`](slingshot-specs/) cover the engineering rules,
-documentation policy, specs process, and detailed agent context strategy. The short
-version: keep the diff small, prefer editing existing files, don't add abstractions
-beyond what the task requires, write no comments unless the _why_ is non-obvious.
+Contributions should include focused tests, public API documentation, and any generated
+evidence affected by the change. Run the relevant package tests during development and
+`bun run hardening:core` before submitting broad framework changes.
 
 ## License
 
-MIT.
+MIT

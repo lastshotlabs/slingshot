@@ -6,10 +6,14 @@
     "!packages/docs"
   ],
   "version": "3.1.0",
-  "description": "Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.",
+  "description": "Config-driven TypeScript backend framework for typed APIs, entities, events, workflows, and production operations.",
   "repository": {
     "type": "git",
     "url": "https://github.com/lastshotlabs/slingshot.git"
+  },
+  "homepage": "https://lastshotlabs.github.io/slingshot/",
+  "bugs": {
+    "url": "https://github.com/lastshotlabs/slingshot/issues"
   },
   "license": "MIT",
   "keywords": [
@@ -17,6 +21,13 @@
     "hono",
     "api",
     "framework",
+    "backend",
+    "typescript",
+    "entities",
+    "migrations",
+    "events",
+    "workflows",
+    "postgresql",
     "auth",
     "websocket",
     "openapi"

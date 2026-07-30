@@ -11,7 +11,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 - Version: `3.1.0`
 - Kind: Root package
 - Role: app assembly package
-- Description: Config-driven backend framework built on Hono. Plugin-driven, TypeScript-first.
+- Description: Config-driven TypeScript backend framework for typed APIs, entities, events, workflows, and production operations.
 - Workspace path: `.`
 - Entry point: `src/index.ts`
 

@@ -56,6 +56,12 @@ describe('root cli registry/platform surface', () => {
         ? tsupConfig.banner({ format: 'esm' })
         : tsupConfig.banner;
     expect(entry?.['cli/index']).toBe('src/cli/index.ts');
+    expect(entry?.['cli/dev-runner']).toBe('src/cli/dev-runner.ts');
+    expect(entry?.['cli/commands/dev']).toBe('src/cli/commands/dev.ts');
+    expect(entry?.['cli/commands/infra/check']).toBe('src/cli/commands/infra/check.ts');
+    expect(entry?.['cli/commands/migrate/plan']).toBe('src/cli/commands/migrate/plan.ts');
+    expect(entry?.['cli/commands/migrate/verify']).toBe('src/cli/commands/migrate/verify.ts');
+    expect(Object.keys(entry ?? {})).toHaveLength(44);
     expect(banner?.js).toContain('#!/usr/bin/env bun');
     expect(vitest.default.test?.environment).toBe('node');
     expect(vitest.default.test?.include).toEqual(['tests/node-runtime/**/*.test.ts']);

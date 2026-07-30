@@ -1,39 +1,29 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'tsup';
+
+export function collectCommandEntries(directory = 'src/cli/commands'): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      Object.assign(entries, collectCommandEntries(path));
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+    entries[path.slice('src/'.length, -'.ts'.length).replaceAll('\\', '/')] = path.replaceAll(
+      '\\',
+      '/',
+    );
+  }
+  return entries;
+}
 
 export default defineConfig({
   entry: {
     'cli/index': 'src/cli/index.ts',
-    'cli/commands/init': 'src/cli/commands/init.ts',
-    'cli/commands/deploy': 'src/cli/commands/deploy.ts',
-    'cli/commands/start': 'src/cli/commands/start.ts',
-    'cli/commands/platform/init': 'src/cli/commands/platform/init.ts',
-    'cli/commands/platform/deploy': 'src/cli/commands/platform/deploy.ts',
-    'cli/commands/platform/sync': 'src/cli/commands/platform/sync.ts',
-
-    'cli/commands/platform/destroy': 'src/cli/commands/platform/destroy.ts',
-    'cli/commands/platform/pull': 'src/cli/commands/platform/pull.ts',
-    'cli/commands/stacks/create': 'src/cli/commands/stacks/create.ts',
-    'cli/commands/stacks/list': 'src/cli/commands/stacks/list.ts',
-    'cli/commands/stacks/inspect': 'src/cli/commands/stacks/inspect.ts',
-    'cli/commands/secrets/push': 'src/cli/commands/secrets/push.ts',
-    'cli/commands/secrets/pull': 'src/cli/commands/secrets/pull.ts',
-    'cli/commands/secrets/check': 'src/cli/commands/secrets/check.ts',
-    'cli/commands/registry/init': 'src/cli/commands/registry/init.ts',
-    'cli/commands/servers/remove': 'src/cli/commands/servers/remove.ts',
-    'cli/commands/servers/inspect': 'src/cli/commands/servers/inspect.ts',
-    'cli/commands/servers/add': 'src/cli/commands/servers/add.ts',
-    'cli/commands/infra/generate': 'src/cli/commands/infra/generate.ts',
-    'cli/commands/generate': 'src/cli/commands/generate.ts',
-    'cli/commands/migrate/generate': 'src/cli/commands/migrate/generate.ts',
-    'cli/commands/migrate/apply': 'src/cli/commands/migrate/apply.ts',
-    'cli/commands/migrate/status': 'src/cli/commands/migrate/status.ts',
-    'cli/commands/migrate/dev': 'src/cli/commands/migrate/dev.ts',
-    'cli/commands/migrate/reset': 'src/cli/commands/migrate/reset.ts',
-    'cli/commands/events/outbox/status': 'src/cli/commands/events/outbox/status.ts',
-    'cli/commands/events/outbox/list': 'src/cli/commands/events/outbox/list.ts',
-    'cli/commands/events/outbox/retry': 'src/cli/commands/events/outbox/retry.ts',
-    'cli/commands/events/outbox/purge': 'src/cli/commands/events/outbox/purge.ts',
-    'cli/commands/events/inbox/purge': 'src/cli/commands/events/inbox/purge.ts',
+    'cli/dev-runner': 'src/cli/dev-runner.ts',
+    ...collectCommandEntries(),
   },
   format: ['esm'],
   dts: false,

@@ -1,5 +1,4 @@
 import { Command, Flags } from '@oclif/core';
-import { spawn } from 'bun';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -46,7 +45,7 @@ export default class Dev extends Command {
       env.SLINGSHOT_DEV_CONFIG = resolve(cwd, flags.config);
     }
 
-    const proc = spawn({
+    const proc = Bun.spawn({
       cmd: ['bun', '--watch', runner],
       cwd,
       stdio: ['inherit', 'inherit', 'inherit'],

@@ -57,7 +57,7 @@ describe('event replay validation', () => {
       currentVersion: 2,
       adapted: true,
     });
-    expect(prepared.envelope?.payload).toEqual({ plugins: ['a'], source: 'legacy' });
+    expect(prepared.envelope?.payload as unknown).toEqual({ plugins: ['a'], source: 'legacy' });
     expect(prepared.envelope?.meta.schemaVersion).toBe(2);
     expect(JSON.parse(stored).meta.schemaVersion).toBe(1);
     expect(prepared.envelope?.meta.eventId).toBe(JSON.parse(stored).meta.eventId);

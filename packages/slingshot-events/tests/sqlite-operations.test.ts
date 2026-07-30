@@ -76,27 +76,29 @@ describe('SQLite event reliability operations', () => {
         `UPDATE slingshot_event_outbox
             SET envelope_json = ?, last_error_message = ?
           WHERE event_id = 'event-detail'`,
-        JSON.stringify({
-          key: 'orders:created',
-          payload: {
-            orderId: 'order-1',
-            password: 'do-not-show',
-            nested: { authorization: 'Bearer abc123', note: 'token=abc123' },
-          },
-          meta: {
-            eventId: 'event-detail',
-            occurredAt: '2026-01-01T00:00:00Z',
-            schemaVersion: 2,
-            ownerPlugin: 'orders',
-            exposure: ['internal'],
-            scope: { tenantId: 'tenant-1', apiKey: 'hidden' },
-            requestTenantId: 'tenant-1',
-            requestId: 'request-1',
-            correlationId: 'correlation-1',
-            source: 'job',
-          },
-        }),
-        'failed with token=abc123',
+        [
+          JSON.stringify({
+            key: 'orders:created',
+            payload: {
+              orderId: 'order-1',
+              password: 'do-not-show',
+              nested: { authorization: 'Bearer abc123', note: 'token=abc123' },
+            },
+            meta: {
+              eventId: 'event-detail',
+              occurredAt: '2026-01-01T00:00:00Z',
+              schemaVersion: 2,
+              ownerPlugin: 'orders',
+              exposure: ['internal'],
+              scope: { tenantId: 'tenant-1', apiKey: 'hidden' },
+              requestTenantId: 'tenant-1',
+              requestId: 'request-1',
+              correlationId: 'correlation-1',
+              source: 'job',
+            },
+          }),
+          'failed with token=abc123',
+        ],
       );
       const operations = createSqliteEventReliabilityOperations(
         db as unknown as RuntimeSqliteDatabase,

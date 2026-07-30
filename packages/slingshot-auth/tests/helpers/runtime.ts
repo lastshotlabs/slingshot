@@ -105,6 +105,7 @@ export function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
         meta: {
           eventId: 'test-event-id',
           occurredAt: new Date(0).toISOString(),
+          schemaVersion: 1,
           ownerPlugin: 'slingshot-auth-test',
           exposure: ['internal'] as const,
           scope: null,
@@ -112,7 +113,7 @@ export function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
         },
       };
     },
-  };
+  } as unknown as SlingshotEvents;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@
     "scripts/generate-entity-support-matrix.ts",
     "scripts/event-reliability-conformance.ts",
     "scripts/generate-event-reliability-support.ts",
+    "scripts/generate-maturity-evidence.ts",
     "tsup.cli.config.ts",
     "vitest.config.ts"
   ],

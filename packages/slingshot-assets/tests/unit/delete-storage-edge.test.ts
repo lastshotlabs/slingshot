@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import type { SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import {
   createDeleteStorageFileMiddleware,
   createOrphanedKeyRegistry,
@@ -171,7 +172,7 @@ describe('deleteStorageFile middleware — onOrphanedKey callback', () => {
       list: mock(() => []),
       register: mock(() => {}),
       consume: mock(() => () => false),
-    };
+    } as unknown as SlingshotEvents;
 
     const orphanRegistry = createOrphanedKeyRegistry();
     const originalRecord = orphanRegistry.record.bind(orphanRegistry);
@@ -232,7 +233,7 @@ describe('deleteStorageFile middleware — events publishing', () => {
       list: mock(() => []),
       register: mock(() => {}),
       consume: mock(() => () => false),
-    };
+    } as unknown as SlingshotEvents;
 
     const middleware = createDeleteStorageFileMiddleware({
       storage: {
@@ -297,7 +298,7 @@ describe('deleteStorageFile middleware — events publishing', () => {
       list: mock(() => []),
       register: mock(() => {}),
       consume: mock(() => () => false),
-    };
+    } as unknown as SlingshotEvents;
 
     const middleware = createDeleteStorageFileMiddleware({
       storage: {

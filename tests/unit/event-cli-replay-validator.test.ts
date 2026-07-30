@@ -15,7 +15,8 @@ describe('event CLI replay validator', () => {
           schemaVersion: 2,
           ownerPlugin: 'orders',
           exposure: ['internal'],
-          schema: z.object({ orderId: z.string(), currency: z.string() }),
+          schema: z.object({ orderId: z.string(), currency: z.string() }) as never,
+          resolveScope: () => null,
         }),
       );
       events.registerVersionAdapter({

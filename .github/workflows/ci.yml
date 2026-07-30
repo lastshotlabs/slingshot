@@ -65,6 +65,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install docs dependencies
+        working-directory: packages/docs
+        run: bun install --frozen-lockfile
+
       - name: Build
         run: bun run build
 
@@ -158,6 +162,9 @@ jobs:
 
       - name: Start PostgreSQL, Redis, and Kafka
         run: docker compose -f docker-compose.test.yml up -d --wait postgres redis redpanda
+
+      - name: Build packages
+        run: bun run build:packages
 
       - name: Verify generated reliability support docs
         run: bun run events:support:check

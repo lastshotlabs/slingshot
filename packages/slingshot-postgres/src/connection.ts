@@ -8,6 +8,7 @@ import {
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
+import { checkPostgresAuthSchema, requiresPostgresAuthSchema } from './adapter.js';
 
 const CREATE_POSTGRES_SCOPED_BUNDLE = Symbol.for('slingshot.createPostgresScopedBundle');
 
@@ -127,6 +128,18 @@ async function checkPostgresHealth(
       effectiveTimeoutMs,
       `[slingshot-postgres] readiness check exceeded ${effectiveTimeoutMs}ms`,
     );
+    if (requiresPostgresAuthSchema(pool)) {
+      const schema = await withTimeout(
+        checkPostgresAuthSchema(pool),
+        effectiveTimeoutMs,
+        `[slingshot-postgres] auth schema readiness check exceeded ${effectiveTimeoutMs}ms`,
+      );
+      if (!schema.ok) {
+        throw new Error(
+          `[slingshot-postgres] auth schema is not ready: ${schema.error ?? 'unknown error'}`,
+        );
+      }
+    }
     return {
       ok: true,
       latencyMs: performance.now() - startedAt,

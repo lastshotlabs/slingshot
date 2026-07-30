@@ -9,6 +9,8 @@ import type {
   NotifyInput,
   SlingshotEventBus,
   SlingshotEvents,
+  TransactionManager,
+  TransactionScope,
 } from '@lastshotlabs/slingshot-core';
 import { createConsoleLogger, createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { freezeNotificationData } from './data';
@@ -77,6 +79,15 @@ export interface CreateNotificationBuilderOptions {
    * `onPublishError` call so callbacks see current framework state.
    */
   readonly getHookServices?: () => HookServices | undefined;
+  /** Framework-owned transaction wiring for atomic notification creation and outbox publication. */
+  readonly reliability?: {
+    readonly store: 'postgres';
+    readonly transactions: TransactionManager;
+    readonly resolveNotifications: (scope: TransactionScope) => NotificationAdapter;
+    readonly resolvePreferences: (scope: TransactionScope) => NotificationPreferenceAdapter;
+  };
+  /** Internal active scope supplied by the reliability wrapper. */
+  readonly transaction?: TransactionScope;
 }
 
 /**
@@ -154,6 +165,18 @@ export function createNotificationBuilder(
   }
 
   async function notify(input: NotifyInput): Promise<NotificationRecord | null> {
+    if (options.reliability) {
+      const reliability = options.reliability;
+      return reliability.transactions.run(reliability.store, scope =>
+        createNotificationBuilder({
+          ...options,
+          notifications: reliability.resolveNotifications(scope),
+          preferences: reliability.resolvePreferences(scope),
+          reliability: undefined,
+          transaction: scope,
+        }).notify(input),
+      );
+    }
     if (input.actorId === input.userId && !input.allowSelfNotify) {
       return null;
     }
@@ -285,8 +308,12 @@ export function createNotificationBuilder(
             actorId: input.actorId ?? input.userId,
             source: 'system',
             requestTenantId: null,
+            ...(options.transaction
+              ? { delivery: 'outbox' as const, transaction: options.transaction }
+              : {}),
           });
         } catch (err: unknown) {
+          if (options.transaction) throw err;
           reportPublishError(
             'notifications:notification.updated',
             payload,
@@ -304,8 +331,12 @@ export function createNotificationBuilder(
             actorId: notification.actorId ?? notification.userId,
             source: 'system',
             requestTenantId: null,
+            ...(options.transaction
+              ? { delivery: 'outbox' as const, transaction: options.transaction }
+              : {}),
           });
         } catch (err: unknown) {
+          if (options.transaction) throw err;
           reportPublishError(
             'notifications:notification.created',
             payload,
@@ -331,8 +362,12 @@ export function createNotificationBuilder(
           // System-source emit (called from notify() helper, not an HTTP route).
           // Notification's own tenantId is on the payload + scope, not here.
           requestTenantId: null,
+          ...(options.transaction
+            ? { delivery: 'outbox' as const, transaction: options.transaction }
+            : {}),
         });
       } catch (err: unknown) {
+        if (options.transaction) throw err;
         reportPublishError(
           'notifications:notification.created',
           payload,

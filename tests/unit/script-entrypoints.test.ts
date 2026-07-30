@@ -566,6 +566,14 @@ describe('script entrypoints', () => {
     expect(
       dockerModule
         .createDockerTestCommands([])
+        .some(
+          (step: { command: string[] }) =>
+            step.command.join(' ') === 'bun run events:conformance:report',
+        ),
+    ).toBe(true);
+    expect(
+      dockerModule
+        .createDockerTestCommands([])
         .some((step: { command: string[] }) =>
           step.command.includes('packages/slingshot-entity/tests/conformance/mongo.test.ts'),
         ),

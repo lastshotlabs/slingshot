@@ -4,6 +4,7 @@ import type {
   SlingshotPackageDefinition,
 } from '@lastshotlabs/slingshot-core';
 import {
+  buildHookServices,
   createConsoleLogger,
   createNoopMetricsEmitter,
   deepFreeze,
@@ -428,13 +429,18 @@ export function createNotificationsPackage(
             },
           };
 
-      const createdListener = async (payload: unknown) => {
+      const createdListener = async (
+        payload: unknown,
+        deliveryContext?: { readonly idempotencyKey: string },
+      ) => {
         const event = payload as NotificationCreatedEventPayload;
         let adapterIndex = 0;
+        const failures: unknown[] = [];
         for (const adapter of deliveryAdapters) {
           try {
-            await adapter.deliver(event);
+            await adapter.deliver(event, deliveryContext);
           } catch (err) {
+            failures.push(err);
             pluginLogger.error(
               `[slingshot-notifications] Delivery adapter [${adapterIndex}] threw for notification "${event.notification.id}"`,
               errorLogFields(err),
@@ -442,9 +448,40 @@ export function createNotificationsPackage(
           }
           adapterIndex++;
         }
+        if (deliveryContext && failures.length > 0) {
+          throw new AggregateError(
+            failures,
+            `[slingshot-notifications] ${failures.length} reliable delivery adapter(s) failed`,
+          );
+        }
       };
 
-      bus.on('notifications:notification.created', createdListener);
+      const reliableDelivery =
+        config.reliability === false
+          ? null
+          : buildHookServices({
+              app,
+              pluginState: ctx?.pluginState ?? new Map(),
+              bus,
+              logger: pluginLogger,
+              pluginName: NOTIFICATIONS_PLUGIN_NAME,
+            });
+      const unsubscribeReliable =
+        config.reliability === false
+          ? null
+          : events.consume(
+              'notifications:notification.created',
+              (envelope, { eventId }) =>
+                createdListener(envelope.payload, { idempotencyKey: eventId }),
+              {
+                durable: true,
+                name: config.reliability.consumerName,
+                inbox: { store: config.reliability.store },
+              },
+            );
+      if (config.reliability === false) {
+        bus.on('notifications:notification.created', createdListener);
+      }
 
       const builderFactory = ({ source }: { source: string }) =>
         createNotificationBuilder({
@@ -460,6 +497,27 @@ export function createNotificationsPackage(
             windowMs: config.rateLimit.windowMs,
           },
           metrics: metricsProxy,
+          ...(config.reliability === false || !reliableDelivery
+            ? {}
+            : {
+                reliability: {
+                  store: config.reliability.store,
+                  transactions: reliableDelivery.transactions,
+                  resolveNotifications: scope =>
+                    wrapNotificationAdapter(
+                      validateNotificationAdapter(
+                        reliableDelivery.entities.get(notificationModule, { scope }),
+                      ),
+                      config.notificationTtlMs,
+                    ),
+                  resolvePreferences: scope =>
+                    wrapPreferenceAdapter(
+                      validateNotificationPreferenceAdapter(
+                        reliableDelivery.entities.get(notificationPreferenceModule, { scope }),
+                      ),
+                    ),
+                },
+              }),
         });
 
       // Capability publication is declarative on the package — see
@@ -520,7 +578,11 @@ export function createNotificationsPackage(
       }
 
       teardown = async () => {
-        bus.off('notifications:notification.created', createdListener);
+        if (config.reliability === false) {
+          bus.off('notifications:notification.created', createdListener);
+        } else {
+          unsubscribeReliable?.();
+        }
         if (sweepTimer) {
           clearInterval(sweepTimer);
           sweepTimer = null;

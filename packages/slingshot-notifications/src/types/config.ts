@@ -62,6 +62,26 @@ export const notificationsPluginConfigSchema = z.object({
     .describe(
       'Dispatcher loop settings for queued notification delivery. Default: enabled=true, intervalMs=30000, maxPerTick=500.',
     ),
+  reliability: z
+    .union([
+      z.literal(false),
+      z.object({
+        store: z
+          .literal('postgres')
+          .describe(
+            'PostgreSQL store shared by notification writes and transactional event reliability.',
+          ),
+        consumerName: z
+          .string()
+          .min(1)
+          .default('slingshot-notifications-delivery-v1')
+          .describe('Stable transactional inbox consumer identity.'),
+      }),
+    ])
+    .default(false)
+    .describe(
+      'Opt into atomic notification-created outbox publication and named inbox delivery. Requires matching app-level events.reliability configuration.',
+    ),
   rateLimit: z
     .object({
       perSourcePerUserPerWindow: z

@@ -164,6 +164,25 @@ describe('connectPostgres — connection errors', () => {
     expect(health.ok).toBe(false);
     expect(health.error).toContain('readiness check exceeded');
   });
+
+  test('healthCheck fails when a registered auth schema is absent', async () => {
+    queryFn = async sql =>
+      sql.includes('to_regclass')
+        ? { rows: [{ version_table: null, users_table: null }], rowCount: 1 }
+        : { rows: [{ ok: 1 }], rowCount: 1 };
+    const { connectPostgres } = await import(`../src/connection.ts?pool-auth=${Date.now()}`);
+    const { registerPostgresAuthSchemaRequirement } = await import('../src/adapter.js');
+    const result = await connectPostgres('postgresql://localhost/db', {
+      migrations: 'assume-ready',
+    });
+    registerPostgresAuthSchemaRequirement(result.pool);
+
+    const health = await result.healthCheck();
+
+    expect(health.ok).toBe(false);
+    expect(health.error).toContain('auth schema is not ready');
+    expect(health.error).toContain('not installed');
+  });
 });
 
 describe('pool runtime', () => {

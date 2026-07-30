@@ -75,4 +75,18 @@ describe('root entrypoints', () => {
 
     expect(typeof cliUtils.resolvePlatformConfig).toBe('function');
   });
+
+  test('event reliability operations expose loadable CLI command entrypoints', async () => {
+    const modules = await Promise.all([
+      import('../../src/cli/commands/events/inbox/purge.ts'),
+      import('../../src/cli/commands/events/outbox/list.ts'),
+      import('../../src/cli/commands/events/outbox/purge.ts'),
+      import('../../src/cli/commands/events/outbox/retry.ts'),
+      import('../../src/cli/commands/events/outbox/status.ts'),
+    ]);
+
+    for (const module of modules) {
+      expect(typeof module.default).toBe('function');
+    }
+  });
 });

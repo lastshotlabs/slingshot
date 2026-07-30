@@ -63,7 +63,7 @@ async function harness() {
   const consumer = createTransactionalEventConsumer('sqlite', bus, transactions, scope =>
     resolveInfra.call(transactions, scope),
   );
-  return { db, bus, consumer, resolveInfra };
+  return { db, bus, consumer, resolveInfra, transactions };
 }
 
 function envelope(): EventEnvelope<'app:ready'> {
@@ -178,6 +178,42 @@ describe('transactional event inbox consumer', () => {
 
     const scope = retained as TransactionScope;
     expect(() => resolveInfra.call(null, scope)).toThrow(TransactionScopeClosedError);
+  });
+
+  test('a restarted named consumer skips an already committed delivery', async () => {
+    const { db, bus, consumer, resolveInfra, transactions } = await harness();
+    const event = envelope();
+    let executions = 0;
+    const options = {
+      durable: true as const,
+      name: 'restart-proof-v1',
+      inbox: { store: 'sqlite' as const },
+    };
+    consumer.consume(
+      'app:ready',
+      () => {
+        executions++;
+      },
+      options,
+    );
+    deliver(bus, event);
+    await drain(bus);
+
+    const restarted = createTransactionalEventConsumer('sqlite', bus, transactions, scope =>
+      resolveInfra.call(null, scope),
+    );
+    restarted.consume(
+      'app:ready',
+      () => {
+        executions++;
+      },
+      options,
+    );
+    deliver(bus, event);
+    await drain(bus);
+
+    expect(db.query('SELECT * FROM slingshot_event_inbox').all()).toHaveLength(1);
+    expect(executions).toBe(1);
   });
 
   test('rejects a configured-store mismatch before subscription', async () => {

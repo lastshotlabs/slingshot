@@ -89,16 +89,16 @@ describe('rate limiting — error response format', () => {
   afterEach(() => handle.stop());
 
   test('429 response body contains error field', async () => {
-    await fetch(`${handle.baseUrl}/health`); // exhaust the 1 allowed
-    const res = await fetch(`${handle.baseUrl}/health`);
+    await fetch(`${handle.baseUrl}/cached`); // exhaust the 1 allowed
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
     const body = (await res.json()) as any;
     expect(body).toHaveProperty('error');
   });
 
   test('429 response Content-Type is application/json', async () => {
-    await fetch(`${handle.baseUrl}/health`);
-    const res = await fetch(`${handle.baseUrl}/health`);
+    await fetch(`${handle.baseUrl}/cached`);
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
   });
@@ -120,7 +120,7 @@ describe('rate limiting — global (non-tenanted) bucket', () => {
   afterEach(() => handle.stop());
 
   test('first 3 requests succeed, 4th is rate-limited', async () => {
-    const url = `${handle.baseUrl}/health`;
+    const url = `${handle.baseUrl}/cached`;
     for (let i = 0; i < 3; i++) {
       const res = await fetch(url);
       expect(res.status).toBe(200);
@@ -130,8 +130,8 @@ describe('rate limiting — global (non-tenanted) bucket', () => {
   });
 
   test('rate-limited response has non-empty body', async () => {
-    for (let i = 0; i < 3; i++) await fetch(`${handle.baseUrl}/health`);
-    const res = await fetch(`${handle.baseUrl}/health`);
+    for (let i = 0; i < 3; i++) await fetch(`${handle.baseUrl}/cached`);
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
     const text = await res.text();
     expect(text.length).toBeGreaterThan(0);
@@ -154,12 +154,13 @@ describe('rate limiting — cross-endpoint bucket', () => {
   afterEach(() => handle.stop());
 
   test('requests to different endpoints share the same IP bucket', async () => {
-    // Use 2 requests on /health, 1 on /cached — all 3 share the same IP bucket
-    await fetch(`${handle.baseUrl}/health`);
-    await fetch(`${handle.baseUrl}/health`);
-    await fetch(`${handle.baseUrl}/cached`); // 3rd request across endpoints
+    // Use two requests on /cached and one on /cached-dynamic. All three share
+    // the same anonymous-client bucket.
+    await fetch(`${handle.baseUrl}/cached`);
+    await fetch(`${handle.baseUrl}/cached`);
+    await fetch(`${handle.baseUrl}/cached-dynamic?k=other`);
     // 4th request (any endpoint) should be blocked
-    const res = await fetch(`${handle.baseUrl}/health`);
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
   });
 });

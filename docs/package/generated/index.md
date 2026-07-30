@@ -50,6 +50,9 @@ bun add @lastshotlabs/slingshot
 - `docs:sync`: `bun packages/docs/sync-workspace-docs.ts`
 - `docs:typecheck`: `bun packages/docs/typecheck-docs.ts`
 - `entity:conformance:report`: `bun scripts/entity-conformance-report.ts`
+- `events:conformance:report`: `bun scripts/event-reliability-conformance.ts`
+- `events:support:check`: `bun scripts/generate-event-reliability-support.ts --check`
+- `events:support:generate`: `bun scripts/generate-event-reliability-support.ts`
 - `examples:coverage`: `bun scripts/examples-coverage.ts`
 - `examples:smoke`: `bun scripts/examples-smoke.ts`
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`

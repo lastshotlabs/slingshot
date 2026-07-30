@@ -43,6 +43,12 @@ These modes are live-verified in Docker against Redpanda listeners, including ne
 
 ## Production Guidance
 
+For transactional outbox delivery, the framework calls the adapter's awaited
+`publishEnvelope()` boundary and marks a row delivered only after Kafka acknowledges the
+produce request. Retries reuse the original envelope and event ID. Configure transactional
+inbox consumers with stable names because Kafka redelivery and the outbox accept/finalize crash
+window can produce duplicates.
+
 - Prefer TLS for every non-local environment.
 - Treat `ssl.rejectUnauthorized: false` as local-development-only. The runtime warns because it disables broker certificate verification.
 - Prefer provisioned topics over `autoCreateTopics` / `autoCreateTopic` in production.

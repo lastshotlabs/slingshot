@@ -54,6 +54,25 @@ The main knobs are:
 - `dispatcher`
 - `rateLimit`
 - `defaultPreferences`
+- `reliability`
+
+For the PostgreSQL production path, opt into atomic notification persistence and event
+publication:
+
+```ts
+createNotificationsPackage({
+  reliability: {
+    store: 'postgres',
+    consumerName: 'slingshot-notifications-delivery-v1',
+  },
+});
+```
+
+The app must enable matching `events.reliability` outbox and inbox configuration. Immediate
+notification creation and the governed `notifications:notification.created` envelope then
+commit in one SQL transaction. Delivery runs through the stable named inbox consumer. Delivery
+adapters receive the envelope event ID as `context.idempotencyKey` and should forward it to
+external providers.
 
 ## What You Get
 

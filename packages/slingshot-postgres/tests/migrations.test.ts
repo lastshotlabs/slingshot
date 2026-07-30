@@ -9,7 +9,11 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { attachPostgresPoolRuntime, createPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
-import { createPostgresAdapter, parseMigrationVersion } from '../src/adapter.js';
+import {
+  checkPostgresAuthSchema,
+  createPostgresAdapter,
+  parseMigrationVersion,
+} from '../src/adapter.js';
 
 // ---------------------------------------------------------------------------
 // Pure function: parseMigrationVersion (now imported from the adapter module)
@@ -90,6 +94,55 @@ describe('parseMigrationVersion (pure logic)', () => {
     expect(() => parseMigrationVersion(true, maxVersion)).toThrow(
       '[slingshot-postgres] Invalid value in _slingshot_auth_schema_version: true',
     );
+  });
+});
+
+describe('checkPostgresAuthSchema', () => {
+  test('reports a missing schema without applying DDL', async () => {
+    const statements: string[] = [];
+    const result = await checkPostgresAuthSchema({
+      async query(sql: string) {
+        statements.push(sql);
+        return {
+          rows: [{ version_table: null, users_table: null }],
+          rowCount: 1,
+        };
+      },
+    } as never);
+
+    expect(result).toEqual({
+      ok: false,
+      version: null,
+      expectedVersion: MIGRATION_COUNT,
+      error: 'Slingshot auth schema is not installed',
+    });
+    expect(statements.join('\n')).not.toContain('CREATE TABLE');
+  });
+
+  test('reports the current complete schema', async () => {
+    let call = 0;
+    const result = await checkPostgresAuthSchema({
+      async query() {
+        call++;
+        return call === 1
+          ? {
+              rows: [
+                {
+                  version_table: '_slingshot_auth_schema_version',
+                  users_table: 'slingshot_users',
+                },
+              ],
+              rowCount: 1,
+            }
+          : { rows: [{ version: MIGRATION_COUNT }], rowCount: 1 };
+      },
+    } as never);
+
+    expect(result).toEqual({
+      ok: true,
+      version: MIGRATION_COUNT,
+      expectedVersion: MIGRATION_COUNT,
+    });
   });
 });
 

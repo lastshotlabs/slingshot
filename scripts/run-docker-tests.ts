@@ -74,6 +74,10 @@ export function createDockerTestCommands(
       label: 'five-backend entity conformance report',
       command: ['bun', 'run', 'entity:conformance:report'],
     },
+    {
+      label: 'event reliability conformance report',
+      command: ['bun', 'run', 'events:conformance:report'],
+    },
   ];
 }
 

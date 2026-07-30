@@ -53,6 +53,14 @@ surface on the first enqueue or subscribe call.
 
 ## Operational Notes
 
+### Acknowledged outbox delivery
+
+When `events.reliability.outbox` is enabled, Slingshot uses the adapter's awaited
+`publishEnvelope()` boundary. A row is marked delivered only after every matching durable
+BullMQ destination acknowledges `queue.add()`. Zero durable destinations is a failure, not
+delivery. The outbox owns retry and lease recovery; the adapter's process-local pending buffer
+does not replace it.
+
 - `connection.port` must be a **number**, not a string. Env-var values need explicit coercion:
   `port: Number(process.env.REDIS_PORT)`.
 - Each event key gets its own queue. Naming is deterministic: colons are replaced with

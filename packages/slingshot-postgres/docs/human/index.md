@@ -41,6 +41,17 @@ const { pool } = await connectPostgres(process.env.DATABASE_URL!, {
 });
 ```
 
+When auth uses PostgreSQL with `assume-ready`, provision the framework-owned auth
+tables in the deployment migration job:
+
+```bash
+slingshot migrate apply --backend postgres --include-framework
+```
+
+Serving instances never apply this DDL. Once an auth adapter registers the shared
+pool, `/health/ready` checks both connectivity and the expected auth schema version;
+an empty or stale database returns `503`.
+
 ## Pool Configuration
 
 All `PostgresPoolConfig` fields are optional and map to `pg.Pool` constructor options:

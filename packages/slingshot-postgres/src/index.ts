@@ -1,7 +1,11 @@
 /**
  * Create the Slingshot entity adapter backed by Postgres.
  */
-export { createPostgresAdapter } from './adapter.js';
+export {
+  applyPostgresAuthSchema,
+  checkPostgresAuthSchema,
+  createPostgresAdapter,
+} from './adapter.js';
 /**
  * Options accepted by the Postgres entity adapter.
  */

@@ -16,6 +16,7 @@ import {
   NotificationsHealthCap,
 } from '../../src/public';
 import { createNotificationsTestEvents } from '../../src/testing';
+import { notificationsPluginConfigSchema } from '../../src/types/config';
 
 function createFrameworkConfig() {
   const cfg = {
@@ -40,6 +41,22 @@ function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
 }
 
 describe('createNotificationsPackage lifecycle', () => {
+  test('reliability config resolves defaults and rejects unsupported stores', () => {
+    expect(
+      notificationsPluginConfigSchema.parse({
+        reliability: { store: 'postgres' },
+      }).reliability,
+    ).toEqual({
+      store: 'postgres',
+      consumerName: 'slingshot-notifications-delivery-v1',
+    });
+    expect(() =>
+      notificationsPluginConfigSchema.parse({
+        reliability: { store: 'sqlite' },
+      }),
+    ).toThrow();
+  });
+
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
     const enabledBus = new InProcessAdapter();
     const enabledEvents = createNotificationsTestEvents(enabledBus, {

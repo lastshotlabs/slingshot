@@ -23,6 +23,8 @@
     "scripts/postgres-capacity-smoke.ts",
     "scripts/entity-conformance-report.ts",
     "scripts/generate-entity-support-matrix.ts",
+    "scripts/event-reliability-conformance.ts",
+    "scripts/generate-event-reliability-support.ts",
     "tsup.cli.config.ts",
     "vitest.config.ts"
   ],

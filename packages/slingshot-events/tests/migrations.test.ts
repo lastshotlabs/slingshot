@@ -53,6 +53,13 @@ describe.each([
     expect(fixture.statements).toHaveLength(firstCount);
   });
 
+  test('upgrades a version-1 fixture without replaying old-schema DDL', async () => {
+    const fixture = createProvider(new Map([[1, migrations[0]!.checksum]]));
+    await applyEventReliabilityMigrations(fixture.provider, migrations);
+
+    expect(fixture.statements).toEqual([...migrations[1]!.statements]);
+  });
+
   test('rejects a changed checksum for an applied version', async () => {
     const fixture = createProvider(new Map([[1, 'different']]));
     await expect(

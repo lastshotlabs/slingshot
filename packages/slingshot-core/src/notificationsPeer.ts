@@ -57,7 +57,13 @@ export interface NotificationCreatedEventPayload {
 
 /** Delivery adapter contract registered with `slingshot-notifications`. */
 export interface DeliveryAdapter {
-  deliver(event: NotificationCreatedEventPayload): Promise<void>;
+  deliver(
+    event: NotificationCreatedEventPayload,
+    context?: {
+      /** Stable provider idempotency key. Present for transactional inbox delivery. */
+      readonly idempotencyKey: string;
+    },
+  ): Promise<void>;
 }
 
 /** Input accepted by a source-scoped notification builder. */

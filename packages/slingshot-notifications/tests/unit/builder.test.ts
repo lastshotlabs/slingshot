@@ -5,6 +5,136 @@ import { createNoopRateLimitBackend } from '../../src/rateLimit';
 import { createNotificationsTestAdapters, createNotificationsTestEvents } from '../../src/testing';
 
 describe('createNotificationBuilder', () => {
+  test('reliable mode creates and publishes through the same transaction scope', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const publish = mock(() => ({})) as unknown as typeof events.publish;
+    events.publish = publish;
+    const scope = Object.freeze({ id: 'notification-tx', store: 'postgres' as const });
+    const resolveNotifications = mock(() => adapters.notifications);
+    const run = mock(
+      async (
+        _store: 'postgres' | 'sqlite' | 'mongo',
+        callback: (activeScope: typeof scope) => unknown,
+      ) => callback(scope),
+    );
+    const builder = createNotificationBuilder({
+      source: 'community',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: createNoopRateLimitBackend(),
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+      reliability: {
+        store: 'postgres',
+        transactions: { supports: () => true, run } as never,
+        resolveNotifications,
+        resolvePreferences: () => adapters.preferences,
+      },
+    });
+
+    const created = await builder.notify({
+      userId: 'user-reliable',
+      type: 'community:mention',
+    });
+
+    expect(created).not.toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(resolveNotifications).toHaveBeenCalledWith(scope);
+    expect(publish).toHaveBeenCalledWith(
+      'notifications:notification.created',
+      expect.any(Object),
+      expect.objectContaining({
+        delivery: 'outbox',
+        transaction: scope,
+      }),
+    );
+  });
+
+  test('reliable mode propagates outbox failure so the SQL transaction can roll back', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    events.publish = (() => {
+      throw new Error('outbox insert failed');
+    }) as typeof events.publish;
+    const scope = Object.freeze({ id: 'notification-tx-failure', store: 'postgres' as const });
+    const builder = createNotificationBuilder({
+      source: 'community',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: createNoopRateLimitBackend(),
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+      reliability: {
+        store: 'postgres',
+        transactions: {
+          supports: () => true,
+          run: async (
+            _store: 'postgres' | 'sqlite' | 'mongo',
+            callback: (activeScope: typeof scope) => unknown,
+          ) => callback(scope),
+        } as never,
+        resolveNotifications: () => adapters.notifications,
+        resolvePreferences: () => adapters.preferences,
+      },
+    });
+
+    await expect(
+      builder.notify({ userId: 'user-reliable', type: 'community:mention' }),
+    ).rejects.toThrow('outbox insert failed');
+  });
+
+  test('reliable mode publishes deduplicated updates through the active outbox scope', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const publish = mock(() => ({})) as unknown as typeof events.publish;
+    events.publish = publish;
+    const scope = Object.freeze({ id: 'notification-update-tx', store: 'postgres' as const });
+    const builder = createNotificationBuilder({
+      source: 'community',
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      rateLimitBackend: createNoopRateLimitBackend(),
+      defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+      rateLimit: { limit: 100, windowMs: 60_000 },
+      reliability: {
+        store: 'postgres',
+        transactions: {
+          supports: () => true,
+          run: async (
+            _store: 'postgres' | 'sqlite' | 'mongo',
+            callback: (activeScope: typeof scope) => unknown,
+          ) => callback(scope),
+        } as never,
+        resolveNotifications: () => adapters.notifications,
+        resolvePreferences: () => adapters.preferences,
+      },
+    });
+
+    const input = {
+      userId: 'user-reliable-update',
+      type: 'community:mention',
+      dedupKey: 'thread-1',
+    };
+    await builder.notify(input);
+    await builder.notify(input);
+
+    expect(publish).toHaveBeenLastCalledWith(
+      'notifications:notification.updated',
+      expect.any(Object),
+      expect.objectContaining({ delivery: 'outbox', transaction: scope }),
+    );
+  });
+
   test('uses configured default preferences when no preference rows exist', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();

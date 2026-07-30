@@ -120,8 +120,28 @@ entity operations wait outside the open transaction instead of joining its share
   committed or rolled back.
 
 Database rollback does not make arbitrary HTTP requests, email, queue publication, object-storage
-writes, or other external effects atomic. Framework-owned effects are delayed until commit where
-supported, but durable atomic publication requires the transactional outbox planned in WP4.
+writes, or other external effects atomic. For a governed event that must commit with SQL state,
+publish explicitly through the transactional outbox:
+
+```ts
+await transactions.run('postgres', async scope => {
+  const orders = entities.get(Order, { scope });
+  const order = await orders.create(input);
+  events.publish(
+    'orders:order.created',
+    { orderId: order.id },
+    {
+      delivery: 'outbox',
+      transaction: scope,
+      requestTenantId: order.tenantId ?? null,
+    },
+  );
+});
+```
+
+The broker may redeliver. Wrap SQL consumers with `events.consume(..., {
+durable: true, name, inbox: { store } })`; external effects still need provider
+idempotency keyed by the envelope event ID.
 
 ## When to move out of the entity DSL
 

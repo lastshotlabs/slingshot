@@ -193,4 +193,43 @@ describe('bootstrapAuth postgres wiring', () => {
       await teardown();
     }
   });
+
+  test('reuses the framework postgres bundle so readiness observes auth schema state', async () => {
+    const bootstrapAuth = await loadBootstrapAuth();
+    const bus = makeEventBus();
+    const events = makeEvents(() => bus);
+    const frameworkPostgres = await connectPostgresMock('postgres://framework');
+    connectPostgresMock.mockClear();
+
+    const result = await bootstrapAuth(
+      {
+        db: {
+          auth: 'postgres',
+          postgres: 'postgres://slingshot:test@localhost:5432/app',
+          sessions: 'memory',
+          oauthState: 'memory',
+          postgresMigrations: 'assume-ready',
+        },
+        auth: {
+          enabled: false,
+          jwt: { issuer: 'http://localhost', audience: 'slingshot-tests' },
+        },
+      },
+      bus,
+      events,
+      undefined,
+      {
+        signing: { secret: 'integration-test-signing-secret-1234567890' },
+        dataEncryptionKeys: [],
+        password: Bun.password,
+        getPostgres: () => frameworkPostgres as never,
+      },
+    );
+
+    expect(connectPostgresMock).not.toHaveBeenCalled();
+    expect(createPostgresAdapterMock).toHaveBeenCalledWith({
+      pool: frameworkPostgres.pool,
+    });
+    expect(result.teardownFns).toHaveLength(0);
+  });
 });

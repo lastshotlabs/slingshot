@@ -185,6 +185,55 @@ describe('transactional event reliability live matrix', () => {
     }
   }, 30_000);
 
+  test('SQLite + Kafka acknowledges delivery three consecutive times', async () => {
+    const db = new Database(':memory:');
+    const runtimeDb = db as unknown as RuntimeSqliteDatabase;
+    const infra: StoreInfra = {
+      appName: 'event-reliability-sqlite-kafka-live',
+      getTransactions: createUnsupportedTransactionManager,
+      getSqliteDb: () => runtimeDb,
+      getPostgres: () => {
+        throw new Error('not configured');
+      },
+      getMongo: () => {
+        throw new Error('not configured');
+      },
+      getRedis: () => {
+        throw new Error('not configured');
+      },
+    };
+    await initializeEventReliabilityStore(infra, {
+      store: 'sqlite',
+      outbox: { enabled: true },
+    });
+    const bus = createKafkaAdapter({
+      brokers: [KAFKA],
+      topicPrefix: `wp4.sqlite.live.${randomUUID()}`,
+    });
+    try {
+      for (let iteration = 0; iteration < 3; iteration++) {
+        const envelope: EventEnvelope<'app:ready'> = createRawEventEnvelope('app:ready', {
+          plugins: [`sqlite-kafka-${iteration}`],
+        });
+        createSqliteOutboxRepository(runtimeDb).insert(serializeOutboxEnvelope(envelope));
+        const dispatcher = createOutboxDispatcher({
+          repository: createSqliteOutboxDispatchRepository(runtimeDb),
+          bus,
+          config: { enabled: true },
+        });
+        expect(await dispatcher.dispatchOnce()).toBeGreaterThan(0);
+        const row = db
+          .query('SELECT status FROM slingshot_event_outbox WHERE event_id = ?')
+          .get(envelope.meta.eventId) as { status: string } | null;
+        expect(row?.status).toBe('delivered');
+        await dispatcher.shutdown();
+      }
+    } finally {
+      await bus.shutdown?.();
+      db.close();
+    }
+  }, 30_000);
+
   test('PostgreSQL inbox commits one concurrent duplicate and retries rollback', async () => {
     const bus = createInProcessAdapter();
     let infra: StoreInfra;

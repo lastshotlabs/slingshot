@@ -300,13 +300,18 @@ export async function bootstrapAuth(
         '[slingshot-auth] Postgres auth adapter requires config.db.postgres connection string',
       );
     }
-    postgres = await connectPostgres(connectionString, {
-      pool: config.db?.postgresPool,
-      migrations: config.db?.postgresMigrations,
-      healthcheckTimeoutMs: config.db?.postgresPool?.queryTimeoutMs,
-    });
+    const frameworkPostgres = runtimeInfra.getPostgres?.();
+    postgres =
+      frameworkPostgres ??
+      (await connectPostgres(connectionString, {
+        pool: config.db?.postgresPool,
+        migrations: config.db?.postgresMigrations,
+        healthcheckTimeoutMs: config.db?.postgresPool?.queryTimeoutMs,
+      }));
     authAdapter = await createPostgresAdapter({ pool: postgres.pool });
-    teardownFns.push(() => postgres?.pool.end());
+    if (!frameworkPostgres) {
+      teardownFns.push(() => postgres?.pool.end());
+    }
   } else {
     const { createMongoAuthAdapter } = await import('./adapters/mongoAuth');
     const { resolveMongoose: resolveMg } = await import('./infra/mongo');

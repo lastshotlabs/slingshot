@@ -10,6 +10,7 @@ export default class MigrateApply extends Command {
 
   static override examples = [
     '<%= config.bin %> migrate apply',
+    '<%= config.bin %> migrate apply --include-framework',
     '<%= config.bin %> migrate apply --backend postgres --db-url postgres://localhost/myapp',
     'DATABASE_URL=postgres://... <%= config.bin %> migrate apply',
   ];
@@ -31,6 +32,11 @@ export default class MigrateApply extends Command {
       description: 'Directory containing migration files.',
       default: 'migrations',
     }),
+    'include-framework': Flags.boolean({
+      description:
+        'Apply framework-owned schemas, including PostgreSQL auth, after entity migrations.',
+      default: false,
+    }),
   };
 
   async run(): Promise<void> {
@@ -48,14 +54,41 @@ export default class MigrateApply extends Command {
       this.error(err instanceof Error ? err.message : String(err));
     }
 
-    if (result.applied.length === 0) {
+    let frameworkApplied = false;
+    if (flags['include-framework']) {
+      if (backend !== 'postgres') {
+        this.error('--include-framework currently supports only the postgres backend.');
+      }
+      const postgresPkg = '@lastshotlabs/slingshot-postgres';
+      const { connectPostgres, applyPostgresAuthSchema } = (await import(postgresPkg)) as {
+        connectPostgres: (
+          url: string,
+          options: { migrations: 'assume-ready' },
+        ) => Promise<{ pool: { end(): Promise<void> } }>;
+        applyPostgresAuthSchema: (pool: unknown) => Promise<void>;
+      };
+      const postgres = await connectPostgres(connectionString, { migrations: 'assume-ready' });
+      try {
+        await applyPostgresAuthSchema(postgres.pool);
+        frameworkApplied = true;
+      } finally {
+        await postgres.pool.end();
+      }
+    }
+
+    if (result.applied.length === 0 && !frameworkApplied) {
       this.log('No pending migrations. Database is up to date.');
       return;
     }
 
-    this.log(`Applied ${result.applied.length} migration(s):`);
-    for (const m of result.applied) {
-      this.log(`  ✓ ${m.id}`);
+    if (result.applied.length > 0) {
+      this.log(`Applied ${result.applied.length} migration(s):`);
+      for (const m of result.applied) {
+        this.log(`  ✓ ${m.id}`);
+      }
+    }
+    if (frameworkApplied) {
+      this.log('✓ Framework-owned PostgreSQL schemas are up to date.');
     }
   }
 }

@@ -281,6 +281,18 @@ const MIGRATION_LOCK_KEY1 = 7283;
  */
 const MIGRATION_LOCK_KEY2 = 4829;
 
+const AUTH_SCHEMA_REQUIRED = new WeakSet<object>();
+
+/** Mark a pool as requiring the Slingshot auth schema for readiness. */
+export function registerPostgresAuthSchemaRequirement(pool: object): void {
+  AUTH_SCHEMA_REQUIRED.add(pool);
+}
+
+/** Return whether an auth adapter registered this pool as schema-dependent. */
+export function requiresPostgresAuthSchema(pool: object): boolean {
+  return AUTH_SCHEMA_REQUIRED.has(pool);
+}
+
 /**
  * Parse and validate the migration version stored in the Postgres metadata table.
  *
@@ -340,7 +352,7 @@ export function parseMigrationVersion(raw: unknown, maxVersion: number): number 
  * await runMigrations(pool);
  * ```
  */
-async function runMigrations(pool: Pool): Promise<void> {
+export async function applyPostgresAuthSchema(pool: Pool): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -375,6 +387,54 @@ async function runMigrations(pool: Pool): Promise<void> {
     throw err;
   } finally {
     client.release();
+  }
+}
+
+/** Check that the complete auth schema expected by this package is installed. */
+export async function checkPostgresAuthSchema(pool: Pool): Promise<{
+  readonly ok: boolean;
+  readonly version: number | null;
+  readonly expectedVersion: number;
+  readonly error?: string;
+}> {
+  try {
+    const presence = await pool.query<{
+      version_table: string | null;
+      users_table: string | null;
+    }>(`
+      SELECT
+        to_regclass('_slingshot_auth_schema_version')::text AS version_table,
+        to_regclass('slingshot_users')::text AS users_table
+    `);
+    const presenceRow = presence.rows[0];
+    if (!presenceRow?.version_table || !presenceRow.users_table) {
+      return {
+        ok: false,
+        version: null,
+        expectedVersion: MIGRATIONS.length,
+        error: 'Slingshot auth schema is not installed',
+      };
+    }
+    const result = await pool.query<{ version: number | string }>(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM _slingshot_auth_schema_version',
+    );
+    const version = parseMigrationVersion(result.rows[0]?.version, MIGRATIONS.length);
+    if (version !== MIGRATIONS.length) {
+      return {
+        ok: false,
+        version,
+        expectedVersion: MIGRATIONS.length,
+        error: `Slingshot auth schema is at version ${version}; expected ${MIGRATIONS.length}`,
+      };
+    }
+    return { ok: true, version, expectedVersion: MIGRATIONS.length };
+  } catch (error) {
+    return {
+      ok: false,
+      version: null,
+      expectedVersion: MIGRATIONS.length,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -430,10 +490,11 @@ export interface PostgresAdapterOptions {
  */
 export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promise<AuthAdapter> {
   const logger: Logger = opts.logger ?? noopLogger;
+  registerPostgresAuthSchemaRequirement(opts.pool);
   if (getPostgresPoolRuntime(opts.pool)?.migrationMode !== 'assume-ready') {
     logger.info('postgres.migration.start', { event: 'migration_start' });
     try {
-      await runMigrations(opts.pool);
+      await applyPostgresAuthSchema(opts.pool);
       logger.info('postgres.migration.complete', { event: 'migration_complete' });
     } catch (err) {
       logger.error('postgres.migration.failed', {

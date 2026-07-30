@@ -135,6 +135,10 @@ For Postgres-backed production:
 - Set `db.postgresMigrations` explicitly. Use `assume-ready` when migrations are
   owned by CI or a deploy job. Use `apply` only when the app process is allowed to
   run startup DDL.
+- When auth uses PostgreSQL with `assume-ready`, run
+  `slingshot migrate apply --backend postgres --include-framework` in the deploy
+  migration job. Serving instances validate the auth schema through
+  `/health/ready` without applying DDL.
 - Set bounded pool timeouts: `connectionTimeoutMs`, `queryTimeoutMs`, and
   `statementTimeoutMs`.
 - Wire `/health/ready` into platform readiness checks. Slingshot reports Postgres
@@ -148,10 +152,13 @@ For transaction-sensitive package services:
 - Treat unsupported-store, scope mismatch, closed-scope, unsettled-work, conflict, and unknown
   commit-outcome errors as explicit operational paths.
 - Keep external HTTP, email, queue, and object-storage effects out of the atomicity claim. Use a
-  transactional outbox once WP4 is available when database state and publication must commit
-  together.
+  transactional outbox when database state and publication must commit together. Use a named
+  transactional inbox consumer for idempotent SQL effects and provider idempotency for external
+  effects.
 - Run `bun run entity:conformance:report` in release CI. Its versioned artifact requires both
   SQLite and PostgreSQL to pass every declared transaction guarantee.
+- Run `bun run events:conformance:report` with PostgreSQL, Redis/BullMQ, and Kafka available.
+  Preserve `event-reliability-conformance.v1.json` even when the lane fails.
 
 ## Runtime Reliability
 

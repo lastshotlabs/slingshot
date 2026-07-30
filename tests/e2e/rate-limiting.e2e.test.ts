@@ -19,7 +19,7 @@ afterEach(() => handle.stop());
 async function hitEndpoint(n: number): Promise<Response[]> {
   const results: Response[] = [];
   for (let i = 0; i < n; i++) {
-    results.push(await fetch(`${handle.baseUrl}/health`));
+    results.push(await fetch(`${handle.baseUrl}/cached`));
   }
   return results;
 }
@@ -28,7 +28,7 @@ async function hitEndpoint(n: number): Promise<Response[]> {
 // Rate limit enforcement
 // ---------------------------------------------------------------------------
 
-describe('rate limiting E2E — /health endpoint', () => {
+describe('rate limiting E2E — application endpoint', () => {
   test('first 3 requests succeed (200)', async () => {
     const responses = await hitEndpoint(3);
     for (const res of responses) {
@@ -39,7 +39,7 @@ describe('rate limiting E2E — /health endpoint', () => {
   test('4th request returns 429', async () => {
     // Exhaust the limit
     await hitEndpoint(3);
-    const res = await fetch(`${handle.baseUrl}/health`);
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
   });
 
@@ -47,15 +47,15 @@ describe('rate limiting E2E — /health endpoint', () => {
     // Exhaust the limit
     await hitEndpoint(3);
     // All subsequent requests should be rate-limited
-    const extra1 = await fetch(`${handle.baseUrl}/health`);
-    const extra2 = await fetch(`${handle.baseUrl}/health`);
+    const extra1 = await fetch(`${handle.baseUrl}/cached`);
+    const extra2 = await fetch(`${handle.baseUrl}/cached`);
     expect(extra1.status).toBe(429);
     expect(extra2.status).toBe(429);
   });
 
   test('rate-limited response has non-empty body', async () => {
     await hitEndpoint(3);
-    const res = await fetch(`${handle.baseUrl}/health`);
+    const res = await fetch(`${handle.baseUrl}/cached`);
     expect(res.status).toBe(429);
     const text = await res.text();
     expect(text.length).toBeGreaterThan(0);

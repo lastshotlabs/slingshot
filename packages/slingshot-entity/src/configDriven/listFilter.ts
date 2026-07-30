@@ -38,7 +38,8 @@ export function resolveListFilter(
         key !== 'filter' &&
         key !== 'limit' &&
         key !== 'cursor' &&
-        key !== 'sortDir',
+        key !== 'sortDir' &&
+        key !== 'includeDeleted',
     ),
   );
 

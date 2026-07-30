@@ -362,6 +362,22 @@ describe('Memory adapter — soft delete', () => {
     expect((list.items[0] as Record<string, unknown>).name).toBe('Keep');
   });
 
+  test('includeDeleted returns both active and soft-deleted records', async () => {
+    const adapter = createMemoryEntityAdapter<
+      Record<string, unknown>,
+      Record<string, unknown>,
+      Record<string, unknown>
+    >(SoftItem);
+
+    const removed = await adapter.create({ name: 'Removed' });
+    await adapter.create({ name: 'Keep' });
+    await adapter.delete(String(removed.id));
+
+    const list = await adapter.list({ includeDeleted: true });
+    expect(list.items.map(item => item.name).sort()).toEqual(['Keep', 'Removed']);
+    expect(list.items.find(item => item.name === 'Removed')?.deletedAt).toBeDefined();
+  });
+
   test('cannot update a soft-deleted record', async () => {
     const adapter = createMemoryEntityAdapter<
       Record<string, unknown>,

@@ -25,7 +25,41 @@ import type {
   ProviderStreamEvent,
   ProviderToolCall,
 } from './provider/types';
-import type { AiModerator, AiVerdict } from './types';
+import type { AiModerator, AiResult, AiVerdict } from './types';
+
+/**
+ * Build a complete, deterministic AI result for consumer tests.
+ *
+ * Supplying only a value avoids coupling fixtures to every field added to
+ * `AiResult`; overrides remain available when a test cares about metadata.
+ */
+export function makeAiResult<T>(
+  value: T,
+  overrides: Partial<Omit<AiResult<T>, 'value'>> = {},
+): AiResult<T> {
+  return {
+    value,
+    stopReason: 'end',
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 0,
+      accounting: 'full',
+    },
+    moderation: null,
+    degradations: [],
+    provider: 'fixture',
+    model: 'fixture-model',
+    cached: 'none',
+    latencyMs: 0,
+    raw: null,
+    toolCalls: [],
+    iterations: 1,
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Fake provider

@@ -136,7 +136,8 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
   ): boolean {
     for (const [key, value] of Object.entries(filter)) {
       if (value === undefined) continue;
-      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
+      if (key === 'limit' || key === 'cursor' || key === 'sortDir' || key === 'includeDeleted')
+        continue;
       if (record[key] !== value) return false;
     }
     return true;
@@ -335,7 +336,7 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
           store.delete(pk);
           continue;
         }
-        if (!recordVisible(entry.record)) continue;
+        if (!opts?.includeDeleted && !recordVisible(entry.record)) continue;
         if (filter && !evaluateFilter(entry.record, filter)) continue;
         visible.push(entry.record);
       }

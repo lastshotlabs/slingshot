@@ -94,7 +94,15 @@ export function createObservabilityFns(state: ObservabilityState, structuredLogg
     }
 
     try {
-      const client = await state.defaultTaskQueue.client;
+      const queue = state.defaultTaskQueue as unknown as {
+        getBackend?: () => { client: Promise<{ ping: () => Promise<unknown> }> };
+        client?: Promise<{ ping: () => Promise<unknown> }>;
+      };
+      const clientPromise = queue.getBackend?.().client ?? queue.client;
+      if (!clientPromise) {
+        throw new Error('BullMQ queue does not expose a Redis health client');
+      }
+      const client = await clientPromise;
       await client.ping();
       details.redisPing = 'ok';
     } catch (err) {

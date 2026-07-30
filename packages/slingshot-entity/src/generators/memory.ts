@@ -435,7 +435,7 @@ export function generateMemory(config: ResolvedEntityConfig): string {
     lines.push('        if (!isAlive(entry)) { store.delete(pk); continue; }');
   }
   if (hasSoftDelete) {
-    lines.push('        if (!recordVisible(entry.record)) continue;');
+    lines.push('        if (!opts?.includeDeleted && !recordVisible(entry.record)) continue;');
   }
   lines.push(
     '        if (filter && !matchesFilter(entry.record as Record<string, unknown>, filter)) continue;',

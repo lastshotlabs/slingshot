@@ -486,7 +486,7 @@ export function generateRedis(config: ResolvedEntityConfig): string {
     '        const record = fromRedisRecord(JSON.parse(raw) as Record<string, unknown>) as Record<string, unknown>;',
   );
   if (hasSoftDelete) {
-    lines.push('        if (!isVisible(record)) continue;');
+    lines.push('        if (!opts?.includeDeleted && !isVisible(record)) continue;');
   }
   lines.push('        if (filter && !matchesFilter(record, filter)) continue;');
   lines.push('        records.push(record);');

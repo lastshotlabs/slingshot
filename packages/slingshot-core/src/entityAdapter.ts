@@ -16,6 +16,8 @@ export interface EntityCrudAdapter {
     limit?: number;
     cursor?: string;
     sortDir?: 'asc' | 'desc';
+    /** Include records hidden by the entity's soft-delete policy. */
+    includeDeleted?: boolean;
   }): Promise<{ items: unknown[]; cursor?: string; nextCursor?: string; hasMore?: boolean }>;
   update(
     id: string,

@@ -630,10 +630,14 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('      let paramIdx = 1;');
   if (hasSoftDelete) {
     if (sdNonNull) {
-      lines.push(`      conditions.push('${toSnakeCase(sdField)} IS NULL');`);
+      lines.push(
+        `      if (!opts?.includeDeleted) conditions.push('${toSnakeCase(sdField)} IS NULL');`,
+      );
     } else {
-      lines.push(`      conditions.push(\`${toSnakeCase(sdField)} != $\${paramIdx++}\`);`);
-      lines.push(`      params.push('${sdValue}');`);
+      lines.push(`      if (!opts?.includeDeleted) {`);
+      lines.push(`        conditions.push(\`${toSnakeCase(sdField)} != $\${paramIdx++}\`);`);
+      lines.push(`        params.push('${sdValue}');`);
+      lines.push(`      }`);
     }
   }
   if (ttlSeconds) {

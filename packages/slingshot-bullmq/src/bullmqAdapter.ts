@@ -724,6 +724,24 @@ export function createBullMQAdapter(
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
   const enqueueTimeoutMs = opts.enqueueTimeoutMs ?? 10_000;
+  // BullMQ 6 no longer bundles ioredis and therefore inherits the peer's
+  // 10-second default connection timeout. Bound connection establishment to
+  // the adapter's enqueue timeout so a failed publish can also shut down
+  // promptly instead of leaving a connecting Queue/Worker behind.
+  const rawConnection = opts.connection as unknown as Record<string, unknown>;
+  const producerConnection: ConnectionOptions = {
+    ...rawConnection,
+    connectTimeout:
+      typeof rawConnection['connectTimeout'] === 'number'
+        ? rawConnection['connectTimeout']
+        : Math.min(enqueueTimeoutMs, 5_000),
+  };
+  const workerConnection: ConnectionOptions = {
+    ...(producerConnection as unknown as Record<string, unknown>),
+    // BullMQ workers use blocking Redis commands and require unlimited
+    // command retries. Keep producer queues bounded independently.
+    maxRetriesPerRequest: null,
+  };
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
   const logger: Logger = (rawLogger ?? createConsoleLogger()).child({
@@ -781,6 +799,11 @@ export function createBullMQAdapter(
   // Track all created queues and workers for graceful shutdown
   const queues: Queue[] = [];
   const workers: Worker[] = [];
+  // BullMQ 6's graceful close can wait indefinitely when a worker's Redis
+  // connection never reached ready. Remember readiness so shutdown can force
+  // only those workers while preserving in-flight job completion for healthy
+  // workers.
+  const readyWorkers = new WeakSet<Worker>();
 
   // Map from internal key ("prefix:event:name") → queue instance
   // Keys use the raw (colon-containing) strings for lookup; actual BullMQ queue
@@ -805,7 +828,7 @@ export function createBullMQAdapter(
         : sanitizeQueueName(`${sourceQueueName}:validation-dlq`);
     let dlq = validationDlqs.get(dlqName);
     if (!dlq) {
-      dlq = new Queue(dlqName, { connection: opts.connection });
+      dlq = new Queue(dlqName, { connection: producerConnection });
       validationDlqs.set(dlqName, dlq);
       queues.push(dlq);
     }
@@ -1073,7 +1096,7 @@ export function createBullMQAdapter(
       }
 
       const queue = new Queue(bullmqQueueName, {
-        connection: opts.connection,
+        connection: producerConnection,
         defaultJobOptions: { attempts },
       });
       queues.push(queue);
@@ -1184,13 +1207,17 @@ export function createBullMQAdapter(
             if (job.id) consumeStartByJob.delete(job.id);
           }
         },
-        { connection: opts.connection },
+        { connection: workerConnection },
       );
 
       worker.on('error', err => {
         workerPausedCount += 1;
         metrics.gauge('bullmq.worker.paused', 1, { queue: bullmqQueueName });
         logger.error('worker error', { queue: bullmqQueueName, err: errInfo(err) });
+      });
+
+      worker.on('ready', () => {
+        readyWorkers.add(worker);
       });
 
       worker.on('completed', job => {
@@ -1524,9 +1551,10 @@ export function createBullMQAdapter(
      * Gracefully shuts down all BullMQ workers and queues created by this adapter.
      *
      * Cancels any pending drain timer, clears in-memory listener maps, closes all
-     * `Worker` instances (waits for active jobs to finish), and then closes all `Queue`
-     * connections. Any events still in the pending buffer at shutdown time are discarded
-     * with a warning log.
+     * `Worker` instances, and then closes all `Queue` connections. Workers that reached
+     * Redis readiness close gracefully and wait for active jobs; workers whose connection
+     * never became ready are force-closed so shutdown cannot hang during an outage. Any
+     * events still in the pending buffer are discarded with a warning log.
      *
      * @returns A `Promise` that resolves when all workers and queues have been closed.
      */
@@ -1548,7 +1576,7 @@ export function createBullMQAdapter(
       envelopeListeners.clear();
       payloadListenerWrappers.clear();
       durableListeners.clear();
-      await Promise.all(workers.map(w => w.close()));
+      await Promise.all(workers.map(w => w.close(!readyWorkers.has(w))));
       await Promise.all(queues.map(q => q.close()));
       if (wal) {
         await wal.flush();

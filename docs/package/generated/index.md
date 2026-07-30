@@ -138,7 +138,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-webhooks`: `workspace:*`
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `^3.7.0`
-- `bullmq`: `>=5 <6`
+- `bullmq`: `>=6 <7`
 - `hono`: `>=4.12.18 <5`
 - `ioredis`: `>=5 <6`
 - `jose`: `6.2.0`

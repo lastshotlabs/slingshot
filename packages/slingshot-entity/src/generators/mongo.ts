@@ -489,7 +489,10 @@ export function generateMongo(config: ResolvedEntityConfig): string {
     '      const listFilter = resolveListFilter(opts as Record<string, unknown> | undefined);',
   );
   lines.push(
-    '      const query: Record<string, unknown> = { ...baseFilter(), ...buildMongoListFilter(listFilter) };',
+    `      const visibilityFilter = opts?.includeDeleted ? { ${ttlSeconds ? '...notExpiredFilter()' : ''} } : baseFilter();`,
+  );
+  lines.push(
+    '      const query: Record<string, unknown> = { ...visibilityFilter, ...buildMongoListFilter(listFilter) };',
   );
   lines.push('');
 

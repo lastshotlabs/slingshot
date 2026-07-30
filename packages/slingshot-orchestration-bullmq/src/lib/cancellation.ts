@@ -342,7 +342,15 @@ export function createCancellationFns(state: CancellationState) {
   }
 
   async function getCancellationSnapshotStore(): Promise<CancellationSnapshotStoreClient> {
-    return (await state.defaultTaskQueue.client) as CancellationSnapshotStoreClient;
+    const queue = state.defaultTaskQueue as unknown as {
+      getBackend?: () => { client: Promise<unknown> };
+      client?: Promise<unknown>;
+    };
+    const clientPromise = queue.getBackend?.().client ?? queue.client;
+    if (!clientPromise) {
+      throw new Error('BullMQ queue does not expose a Redis cancellation snapshot client');
+    }
+    return (await clientPromise) as CancellationSnapshotStoreClient;
   }
 
   async function quarantineMalformedSnapshot(

@@ -44,7 +44,7 @@ bun add @lastshotlabs/slingshot-orchestration-bullmq
 
 ## Peer Dependencies
 
-- `bullmq`: `>=5 <6`
+- `bullmq`: `>=6 <7`
 - `ioredis`: `>=5 <6`
 - `zod`: `>=4.0 <5`
 

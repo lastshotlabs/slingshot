@@ -73,6 +73,12 @@ nested filters support comparison, membership, containment, and logical operator
 limit above the configured maximum is rejected rather than silently truncated. Callers that need to
 scan a full collection must follow `nextCursor` in bounded pages.
 
+Soft-deleted rows remain hidden by default. Trusted application code can explicitly request them
+with `adapter.list({ includeDeleted: true })`; the option is implemented consistently by memory,
+SQLite, PostgreSQL, MongoDB, and Redis adapters. Generated HTTP list schemas do not expose this
+switch automatically, because restoring or auditing deleted records requires an application-owned
+authorization boundary.
+
 ## Why this changed
 
 `Config-driven` was too broad. It mixed:

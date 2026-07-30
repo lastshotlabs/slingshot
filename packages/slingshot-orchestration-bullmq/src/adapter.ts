@@ -269,6 +269,14 @@ export function createBullMQOrchestrationAdapter(
     return createCachedRunHandle(id, jobPromiseLoader);
   }
 
+  // BullMQ 6 rejects custom job ids containing ":" because the character is
+  // reserved by its Redis key format. Encode the complete portable
+  // idempotency scope rather than replacing delimiters, which keeps the
+  // mapping collision-free.
+  function toBullMQJobId(id: string): string {
+    return id.includes(':') ? encodeURIComponent(id) : id;
+  }
+
   // -- Adapter API --
   return {
     getMetrics: observability.getMetrics,
@@ -291,7 +299,9 @@ export function createBullMQOrchestrationAdapter(
       const taskRuntime = resolveTaskRuntimeConfig(task);
       const runId = generateRunId();
       const queue = sm.getQueueForTaskName(name);
-      const jobId = createIdempotencyScope({ type: 'task', name }, opts ?? {}) ?? runId;
+      const jobId = toBullMQJobId(
+        createIdempotencyScope({ type: 'task', name }, opts ?? {}) ?? runId,
+      );
       let job = await Job.fromId(queue, jobId);
       if (job) {
         const existingRunId =
@@ -343,7 +353,9 @@ export function createBullMQOrchestrationAdapter(
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
       const runId = generateRunId();
-      const jobId = createIdempotencyScope({ type: 'workflow', name }, opts ?? {}) ?? runId;
+      const jobId = toBullMQJobId(
+        createIdempotencyScope({ type: 'workflow', name }, opts ?? {}) ?? runId,
+      );
       let job = await Job.fromId(workflowQueue, jobId);
       if (job) {
         const existingRunId =

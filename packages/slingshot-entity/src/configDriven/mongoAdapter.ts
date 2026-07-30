@@ -447,7 +447,8 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     for (const [key, val] of Object.entries(filter)) {
       if (val === undefined) continue;
-      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
+      if (key === 'limit' || key === 'cursor' || key === 'sortDir' || key === 'includeDeleted')
+        continue;
       if (!(key in config.fields)) continue;
 
       const targetKey = config.fields[key].primary ? mongoPkField : key;
@@ -613,7 +614,9 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       const limit = rawLimit;
       const filter = resolveListFilter(opts as Record<string, unknown> | undefined);
 
-      const docs = await Model.find(baseFilter()).sort({}).lean();
+      const docs = await Model.find(opts?.includeDeleted ? notExpiredFilter() : baseFilter())
+        .sort({})
+        .lean();
       const visible = docs
         .map(doc => fromMongoDoc(doc, config))
         .filter(record => !filter || evaluateFilter(record, filter));

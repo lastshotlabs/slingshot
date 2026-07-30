@@ -101,7 +101,8 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
   ): boolean {
     for (const [key, val] of Object.entries(filter)) {
       if (val === undefined) continue;
-      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
+      if (key === 'limit' || key === 'cursor' || key === 'sortDir' || key === 'includeDeleted')
+        continue;
       if (record[key] !== val) return false;
     }
     return true;
@@ -208,7 +209,7 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
         const raw = await redis.get(key);
         if (!raw) continue;
         const record = fromRedisRecord(JSON.parse(raw) as Record<string, unknown>, config.fields);
-        if (!isVisible(record)) continue;
+        if (!opts?.includeDeleted && !isVisible(record)) continue;
         if (filter && !evaluateFilter(record, filter)) continue;
         records.push(record);
       }

@@ -287,7 +287,8 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     for (const [key, val] of Object.entries(filter)) {
       if (val === undefined) continue;
-      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
+      if (key === 'limit' || key === 'cursor' || key === 'sortDir' || key === 'includeDeleted')
+        continue;
       if (!(key in config.fields)) continue;
 
       const col = column(key);
@@ -523,7 +524,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       let paramIdx = 1;
 
       // Soft-delete
-      if (config.softDelete) {
+      if (config.softDelete && !opts?.includeDeleted) {
         if ('value' in config.softDelete) {
           conditions.push(`${column(config.softDelete.field)} != $${paramIdx++}`);
           params.push(config.softDelete.value);

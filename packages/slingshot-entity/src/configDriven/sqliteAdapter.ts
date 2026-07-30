@@ -245,7 +245,8 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     for (const [key, val] of Object.entries(filter)) {
       if (val === undefined) continue;
-      if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
+      if (key === 'limit' || key === 'cursor' || key === 'sortDir' || key === 'includeDeleted')
+        continue;
       if (!(key in config.fields)) continue;
 
       const col = toSnakeCase(key);
@@ -507,7 +508,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       const params: unknown[] = [];
 
       // Soft-delete exclusion
-      if (config.softDelete) {
+      if (config.softDelete && !opts?.includeDeleted) {
         const col = toSnakeCase(config.softDelete.field);
         if ('value' in config.softDelete) {
           conditions.push(`${col} != ?`);

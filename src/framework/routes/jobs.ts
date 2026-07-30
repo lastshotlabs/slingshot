@@ -31,7 +31,7 @@ const ErrorResponse = z.object({ error: z.string() });
 const JobStatusResponse = z
   .object({
     id: z.string().describe('Job ID.'),
-    state: z.string().describe('Job state: waiting, active, completed, failed, delayed, paused.'),
+    state: z.string().describe('Job state: waiting, active, completed, failed, or delayed.'),
     progress: z.union([z.number(), z.record(z.string(), z.unknown())]).describe('Job progress.'),
     result: z.unknown().optional().describe('Job result (when completed).'),
     failedReason: z.string().optional().describe('Failure reason (when failed).'),
@@ -207,7 +207,7 @@ export const createJobsRouter = (
       }),
       query: z.object({
         state: z
-          .enum(['waiting', 'active', 'completed', 'failed', 'delayed', 'paused'])
+          .enum(['waiting', 'active', 'completed', 'failed', 'delayed'])
           .optional()
           .describe('Filter by job state.'),
         start: z.string().optional().describe('Start index. Default: 0.'),

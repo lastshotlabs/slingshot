@@ -638,10 +638,14 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   lines.push('      const params: unknown[] = [];');
   if (hasSoftDelete) {
     if (sdNonNull) {
-      lines.push(`      conditions.push("${toSnakeCase(sdField)} IS NULL");`);
+      lines.push(
+        `      if (!opts?.includeDeleted) conditions.push("${toSnakeCase(sdField)} IS NULL");`,
+      );
     } else {
-      lines.push(`      conditions.push("${toSnakeCase(sdField)} != ?");`);
-      lines.push(`      params.push('${sdValue}');`);
+      lines.push(`      if (!opts?.includeDeleted) {`);
+      lines.push(`        conditions.push("${toSnakeCase(sdField)} != ?");`);
+      lines.push(`        params.push('${sdValue}');`);
+      lines.push(`      }`);
     }
   }
   if (ttlSeconds) {

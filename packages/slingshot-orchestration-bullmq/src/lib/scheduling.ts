@@ -41,16 +41,16 @@ export function createSchedulingFns(
     await ensureStarted();
     const queue = target.type === 'task' ? getQueueForTaskName(target.name) : state.workflowQueue;
     const scheduleId = `slingshot-schedule-${target.type}-${target.name}-${generateRunId()}`;
-    await queue.add(
-      target.name,
+    await queue.upsertJobScheduler(
+      scheduleId,
+      { pattern: cron },
       {
-        [target.type === 'task' ? 'taskName' : 'workflowName']: target.name,
-        input,
-        _scheduled: true,
-      },
-      {
-        jobId: scheduleId,
-        repeat: { pattern: cron },
+        name: target.name,
+        data: {
+          [target.type === 'task' ? 'taskName' : 'workflowName']: target.name,
+          input,
+          _scheduled: true,
+        },
       },
     );
     return { id: scheduleId, target, cron, input };

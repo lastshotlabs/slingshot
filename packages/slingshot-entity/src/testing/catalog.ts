@@ -361,7 +361,7 @@ const SCOPE_AND_LIFECYCLE = [
   ),
   defineCase(
     'lifecycle.soft-delete-visibility',
-    'soft-deleted records are hidden from public reads',
+    'soft-deleted records are hidden by default and recoverable through explicit list opt-in',
     ['crud.create', 'crud.read', 'crud.delete', 'crud.list', 'lifecycle.soft-delete'],
     async harness => {
       const target = adapter(harness, CONFORMANCE_SOFT_DELETE_KEY);
@@ -369,6 +369,11 @@ const SCOPE_AND_LIFECYCLE = [
       assertEqual(await target.delete('soft-1'), true, 'Soft delete result');
       assertEqual(await target.getById('soft-1'), null, 'Soft-deleted get');
       assertEqual((await target.list()).items.length, 0, 'Soft-deleted list');
+      assertEqual(
+        (await target.list({ includeDeleted: true })).items.length,
+        1,
+        'Explicit soft-deleted list',
+      );
       assertEqual(await target.delete('soft-1'), false, 'Repeated soft delete');
     },
   ),

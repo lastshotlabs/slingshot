@@ -46,7 +46,7 @@ bun add @lastshotlabs/slingshot-webhooks
 ## Peer Dependencies
 
 - `@hono/zod-openapi`: `>=0.18`
-- `bullmq`: `>=5 <6`
+- `bullmq`: `>=6 <7`
 - `hono`: `>=4.12.14 <5`
 - `ioredis`: `>=5 <6`
 - `mongoose`: `>=9.0 <10`

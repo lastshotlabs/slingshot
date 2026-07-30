@@ -194,6 +194,29 @@ export class FakeQueue {
     return this.jobs;
   }
 
+  async upsertJobScheduler(
+    key: string,
+    repeat: { pattern?: string },
+    template?: { name?: string; data?: Record<string, unknown> },
+  ) {
+    const name = template?.name ?? key;
+    const data = template?.data ?? {};
+    this.schedulers = this.schedulers.filter(scheduler => scheduler.key !== key);
+    this.schedulers.push({
+      key,
+      name,
+      pattern: repeat.pattern,
+      memo: data,
+    });
+    return new FakeJob({
+      queue: this,
+      id: key,
+      name,
+      data,
+      opts: { repeat },
+    });
+  }
+
   async getJobSchedulers() {
     return this.schedulers;
   }

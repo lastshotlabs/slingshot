@@ -1126,6 +1126,8 @@ export interface CursorPaginationOptions {
   cursor?: string;
   /** Sort direction override. */
   sortDir?: 'asc' | 'desc';
+  /** Include records hidden by the entity's soft-delete policy. */
+  includeDeleted?: boolean;
 }
 
 /**

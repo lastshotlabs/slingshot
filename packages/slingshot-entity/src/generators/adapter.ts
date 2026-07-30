@@ -90,6 +90,7 @@ export interface ListOptions {
   limit?: number;
   cursor?: string;
   sortDir?: 'asc' | 'desc';
+  includeDeleted?: boolean;
   [key: string]: unknown;
 }
 

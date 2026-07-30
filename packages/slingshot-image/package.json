@@ -42,7 +42,7 @@
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "20.19.39"
+    "@types/node": "26.1.2"
   },
   "engines": {
     "node": ">=20"

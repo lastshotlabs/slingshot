@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",
-    "better-sqlite3": "12.8.0"
+    "better-sqlite3": "13.0.2"
   },
   "peerDependencies": {
     "zod": ">=4.0 <5"

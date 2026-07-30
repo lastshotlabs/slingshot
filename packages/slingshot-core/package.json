@@ -44,7 +44,7 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "8.4.3",
+    "@asteasolutions/zod-to-openapi": "9.1.0",
     "@faker-js/faker": "10.4.0",
     "@hono/zod-openapi": "1.2.2",
     "undici": "8.8.0"

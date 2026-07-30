@@ -66,6 +66,20 @@ export interface OutboxOperationalRow {
   readonly lastErrorCode: string | null;
 }
 
+/** Redacted bounded detail for one durable outbox event. */
+export interface OutboxOperationalDetail extends OutboxOperationalRow {
+  readonly schemaVersion: number;
+  readonly occurredAt: string | null;
+  readonly ownerPlugin: string | null;
+  readonly requestTenantId: string | null;
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+  readonly source: string | null;
+  readonly scope: unknown;
+  readonly payloadPreview: unknown;
+  readonly lastErrorMessage: string | null;
+}
+
 /** Aggregate state used by readiness, metrics, and `events outbox status`. */
 export interface OutboxOperationalStatus {
   readonly counts: Readonly<Record<OutboxStatus, number>>;
@@ -87,6 +101,8 @@ export interface OutboxReplayAudit {
 export interface EventReliabilityOperations {
   status(now: string): Promise<OutboxOperationalStatus>;
   list(status: OutboxStatus, limit: number): Promise<readonly OutboxOperationalRow[]>;
+  inspect(eventId: string): Promise<OutboxOperationalDetail | null>;
+  listReplayAudit(limit: number): Promise<readonly OutboxReplayAudit[]>;
   retryEvent(input: {
     readonly eventId: string;
     readonly now: string;

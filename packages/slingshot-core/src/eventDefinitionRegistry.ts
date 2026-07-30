@@ -43,6 +43,7 @@ export function createEventDefinitionRegistry(
       }
 
       const frozenDefinition = defineEvent(definition.key, {
+        schemaVersion: definition.schemaVersion,
         ownerPlugin: definition.ownerPlugin,
         exposure: definition.exposure,
         schema: definition.schema,

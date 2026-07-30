@@ -23,6 +23,7 @@ export function createEventEnvelope<K extends EventKey>(
     meta: {
       eventId: crypto.randomUUID(),
       occurredAt: new Date().toISOString(),
+      schemaVersion: params.schemaVersion ?? 1,
       ownerPlugin: params.ownerPlugin,
       exposure: Object.freeze([...params.exposure]),
       scope: params.scope ? { ...params.scope } : null,
@@ -86,6 +87,7 @@ export function isEventEnvelope<K extends EventKey = EventKey>(
     meta?: {
       eventId?: unknown;
       occurredAt?: unknown;
+      schemaVersion?: unknown;
       ownerPlugin?: unknown;
       exposure?: unknown;
       scope?: unknown;
@@ -103,6 +105,10 @@ export function isEventEnvelope<K extends EventKey = EventKey>(
   return (
     typeof candidate.meta.eventId === 'string' &&
     typeof candidate.meta.occurredAt === 'string' &&
+    (candidate.meta.schemaVersion === undefined ||
+      (typeof candidate.meta.schemaVersion === 'number' &&
+        Number.isSafeInteger(candidate.meta.schemaVersion) &&
+        candidate.meta.schemaVersion > 0)) &&
     typeof candidate.meta.ownerPlugin === 'string' &&
     Array.isArray(candidate.meta.exposure)
   );

@@ -68,6 +68,58 @@ describe('SQLite event reliability operations', () => {
     }
   });
 
+  test('inspects one event through a bounded recursively redacted projection', async () => {
+    const db = database();
+    try {
+      insertOutbox(db, { id: 'detail', status: 'dead', createdAt: '2026-01-01T00:00:00Z' });
+      db.run(
+        `UPDATE slingshot_event_outbox
+            SET envelope_json = ?, last_error_message = ?
+          WHERE event_id = 'event-detail'`,
+        JSON.stringify({
+          key: 'orders:created',
+          payload: {
+            orderId: 'order-1',
+            password: 'do-not-show',
+            nested: { authorization: 'Bearer abc123', note: 'token=abc123' },
+          },
+          meta: {
+            eventId: 'event-detail',
+            occurredAt: '2026-01-01T00:00:00Z',
+            schemaVersion: 2,
+            ownerPlugin: 'orders',
+            exposure: ['internal'],
+            scope: { tenantId: 'tenant-1', apiKey: 'hidden' },
+            requestTenantId: 'tenant-1',
+            requestId: 'request-1',
+            correlationId: 'correlation-1',
+            source: 'job',
+          },
+        }),
+        'failed with token=abc123',
+      );
+      const operations = createSqliteEventReliabilityOperations(
+        db as unknown as RuntimeSqliteDatabase,
+      );
+
+      expect(await operations.inspect('event-detail')).toMatchObject({
+        eventId: 'event-detail',
+        schemaVersion: 2,
+        ownerPlugin: 'orders',
+        requestTenantId: 'tenant-1',
+        scope: { tenantId: 'tenant-1', apiKey: '[redacted]' },
+        payloadPreview: {
+          orderId: 'order-1',
+          password: '[redacted]',
+          nested: { authorization: '[redacted]', note: 'token=[redacted]' },
+        },
+        lastErrorMessage: 'failed with token=[redacted]',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   test('retry preserves envelope and event identity and writes audit records', async () => {
     const db = database();
     try {
@@ -102,6 +154,14 @@ describe('SQLite event reliability operations', () => {
         actor: 'operator',
         reason: 'broker restored',
       });
+      expect(await operations.listReplayAudit(10)).toEqual([
+        expect.objectContaining({
+          eventId: 'event-dead',
+          replayedCount: 1,
+          actor: 'operator',
+          reason: 'broker restored',
+        }),
+      ]);
     } finally {
       db.close();
     }

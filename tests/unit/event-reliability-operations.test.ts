@@ -19,6 +19,12 @@ function operations(status: OutboxOperationalStatus): EventReliabilityOperations
     async list() {
       return [];
     },
+    async inspect() {
+      return null;
+    },
+    async listReplayAudit() {
+      return [];
+    },
     async retryEvent() {
       return false;
     },

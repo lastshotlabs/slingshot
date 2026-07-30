@@ -61,6 +61,8 @@ export interface EventSubscriptionPrincipal {
 export interface EventEnvelopeMeta {
   eventId: string;
   occurredAt: string;
+  /** Positive integer version of the governed event payload contract. */
+  schemaVersion: number;
   ownerPlugin: string;
   exposure: readonly EventExposure[];
   scope: EventScope | null;
@@ -84,6 +86,8 @@ export interface EventEnvelope<K extends EventKey = EventKey> {
 export interface CreateEventEnvelopeParams<K extends EventKey> {
   key: K;
   payload: SlingshotEventMap[K];
+  /** Governed payload-contract version. Defaults to `1` for direct/raw publishers. */
+  schemaVersion?: number;
   ownerPlugin: string;
   exposure: readonly EventExposure[];
   scope: EventScope | null;
@@ -96,6 +100,8 @@ export interface CreateEventEnvelopeParams<K extends EventKey> {
 /** Declares a publishable event: its owner, exposure surfaces, payload schema, and scope/authorization/projection logic. */
 export interface EventDefinition<K extends EventKey = EventKey> {
   key: K;
+  /** Positive integer payload-contract version. Defaults to `1` in `defineEvent()`. */
+  schemaVersion: number;
   ownerPlugin: string;
   exposure: readonly EventExposure[];
   schema?: z.ZodType<SlingshotEventMap[K]>;

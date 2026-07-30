@@ -177,6 +177,7 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
       const envelope = createEventEnvelope({
         key,
         payload: validatedPayload,
+        schemaVersion: definition.schemaVersion,
         ownerPlugin: definition.ownerPlugin,
         exposure: definition.exposure,
         scope,

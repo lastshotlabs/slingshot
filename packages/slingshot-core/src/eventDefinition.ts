@@ -36,6 +36,12 @@ function hasExternalExposure(exposure: readonly EventExposure[]): boolean {
  * is declared, exposures are duplicated, or `internal` is mixed with external exposures.
  */
 export function validateEventDefinition<K extends EventKey>(definition: EventDefinition<K>): void {
+  if (!Number.isSafeInteger(definition.schemaVersion) || definition.schemaVersion <= 0) {
+    throw new Error(
+      `[EventDefinitionRegistry] Event "${definition.key}" requires a positive integer schemaVersion.`,
+    );
+  }
+
   if (!definition.ownerPlugin.trim()) {
     throw new Error('[EventDefinitionRegistry] Event definitions require a non-empty ownerPlugin.');
   }
@@ -68,10 +74,13 @@ export function validateEventDefinition<K extends EventKey>(definition: EventDef
  */
 export function defineEvent<K extends EventKey>(
   key: K,
-  definition: Omit<EventDefinition<K>, 'key'>,
+  definition: Omit<EventDefinition<K>, 'key' | 'schemaVersion'> & {
+    readonly schemaVersion?: number;
+  },
 ): Readonly<EventDefinition<K>> {
   const normalized: EventDefinition<K> = {
     key,
+    schemaVersion: definition.schemaVersion ?? 1,
     ...definition,
     exposure: Object.freeze([...definition.exposure]),
   };

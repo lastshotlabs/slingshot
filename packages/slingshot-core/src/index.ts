@@ -42,6 +42,12 @@ export type {
 } from './eventSerializer';
 export { JsonEventSerializer, JSON_SERIALIZER } from './eventSerializer';
 export type { EventSchemaRegistry, EventValidationResult } from './eventSchemaRegistry';
+export { createEventVersionRegistry } from './eventVersionRegistry';
+export type {
+  EventVersionAdapter,
+  EventVersionAdaptation,
+  EventVersionRegistry,
+} from './eventVersionRegistry';
 export { createEventSchemaRegistry, validateEventPayload } from './eventSchemaRegistry';
 export type {
   EventDefinition,

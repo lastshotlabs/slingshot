@@ -1,6 +1,8 @@
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { projectStoredEventEnvelope, redactOperatorText } from '../operatorProjection';
 import type {
   EventReliabilityOperations,
+  OutboxOperationalDetail,
   OutboxOperationalRow,
   OutboxOperationalStatus,
   OutboxStatus,
@@ -9,6 +11,34 @@ import type {
 interface CountRow {
   status: OutboxStatus;
   count: number;
+}
+
+interface SqliteOperationalRow {
+  id: string;
+  event_id: string;
+  event_key: string;
+  status: OutboxStatus;
+  attempts: number;
+  available_at: string;
+  lease_expires_at: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  last_error_code: string | null;
+}
+
+function operationalRow(row: SqliteOperationalRow): OutboxOperationalRow {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    eventKey: row.event_key,
+    status: row.status,
+    attempts: row.attempts,
+    availableAt: row.available_at,
+    leaseExpiresAt: row.lease_expires_at,
+    createdAt: row.created_at,
+    deliveredAt: row.delivered_at,
+    lastErrorCode: row.last_error_code,
+  };
 }
 
 /** Create SQLite-backed reliability operations for health and CLI tooling. */
@@ -49,35 +79,60 @@ export function createSqliteEventReliabilityOperations(
     },
     async list(status, limit): Promise<readonly OutboxOperationalRow[]> {
       return db
-        .query<{
-          id: string;
-          event_id: string;
-          event_key: string;
-          status: OutboxStatus;
-          attempts: number;
-          available_at: string;
-          lease_expires_at: string | null;
-          created_at: string;
-          delivered_at: string | null;
-          last_error_code: string | null;
-        }>(
+        .query<SqliteOperationalRow>(
           `SELECT id, event_id, event_key, status, attempts, available_at,
                   lease_expires_at, created_at, delivered_at, last_error_code
              FROM slingshot_event_outbox
             WHERE status = ? ORDER BY created_at LIMIT ?`,
         )
         .all(status, limit)
+        .map(operationalRow);
+    },
+    async inspect(eventId): Promise<OutboxOperationalDetail | null> {
+      const row = db
+        .query<
+          SqliteOperationalRow & {
+            envelope_json: string;
+            last_error_message: string | null;
+          }
+        >(
+          `SELECT id, event_id, event_key, envelope_json, status, attempts, available_at,
+                  lease_expires_at, created_at, delivered_at, last_error_code, last_error_message
+             FROM slingshot_event_outbox
+            WHERE event_id = ? LIMIT 1`,
+        )
+        .get(eventId);
+      if (!row) return null;
+      return {
+        ...operationalRow(row),
+        ...projectStoredEventEnvelope(row.envelope_json),
+        lastErrorMessage: row.last_error_message
+          ? redactOperatorText(row.last_error_message)
+          : null,
+      };
+    },
+    async listReplayAudit(limit) {
+      return db
+        .query<{
+          id: string;
+          event_id: string | null;
+          replayed_count: number;
+          actor: string;
+          reason: string;
+          created_at: string;
+        }>(
+          `SELECT id, event_id, replayed_count, actor, reason, created_at
+             FROM slingshot_event_replay_audit
+            ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(limit)
         .map(row => ({
           id: row.id,
           eventId: row.event_id,
-          eventKey: row.event_key,
-          status: row.status,
-          attempts: row.attempts,
-          availableAt: row.available_at,
-          leaseExpiresAt: row.lease_expires_at,
+          replayedCount: row.replayed_count,
+          actor: row.actor,
+          reason: row.reason,
           createdAt: row.created_at,
-          deliveredAt: row.delivered_at,
-          lastErrorCode: row.last_error_code,
         }));
     },
     async retryEvent(input): Promise<boolean> {

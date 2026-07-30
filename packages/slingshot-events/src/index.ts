@@ -51,6 +51,7 @@ export type {
   LeasedOutboxRow,
   NewOutboxRow,
   OutboxOperationalRow,
+  OutboxOperationalDetail,
   OutboxOperationalStatus,
   OutboxDispatchRepository,
   OutboxRepository,
@@ -58,6 +59,11 @@ export type {
   OutboxStatus,
 } from './outbox/repository';
 export { serializeOutboxEnvelope } from './outbox/repository';
+export {
+  projectStoredEventEnvelope,
+  redactEventPayload,
+  redactOperatorText,
+} from './operatorProjection';
 /** Governed transactionally deduplicated consumer implementation. */
 export { createTransactionalEventConsumer } from './consume';
 export type { InboxLifecycleEvent, ResolveTransactionScopeInfra } from './consume';

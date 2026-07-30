@@ -317,7 +317,7 @@
     "@vitest/coverage-v8": "4.1.2",
     "argon2": "0.44.0",
     "better-sqlite3": "12.8.0",
-    "bullmq": "5.76.4",
+    "bullmq": "6.0.0",
     "dependency-cruiser": "17.3.9",
     "eslint": "10.1.0",
     "eslint-config-prettier": "10.1.8",

@@ -32,6 +32,10 @@ export default class MigrateApply extends Command {
       description: 'Directory containing migration files.',
       default: 'migrations',
     }),
+    approve: Flags.string({
+      description:
+        'Exact approval digest printed by migrate plan for contract or destructive work.',
+    }),
     'include-framework': Flags.boolean({
       description:
         'Apply framework-owned schemas, including PostgreSQL auth, after entity migrations.',
@@ -49,7 +53,12 @@ export default class MigrateApply extends Command {
 
     let result;
     try {
-      result = await applyPending({ backend, connectionString, migrationsDir });
+      result = await applyPending({
+        backend,
+        connectionString,
+        migrationsDir,
+        approve: flags.approve,
+      });
     } catch (err) {
       this.error(err instanceof Error ? err.message : String(err));
     }

@@ -1,0 +1,58 @@
+---
+title: Migration Engine v2
+description: Plan, approve, verify, and safely resume schema migrations.
+---
+
+Migration Engine v2 separates review from execution. Generate migration files
+as usual, then inspect the deterministic risk plan before applying:
+
+```sh
+slingshot migrate plan
+slingshot migrate verify
+slingshot migrate apply
+```
+
+`migrate plan --json` returns a versioned `formatVersion: 2` document. Every
+step declares its expand/backfill/contract phase, risk, lock risk,
+preconditions, operation checksum, and post-step verification. The JSON output
+is deterministic for the same database history and files.
+
+Contract and destructive SQL fail closed. After reviewing the exact plan, pass
+the printed digest:
+
+```sh
+slingshot migrate apply --approve <digest>
+```
+
+Editing a file, changing the pending set, or changing recorded history changes
+the digest. Never persist approval digests as a broad environment default.
+
+## Renames
+
+Use `renameFrom` to distinguish a data-preserving rename from an ambiguous
+remove/add pair:
+
+```ts
+const CustomerV2 = defineEntity('Customer', {
+  fields: {
+    id: field.string({ primary: true }),
+    displayName: field.string({ renameFrom: 'name' }),
+  },
+});
+```
+
+The source must exist only in the previous snapshot and may be claimed by only
+one target. A rename that also changes type is rejected unless it names an
+operator-reviewed `migrationTransform`.
+
+## Ledger and recovery
+
+PostgreSQL applies under an app/database advisory lock. SQLite applies under an
+immediate transaction. The immutable v2 ledger records the plan checksum,
+source and target schema checksums, applied step ID, executor version, and
+verification result. SQLite interruption rolls the step and ledger entry back
+together, so the same unchanged plan can resume without repeating committed
+work.
+
+Run `migrate verify --json` in deployment CI before apply. It fails on modified
+history, missing applied files, out-of-order migrations, or malformed steps.

@@ -144,6 +144,16 @@ export type ResolvedConcurrencyFields<
  * Control optional/required status, default values, immutability, and primary key designation.
  */
 export interface FieldOptions {
+  /**
+   * Previous persisted field name. Migration planning treats this as an
+   * explicit data-preserving rename rather than a remove/add pair.
+   */
+  renameFrom?: string;
+  /**
+   * Named operator-reviewed transform/backfill for a rename that also changes
+   * type. The migration engine refuses such renames when this is omitted.
+   */
+  migrationTransform?: string;
   /** Makes the field optional (TS `?:`). Defaults to `false`. */
   optional?: boolean;
   /** Default value: an auto sentinel or a literal matching the field type. */
@@ -224,6 +234,8 @@ export interface FieldDef<
    * variant union can be derived at the entity level for narrowing.
    */
   readonly inputVariants?: InputVariants;
+  readonly renameFrom?: string;
+  readonly migrationTransform?: string;
   readonly default?: Default;
   readonly onUpdate?: OnUpdate;
   readonly enumValues?: EnumValues;
@@ -282,6 +294,8 @@ function makeField<
     immutable: opts?.immutable ?? opts?.primary ?? false, // PK is immutable by default
     private: opts?.private ?? false,
     inputVariants: opts?.inputVariants as ResolveInputVariants<O>,
+    renameFrom: opts?.renameFrom,
+    migrationTransform: opts?.migrationTransform,
     default: opts?.default as ResolveDflt<O>,
     onUpdate: opts?.onUpdate as ResolveUpd<O>,
     enumValues,

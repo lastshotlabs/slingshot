@@ -34,6 +34,8 @@ function makeField<
     immutable: opts?.immutable ?? opts?.primary ?? false,
     private: opts?.private ?? false,
     inputVariants: opts?.inputVariants as ResolveInputVariants<O>,
+    renameFrom: opts?.renameFrom,
+    migrationTransform: opts?.migrationTransform,
     format: opts?.format,
     default: opts?.default as ResolveDflt<O>,
     onUpdate: opts?.onUpdate as ResolveUpd<O>,

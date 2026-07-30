@@ -4,11 +4,30 @@
  * Snapshots are stored as JSON files in a configurable directory
  * (default: .slingshot/snapshots/).
  */
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { ResolvedEntityConfig } from '../types';
-import type { EntitySnapshot } from './types';
+import type { EntitySnapshot, EntitySnapshotV1, EntitySnapshotV2 } from './types';
+
+function normalizedEntity(config: ResolvedEntityConfig): ResolvedEntityConfig {
+  return JSON.parse(JSON.stringify(config)) as ResolvedEntityConfig;
+}
+
+function schemaChecksum(entity: ResolvedEntityConfig): string {
+  return createHash('sha256').update(JSON.stringify(entity), 'utf8').digest('hex');
+}
+
+/** Deterministically upgrade the legacy full-config snapshot to v2 schema facts. */
+export function upgradeSnapshotV1(snapshot: EntitySnapshotV1): EntitySnapshotV2 {
+  const entity = normalizedEntity(snapshot.entity);
+  return {
+    snapshotVersion: 2,
+    timestamp: snapshot.timestamp,
+    schemaChecksum: schemaChecksum(entity),
+    entity,
+  };
+}
 
 function snapshotFilename(config: ResolvedEntityConfig): string {
   return `${config._storageName}.json`;
@@ -17,7 +36,8 @@ function snapshotFilename(config: ResolvedEntityConfig): string {
 function readSnapshotFile(filePath: string): EntitySnapshot | null {
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw) as EntitySnapshot;
+    const parsed = JSON.parse(raw) as EntitySnapshot;
+    return parsed.snapshotVersion === 1 ? upgradeSnapshotV1(parsed) : parsed;
   } catch {
     // File does not exist or contains invalid JSON — treat as no snapshot.
     return null;
@@ -110,10 +130,12 @@ export function loadSnapshot(
  */
 export function saveSnapshot(snapshotDir: string, config: ResolvedEntityConfig): void {
   mkdirSync(snapshotDir, { recursive: true });
-  const snapshot: EntitySnapshot = {
-    snapshotVersion: 1,
+  const entity = normalizedEntity(config);
+  const snapshot: EntitySnapshotV2 = {
+    snapshotVersion: 2,
     timestamp: new Date().toISOString(),
-    entity: config,
+    schemaChecksum: schemaChecksum(entity),
+    entity,
   };
   const filePath = join(snapshotDir, snapshotFilename(config));
   const tmpPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;

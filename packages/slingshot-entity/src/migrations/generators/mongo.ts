@@ -85,6 +85,12 @@ export function generateMigrationMongo(plan: MigrationPlan): string {
 
   for (const change of plan.changes) {
     switch (change.type) {
+      case 'renameField': {
+        schema.push(
+          `${coll}.updateMany({ ${jsonString(change.from)}: { $exists: true } }, { $rename: { ${jsonString(change.from)}: ${jsonString(change.to)} } });`,
+        );
+        break;
+      }
       case 'addField': {
         const fieldKey = jsonString(change.name);
         schema.push(`// Field ${fieldKey} added — no migration needed (schemaless).`);
@@ -127,6 +133,24 @@ export function generateMigrationMongo(plan: MigrationPlan): string {
         schema.push(`// Manual data transformation required.`);
         break;
       }
+
+      case 'changeOptionality':
+        schema.push(
+          `// Optionality for ${jsonString(change.name)} changed; validate/backfill documents before enforcing at the application boundary.`,
+        );
+        break;
+
+      case 'changeDefault':
+        schema.push(
+          `// Default for ${jsonString(change.name)} changed; existing documents are intentionally unchanged.`,
+        );
+        break;
+
+      case 'changeEnumValues':
+        schema.push(
+          `// Enum values for ${jsonString(change.name)} changed; review existing documents before removing values.`,
+        );
+        break;
 
       case 'addIndex': {
         const spec = indexSpec(change.index.fields, change.index.direction);

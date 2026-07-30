@@ -20,6 +20,7 @@ import { createRequire } from 'module';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import type { Backend } from './discover';
+import { buildMigrationPlanV2 } from './planV2';
 import { migrationsDirFor } from './planner';
 
 /**
@@ -73,6 +74,7 @@ export interface MigrationStatus {
 }
 
 const TRACKING_TABLE = '_slingshot_entity_migrations';
+const LEDGER_TABLE = '_slingshot_migration_ledger_v2';
 
 function sha256(s: string): string {
   return createHash('sha256').update(s, 'utf-8').digest('hex');
@@ -146,6 +148,19 @@ async function pgEnsureTrackingTable(client: PgClient): Promise<void> {
        id TEXT PRIMARY KEY,
        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
        checksum TEXT NOT NULL
+     )`,
+  );
+  await client.query(
+    `CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
+       migration_id TEXT PRIMARY KEY,
+       plan_checksum TEXT NOT NULL,
+       source_schema_checksum TEXT NOT NULL,
+       target_schema_checksum TEXT NOT NULL,
+       applied_step_ids JSONB NOT NULL,
+       started_at TIMESTAMPTZ NOT NULL,
+       completed_at TIMESTAMPTZ NOT NULL,
+       executor_version TEXT NOT NULL,
+       verification_result TEXT NOT NULL
      )`,
   );
 }
@@ -231,6 +246,19 @@ function sqliteEnsureTrackingTable(db: SqliteDb): void {
        checksum TEXT NOT NULL
      )`,
   );
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
+       migration_id TEXT PRIMARY KEY,
+       plan_checksum TEXT NOT NULL,
+       source_schema_checksum TEXT NOT NULL,
+       target_schema_checksum TEXT NOT NULL,
+       applied_step_ids TEXT NOT NULL,
+       started_at INTEGER NOT NULL,
+       completed_at INTEGER NOT NULL,
+       executor_version TEXT NOT NULL,
+       verification_result TEXT NOT NULL
+     )`,
+  );
 }
 
 function sqliteListApplied(db: SqliteDb): AppliedMigration[] {
@@ -247,6 +275,69 @@ function sqliteListApplied(db: SqliteDb): AppliedMigration[] {
 function sqliteApplyOne(db: SqliteDb, m: PendingMigration): void {
   db.exec(m.sql);
   db.prepare(`INSERT INTO ${TRACKING_TABLE} (id, checksum) VALUES (?, ?)`).run(m.id, m.checksum);
+}
+
+interface LedgerRecord {
+  migrationId: string;
+  planChecksum: string;
+  sourceChecksum: string;
+  targetChecksum: string;
+  stepId: string;
+  startedAt: Date;
+}
+
+function ledgerRecord(
+  migration: PendingMigration,
+  plan: ReturnType<typeof buildMigrationPlanV2>,
+  startedAt: Date,
+): LedgerRecord {
+  return {
+    migrationId: migration.id,
+    planChecksum: sha256(JSON.stringify(plan)),
+    sourceChecksum: plan.fromChecksum,
+    targetChecksum: plan.toChecksum,
+    stepId:
+      plan.steps.find(step => step.operation.migrationId === migration.id)?.id ?? migration.id,
+    startedAt,
+  };
+}
+
+async function pgRecordLedger(client: PgClient, record: LedgerRecord): Promise<void> {
+  await client.query(
+    `INSERT INTO ${LEDGER_TABLE}
+       (migration_id, plan_checksum, source_schema_checksum, target_schema_checksum,
+        applied_step_ids, started_at, completed_at, executor_version, verification_result)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW(), $7, $8)`,
+    [
+      record.migrationId,
+      record.planChecksum,
+      record.sourceChecksum,
+      record.targetChecksum,
+      JSON.stringify([record.stepId]),
+      record.startedAt,
+      '2',
+      'passed',
+    ],
+  );
+}
+
+function sqliteRecordLedger(db: SqliteDb, record: LedgerRecord): void {
+  db.prepare(
+    `INSERT INTO ${LEDGER_TABLE}
+       (migration_id, plan_checksum, source_schema_checksum, target_schema_checksum,
+        applied_step_ids, started_at, completed_at, executor_version, verification_result)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.migrationId,
+    record.planChecksum,
+    record.sourceChecksum,
+    record.targetChecksum,
+    JSON.stringify([record.stepId]),
+    record.startedAt.getTime(),
+    Date.now(),
+    '2',
+    'passed',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,6 +579,7 @@ export async function applyPending(args: {
   backend: Backend;
   connectionString: string;
   migrationsDir: string;
+  approve?: string;
 }): Promise<{ applied: PendingMigration[]; drift: MigrationStatus['drift'] }> {
   const status = await getStatus(args);
   if (status.drift.length > 0) {
@@ -516,6 +608,13 @@ export async function applyPending(args: {
     );
   }
   if (status.pending.length === 0) return { applied: [], drift: [] };
+  const plan = buildMigrationPlanV2(args.backend, status);
+  if (plan.approvalDigest && args.approve !== plan.approvalDigest) {
+    throw new Error(
+      `This migration plan contains contract or destructive work. ` +
+        `Review \`slingshot migrate plan\` and rerun with --approve ${plan.approvalDigest}`,
+    );
+  }
 
   const applied: PendingMigration[] = [];
 
@@ -523,12 +622,30 @@ export async function applyPending(args: {
     const pool = await loadPgPool(args.connectionString);
     const client = await pool.connect();
     try {
+      await client.query(`SELECT pg_advisory_lock(hashtext($1))`, [
+        `slingshot:migrate:${args.connectionString}`,
+      ]);
       await pgEnsureTrackingTable(client);
-      for (const m of status.pending) {
-        await pgApplyOne(client, m);
+      const alreadyApplied = new Set((await pgListApplied(client)).map(migration => migration.id));
+      for (const m of status.pending.filter(migration => !alreadyApplied.has(migration.id))) {
+        const startedAt = new Date();
+        await client.query('BEGIN');
+        try {
+          await pgApplyOne(client, m);
+          await pgRecordLedger(client, ledgerRecord(m, plan, startedAt));
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
         applied.push(m);
       }
     } finally {
+      await client
+        .query(`SELECT pg_advisory_unlock(hashtext($1))`, [
+          `slingshot:migrate:${args.connectionString}`,
+        ])
+        .catch(() => undefined);
       client.release?.();
       await pool.end();
     }
@@ -547,9 +664,19 @@ export async function applyPending(args: {
     const db = await loadSqliteDb(args.connectionString);
     try {
       sqliteEnsureTrackingTable(db);
-      for (const m of status.pending) {
-        sqliteApplyOne(db, m);
-        applied.push(m);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const alreadyApplied = new Set(sqliteListApplied(db).map(migration => migration.id));
+        for (const m of status.pending.filter(migration => !alreadyApplied.has(migration.id))) {
+          const startedAt = new Date();
+          sqliteApplyOne(db, m);
+          sqliteRecordLedger(db, ledgerRecord(m, plan, startedAt));
+          applied.push(m);
+        }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
       }
     } finally {
       db.close();

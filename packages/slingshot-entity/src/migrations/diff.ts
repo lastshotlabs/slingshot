@@ -76,10 +76,32 @@ export function diffEntityConfig(
   // Field diffs
   const prevFields = previous.fields;
   const currFields = current.fields;
+  const renameSources = new Map<string, string>();
+  for (const [name, def] of Object.entries(currFields)) {
+    if (!def.renameFrom) continue;
+    if (renameSources.has(def.renameFrom)) {
+      throw new Error(
+        `[migration:${current.name}] Multiple fields rename from '${def.renameFrom}'. Rename sources must be unique.`,
+      );
+    }
+    if (!(def.renameFrom in prevFields) || def.renameFrom in currFields) {
+      throw new Error(
+        `[migration:${current.name}] renameFrom '${def.renameFrom}' for '${name}' must exist only in the previous snapshot.`,
+      );
+    }
+    const previousField = prevFields[def.renameFrom];
+    if (previousField.type !== def.type && !def.migrationTransform) {
+      throw new Error(
+        `[migration:${current.name}] Rename '${def.renameFrom}' to '${name}' changes type without migrationTransform.`,
+      );
+    }
+    renameSources.set(def.renameFrom, name);
+    changes.push({ type: 'renameField', from: def.renameFrom, to: name, field: def });
+  }
 
   // Removed fields first (drops before adds is the consistent convention)
   for (const [name, def] of Object.entries(prevFields)) {
-    if (!(name in currFields)) {
+    if (!(name in currFields) && !renameSources.has(name)) {
       changes.push({ type: 'removeField', name, field: def });
       if (!def.optional) {
         warnings.push(
@@ -91,7 +113,7 @@ export function diffEntityConfig(
 
   // Added fields
   for (const [name, def] of Object.entries(currFields)) {
-    if (!(name in prevFields)) {
+    if (!(name in prevFields) && !def.renameFrom) {
       changes.push({ type: 'addField', name, field: def });
     }
   }
@@ -105,6 +127,37 @@ export function diffEntityConfig(
       warnings.push(
         `Field '${name}' type changed from '${prevDef.type}' to '${currDef.type}' — requires manual data migration`,
       );
+    }
+    if (!prevDef || prevDef.type !== currDef.type) continue;
+    if (prevDef.optional !== currDef.optional) {
+      changes.push({
+        type: 'changeOptionality',
+        name,
+        fromOptional: prevDef.optional,
+        toOptional: currDef.optional,
+      });
+      if (!currDef.optional) {
+        hasBreakingChanges = true;
+        warnings.push(
+          `Field '${name}' becomes required — verify a complete backfill before enforcing NOT NULL`,
+        );
+      }
+    }
+    if (!deepEqual(prevDef.default, currDef.default)) {
+      changes.push({ type: 'changeDefault', name, from: prevDef.default, to: currDef.default });
+    }
+    if (prevDef.type === 'enum' && currDef.type === 'enum') {
+      const previousValues = new Set(prevDef.enumValues ?? []);
+      const currentValues = new Set(currDef.enumValues ?? []);
+      const added = [...currentValues].filter(value => !previousValues.has(value));
+      const removed = [...previousValues].filter(value => !currentValues.has(value));
+      if (added.length > 0 || removed.length > 0) {
+        changes.push({ type: 'changeEnumValues', name, added, removed });
+        if (removed.length > 0) {
+          hasBreakingChanges = true;
+          warnings.push(`Field '${name}' removes enum values: ${removed.join(', ')}`);
+        }
+      }
     }
   }
 

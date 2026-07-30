@@ -840,6 +840,26 @@ The captured adapter is then available inside any `custom` operation handler.
 
 ---
 
+## Schema-operation rollout
+
+Field configuration also carries explicit migration intent. When a persisted
+field changes name, declare the source so generation emits a rename instead of
+an ambiguous remove/add pair:
+
+```typescript
+displayName: field.string({ renameFrom: 'name' });
+```
+
+The source must exist only in the previous v2 snapshot. A rename that changes
+type must also name an operator-reviewed `migrationTransform`; otherwise
+planning fails before emitting SQL. Review the resulting phased plan with
+`slingshot migrate plan`, run `slingshot migrate verify`, and pass the exact
+printed `--approve` digest for contract or destructive work. See
+[Migration Engine v2](/guides/migration-engine-v2/) for the ledger and recovery
+workflow.
+
+---
+
 ## Quick reference
 
 | Need                                                          | Kind                |

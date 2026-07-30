@@ -8,9 +8,15 @@ import { generateMigrationMongo } from './generators/mongo';
 import { generateMigrationPostgres } from './generators/postgres';
 import { generateMigrationSqlite } from './generators/sqlite';
 
-export type { MigrationPlan, MigrationChange, EntitySnapshot } from './types';
+export type {
+  MigrationPlan,
+  MigrationChange,
+  EntitySnapshot,
+  EntitySnapshotV1,
+  EntitySnapshotV2,
+} from './types';
 export { diffEntityConfig } from './diff';
-export { loadSnapshot, saveSnapshot } from './snapshotStore';
+export { loadSnapshot, saveSnapshot, upgradeSnapshotV1 } from './snapshotStore';
 export { generateMigrationSqlite } from './generators/sqlite';
 export { generateMigrationPostgres } from './generators/postgres';
 export { generateMigrationMongo } from './generators/mongo';

@@ -85,6 +85,12 @@ export function generateMigrationSqlite(plan: MigrationPlan): string {
 
   for (const change of plan.changes) {
     switch (change.type) {
+      case 'renameField': {
+        schema.push(
+          `ALTER TABLE ${qTable} RENAME COLUMN ${quoteSqlIdent(toSnakeCase(change.from))} TO ${quoteSqlIdent(toSnakeCase(change.to))};`,
+        );
+        break;
+      }
       case 'addField': {
         const col = quoteSqlIdent(toSnakeCase(change.name));
         const type = sqliteColType(change.field.type);
@@ -121,6 +127,27 @@ export function generateMigrationSqlite(plan: MigrationPlan): string {
         schema.push(`-- SQLite does not support ALTER COLUMN. Manual data migration required.`);
         break;
       }
+
+      case 'changeOptionality':
+        schema.push(
+          `-- MANUAL TABLE REBUILD: '${change.name}' optionality changes from ${change.fromOptional} to ${change.toOptional}.`,
+        );
+        if (!change.toOptional) {
+          schema.push(`-- REQUIRED BACKFILL CHECK before rebuilding with NOT NULL.`);
+        }
+        break;
+
+      case 'changeDefault':
+        schema.push(
+          `-- MANUAL TABLE REBUILD: '${change.name}' default changes from ${String(change.from)} to ${String(change.to)}.`,
+        );
+        break;
+
+      case 'changeEnumValues':
+        schema.push(
+          `-- MANUAL ENUM REVIEW for '${change.name}': add [${change.added.join(', ')}], remove [${change.removed.join(', ')}].`,
+        );
+        break;
 
       case 'addIndex': {
         const cols = change.index.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');

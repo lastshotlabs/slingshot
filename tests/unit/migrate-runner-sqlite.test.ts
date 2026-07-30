@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { afterEach, describe, expect, test } from 'bun:test';
+import { buildMigrationPlanV2 } from '../../src/cli/lib/migrate/planV2';
 import { applyPending, getStatus } from '../../src/cli/lib/migrate/runner';
 
 describe('sqlite migration runner under Bun (#2)', () => {
@@ -78,5 +79,22 @@ describe('sqlite migration runner under Bun (#2)', () => {
     });
 
     expect(second.applied).toHaveLength(0);
+  });
+
+  test('destructive work fails closed without the exact plan approval digest', async () => {
+    const { dbPath, migrationsDir } = scratch();
+    writeMigration(migrationsDir, '20260101000000_init', 'CREATE TABLE t (id TEXT PRIMARY KEY);');
+    await applyPending({ backend: 'sqlite', connectionString: dbPath, migrationsDir });
+    writeMigration(migrationsDir, '20260102000000_drop', 'DROP TABLE t;');
+
+    const args = { backend: 'sqlite' as const, connectionString: dbPath, migrationsDir };
+    await expect(applyPending(args)).rejects.toThrow('--approve');
+    const plan = buildMigrationPlanV2('sqlite', await getStatus(args));
+    expect(plan.approvalDigest).not.toBeNull();
+    await expect(
+      applyPending({ ...args, approve: plan.approvalDigest ?? undefined }),
+    ).resolves.toMatchObject({
+      applied: [expect.objectContaining({ id: '20260102000000_drop' })],
+    });
   });
 });

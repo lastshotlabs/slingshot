@@ -73,6 +73,67 @@ describe('diffEntityConfig', () => {
     expect(removeField).toBeDefined();
   });
 
+  it('emits an explicit data-preserving field rename', () => {
+    const v2 = defineEntity('Message', {
+      namespace: 'chat',
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        roomId: field.string(),
+        body: field.string({ renameFrom: 'content' }),
+        status: field.enum(['sent', 'delivered', 'read'], { default: 'sent' }),
+        createdAt: field.date({ default: 'now' }),
+      },
+      indexes: [index(['roomId', 'createdAt'], { direction: 'desc' })],
+      softDelete: { field: 'status', value: 'deleted' },
+    });
+    const plan = diffEntityConfig(MessageV1, v2);
+    expect(plan.changes.filter(change => change.type === 'renameField')).toEqual([
+      expect.objectContaining({ from: 'content', to: 'body' }),
+    ]);
+    expect(generateMigrationPostgres(plan)).toContain('RENAME COLUMN "content" TO "body"');
+    expect(generateMigrationSqlite(plan)).toContain('RENAME COLUMN "content" TO "body"');
+  });
+
+  it('rejects a rename and type change without an explicit transform', () => {
+    const v2 = defineEntity('Message', {
+      namespace: 'chat',
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        roomId: field.string(),
+        body: field.integer({ renameFrom: 'content' }),
+        status: field.enum(['sent', 'delivered', 'read'], { default: 'sent' }),
+        createdAt: field.date({ default: 'now' }),
+      },
+    });
+    expect(() => diffEntityConfig(MessageV1, v2)).toThrow('without migrationTransform');
+  });
+
+  it('models required-field contraction as backfill-gated work', () => {
+    const previous = defineEntity('Profile', {
+      fields: {
+        id: field.string({ primary: true }),
+        nickname: field.string({ optional: true }),
+      },
+    });
+    const current = defineEntity('Profile', {
+      fields: {
+        id: field.string({ primary: true }),
+        nickname: field.string(),
+      },
+    });
+    const plan = diffEntityConfig(previous, current);
+    expect(plan.hasBreakingChanges).toBe(true);
+    expect(plan.changes).toContainEqual({
+      type: 'changeOptionality',
+      name: 'nickname',
+      fromOptional: true,
+      toOptional: false,
+    });
+    const sql = generateMigrationPostgres(plan);
+    expect(sql).toContain('REQUIRED BACKFILL CHECK');
+    expect(sql).toContain('-- ALTER TABLE');
+  });
+
   it('detects field type change as breaking', () => {
     const v2 = defineEntity('Message', {
       namespace: 'chat',

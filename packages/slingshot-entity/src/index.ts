@@ -133,9 +133,16 @@ export {
   generateInitialMigrationMongo,
   loadSnapshot,
   saveSnapshot,
+  upgradeSnapshotV1,
 } from './migrations';
 /** Schema diff and migration-plan result types for storage evolution workflows. */
-export type { MigrationPlan, MigrationChange, EntitySnapshot } from './migrations';
+export type {
+  MigrationPlan,
+  MigrationChange,
+  EntitySnapshot,
+  EntitySnapshotV1,
+  EntitySnapshotV2,
+} from './migrations';
 /** Resolve the backend-specific table / collection name for an entity. */
 export { storageName } from './lib/naming';
 

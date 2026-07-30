@@ -94,6 +94,12 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
 
   for (const change of plan.changes) {
     switch (change.type) {
+      case 'renameField': {
+        schema.push(
+          `ALTER TABLE ${qTable} RENAME COLUMN ${quoteSqlIdent(toSnakeCase(change.from))} TO ${quoteSqlIdent(toSnakeCase(change.to))};`,
+        );
+        break;
+      }
       case 'addField': {
         const col = quoteSqlIdent(toSnakeCase(change.name));
         const type = pgColType(change.field.type);
@@ -128,6 +134,40 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
         );
         break;
       }
+
+      case 'changeOptionality': {
+        const col = quoteSqlIdent(toSnakeCase(change.name));
+        if (change.toOptional) {
+          schema.push(`ALTER TABLE ${qTable} ALTER COLUMN ${col} DROP NOT NULL;`);
+        } else {
+          schema.push(`-- REQUIRED BACKFILL CHECK: ${col} must contain no NULL values.`);
+          schema.push(`-- ALTER TABLE ${qTable} ALTER COLUMN ${col} SET NOT NULL;`);
+        }
+        break;
+      }
+
+      case 'changeDefault': {
+        const col = quoteSqlIdent(toSnakeCase(change.name));
+        if (change.to === undefined) {
+          schema.push(`ALTER TABLE ${qTable} ALTER COLUMN ${col} DROP DEFAULT;`);
+        } else {
+          const clause = defaultClause({
+            type: 'string',
+            optional: true,
+            primary: false,
+            immutable: false,
+            default: change.to,
+          });
+          schema.push(`ALTER TABLE ${qTable} ALTER COLUMN ${col} SET${clause};`);
+        }
+        break;
+      }
+
+      case 'changeEnumValues':
+        schema.push(
+          `-- MANUAL ENUM REVIEW for '${change.name}': add [${change.added.join(', ')}], remove [${change.removed.join(', ')}].`,
+        );
+        break;
 
       case 'addIndex': {
         const cols = change.index.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');

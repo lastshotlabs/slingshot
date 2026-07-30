@@ -83,6 +83,10 @@ export type AutoDefault = 'uuid' | 'now' | 'cuid' | 'version';
  * ```
  */
 export interface FieldOptions {
+  /** Previous persisted field name used for an explicit migration rename. */
+  renameFrom?: string;
+  /** Operator-reviewed transform/backfill name for rename plus type changes. */
+  migrationTransform?: string;
   /** When true the field is not required on create. Defaults to `false`. */
   optional?: boolean;
   /**
@@ -195,6 +199,8 @@ export interface FieldDef<
    * variant union can be derived at the entity level for narrowing.
    */
   readonly inputVariants?: InputVariants;
+  readonly renameFrom?: string;
+  readonly migrationTransform?: string;
   readonly format?: string;
   readonly default?: Default;
   readonly onUpdate?: OnUpdate;

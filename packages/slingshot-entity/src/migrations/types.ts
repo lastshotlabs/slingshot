@@ -43,6 +43,12 @@ import type {
  * ```
  */
 export type MigrationChange =
+  | {
+      readonly type: 'renameField';
+      readonly from: string;
+      readonly to: string;
+      readonly field: FieldDef;
+    }
   | { readonly type: 'addField'; readonly name: string; readonly field: FieldDef }
   | { readonly type: 'removeField'; readonly name: string; readonly field: FieldDef }
   | {
@@ -50,6 +56,24 @@ export type MigrationChange =
       readonly name: string;
       readonly from: FieldType;
       readonly to: FieldType;
+    }
+  | {
+      readonly type: 'changeOptionality';
+      readonly name: string;
+      readonly fromOptional: boolean;
+      readonly toOptional: boolean;
+    }
+  | {
+      readonly type: 'changeDefault';
+      readonly name: string;
+      readonly from: FieldDef['default'];
+      readonly to: FieldDef['default'];
+    }
+  | {
+      readonly type: 'changeEnumValues';
+      readonly name: string;
+      readonly added: readonly string[];
+      readonly removed: readonly string[];
     }
   | { readonly type: 'addIndex'; readonly index: IndexDef }
   | { readonly type: 'removeIndex'; readonly index: IndexDef }
@@ -148,7 +172,7 @@ export interface MigrationPlan {
  * }
  * ```
  */
-export interface EntitySnapshot {
+export interface EntitySnapshotV1 {
   /** Always `1` — reserved for future format changes. */
   readonly snapshotVersion: 1;
   /** ISO 8601 timestamp of when the snapshot was saved. */
@@ -156,3 +180,17 @@ export interface EntitySnapshot {
   /** The full entity config captured at snapshot time. */
   readonly entity: ResolvedEntityConfig;
 }
+
+/**
+ * Normalized migration snapshot. Runtime callbacks are removed by JSON
+ * serialization before persistence so planning depends only on schema facts.
+ */
+export interface EntitySnapshotV2 {
+  readonly snapshotVersion: 2;
+  readonly timestamp: string;
+  readonly schemaChecksum: string;
+  readonly entity: ResolvedEntityConfig;
+}
+
+/** Persisted migration snapshot accepted by the deterministic v1-to-v2 loader. */
+export type EntitySnapshot = EntitySnapshotV1 | EntitySnapshotV2;

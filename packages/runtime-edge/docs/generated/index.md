@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-runtime-edge`
-- Version: `3.0.0`
+- Version: `4.0.0`
 - Kind: Workspace package
 - Role: feature package
 - Description: Edge runtime implementation with Web Crypto and KV-backed ISR for Slingshot

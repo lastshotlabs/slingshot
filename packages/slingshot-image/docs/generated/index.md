@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-image
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-image`
-- Version: `3.0.0`
+- Version: `4.0.0`
 - Kind: Workspace package
 - Role: feature package
 - Description: On-the-fly image optimization and transform pipeline for Slingshot

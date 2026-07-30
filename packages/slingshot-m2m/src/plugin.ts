@@ -1,6 +1,9 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  emitConfiguredPackageStabilityWarning,
+  getPluginStateOrNull,
+} from '@lastshotlabs/slingshot-core';
 import { createM2MRouter } from './routes/m2m';
 
 /**
@@ -30,9 +33,8 @@ import { createM2MRouter } from './routes/m2m';
  * ```
  */
 export function createM2MPlugin(): SlingshotPlugin {
-  emitPackageStabilityWarning(
+  emitConfiguredPackageStabilityWarning(
     '@lastshotlabs/slingshot-m2m',
-    'experimental',
     'Use the next channel while the machine-to-machine flow is still being hardened.',
   );
 

@@ -1,6 +1,9 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  emitConfiguredPackageStabilityWarning,
+  getPluginStateOrNull,
+} from '@lastshotlabs/slingshot-core';
 import { createScimRouter } from './routes/scim';
 
 /**
@@ -31,9 +34,8 @@ import { createScimRouter } from './routes/scim';
  * ```
  */
 export function createScimPlugin(): SlingshotPlugin {
-  emitPackageStabilityWarning(
+  emitConfiguredPackageStabilityWarning(
     '@lastshotlabs/slingshot-scim',
-    'experimental',
     'Use the next channel while the SCIM surface is still under active development.',
   );
 

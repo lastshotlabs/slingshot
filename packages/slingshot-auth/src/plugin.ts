@@ -13,7 +13,7 @@ import {
   COOKIE_TOKEN,
   HEADER_USER_TOKEN,
   HttpError,
-  emitPackageStabilityWarning,
+  emitConfiguredPackageStabilityWarning,
   getClientIpFromRequest,
   getContextOrNull,
   isPublicPath,
@@ -134,9 +134,8 @@ function readAuthCookieHeaderValue(
  * - OAuth routes are provided by `@lastshotlabs/slingshot-oauth` and mounted by that plugin.
  */
 export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin {
-  emitPackageStabilityWarning(
+  emitConfiguredPackageStabilityWarning(
     '@lastshotlabs/slingshot-auth',
-    'experimental',
     'Use this package on the next channel while the auth surface is still being hardened.',
   );
 

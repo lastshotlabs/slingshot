@@ -199,6 +199,7 @@ export const rootCoverageIgnoredGlobs = [
   // Executable CLI/script entrypoints perform process-level work when loaded;
   // their underlying helpers are covered through command and script tests.
   'scripts/check-unsafe-full-adapter.ts',
+  'scripts/check-maturity-evidence.ts',
   'scripts/tenant-boundary-conformance.ts',
   'src/cli/commands/dev.ts',
   'src/cli/commands/migrate/apply.ts',

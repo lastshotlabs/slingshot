@@ -9,6 +9,11 @@ Slingshot uses the normal npm and SemVer conventions:
 - npm dist-tags describe release channels.
 - runtime warnings surface experimental APIs when a developer actually uses them.
 
+The committed `package-maturity.json` declaration is authoritative. CI
+generates and byte-compares the [package maturity evidence table](/core-features/generated-maturity/),
+release summary, and runtime warning metadata from that declaration and its
+versioned evidence manifests. Hand-written status lists are not release inputs.
+
 All published packages in this worktree are currently pre-1.0 and versioned `0.0.2`, so the safest
 assumption is that the public API may still move.
 

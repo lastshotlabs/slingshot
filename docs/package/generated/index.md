@@ -43,7 +43,7 @@ bun add @lastshotlabs/slingshot
 - `docs:dev`: `bun run docs:generate && bun run docs:install && cd packages/docs && bun run dev`
 - `docs:entity-support`: `bun scripts/generate-entity-support-matrix.ts`
 - `docs:entity-support:check`: `bun scripts/generate-entity-support-matrix.ts --check`
-- `docs:generate`: `bun run docs:entity-support && bun run events:support:generate && bun run docs:sync && bun run docs:api`
+- `docs:generate`: `bun run maturity:generate && bun run docs:entity-support && bun run events:support:generate && bun run docs:sync && bun run docs:api`
 - `docs:impact`: `bun packages/docs/docs-impact.ts`
 - `docs:install`: `cd packages/docs && bun install`
 - `docs:preview`: `bun run docs:build && cd packages/docs && bun run preview`
@@ -58,11 +58,13 @@ bun add @lastshotlabs/slingshot
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`
 - `format`: `prettier --write .`
 - `format:check`: `prettier --check .`
-- `hardening:core`: `bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test`
+- `hardening:core`: `bun run maturity:check && bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run typecheck:tests && bun run build && bun run verify:packed-artifacts && bun run test`
 - `hardening:full`: `bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci`
 - `lint`: `eslint src/ --cache && bun run --filter '@lastshotlabs/slingshot-*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
 - `lint:fix`: `eslint src/ --cache --fix && bun run --filter '@lastshotlabs/slingshot-*' lint -- --fix`
+- `maturity:check`: `bun scripts/check-maturity-evidence.ts`
+- `maturity:generate`: `bun scripts/generate-maturity-evidence.ts`
 - `prepublishOnly`: `bun run hardening:full`
 - `release`: `bun run hardening:full && bun publish --access public && bun run --filter '*' publish`
 - `release:major`: `bun run --filter '*' version major && npm version major && bun run release`

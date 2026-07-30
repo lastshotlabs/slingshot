@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
+import { PACKAGE_MATURITY } from '../slingshot-core/src/generated/packageMaturity';
 import {
   type WorkspacePackage,
   discoverWorkspacePackages,
@@ -19,51 +20,6 @@ interface PackageStatusMeta {
   variant: 'default' | 'note' | 'tip' | 'caution' | 'danger' | 'success';
   note: string;
 }
-
-const corePathPackages = new Set(['slingshot', 'slingshot-core', 'slingshot-entity']);
-const productionPathPackages = new Set([
-  'slingshot-permissions',
-  'slingshot-organizations',
-  'slingshot-orchestration-engine',
-  'slingshot-orchestration-bullmq',
-  'slingshot-orchestration-temporal',
-  'slingshot-orchestration',
-  'slingshot-bullmq',
-  'slingshot-assets',
-  'slingshot-search',
-  'slingshot-webhooks',
-  'slingshot-kafka',
-  'slingshot-admin',
-  'slingshot-mail',
-  'slingshot-notifications',
-  'slingshot-push',
-  'slingshot-runtime-bun',
-  'slingshot-runtime-node',
-  'slingshot-runtime-edge',
-  'slingshot-ssr',
-  'slingshot-ssg',
-  'slingshot-postgres',
-]);
-const experimentalPackages = new Set([
-  'slingshot-auth',
-  'slingshot-oauth',
-  'slingshot-oidc',
-  'slingshot-m2m',
-  'slingshot-scim',
-]);
-const deferredPackages = new Set([
-  'slingshot-community',
-  'slingshot-chat',
-  'slingshot-game-engine',
-  'slingshot-deep-links',
-  'slingshot-embeds',
-  'slingshot-emoji',
-  'slingshot-gifs',
-  'slingshot-image',
-  'slingshot-interactions',
-  'slingshot-polls',
-  'slingshot-infra',
-]);
 
 function ensureDir(path: string): void {
   mkdirSync(path, { recursive: true });
@@ -107,7 +63,9 @@ function packageRole(pkg: WorkspacePackage): string {
 }
 
 function packageStatus(pkg: WorkspacePackage): PackageStatusMeta | null {
-  if (corePathPackages.has(pkg.slug)) {
+  const maturity = PACKAGE_MATURITY[pkg.name as keyof typeof PACKAGE_MATURITY];
+  if (!maturity) return null;
+  if (maturity.profile === 'core') {
     return {
       label: 'Core path',
       variant: 'success',
@@ -115,7 +73,7 @@ function packageStatus(pkg: WorkspacePackage): PackageStatusMeta | null {
     };
   }
 
-  if (productionPathPackages.has(pkg.slug)) {
+  if (maturity.profile === 'prod-path') {
     return {
       label: 'Prod path',
       variant: 'tip',
@@ -123,7 +81,7 @@ function packageStatus(pkg: WorkspacePackage): PackageStatusMeta | null {
     };
   }
 
-  if (experimentalPackages.has(pkg.slug)) {
+  if (maturity.profile === 'experimental') {
     return {
       label: 'Experimental',
       variant: 'caution',
@@ -131,7 +89,7 @@ function packageStatus(pkg: WorkspacePackage): PackageStatusMeta | null {
     };
   }
 
-  if (deferredPackages.has(pkg.slug)) {
+  if (maturity.profile === 'deferred') {
     return {
       label: 'Deferred',
       variant: 'note',

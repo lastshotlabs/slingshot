@@ -1,3 +1,5 @@
+import { PACKAGE_MATURITY } from './generated/packageMaturity';
+
 const emittedWarnings = new Set<string>();
 
 /** Maturity label for a Slingshot package, driving the runtime warning emitted for non-`stable` packages. */
@@ -47,6 +49,16 @@ export function emitPackageStabilityWarning(
     'ExperimentalWarning',
     code,
   );
+}
+
+/** Emit the generated warning policy for a declared package from a public factory call. */
+export function emitConfiguredPackageStabilityWarning(
+  packageName: keyof typeof PACKAGE_MATURITY,
+  detail?: string,
+): void {
+  const maturity = PACKAGE_MATURITY[packageName];
+  if (maturity.warning !== 'factory') return;
+  emitPackageStabilityWarning(packageName, maturity.stability, detail);
 }
 
 export function markPackageExperimental(packageName: string, detail?: string): void {

@@ -3,7 +3,7 @@ import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
-  emitPackageStabilityWarning,
+  emitConfiguredPackageStabilityWarning,
   getPluginStateOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -190,9 +190,8 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
     oauthPluginConfigSchema,
   ) as OAuthPluginOptions;
 
-  emitPackageStabilityWarning(
+  emitConfiguredPackageStabilityWarning(
     '@lastshotlabs/slingshot-oauth',
-    'experimental',
     'Use the next channel until the social login surface is promoted to stable.',
   );
 

@@ -1,5 +1,5 @@
 ---
-'slingshot': minor
+'@lastshotlabs/slingshot': minor
 '@lastshotlabs/slingshot-core': minor
 '@lastshotlabs/slingshot-entity': minor
 ---

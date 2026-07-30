@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-runtime-node",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Node.js runtime implementation for Slingshot",
   "license": "MIT",
   "type": "module",

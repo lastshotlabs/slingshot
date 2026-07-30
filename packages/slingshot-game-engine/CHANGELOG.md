@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-game-engine
 
+## 0.2.13
+
+### Patch Changes
+
+- 0696379: Pin owned runtime, build, and optional dependencies to the versions already selected by the lockfiles. Preserve peer compatibility ranges and workspace protocols, and enforce the distinction in CI.
+- Updated dependencies [2e32296]
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-entity@0.5.1
+  - @lastshotlabs/slingshot-core@0.6.1
+
 ## 0.2.12
 
 ### Patch Changes

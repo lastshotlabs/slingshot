@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-oauth
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-core@0.6.1
+  - @lastshotlabs/slingshot-auth@1.0.5
+
 ## 1.0.4
 
 ### Patch Changes

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssg
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssg`
-- Version: `0.2.10`
+- Version: `0.2.11`
 - Kind: Workspace package
 - Role: feature package
 - Description: Static site generation helpers built on Slingshot SSR

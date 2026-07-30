@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-auth
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [2e32296]
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-postgres@0.3.5
+  - @lastshotlabs/slingshot-core@0.6.1
+
 ## 1.0.4
 
 ### Patch Changes

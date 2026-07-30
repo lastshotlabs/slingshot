@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `3.1.1`
+- Version: `3.1.2`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven TypeScript backend framework for typed APIs, entities, events, workflows, and production operations.
@@ -106,7 +106,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `@lastshotlabs/slingshot-events`: `workspace:*`
 - `@lastshotlabs/slingshot-organizations`: `workspace:*`
-- `@oclif/core`: `4.13.0`
+- `@oclif/core`: `4.13.2`
 - `@opentelemetry/api`: `1.9.1`
 - `@scalar/hono-api-reference`: `0.10.0`
 

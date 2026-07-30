@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-bullmq
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-core@0.6.1
+
 ## 0.3.1
 
 ### Patch Changes

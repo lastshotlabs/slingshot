@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-push
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-push`
-- Version: `2.0.1`
+- Version: `2.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Multi-provider push delivery plugin for Slingshot

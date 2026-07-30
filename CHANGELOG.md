@@ -1,5 +1,36 @@
 # @lastshotlabs/slingshot
 
+## 3.1.2
+
+### Patch Changes
+
+- 0696379: Pin owned runtime, build, and optional dependencies to the versions already selected by the lockfiles. Preserve peer compatibility ranges and workspace protocols, and enforce the distinction in CI.
+- Updated dependencies [2e32296]
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-community@0.2.16
+  - @lastshotlabs/slingshot-entity@0.5.1
+  - @lastshotlabs/slingshot-postgres@0.3.5
+  - @lastshotlabs/slingshot-core@0.6.1
+  - @lastshotlabs/slingshot-deep-links@0.2.9
+  - @lastshotlabs/slingshot-events@0.3.1
+  - @lastshotlabs/slingshot-infra@0.2.9
+  - @lastshotlabs/slingshot-interactions@0.2.12
+  - @lastshotlabs/slingshot-notifications@0.4.2
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.9
+  - @lastshotlabs/slingshot-push@2.0.2
+  - @lastshotlabs/slingshot-organizations@1.0.5
+  - @lastshotlabs/slingshot-webhooks@0.2.11
+  - @lastshotlabs/slingshot-auth@1.0.5
+  - @lastshotlabs/slingshot-runtime-bun@0.2.9
+  - @lastshotlabs/slingshot-admin@0.2.9
+  - @lastshotlabs/slingshot-bullmq@0.3.2
+  - @lastshotlabs/slingshot-kafka@0.3.2
+  - @lastshotlabs/slingshot-mail@0.2.9
+  - @lastshotlabs/slingshot-orchestration@0.2.9
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.9
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.9
+  - @lastshotlabs/slingshot-permissions@0.2.10
+
 ## 3.1.1
 
 ### Patch Changes

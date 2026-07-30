@@ -41,6 +41,12 @@ describe('script entrypoints', () => {
     }
   });
 
+  test('validates the repository dependency version policy', async () => {
+    await expect(
+      import(`../../scripts/check-dependency-version-policy.ts?policy=${Date.now()}`),
+    ).resolves.toBeDefined();
+  });
+
   test('ensures the pagefind junction exists when Bun hoists it', async () => {
     const { ensurePagefindLink, getPagefindPaths } = await import(
       `../../scripts/ensure-pagefind-link.ts?link=${Date.now()}`

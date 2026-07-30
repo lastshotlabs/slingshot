@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-core
 
+## 0.6.1
+
+### Patch Changes
+
+- 2e32296: Add `suspendedAt` to the optional `CoreAuthAdapter.getUser()` profile contract so adapters can expose the suspension timestamp already carried by `UserRecord`.
+- 0696379: Pin owned runtime, build, and optional dependencies to the versions already selected by the lockfiles. Preserve peer compatibility ranges and workspace protocols, and enforce the distinction in CI.
+
 ## 0.6.0
 
 ### Minor Changes

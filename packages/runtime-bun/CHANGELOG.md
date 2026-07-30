@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-runtime-bun
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-core@0.6.1
+
 ## 0.2.8
 
 ### Patch Changes

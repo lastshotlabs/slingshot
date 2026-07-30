@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-events
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-events`
-- Version: `0.3.0`
+- Version: `0.3.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Transactional outbox and inbox reliability for Slingshot events

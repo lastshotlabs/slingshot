@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ai
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ai`
-- Version: `0.4.6`
+- Version: `0.4.7`
 - Kind: Workspace package
 - Role: feature package
 - Description: Multi-provider LLM capability for Slingshot — generation, structured output, moderation, cost tracking

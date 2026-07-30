@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-scim
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-scim`
-- Version: `1.0.4`
+- Version: `1.0.5`
 - Kind: Workspace package
 - Role: feature package
 - Description: SCIM 2.0 user provisioning plugin for Slingshot

@@ -1,5 +1,17 @@
 # @lastshotlabs/slingshot-assets
 
+## 0.2.12
+
+### Patch Changes
+
+- 2e32296: Fix four consumer-reported contract gaps: include owner and size data in asset lifecycle events, expose reply listing through the community public contract, decode Postgres numeric entity fields as JavaScript numbers, and preserve suspension timestamps in Postgres user reads.
+- 0696379: Pin owned runtime, build, and optional dependencies to the versions already selected by the lockfiles. Preserve peer compatibility ranges and workspace protocols, and enforce the distinction in CI.
+- Updated dependencies [2e32296]
+- Updated dependencies [0696379]
+  - @lastshotlabs/slingshot-entity@0.5.1
+  - @lastshotlabs/slingshot-core@0.6.1
+  - @lastshotlabs/slingshot-permissions@0.2.10
+
 ## 0.2.11
 
 ### Patch Changes

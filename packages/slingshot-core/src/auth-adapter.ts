@@ -422,6 +422,7 @@ export interface CoreAuthAdapter {
     lastName?: string;
     externalId?: string;
     suspended?: boolean;
+    suspendedAt?: Date;
     suspendedReason?: string;
     userMetadata?: Record<string, unknown>;
     appMetadata?: Record<string, unknown>;

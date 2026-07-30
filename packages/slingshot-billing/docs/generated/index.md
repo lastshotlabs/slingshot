@@ -39,8 +39,8 @@ bun add @lastshotlabs/slingshot-billing
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
-- `stripe`: `^22.3.2`
-- `zod`: `>=4.0 <5`
+- `stripe`: `22.3.2`
+- `zod`: `4.3.6`
 
 ## Peer Dependencies
 

@@ -36,7 +36,7 @@ bun add @lastshotlabs/slingshot-deep-links
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `zod`: `>=4.0 <5`
+- `zod`: `4.3.6`
 
 ## Peer Dependencies
 

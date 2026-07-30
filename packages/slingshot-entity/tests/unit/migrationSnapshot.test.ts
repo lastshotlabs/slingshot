@@ -2,11 +2,11 @@
  * Snapshot save/load cycle tests.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { writeGenerated } from '../../src/cli';
 import { defineEntity, field } from '../../src/index';
-import { loadSnapshot, saveSnapshot } from '../../src/migrations/snapshotStore';
+import { loadSnapshot, saveSnapshot, upgradeSnapshotV1 } from '../../src/migrations/snapshotStore';
 
 const TMP_DIR = join(import.meta.dir, '../.tmp-snapshot-test');
 
@@ -39,7 +39,8 @@ describe('loadSnapshot', () => {
     saveSnapshot(TMP_DIR, UserEntity);
     const snapshot = loadSnapshot(TMP_DIR, UserEntity);
     expect(snapshot).not.toBeNull();
-    expect(snapshot!.snapshotVersion).toBe(1);
+    expect(snapshot!.snapshotVersion).toBe(2);
+    expect(snapshot).toHaveProperty('schemaChecksum');
     expect(snapshot!.entity.name).toBe('User');
     expect(snapshot!.entity._storageName).toBe(UserEntity._storageName);
   });
@@ -54,7 +55,7 @@ describe('loadSnapshot', () => {
     });
   });
 
-  it('keeps snapshot version 1 and stores an injected concurrency field as an ordinary field', () => {
+  it('stores snapshot version 2 and an injected concurrency field as an ordinary field', () => {
     const ConcurrentUser = defineEntity('ConcurrentUser', {
       fields: UserEntity.fields,
       concurrency: { strategy: 'version', field: 'revision' },
@@ -62,7 +63,7 @@ describe('loadSnapshot', () => {
     saveSnapshot(TMP_DIR, ConcurrentUser);
     const snapshot = loadSnapshot(TMP_DIR, ConcurrentUser);
 
-    expect(snapshot!.snapshotVersion).toBe(1);
+    expect(snapshot!.snapshotVersion).toBe(2);
     expect(snapshot!.entity.fields).toMatchObject({
       revision: expect.objectContaining({
         type: 'number',
@@ -76,6 +77,20 @@ describe('loadSnapshot', () => {
       initialVersion: 1,
       requiredOnWrite: true,
     });
+  });
+
+  it('upgrades v1 snapshots deterministically and idempotently on load', () => {
+    const legacy = {
+      snapshotVersion: 1 as const,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      entity: UserEntity,
+    };
+    const first = upgradeSnapshotV1(legacy);
+    const second = upgradeSnapshotV1(legacy);
+    expect(first).toEqual(second);
+
+    writeFileSync(join(TMP_DIR, `${UserEntity._storageName}.json`), JSON.stringify(legacy), 'utf8');
+    expect(loadSnapshot(TMP_DIR, UserEntity)).toEqual(first);
   });
 
   it('snapshot has a valid ISO timestamp', () => {

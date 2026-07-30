@@ -16,11 +16,10 @@ updates:
     ignore:
       - dependency-name: '@lastshotlabs/*'
     groups:
-      minor-and-patch:
+      patch:
         patterns:
           - '*'
         update-types:
-          - minor
           - patch
 
   - package-ecosystem: bun
@@ -36,11 +35,10 @@ updates:
     ignore:
       - dependency-name: '@lastshotlabs/*'
     groups:
-      minor-and-patch:
+      patch:
         patterns:
           - '*'
         update-types:
-          - minor
           - patch
 
   - package-ecosystem: github-actions

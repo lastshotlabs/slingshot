@@ -402,6 +402,13 @@ export type {
   DefaultValidationErrorBody,
   ValidationErrorDetail,
 } from './context';
+export {
+  captureTenantExecutionContext,
+  deserializeTenantExecutionContext,
+  withTenantExecutionContext,
+  type TenantExecutionContextInput,
+  type TenantExecutionContextSnapshot,
+} from './context/tenantExecutionContext';
 
 // --- memoryEviction ---
 export {
@@ -923,6 +930,12 @@ export {
   getRequestScopeStore,
   setRequestScopeStore,
 } from './requestScope';
+export {
+  createTenantBoundaryRegistry,
+  type TenantBoundaryDefinition,
+  type TenantBoundaryKind,
+  type TenantBoundaryRegistry,
+} from './tenantBoundaries';
 
 // --- typed env-validated config ---
 export type { ConfigDefinition, ConfigSource } from './config';

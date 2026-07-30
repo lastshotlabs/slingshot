@@ -244,6 +244,12 @@ afterAll(async () => {
 
 **Missing DB handle with a silent failure.** If `ctx.sqliteDb` is `null` but your adapter requires it, don't let it blow up somewhere deep in your code. Throw early with the expected config key: `throw new Error('This plugin requires a SQLite path at config.db.sqlite')`. The user needs to know what to fix.
 
+**Passing tenant identity to asynchronous work.** Capture a
+`TenantExecutionContextSnapshot` at the request boundary and restore it inside
+the callback with `withTenantExecutionContext(...)`. Snapshots are immutable,
+versioned values; they avoid module-global tenant state and preserve identity
+across queue, event, job, and realtime boundaries.
+
 ## See also
 
 - [Plugin Interface](/authoring/plugin-interface/) — lifecycle phases and when to access context

@@ -20,6 +20,7 @@ export { loadSnapshot, saveSnapshot, upgradeSnapshotV1 } from './snapshotStore';
 export { generateMigrationSqlite } from './generators/sqlite';
 export { generateMigrationPostgres } from './generators/postgres';
 export { generateMigrationMongo } from './generators/mongo';
+export { setPostgresTenantContext } from './postgresTenantContext';
 export {
   generateInitialMigrationPostgres,
   generateInitialMigrationSqlite,

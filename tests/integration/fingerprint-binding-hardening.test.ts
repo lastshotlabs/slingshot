@@ -18,6 +18,7 @@ afterEach(() => {
 async function setupAuthPlugin(sessionBinding?: boolean) {
   await createTestApp(
     {
+      tenancy: { mode: 'single', tenantId: 'fingerprint-hardening-test' },
       security: {
         trustProxy: false,
         signing: {

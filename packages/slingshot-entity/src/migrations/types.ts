@@ -146,6 +146,7 @@ export interface MigrationPlan {
   readonly storageNames: MigrationStorageNames;
   /** Injected optimistic-concurrency field in the current config, when enabled. */
   readonly concurrencyField?: string;
+  readonly tenant?: { readonly field: string; readonly postgresRls: boolean };
   /** Ordered list of schema changes. Removals are emitted before additions. */
   readonly changes: readonly MigrationChange[];
   /** True when at least one `changeFieldType` change is present. */

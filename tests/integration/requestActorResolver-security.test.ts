@@ -33,7 +33,9 @@ describe('auth RequestActorResolver upgrade security', () => {
 
   test('accepts production __Host-token cookies during upgrade auth', async () => {
     process.env.NODE_ENV = 'production';
-    const app = await createTestApp();
+    const app = await createTestApp({
+      tenancy: { mode: 'single', tenantId: 'request-actor-security' },
+    });
     const registerRes = await app.request(
       '/auth/register',
       json({ email: 'resolver-host-cookie@example.com', password: 'password123' }),

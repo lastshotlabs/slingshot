@@ -239,7 +239,15 @@ export async function mountTenantMiddleware(
   carrier?: { cache: import('@framework/middleware/tenant').TenantResolutionCache | null },
   isProd = false,
 ): Promise<void> {
-  if (!tenancy.onResolve) {
+  if (isProd && tenancy.mode == null) {
+    throw new Error(
+      '[security] Production tenancy configuration must declare mode "single" or "multi".',
+    );
+  }
+  if (tenancy.mode === 'multi' && !tenancy.onResolve) {
+    throw new Error('[security] Multi-tenant mode requires tenancy.onResolve.');
+  }
+  if (tenancy.mode !== 'single' && !tenancy.onResolve) {
     if (isProd) {
       throw new Error(
         '[security] Tenancy is configured without an onResolve callback. ' +
@@ -300,7 +308,12 @@ export function mountCors(
     HEADER_USER_TOKEN,
     HEADER_REFRESH_TOKEN,
     HEADER_CSRF_TOKEN,
-    ...(tenancy?.resolution === 'header' && tenancy.headerName ? [tenancy.headerName] : []),
+    ...(tenancy &&
+    tenancy.mode !== 'single' &&
+    tenancy.resolution === 'header' &&
+    tenancy.headerName
+      ? [tenancy.headerName]
+      : []),
   ];
 
   app.use(

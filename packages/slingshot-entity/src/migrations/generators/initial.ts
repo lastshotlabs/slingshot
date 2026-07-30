@@ -101,6 +101,23 @@ export function generateInitialMigrationPostgres(config: ResolvedEntityConfig): 
   ];
   sections.push(schema.join('\n'));
 
+  if (config.tenant?.postgresRls) {
+    const tenantColumn = quoteSqlIdent(toSnakeCase(config.tenant.field));
+    const policy = quoteSqlIdent(`tenant_isolation_${table}`);
+    sections.push(
+      [
+        '-- --- section:tenant-rls ---',
+        `ALTER TABLE ${qTable} ENABLE ROW LEVEL SECURITY;`,
+        `ALTER TABLE ${qTable} FORCE ROW LEVEL SECURITY;`,
+        `DROP POLICY IF EXISTS ${policy} ON ${qTable};`,
+        `CREATE POLICY ${policy} ON ${qTable} USING (${tenantColumn} = current_setting('slingshot.tenant_id', true)) WITH CHECK (${tenantColumn} = current_setting('slingshot.tenant_id', true));`,
+        `-- Verify: SELECT polname FROM pg_policies WHERE tablename = ${escapeSqlString(table)} AND polname = ${escapeSqlString(`tenant_isolation_${table}`)};`,
+        '-- Runtime transactions must execute: SET LOCAL slingshot.tenant_id = <tenant-id>;',
+        '-- --- end:tenant-rls ---',
+      ].join('\n'),
+    );
+  }
+
   const indexes: string[] = ['-- --- section:indexes ---'];
   for (const idx of config.indexes ?? []) {
     const cols = idx.fields.map(f => quoteSqlIdent(toSnakeCase(f))).join(', ');

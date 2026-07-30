@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import { defineEntity, field, index } from '../../packages/slingshot-entity/src';
 import {
   diffEntityConfig,
+  generateInitialMigrationPostgres,
   generateMigrationMongo,
   generateMigrationPostgres,
   generateMigrationSqlite,
   generateMigrations,
+  setPostgresTenantContext,
 } from '../../packages/slingshot-entity/src/migrations';
 
 // ---------------------------------------------------------------------------
@@ -228,6 +230,42 @@ describe('diffEntityConfig', () => {
 // ---------------------------------------------------------------------------
 
 describe('Migration SQL generation', () => {
+  it('binds PostgreSQL RLS identity transaction-locally', async () => {
+    const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+    await setPostgresTenantContext(
+      {
+        query: async (sql, values) => {
+          calls.push({ sql, values });
+        },
+      },
+      'tenant-a',
+    );
+    expect(calls).toEqual([
+      {
+        sql: `SELECT set_config('slingshot.tenant_id', $1, true)`,
+        values: ['tenant-a'],
+      },
+    ]);
+    await expect(setPostgresTenantContext({ query: async () => undefined }, '   ')).rejects.toThrow(
+      'non-empty tenantId',
+    );
+  });
+
+  it('generates PostgreSQL tenant RLS policy and verification guidance', () => {
+    const entity = defineEntity('TenantDocument', {
+      fields: {
+        id: field.string({ primary: true }),
+        tenantId: field.string(),
+      },
+      tenant: { field: 'tenantId', postgresRls: true },
+    });
+    const ddl = generateInitialMigrationPostgres(entity);
+    expect(ddl).toContain('ENABLE ROW LEVEL SECURITY');
+    expect(ddl).toContain('FORCE ROW LEVEL SECURITY');
+    expect(ddl).toContain("current_setting('slingshot.tenant_id', true)");
+    expect(ddl).toContain('pg_policies');
+  });
+
   const v2 = defineEntity('Message', {
     namespace: 'chat',
     fields: {

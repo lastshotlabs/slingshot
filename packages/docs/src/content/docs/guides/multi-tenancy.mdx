@@ -5,15 +5,20 @@ description: Isolate data per tenant — by subdomain, header, or path — using
 
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
-Slingshot has a first-class tenant model. Every request carries a `tenantId` on the context. Plugins that support multi-tenancy — community, search, push, organizations — scope their data by that ID automatically. Provide one function that extracts the tenant from the request; the rest wires itself.
+Slingshot has a first-class tenant model. Production apps explicitly declare
+single- or multi-tenant mode; there is no anonymous production fallback.
 
 ## How it works
 
-The framework calls your `tenantResolver` on every request before any routes run. The returned string is available via `getRequestTenantId(c)` in all middleware and route handlers. Plugins read it automatically.
+Single-tenant mode stamps one configured identity centrally:
 
-For single-tenant apps: `tenantResolver: () => 'default'`.
+```ts
+tenancy: { mode: 'single', tenantId: 'primary' }
+```
 
-For multi-tenant apps: return a different string per tenant — from the subdomain, a header, a JWT claim, or a database lookup.
+Multi-tenant mode extracts an ID from a header, subdomain, or path and requires
+`onResolve` to validate it. The resolved identity is available through
+`getRequestTenantId(c)` and is carried through registered package boundaries.
 
 ## Setting up a tenant resolver
 
@@ -30,6 +35,7 @@ export default defineApp({
     },
   },
   tenancy: {
+    mode: 'multi',
     resolution: 'subdomain',
     onResolve: async tenantId => {
       if (!tenantId || tenantId === 'www') return null;
@@ -64,56 +70,26 @@ export default defineApp({
 
 ```typescript
 // app1.example.com → 'app1'
-tenantResolver: c => {
-  const host = c.req.header('host') ?? '';
-  return host.split('.')[0];
-};
+tenancy: { mode: 'multi', resolution: 'subdomain', onResolve };
 ```
 
 ### Header
 
 ```typescript
 // X-Tenant-ID: acme
-tenantResolver: c => c.req.header('x-tenant-id') ?? 'default';
+tenancy: { mode: 'multi', resolution: 'header', headerName: 'x-tenant-id', onResolve };
 ```
-
-### JWT claim
-
-```typescript
-// Tenant embedded in the user's JWT
-tenantResolver: c => {
-  const token = c.req.header('authorization')?.replace('Bearer ', '');
-  if (!token) return undefined;
-  const payload = decodeJwtWithoutVerifying(token);
-  return payload?.tenantId ?? undefined;
-};
-```
-
-<Aside>
-  Returning `undefined` means "no tenant." Plugins will treat the request as unauthenticated for
-  tenant-scoped operations. Return `'default'` for single-tenant apps.
-</Aside>
 
 ### Path prefix
 
 ```typescript
 // /t/acme/posts → tenant 'acme'
-tenantResolver: c => {
-  const match = c.req.path.match(/^\/t\/([^/]+)/);
-  return match?.[1];
-};
+tenancy: { mode: 'multi', resolution: 'path', pathSegment: 1, onResolve };
 ```
 
-### Database lookup
-
-```typescript
-// Look up the tenant by custom domain
-tenantResolver: async c => {
-  const host = c.req.header('host') ?? '';
-  const tenant = await db.tenants.findByDomain(host);
-  return tenant?.id;
-};
-```
+`onResolve` is where database lookup, disabled-tenant rejection, and tenant
+configuration loading occur. Return `null` to reject without trusting the
+caller-provided identifier.
 
 ## Reading the tenant in routes
 

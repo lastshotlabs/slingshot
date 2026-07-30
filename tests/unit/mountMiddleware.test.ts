@@ -199,7 +199,7 @@ describe('mountTenantMiddleware', () => {
     const tenancyData = { resolution: 'subdomain' };
     const tenancy = tenancyData as unknown as never;
     await expect(mountTenantMiddleware(app, tenancy, undefined, true)).rejects.toThrow(
-      '[security] Tenancy is configured without an onResolve callback.',
+      'must declare mode',
     );
   });
 
@@ -228,6 +228,26 @@ describe('mountTenantMiddleware', () => {
     await expect(
       mountTenantMiddleware(app, tenancyWithResolve, undefined, false),
     ).resolves.toBeUndefined();
+  });
+
+  it('stamps an explicit single-tenant identity centrally in production', async () => {
+    const app = makeApp();
+    await mountTenantMiddleware(app, { mode: 'single', tenantId: 'primary' }, undefined, true);
+    app.get('/test', c => c.json({ tenantId: c.get('tenantId') }));
+    const response = await app.request('/test');
+    expect(await response.json()).toEqual({ tenantId: 'primary' });
+  });
+
+  it('rejects a legacy implicit tenancy config in production', async () => {
+    const app = makeApp();
+    await expect(
+      mountTenantMiddleware(
+        app,
+        { resolution: 'header', onResolve: async () => ({}) },
+        undefined,
+        true,
+      ),
+    ).rejects.toThrow('must declare mode');
   });
 });
 

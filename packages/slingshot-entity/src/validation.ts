@@ -142,7 +142,13 @@ export const entityConfigSchema = z
         maxLimit: z.number().optional(),
       })
       .optional(),
-    tenant: z.object({ field: z.string(), optional: z.boolean().optional() }).optional(),
+    tenant: z
+      .object({
+        field: z.string(),
+        optional: z.boolean().optional(),
+        postgresRls: z.boolean().optional(),
+      })
+      .optional(),
     concurrency: z
       .object({
         strategy: z.literal('version'),

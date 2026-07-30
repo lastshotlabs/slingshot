@@ -205,6 +205,22 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
   schema.push('-- --- end:schema ---');
   indexes.push('-- --- end:indexes ---');
   sections.push(schema.join('\n'));
+
+  if (plan.tenant?.postgresRls) {
+    const tenantColumn = quoteSqlIdent(toSnakeCase(plan.tenant.field));
+    const policy = quoteSqlIdent(`tenant_isolation_${table}`);
+    sections.push(
+      [
+        '-- --- section:tenant-rls ---',
+        `ALTER TABLE ${qTable} ENABLE ROW LEVEL SECURITY;`,
+        `ALTER TABLE ${qTable} FORCE ROW LEVEL SECURITY;`,
+        `DROP POLICY IF EXISTS ${policy} ON ${qTable};`,
+        `CREATE POLICY ${policy} ON ${qTable} USING (${tenantColumn} = current_setting('slingshot.tenant_id', true)) WITH CHECK (${tenantColumn} = current_setting('slingshot.tenant_id', true));`,
+        `-- Verify policy presence in pg_policies before deployment.`,
+        '-- --- end:tenant-rls ---',
+      ].join('\n'),
+    );
+  }
   sections.push(indexes.join('\n'));
   sections.push(['-- --- section:footer ---', 'COMMIT;', '-- --- end:footer ---'].join('\n'));
 

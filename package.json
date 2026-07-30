@@ -87,6 +87,7 @@
     "test:coverage:check": "bun run test:coverage && bun scripts/check-coverage.ts",
     "entity:conformance:report": "bun scripts/entity-conformance-report.ts",
     "events:conformance:report": "bun scripts/event-reliability-conformance.ts",
+    "tenant:conformance:report": "bun scripts/tenant-boundary-conformance.ts",
     "events:support:generate": "bun scripts/generate-event-reliability-support.ts",
     "events:support:check": "bun scripts/generate-event-reliability-support.ts --check",
     "test:docker:up": "docker compose -f docker-compose.test.yml up -d --wait",

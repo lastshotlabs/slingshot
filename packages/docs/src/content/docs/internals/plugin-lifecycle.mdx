@@ -227,6 +227,13 @@ inbox consumer to the application transaction manager. This happens before
 package route handlers run, so handlers can publish to the outbox or register a
 durable `ctx.events.consume()` handler without a lazy first-use schema race.
 
+### Tenancy bootstrap
+
+Production app assembly requires an explicit tenancy mode before plugin
+lifecycle hooks run. `mode: 'single'` centrally stamps the configured tenant on
+every request; `mode: 'multi'` requires an `onResolve` policy. This keeps plugins
+from observing an implicit or partially resolved tenant identity during setup.
+
 ## See also
 
 - [Context and Registrar](/internals/context-registrar/) — what's inside `SlingshotContext`

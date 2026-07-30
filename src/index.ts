@@ -321,6 +321,7 @@ export type {
   PaginationConfig,
   TenantConfig,
 } from '@lastshotlabs/slingshot-core';
+export type { AppTenancyConfig } from './config/types/tenancy.js';
 export {
   createEntityFactories,
   createMemoryEntityAdapter,

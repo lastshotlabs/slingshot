@@ -176,9 +176,9 @@ describe('startup safety — tenancy in production', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      await expect(createTestApp({ tenancy: { resolution: 'header' } })).rejects.toThrow(
-        /onResolve/i,
-      );
+      await expect(
+        createTestApp({ tenancy: { mode: 'multi', resolution: 'header' } as any }),
+      ).rejects.toThrow(/onResolve/i);
     } finally {
       process.env.NODE_ENV = originalEnv;
     }
@@ -205,7 +205,13 @@ describe('startup safety — CORS + CSRF', () => {
     try {
       // Should warn but not throw
       const app = trackApp(
-        await createTestApp({ security: { cors: '*' } }, { security: { csrf: { enabled: true } } }),
+        await createTestApp(
+          {
+            tenancy: { mode: 'single', tenantId: 'startup-safety' },
+            security: { cors: '*' },
+          },
+          { security: { csrf: { enabled: true } } },
+        ),
       );
       expect(app).toBeDefined();
     } finally {
@@ -242,9 +248,12 @@ describe('startup safety — jobs endpoint', () => {
     const orig = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      await expect(createTestApp({ jobs: { statusEndpoint: true, auth: 'none' } })).rejects.toThrow(
-        '[security] jobs.auth is required in production',
-      );
+      await expect(
+        createTestApp({
+          tenancy: { mode: 'single', tenantId: 'startup-safety' },
+          jobs: { statusEndpoint: true, auth: 'none' },
+        }),
+      ).rejects.toThrow('[security] jobs.auth is required in production');
     } finally {
       process.env.NODE_ENV = orig;
     }
@@ -256,6 +265,7 @@ describe('startup safety — jobs endpoint', () => {
     try {
       const app = trackApp(
         await createTestApp({
+          tenancy: { mode: 'single', tenantId: 'startup-safety' },
           jobs: { statusEndpoint: true, auth: 'none', unsafePublic: true },
         }),
       );
@@ -271,9 +281,12 @@ describe('startup safety — metrics endpoint', () => {
     const orig = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      await expect(createTestApp({ metrics: { enabled: true, auth: 'none' } })).rejects.toThrow(
-        '[security] metrics.auth is required in production',
-      );
+      await expect(
+        createTestApp({
+          tenancy: { mode: 'single', tenantId: 'startup-safety' },
+          metrics: { enabled: true, auth: 'none' },
+        }),
+      ).rejects.toThrow('[security] metrics.auth is required in production');
     } finally {
       process.env.NODE_ENV = orig;
     }
@@ -285,6 +298,7 @@ describe('startup safety — metrics endpoint', () => {
     try {
       const app = trackApp(
         await createTestApp({
+          tenancy: { mode: 'single', tenantId: 'startup-safety' },
           metrics: { enabled: true, auth: 'none', unsafePublic: true },
         }),
       );

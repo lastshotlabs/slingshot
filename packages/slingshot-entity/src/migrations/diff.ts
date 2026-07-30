@@ -226,6 +226,9 @@ export function diffEntityConfig(
       mongo: storageName(current, 'mongo'),
     },
     concurrencyField: current._concurrency?.field,
+    tenant: current.tenant
+      ? { field: current.tenant.field, postgresRls: current.tenant.postgresRls ?? false }
+      : undefined,
     changes,
     hasBreakingChanges,
     warnings,

@@ -134,6 +134,7 @@ export {
   loadSnapshot,
   saveSnapshot,
   upgradeSnapshotV1,
+  setPostgresTenantContext,
 } from './migrations';
 /** Schema diff and migration-plan result types for storage evolution workflows. */
 export type {

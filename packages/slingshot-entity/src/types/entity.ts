@@ -63,6 +63,8 @@ export interface RelationDef {
   readonly foreignKey: string;
   /** When true the foreign key may be null (only meaningful for `belongsTo`). */
   readonly optional?: boolean;
+  /** Enable PostgreSQL row-level security as defense in depth. */
+  readonly postgresRls?: boolean;
 }
 
 /** Soft-delete configuration for an entity; when set, deletes update a field instead of removing the record. */
@@ -124,6 +126,8 @@ export interface TenantConfig {
    * Typically false — only set for entities shared across tenant boundaries.
    */
   readonly optional?: boolean;
+  /** Enable PostgreSQL row-level security as defense in depth. */
+  readonly postgresRls?: boolean;
 }
 
 /**

@@ -183,6 +183,13 @@ When a mutable entity can receive competing writes, include
 version strategy, generate and apply the backfill migration, teach HTTP clients to retain ETags,
 and only then require `If-Match`. Storage capability validation remains part of app startup.
 
+For tenant-owned PostgreSQL entities, set
+`tenant: { field: 'tenantId', postgresRls: true }` to generate an enabled,
+forced row-level-security policy. Each runtime transaction must call
+`setPostgresTenantContext(client, tenantId)` before accessing the table. The
+setting is transaction-local, so pooled connections cannot leak tenant identity
+to their next borrower.
+
 ## Related Reading
 
 - [/config-driven-walkthrough/](/config-driven-walkthrough/)

@@ -56,14 +56,33 @@ import { fnSchema } from './shared';
  * }
  * ```
  */
-export const tenancySchema = z.object({
-  resolution: z.enum(['header', 'subdomain', 'path']),
-  headerName: z.string().optional(),
-  pathSegment: z.number().optional(),
-  listEndpoint: z.string().optional(),
-  onResolve: fnSchema.optional(),
-  cacheTtlMs: z.number().optional(),
-  cacheMaxSize: z.number().optional(),
-  exemptPaths: z.array(z.string()).optional(),
-  rejectionStatus: z.number().optional(),
-});
+export const tenancySchema = z
+  .object({
+    mode: z.enum(['single', 'multi']).optional(),
+    tenantId: z.string().min(1).optional(),
+    resolution: z.enum(['header', 'subdomain', 'path']).optional(),
+    headerName: z.string().optional(),
+    pathSegment: z.number().optional(),
+    listEndpoint: z.string().optional(),
+    onResolve: fnSchema.optional(),
+    cacheTtlMs: z.number().optional(),
+    cacheMaxSize: z.number().optional(),
+    exemptPaths: z.array(z.string()).optional(),
+    rejectionStatus: z.number().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === 'single' && !value.tenantId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['tenantId'],
+        message: 'Single-tenant mode requires tenantId',
+      });
+    }
+    if (value.mode !== 'single' && !value.resolution) {
+      context.addIssue({
+        code: 'custom',
+        path: ['resolution'],
+        message: 'Multi-tenant resolution is required',
+      });
+    }
+  });

@@ -175,6 +175,7 @@ function extractTenantId(
   c: Parameters<MiddlewareHandler>[0],
   config: TenancyConfig,
 ): string | null {
+  if (config.mode === 'single') return config.tenantId;
   if (config.resolution === 'header') {
     const headerName = config.headerName ?? 'x-tenant-id';
     return c.req.header(headerName) ?? null;
@@ -225,6 +226,19 @@ export const createTenantMiddleware = (
   config: TenancyConfig,
   carrier?: TenantCacheCarrier,
 ): MiddlewareHandler<AppEnv> => {
+  if (config.mode === 'single') {
+    if (!config.tenantId.trim()) {
+      throw new Error('[security] Single-tenant mode requires a non-empty tenantId.');
+    }
+    if (carrier) carrier.cache = null;
+    const tenantId = config.tenantId;
+    const tenantConfig = Object.freeze({ tenantId });
+    return async (c, next) => {
+      c.set('tenantId', tenantId);
+      c.set('tenantConfig', tenantConfig);
+      return next();
+    };
+  }
   const exemptPaths = [...DEFAULT_EXEMPT, ...(config.exemptPaths ?? [])];
   const rejectionStatus = config.rejectionStatus ?? 403;
   const cacheTtlMs = config.cacheTtlMs ?? 60_000;

@@ -2,23 +2,37 @@ export interface TenantConfig {
   [key: string]: unknown;
 }
 
-export interface TenancyConfig {
-  /** How tenant is identified. */
-  resolution: 'header' | 'subdomain' | 'path';
+interface MultiTenancyOptions {
   /** Header name when resolution is "header". Default: "x-tenant-id". */
-  headerName?: string;
+  readonly headerName?: string;
   /** Path segment index when resolution is "path". Default: 0. */
-  pathSegment?: number;
-  /** Optional tenant discovery endpoint for frontend tenant pickers. */
-  listEndpoint?: string;
-  /** Callback to validate/load tenant. Return null to reject. */
-  onResolve?: (tenantId: string) => Promise<TenantConfig | null>;
-  /** TTL in ms for caching onResolve results (LRU cache). Default: 60_000. Set 0 to disable. */
-  cacheTtlMs?: number;
-  /** Max entries in tenant resolution cache. Default: 500. */
-  cacheMaxSize?: number;
-  /** Paths that skip tenant resolution. Uses startsWith matching. Default: ["/health", "/docs", "/openapi.json"]. */
-  exemptPaths?: string[];
-  /** HTTP status when onResolve returns null. Default: 403. */
-  rejectionStatus?: 403 | 404;
+  readonly pathSegment?: number;
+  readonly listEndpoint?: string;
+  readonly cacheTtlMs?: number;
+  readonly cacheMaxSize?: number;
+  readonly exemptPaths?: string[];
+  readonly rejectionStatus?: 403 | 404;
 }
+
+export type AppTenancyConfig =
+  | {
+      readonly mode: 'single';
+      readonly tenantId: string;
+    }
+  | (MultiTenancyOptions & {
+      readonly mode: 'multi';
+      readonly resolution: 'header' | 'subdomain' | 'path';
+      readonly onResolve: (tenantId: string) => Promise<TenantConfig | null>;
+    });
+
+/**
+ * Legacy development-only multi-tenant shape. Production bootstrap rejects it;
+ * use an explicit `mode` in new applications.
+ */
+export type LegacyTenancyConfig = MultiTenancyOptions & {
+  readonly mode?: undefined;
+  readonly resolution: 'header' | 'subdomain' | 'path';
+  readonly onResolve?: (tenantId: string) => Promise<TenantConfig | null>;
+};
+
+export type TenancyConfig = AppTenancyConfig | LegacyTenancyConfig;

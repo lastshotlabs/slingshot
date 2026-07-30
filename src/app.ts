@@ -153,7 +153,7 @@ export type { AppMeta } from './config/types/meta';
 export type { DbConfig } from './config/types/db';
 export type { EventsConfig } from './config/types/events';
 export type { BotProtectionConfig, SecurityConfig } from './config/types/security';
-export type { TenancyConfig, TenantConfig } from './config/types/tenancy';
+export type { AppTenancyConfig, TenancyConfig, TenantConfig } from './config/types/tenancy';
 export type { LoggingConfig } from './config/types/logging';
 export type { ValidationConfig } from './config/types/validation';
 export type { ObservabilityConfig, TracingConfig } from './config/types/observability';
@@ -395,6 +395,7 @@ function mergeTenantExemptPaths(
   plugins: readonly SlingshotPlugin[],
 ): TenancyConfig | undefined {
   if (!tenancy) return tenancy;
+  if (tenancy.mode === 'single') return tenancy;
 
   const exemptPaths = new Set(tenancy.exemptPaths ?? []);
   for (const plugin of plugins) {
@@ -782,6 +783,9 @@ async function assembleApp<T extends object>(
 
   // Tenant resolution runs before framework middleware so tenantId is available for rate limiting.
   const tenantConfig = mergeTenantExemptPaths(config.tenancy, sortedPlugins);
+  if (bootstrap.isProd && !tenantConfig) {
+    throw new Error('[security] Production apps must declare tenancy.mode as "single" or "multi".');
+  }
   if (tenantConfig) {
     await mountTenantMiddleware(app, tenantConfig, tenantCacheCarrier, bootstrap.isProd);
   }

@@ -744,6 +744,8 @@ export interface TenantConfig {
   readonly field: string;
   /** Whether tenancy is optional (not all deployments use it). */
   readonly optional?: boolean;
+  /** Enable PostgreSQL row-level security as defense in depth. */
+  readonly postgresRls?: boolean;
 }
 
 // ============================================================================

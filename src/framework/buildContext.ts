@@ -42,6 +42,7 @@ import {
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { EventReliabilityConfig } from '@lastshotlabs/slingshot-events';
 import {
+  createEventReplayValidator,
   createOutboxDispatcher,
   createPostgresOutboxDispatchRepository,
   createSqliteOutboxDispatchRepository,
@@ -432,6 +433,11 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       repository,
       bus,
       config: eventReliability.outbox,
+      replayValidator: createEventReplayValidator({
+        definitions: events.definitions,
+        schemas: events.schemas,
+        versions: events.versions,
+      }),
       onLifecycle: eventReliabilityMetrics?.outbox,
     });
     eventOutboxDispatcher.start();

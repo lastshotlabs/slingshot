@@ -64,6 +64,13 @@ export {
   redactEventPayload,
   redactOperatorText,
 } from './operatorProjection';
+export { createEventReplayValidator } from './replayValidation';
+export type {
+  EventReplayIncompatibility,
+  EventReplayValidation,
+  EventReplayValidator,
+  EventReplayValidatorOptions,
+} from './replayValidation';
 /** Governed transactionally deduplicated consumer implementation. */
 export { createTransactionalEventConsumer } from './consume';
 export type { InboxLifecycleEvent, ResolveTransactionScopeInfra } from './consume';

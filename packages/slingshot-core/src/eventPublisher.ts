@@ -8,6 +8,12 @@ import type {
 import { createDefaultSubscriberAuthorizer, eventHasExternalExposure } from './eventDefinition';
 import type { EventDefinitionRegistry } from './eventDefinitionRegistry';
 import { type EventEnvelope, createEventEnvelope } from './eventEnvelope';
+import { type EventSchemaRegistry, createEventSchemaRegistry } from './eventSchemaRegistry';
+import {
+  type EventVersionAdapter,
+  type EventVersionRegistry,
+  createEventVersionRegistry,
+} from './eventVersionRegistry';
 import type { TransactionScope } from './transactions';
 import type { TransactionStore } from './transactions';
 
@@ -20,8 +26,14 @@ import type { TransactionStore } from './transactions';
 export interface SlingshotEvents {
   /** The underlying definition registry shared across all plugins. */
   readonly definitions: EventDefinitionRegistry;
+  /** The payload-schema registry mirrored from governed definitions. */
+  readonly schemas: EventSchemaRegistry;
+  /** Explicit ascending payload-version adapters used by replay and dispatch. */
+  readonly versions: EventVersionRegistry;
   /** Register a new event definition (typically called during plugin setup). */
   register<K extends EventKey>(definition: EventDefinition<K>): void;
+  /** Register one explicit single-version payload adapter during plugin setup. */
+  registerVersionAdapter(adapter: EventVersionAdapter): void;
   /** Retrieve a registered definition by key, or `undefined` if not registered. */
   get<K extends EventKey>(key: K): EventDefinition<K> | undefined;
   /** Return all registered event definitions. */
@@ -73,6 +85,8 @@ export type TransactionalEventUnsubscribe = () => boolean;
 /** Dependencies for building the {@link SlingshotEvents} publisher: the definition registry and the event bus to emit through. */
 export interface CreateEventPublisherOptions {
   definitions: EventDefinitionRegistry;
+  schemas?: EventSchemaRegistry;
+  versions?: EventVersionRegistry;
   bus: SlingshotEventBus;
   /** Internal transactional outbox writer. Omit when outbox delivery is unavailable. */
   outbox?: TransactionalEventOutboxWriter;
@@ -143,11 +157,19 @@ function validatePayload<K extends EventKey>(
  * @returns A fully wired event publisher ready for plugin use.
  */
 export function createEventPublisher(options: CreateEventPublisherOptions): SlingshotEvents {
+  const schemas = options.schemas ?? createEventSchemaRegistry();
+  const versions = options.versions ?? createEventVersionRegistry();
   return {
     definitions: options.definitions,
+    schemas,
+    versions,
 
     register<K extends EventKey>(definition: EventDefinition<K>): void {
       options.definitions.register(definition);
+    },
+
+    registerVersionAdapter(adapter): void {
+      versions.register(adapter);
     },
 
     get<K extends EventKey>(key: K): EventDefinition<K> | undefined {

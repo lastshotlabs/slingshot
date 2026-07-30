@@ -1,5 +1,6 @@
 import type { AcknowledgedEventBus, EventEnvelope } from '@lastshotlabs/slingshot-core';
 import { isEventEnvelope, withTimeout } from '@lastshotlabs/slingshot-core';
+import type { EventReplayValidator } from '../replayValidation';
 import type { EventOutboxConfig } from '../types';
 import type { LeasedOutboxRow, OutboxDispatchRepository } from './repository';
 
@@ -12,6 +13,8 @@ export interface OutboxDispatcherOptions {
   readonly now?: () => Date;
   readonly random?: () => number;
   readonly onError?: (error: unknown) => void;
+  /** Governed schema/version validator applied without mutating stored envelopes. */
+  readonly replayValidator?: EventReplayValidator;
   /** Bounded-cardinality lifecycle observer for metrics and structured logs. */
   readonly onLifecycle?: (event: OutboxLifecycleEvent) => void;
 }
@@ -102,7 +105,19 @@ export function createOutboxDispatcher(options: OutboxDispatcherOptions): Outbox
     const attempts = row.attempts + 1;
     const startedAt = Date.now();
     try {
-      const envelope = parseEnvelope(row);
+      const storedEnvelope = parseEnvelope(row);
+      const prepared = options.replayValidator?.prepare(row.envelopeJson, row.eventKey);
+      if (prepared && !prepared.validation.compatible) {
+        throw new PermanentOutboxPublicationError(
+          `Stored outbox envelope is incompatible with the current event contract (${prepared.validation.reason}).`,
+        );
+      }
+      if (prepared && !prepared.envelope) {
+        throw new PermanentOutboxPublicationError(
+          'Stored outbox envelope validation did not produce a publishable envelope.',
+        );
+      }
+      const envelope = prepared?.envelope ?? storedEnvelope;
       const receipt = await withTimeout(
         options.bus.publishEnvelope(envelope),
         config.publicationTimeoutMs,

@@ -69,6 +69,7 @@ import {
   createEventDefinitionRegistry,
   createEventPublisher,
   createEventSchemaRegistry,
+  createEventVersionRegistry,
   defaultValidationErrorFormatter,
   defineEvent,
   isHttpError,
@@ -623,10 +624,13 @@ async function prepareBootstrap<T extends object>(
     });
   }
   const definitions = createEventDefinitionRegistry({ schemaRegistry: eventSchemaRegistry });
+  const eventVersionRegistry = createEventVersionRegistry();
   const eventOutboxWriter = createFrameworkEventOutboxWriter(config.events?.reliability);
   const eventInboxConsumer = createFrameworkEventInboxConsumer(config.events?.reliability, bus);
   const events = createEventPublisher({
     definitions,
+    schemas: eventSchemaRegistry,
+    versions: eventVersionRegistry,
     bus,
     outbox: eventOutboxWriter,
     consumer: eventInboxConsumer,
@@ -964,6 +968,7 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
 
   await withSpan(tracer, 'slingshot.bootstrap.finalize', () => {
     events.definitions.freeze();
+    events.versions.freeze();
     finalizeContext(ctx, drain());
 
     if (tenantCacheCarrier.cache) {

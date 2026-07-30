@@ -1,5 +1,52 @@
 # @lastshotlabs/slingshot
 
+## 3.1.0
+
+### Minor Changes
+
+- d46d7aa: Add governed event schema versions, explicit payload-version adapters, bounded redacted
+  inspection, authenticated event operator routes, mutation audit ledgers, and operator
+  dashboard/runbook assets.
+- 4487f74: Add migration v2 snapshots, explicit field renames, deterministic risk plans,
+  approval digests, verification commands, deployment locking, and immutable
+  execution ledger records.
+- 0cd383b: Add explicit single/multi app tenancy, immutable execution-context snapshots,
+  an instance-scoped tenant-boundary registry and conformance inventory, plus
+  optional PostgreSQL row-level-security migration support.
+- 2178930: Add authoritative package maturity declarations and deterministic generated
+  evidence for documentation, runtime warning policy, release channels, and
+  promotion enforcement.
+
+### Patch Changes
+
+- Updated dependencies [d46d7aa]
+- Updated dependencies [4487f74]
+- Updated dependencies [0cd383b]
+- Updated dependencies [2178930]
+  - @lastshotlabs/slingshot-core@0.6.0
+  - @lastshotlabs/slingshot-events@0.3.0
+  - @lastshotlabs/slingshot-entity@0.5.0
+  - @lastshotlabs/slingshot-runtime-bun@0.2.8
+  - @lastshotlabs/slingshot-admin@0.2.8
+  - @lastshotlabs/slingshot-auth@1.0.4
+  - @lastshotlabs/slingshot-bullmq@0.3.1
+  - @lastshotlabs/slingshot-community@0.2.15
+  - @lastshotlabs/slingshot-deep-links@0.2.8
+  - @lastshotlabs/slingshot-infra@0.2.8
+  - @lastshotlabs/slingshot-interactions@0.2.11
+  - @lastshotlabs/slingshot-kafka@0.3.1
+  - @lastshotlabs/slingshot-mail@0.2.8
+  - @lastshotlabs/slingshot-notifications@0.4.1
+  - @lastshotlabs/slingshot-orchestration@0.2.8
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.8
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.8
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.8
+  - @lastshotlabs/slingshot-organizations@1.0.4
+  - @lastshotlabs/slingshot-permissions@0.2.9
+  - @lastshotlabs/slingshot-postgres@0.3.4
+  - @lastshotlabs/slingshot-push@2.0.1
+  - @lastshotlabs/slingshot-webhooks@0.2.10
+
 ## 3.0.0
 
 ### Minor Changes

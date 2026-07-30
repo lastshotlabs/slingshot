@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-image",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "On-the-fly image optimization and transform pipeline for Slingshot",
   "license": "MIT",
   "type": "module",

@@ -1,5 +1,21 @@
 # @lastshotlabs/slingshot-events
 
+## 0.3.0
+
+### Minor Changes
+
+- d46d7aa: Add governed event schema versions, explicit payload-version adapters, bounded redacted
+  inspection, authenticated event operator routes, mutation audit ledgers, and operator
+  dashboard/runbook assets.
+
+### Patch Changes
+
+- Updated dependencies [d46d7aa]
+- Updated dependencies [4487f74]
+- Updated dependencies [0cd383b]
+- Updated dependencies [2178930]
+  - @lastshotlabs/slingshot-core@0.6.0
+
 ## 0.2.0
 
 ### Minor Changes

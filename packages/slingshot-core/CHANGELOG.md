@@ -1,5 +1,22 @@
 # @lastshotlabs/slingshot-core
 
+## 0.6.0
+
+### Minor Changes
+
+- d46d7aa: Add governed event schema versions, explicit payload-version adapters, bounded redacted
+  inspection, authenticated event operator routes, mutation audit ledgers, and operator
+  dashboard/runbook assets.
+- 4487f74: Add migration v2 snapshots, explicit field renames, deterministic risk plans,
+  approval digests, verification commands, deployment locking, and immutable
+  execution ledger records.
+- 0cd383b: Add explicit single/multi app tenancy, immutable execution-context snapshots,
+  an instance-scoped tenant-boundary registry and conformance inventory, plus
+  optional PostgreSQL row-level-security migration support.
+- 2178930: Add authoritative package maturity declarations and deterministic generated
+  evidence for documentation, runtime warning policy, release channels, and
+  promotion enforcement.
+
 ## 0.5.0
 
 ### Minor Changes

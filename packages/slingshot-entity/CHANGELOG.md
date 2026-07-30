@@ -1,5 +1,24 @@
 # @lastshotlabs/slingshot-entity
 
+## 0.5.0
+
+### Minor Changes
+
+- 4487f74: Add migration v2 snapshots, explicit field renames, deterministic risk plans,
+  approval digests, verification commands, deployment locking, and immutable
+  execution ledger records.
+- 0cd383b: Add explicit single/multi app tenancy, immutable execution-context snapshots,
+  an instance-scoped tenant-boundary registry and conformance inventory, plus
+  optional PostgreSQL row-level-security migration support.
+
+### Patch Changes
+
+- Updated dependencies [d46d7aa]
+- Updated dependencies [4487f74]
+- Updated dependencies [0cd383b]
+- Updated dependencies [2178930]
+  - @lastshotlabs/slingshot-core@0.6.0
+
 ## 0.4.1
 
 ### Patch Changes

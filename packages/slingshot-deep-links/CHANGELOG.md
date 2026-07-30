@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-deep-links
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [d46d7aa]
+- Updated dependencies [4487f74]
+- Updated dependencies [0cd383b]
+- Updated dependencies [2178930]
+  - @lastshotlabs/slingshot-core@0.6.0
+
 ## 0.2.7
 
 ### Patch Changes

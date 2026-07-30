@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-orchestration-bullmq
 
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [0c13b2b]
+  - @lastshotlabs/slingshot-core@0.6.2
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.10
+
 ## 0.2.9
 
 ### Patch Changes

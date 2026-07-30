@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-oidc
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-oidc`
-- Version: `1.0.5`
+- Version: `1.0.6`
 - Kind: Workspace package
 - Role: feature package
 - Description: OIDC discovery and JWKS plugin for Slingshot

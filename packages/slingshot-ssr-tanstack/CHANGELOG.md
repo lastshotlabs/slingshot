@@ -1,5 +1,14 @@
 # @lastshotlabs/slingshot-ssr-tanstack
 
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [0c13b2b]
+  - @lastshotlabs/slingshot-core@0.6.2
+  - @lastshotlabs/slingshot-permissions@0.2.11
+  - @lastshotlabs/slingshot-ssr@0.2.13
+
 ## 0.2.14
 
 ### Patch Changes

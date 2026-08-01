@@ -393,7 +393,15 @@ export function createMemoryAuthAdapter(
       const key = `${provider}:${providerId}`;
 
       const existingOwner = _oauthProviderLinks.get(key);
-      if (existingOwner) return { id: existingOwner, created: false };
+      if (existingOwner) {
+        // Returning sign-in re-asserts the address — see sqliteAuth for why this
+        // matters for accounts linked before the claim was carried through.
+        if (profile.emailVerified === true) {
+          const existingUser = _users.get(existingOwner);
+          if (existingUser) existingUser.emailVerified = true;
+        }
+        return { id: existingOwner, created: false };
+      }
 
       // Reject if email belongs to a credential account
       if (profile.email) {
@@ -414,7 +422,7 @@ export function createMemoryAuthAdapter(
         passwordHash: null,
         providerIds: [key],
         roles: [],
-        emailVerified: false,
+        emailVerified: profile.emailVerified === true,
         mfaSecret: null,
         mfaEnabled: false,
         recoveryCodes: [],

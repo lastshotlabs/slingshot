@@ -19,6 +19,23 @@ import type { PaginatedResult } from './entityConfig';
 export interface IdentityProfile {
   /** Email address claimed by the provider. May be absent if the user denied the email scope. */
   email?: string;
+  /**
+   * Whether the provider ASSERTS it has verified this address (OIDC `email_verified`).
+   *
+   * @remarks
+   * Only set this from a claim the provider actually made — never infer it from the
+   * mere presence of an email. When true, `findOrCreateByProvider()` marks the local
+   * account `emailVerified`, because a provider-asserted address is strictly better
+   * evidence than a token we would have mailed to it ourselves.
+   *
+   * Leaving this undefined is always safe: it means "the provider said nothing", and
+   * the local flag is left exactly as it was.
+   *
+   * This exists because omitting it is a trap. `emailVerification.required` gates
+   * login AND every `userAuth` request, so an OAuth account that is never marked
+   * verified cannot authenticate at all — it 403s at its own callback, forever.
+   */
+  emailVerified?: boolean;
   /** Full display name as returned by the provider (e.g., `'Jane Smith'`). */
   name?: string;
   /** Given name / first name, when the provider returns it as a separate claim. */

@@ -637,7 +637,17 @@ export function createSqliteAuthAdapter(
           'SELECT userId AS id FROM oauth_provider_links WHERE provider = ? AND providerUserId = ?',
         )
         .get(provider, providerId);
-      if (existing) return { id: existing.id, created: false };
+      if (existing) {
+        // Returning sign-in: the provider re-asserts the address on every login, so
+        // an account linked before this claim was carried still gets marked. Guarded
+        // on emailVerified = 0 so the steady-state login writes nothing.
+        if (profile.emailVerified === true) {
+          db.run('UPDATE users SET emailVerified = 1 WHERE id = ? AND emailVerified = 0', [
+            existing.id,
+          ]);
+        }
+        return { id: existing.id, created: false };
+      }
 
       // Reject if email belongs to a credential account
       if (profile.email) {
@@ -654,12 +664,18 @@ export function createSqliteAuthAdapter(
       const id = crypto.randomUUID();
       const normalizedEmail = profile.email ? normalizeEmail(profile.email) : null;
       db.transaction(() => {
-        db.run('INSERT INTO users (id, email, identifier, providerIds) VALUES (?, ?, ?, ?)', [
-          id,
-          normalizedEmail,
-          normalizedEmail,
-          JSON.stringify([key]),
-        ]);
+        db.run(
+          'INSERT INTO users (id, email, identifier, providerIds, emailVerified) VALUES (?, ?, ?, ?, ?)',
+          [
+            id,
+            normalizedEmail,
+            normalizedEmail,
+            JSON.stringify([key]),
+            // The column is NOT NULL DEFAULT 0, so omitting this is what made every
+            // OAuth account permanently unverifiable.
+            profile.emailVerified === true ? 1 : 0,
+          ],
+        );
         db.run(
           'INSERT INTO oauth_provider_links (provider, providerUserId, userId) VALUES (?, ?, ?)',
           [provider, providerId, id],

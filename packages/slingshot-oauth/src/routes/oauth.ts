@@ -144,7 +144,7 @@ const finishOAuth = async (
   runtime: AuthRuntimeContext,
   provider: string,
   providerId: string,
-  profile: { email?: string; name?: string; avatarUrl?: string },
+  profile: { email?: string; emailVerified?: boolean; name?: string; avatarUrl?: string },
   postLoginRedirect: string,
 ) => {
   const { adapter, config } = runtime;
@@ -649,7 +649,13 @@ export const createOAuthRouter = (
         const tokens = await getGoogle().validateAuthorizationCode(code, stored.codeVerifier);
         const info = (await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
           headers: { Authorization: `Bearer ${tokens.accessToken()}` },
-        }).then(r => r.json())) as { sub: string; email?: string; name?: string; picture?: string };
+        }).then(r => r.json())) as {
+          sub: string;
+          email?: string;
+          email_verified?: boolean;
+          name?: string;
+          picture?: string;
+        };
 
         const linkResponse = await finishProviderLink(c, stored.linkUserId, 'google', info.sub);
         if (linkResponse) return linkResponse;
@@ -660,7 +666,15 @@ export const createOAuthRouter = (
           runtime,
           'google',
           info.sub,
-          { email: info.email, name: info.name, avatarUrl: info.picture },
+          {
+            email: info.email,
+            // Google returns this in the userinfo response and we were dropping it,
+            // which left every Google account permanently unverified. Only forward a
+            // literal true — an absent claim must not read as verified.
+            emailVerified: info.email_verified === true,
+            name: info.name,
+            avatarUrl: info.picture,
+          },
           resolveCallbackRedirect(state),
         );
       },

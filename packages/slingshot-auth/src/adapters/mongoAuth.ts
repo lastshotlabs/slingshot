@@ -193,7 +193,15 @@ export function createMongoAuthAdapter(
       const key = `${provider}:${providerId}`;
 
       let user = await AuthUser.findOne({ providerIds: key });
-      if (user) return { id: String(user._id), created: false };
+      if (user) {
+        // Returning sign-in re-asserts the address — see sqliteAuth for why this
+        // matters for accounts linked before the claim was carried through.
+        if (profile.emailVerified === true && !user.emailVerified) {
+          user.emailVerified = true;
+          await user.save();
+        }
+        return { id: String(user._id), created: false };
+      }
 
       if (profile.email) {
         const existing = await AuthUser.findOne({ email: normalizeEmail(profile.email) });
@@ -211,6 +219,7 @@ export function createMongoAuthAdapter(
           email: normalizedEmail,
           identifier: normalizedEmail,
           providerIds: [key],
+          emailVerified: profile.emailVerified === true,
         });
       } catch (err: unknown) {
         if (isMongoDuplicateKeyError(err)) {

@@ -170,6 +170,47 @@ export function adapterParitySuite({ name, getAdapter }: ParitySuiteOpts) {
         expect(second.id).toBe(first.id);
       });
 
+      // A provider-asserted address is the strongest verification the framework has.
+      // Dropping it made every OAuth account permanently unverifiable: with
+      // `emailVerification.required` on, the OAuth callback 403s the account it just
+      // created, and every `userAuth` route 403s for the whole session. That took a
+      // downstream app's production down for ~9.5 hours. Keep these three.
+      test('findOrCreateByProvider marks verified when the provider asserts it', async () => {
+        const { id } = await a().findOrCreateByProvider!('google', 'gid-ev-1', {
+          email: 'asserted@example.com',
+          emailVerified: true,
+        });
+        expect(await a().getEmailVerified!(id)).toBe(true);
+      });
+
+      test('findOrCreateByProvider does NOT mark verified when the provider is silent', async () => {
+        const { id } = await a().findOrCreateByProvider!('google', 'gid-ev-2', {
+          email: 'silent@example.com',
+        });
+        expect(await a().getEmailVerified!(id)).toBe(false);
+
+        const denied = await a().findOrCreateByProvider!('google', 'gid-ev-3', {
+          email: 'denied@example.com',
+          emailVerified: false,
+        });
+        expect(await a().getEmailVerified!(denied.id)).toBe(false);
+      });
+
+      test('a returning sign-in upgrades an account linked before the claim was carried', async () => {
+        const first = await a().findOrCreateByProvider!('google', 'gid-ev-4', {
+          email: 'upgrade@example.com',
+        });
+        expect(await a().getEmailVerified!(first.id)).toBe(false);
+
+        const second = await a().findOrCreateByProvider!('google', 'gid-ev-4', {
+          email: 'upgrade@example.com',
+          emailVerified: true,
+        });
+        expect(second.created).toBe(false);
+        expect(second.id).toBe(first.id);
+        expect(await a().getEmailVerified!(first.id)).toBe(true);
+      });
+
       test('findOrCreateByProvider rejects email collision with credential account', async () => {
         await a().create('taken@example.com', 'hash');
         await assertRejects(

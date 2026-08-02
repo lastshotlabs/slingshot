@@ -370,7 +370,10 @@ export const createServer = async <T extends object = object>(
       instanceId: crypto.randomUUID(),
       presenceEnabled,
       roomRegistry: new Map<string, Set<string>>(),
-      heartbeatSockets: new Map<string, { ws: unknown; endpoint: string; timeoutAt: number }>(),
+      heartbeatSockets: new Map<
+        string,
+        { ws: unknown; endpoint: string; pendingPingAt: number | null }
+      >(),
       heartbeatEndpointConfigs: new Map<string, { intervalMs?: number; timeoutMs?: number }>(),
       heartbeatTimer: null,
       socketUsers: new Map<string, string>(),

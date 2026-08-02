@@ -295,15 +295,20 @@ export interface WsState {
   readonly roomRegistry: Map<string, Set<string>>;
 
   /**
-   * Heartbeat socket registry: socket ID → socket handle, endpoint name, and next-timeout epoch.
+   * Heartbeat socket registry: socket ID → socket handle, endpoint name, and the epoch ms of
+   * the ping still awaiting a pong (`null` when none is outstanding).
    *
    * @remarks
-   * Maintained by the heartbeat timer loop. `timeoutAt` is the epoch ms by which the socket
-   * must respond to the last ping. Sockets that miss their deadline are closed with code 1001
-   * (Going Away). Typed as `unknown` for the socket handle — cast to `ServerWebSocket<SocketData>`
-   * at use sites.
+   * Maintained by the heartbeat timer loop. A socket is closed with code 1001 (Going Away)
+   * only once a ping it was actually SENT has gone unanswered for longer than the endpoint's
+   * `timeoutMs` — a socket with no outstanding ping is never overdue, which is why this holds
+   * the ping time rather than a deadline seeded at connect. Typed as `unknown` for the socket
+   * handle — cast to `ServerWebSocket<SocketData>` at use sites.
    */
-  readonly heartbeatSockets: Map<string, { ws: unknown; endpoint: string; timeoutAt: number }>;
+  readonly heartbeatSockets: Map<
+    string,
+    { ws: unknown; endpoint: string; pendingPingAt: number | null }
+  >;
 
   /**
    * Per-endpoint heartbeat timer configuration.

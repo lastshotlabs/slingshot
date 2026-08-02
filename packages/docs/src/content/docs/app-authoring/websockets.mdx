@@ -81,6 +81,27 @@ Incoming event handlers get a `WsEventContext` with:
 
 That is the canonical room-level API for framework-managed WebSocket behavior.
 
+## Heartbeat
+
+`heartbeat: true` (or `{ intervalMs, timeoutMs }`) makes the server send WebSocket protocol
+ping frames on a timer. Browsers answer a ping with a pong automatically, at the protocol
+layer — clients write no code for this, and a client-side heartbeat is not required.
+
+The contract:
+
+- Every `intervalMs` (default `30000`), a socket with no outstanding ping is pinged.
+- A socket is closed with `1001 Heartbeat timeout` once a ping it was **sent** has gone
+  unanswered for `timeoutMs` (default `10000`). A socket that has not been pinged yet is
+  never overdue, so `timeoutMs` may be shorter than `intervalMs` — the effective detection
+  time is the timeout rounded up to the next tick.
+- One ping is outstanding at a time. A client that has not answered is not re-pinged.
+
+Two things worth knowing when you enable it. The ping traffic is what keeps an idle
+connection alive through NAT devices that would otherwise reap it. And it protects the
+**server's** view of liveness: when the network drops a connection silently, the close frame
+may never reach the client, whose socket stays `OPEN` — so a client that must notice a dead
+connection needs its own check as well, not just this one.
+
 ## Presence and recovery
 
 Presence and recovery are separate concerns:

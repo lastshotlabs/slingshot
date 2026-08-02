@@ -83,7 +83,8 @@ describe('wsHeartbeat', () => {
   test('startHeartbeat pings registered sockets', async () => {
     const ws = mockWs('s1');
     registerSocket(state, ws, 's1', ENDPOINT);
-    handlePong(state, 's1'); // initialize pong so it's fresh
+    // Deliberately NO priming pong: a real client cannot answer a ping that has
+    // not been sent, so a test that primes one is testing an impossible client.
 
     startHeartbeat(state, { [ENDPOINT]: { intervalMs: 50, timeoutMs: 5000 } });
 
@@ -94,20 +95,86 @@ describe('wsHeartbeat', () => {
     expect(ws.closed).toBeNull();
   });
 
-  test('heartbeat closes stale sockets', async () => {
-    // Start heartbeat first so per-endpoint timeout config is available
-    // when registerSocket calculates timeoutAt
+  test('a socket that has never been pinged is never closed as overdue', async () => {
+    // THE REGRESSION. The deadline used to be seeded at `now + timeoutMs` when
+    // the socket OPENED, and the sweep tested it before pinging — so any socket
+    // that connected more than timeoutMs before a tick was closed without ever
+    // having been asked anything. With the framework defaults (30s/10s) that is
+    // every socket, roughly twice a minute, and it reached production twice.
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 20, timeoutMs: 10 } });
+
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+
+    // Long past the timeout, and past several intervals.
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(ws.pings.length, 'it should have been pinged').toBeGreaterThanOrEqual(1);
+    expect(ws.closed, 'and never closed before it could answer').toBeNull();
+  });
+
+  test('a healthy client that keeps ponging is never closed, even when timeoutMs <= intervalMs', async () => {
+    // The framework default pair IS timeoutMs < intervalMs. It has to be
+    // survivable for a client that answers.
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 20, timeoutMs: 10 } });
+
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    const answering = setInterval(() => handlePong(state, 's1'), 5);
+
+    await new Promise(r => setTimeout(r, 120));
+    clearInterval(answering);
+
+    expect(ws.pings.length, 'pinged repeatedly').toBeGreaterThan(1);
+    expect(ws.closed, 'and kept alive throughout').toBeNull();
+  });
+
+  test('only one ping is outstanding at a time', async () => {
+    // A client that has not answered yet is not re-pinged: a fresh ping every
+    // tick would reset nothing and would mask a slow client.
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 15, timeoutMs: 10_000 } });
+
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(ws.pings.length).toBe(1);
+    expect(ws.closed).toBeNull();
+  });
+
+  test('heartbeat closes a socket that was pinged and never answered', async () => {
     startHeartbeat(state, { [ENDPOINT]: { intervalMs: 30, timeoutMs: 10 } });
 
     const ws = mockWs('s1');
     registerSocket(state, ws, 's1', ENDPOINT);
-    // Don't call handlePong — lastPong is Date.now() at register time
+    // Never pong. The first tick pings; the next one finds the ping unanswered
+    // for longer than timeoutMs and closes.
 
-    // Wait a bit longer than timeout + interval
-    await new Promise(r => setTimeout(r, 80));
+    await new Promise(r => setTimeout(r, 120));
 
+    expect(ws.pings.length, 'it was asked before it was judged').toBeGreaterThanOrEqual(1);
     expect(ws.closed).not.toBeNull();
     expect(ws.closed!.code).toBe(1001);
+    expect(ws.closed!.reason).toBe('Heartbeat timeout');
+  });
+
+  test('a client that answers and then goes silent is closed', async () => {
+    // The whole point of the mechanism: liveness must still be detected after a
+    // period of health, not only from a socket that never answered at all.
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 20, timeoutMs: 10 } });
+
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+
+    const answering = setInterval(() => handlePong(state, 's1'), 5);
+    await new Promise(r => setTimeout(r, 60));
+    expect(ws.closed, 'healthy so far').toBeNull();
+
+    clearInterval(answering);
+    await new Promise(r => setTimeout(r, 120));
+
+    expect(ws.closed).not.toBeNull();
     expect(ws.closed!.reason).toBe('Heartbeat timeout');
   });
 
@@ -140,8 +207,10 @@ describe('wsHeartbeat', () => {
     // No errors, state is clean
   });
 
-  test('heartbeat interval swallows errors thrown by ws.ping() (catch block coverage)', async () => {
-    // A socket whose ping() throws exercises the try/catch in the interval callback (line 65)
+  test('a socket whose ping() throws does not stop the sweep, or the sockets beside it', async () => {
+    // The throw used to escape to the loop-level catch, which ended the WHOLE
+    // tick — so one dead handle silently cost every other connection its beat,
+    // and whichever sockets came after it in map order were never pinged at all.
     const throwingWs = {
       data: { id: 's-throw', endpoint: ENDPOINT, rooms: new Set<string>() },
       ping() {
@@ -149,17 +218,21 @@ describe('wsHeartbeat', () => {
       },
       close() {},
     } as any;
+    const healthy = mockWs('s-healthy');
 
     registerSocket(state, throwingWs, 's-throw', ENDPOINT);
-    handlePong(state, 's-throw'); // keep it fresh so timeout doesn't fire
+    registerSocket(state, healthy, 's-healthy', ENDPOINT);
 
     startHeartbeat(state, { [ENDPOINT]: { intervalMs: 30, timeoutMs: 5000 } });
 
-    // Wait for at least one interval — the error must be swallowed, not propagate
+    // Wait for at least one interval — the error must be contained, not propagate
     await new Promise(r => setTimeout(r, 80));
 
-    // If we reach here the interval survived the thrown error
-    expect(state.heartbeatTimer).not.toBeNull();
+    expect(state.heartbeatTimer, 'the sweep survived').not.toBeNull();
+    expect(healthy.pings.length, 'the socket after it still got its beat').toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(healthy.closed).toBeNull();
   });
 
   test('handlePong is a no-op for unknown socket id', () => {

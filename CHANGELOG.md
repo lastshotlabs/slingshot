@@ -1,5 +1,42 @@
 # @lastshotlabs/slingshot
 
+## 3.1.5
+
+### Patch Changes
+
+- e8f67f5: Fix the WebSocket heartbeat closing sockets it has never pinged. The sweep seeded a pong
+  deadline when a socket OPENED and evaluated it before sending the ping that would refresh
+  it, so with the defaults (`intervalMs` 30000, `timeoutMs` 10000) every connection was closed
+  with `1001 Heartbeat timeout` roughly twice a minute. Heartbeat entries now track the ping
+  awaiting an answer, so a socket is only closed once a ping it was actually sent goes
+  unanswered — and `timeoutMs` may now be shorter than `intervalMs`, which makes the shipped
+  defaults a working configuration. A thrown `ping()` is also contained per socket instead of
+  ending that tick for every other connection.
+- Updated dependencies [e8f67f5]
+  - @lastshotlabs/slingshot-core@0.6.4
+  - @lastshotlabs/slingshot-runtime-bun@0.2.12
+  - @lastshotlabs/slingshot-admin@0.2.12
+  - @lastshotlabs/slingshot-auth@1.0.8
+  - @lastshotlabs/slingshot-bullmq@0.3.5
+  - @lastshotlabs/slingshot-community@0.2.19
+  - @lastshotlabs/slingshot-deep-links@0.2.12
+  - @lastshotlabs/slingshot-entity@0.5.4
+  - @lastshotlabs/slingshot-events@0.3.4
+  - @lastshotlabs/slingshot-infra@0.2.12
+  - @lastshotlabs/slingshot-interactions@0.2.15
+  - @lastshotlabs/slingshot-kafka@0.3.5
+  - @lastshotlabs/slingshot-mail@0.2.12
+  - @lastshotlabs/slingshot-notifications@0.4.5
+  - @lastshotlabs/slingshot-orchestration@0.2.12
+  - @lastshotlabs/slingshot-orchestration-bullmq@0.2.12
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.12
+  - @lastshotlabs/slingshot-orchestration-temporal@0.2.12
+  - @lastshotlabs/slingshot-organizations@1.0.8
+  - @lastshotlabs/slingshot-permissions@0.2.13
+  - @lastshotlabs/slingshot-postgres@0.3.8
+  - @lastshotlabs/slingshot-push@2.0.5
+  - @lastshotlabs/slingshot-webhooks@0.2.14
+
 ## 3.1.4
 
 ### Patch Changes

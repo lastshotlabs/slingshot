@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-ssg
 
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [e8f67f5]
+  - @lastshotlabs/slingshot-core@0.6.4
+  - @lastshotlabs/slingshot-ssr@0.2.15
+
 ## 0.2.13
 
 ### Patch Changes

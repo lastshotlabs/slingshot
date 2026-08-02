@@ -1,5 +1,15 @@
 # @lastshotlabs/slingshot-ai
 
+## 0.4.10
+
+### Patch Changes
+
+- Updated dependencies [e8f67f5]
+  - @lastshotlabs/slingshot-core@0.6.4
+  - @lastshotlabs/slingshot-entity@0.5.4
+  - @lastshotlabs/slingshot-orchestration@0.2.12
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.12
+
 ## 0.4.9
 
 ### Patch Changes

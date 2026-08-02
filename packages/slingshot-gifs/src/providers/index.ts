@@ -1,5 +1,6 @@
 import type { GifProvider, GifsPluginConfig } from '../types';
 import { createGiphyProvider } from './giphy';
+import { createKlipyProvider } from './klipy';
 import { createTenorProvider } from './tenor';
 
 /**
@@ -18,12 +19,14 @@ export function resolveGifProvider(config: GifsPluginConfig): GifProvider {
   switch (config.provider) {
     case 'giphy':
       return createGiphyProvider({ apiKey, rating, limit, fetchTimeoutMs });
+    case 'klipy':
+      return createKlipyProvider({ apiKey, rating, limit, fetchTimeoutMs });
     case 'tenor':
       return createTenorProvider({ apiKey, rating, limit, fetchTimeoutMs });
     default:
       throw new Error(
         `[slingshot-gifs] Unknown GIF provider "${config.provider as string}". ` +
-          `Supported providers: giphy, tenor.`,
+          `Supported providers: giphy, klipy, tenor.`,
       );
   }
 }

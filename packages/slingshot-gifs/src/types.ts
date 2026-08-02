@@ -4,7 +4,7 @@ import { z } from 'zod';
  * A single GIF result returned by a provider.
  *
  * Fields are normalized across providers so consumers never need to know
- * which backend (Giphy, Tenor) produced the result.
+ * which backend (Giphy, KLIPY, or Tenor) produced the result.
  */
 export interface GifResult {
   /** Provider-specific unique identifier for the GIF. */
@@ -38,12 +38,12 @@ export interface GifSearchOptions {
 /**
  * The provider contract for GIF search backends.
  *
- * Each provider implementation (Giphy, Tenor) satisfies this interface.
+ * Each provider implementation (Giphy, KLIPY, or Tenor) satisfies this interface.
  * The plugin resolves a single provider at startup and delegates all
  * search/trending calls through it.
  */
 export interface GifProvider {
-  /** Provider name for diagnostics (e.g. 'giphy', 'tenor'). */
+  /** Provider name for diagnostics (e.g. 'giphy', 'klipy', 'tenor'). */
   readonly name: string;
   /**
    * Fetch trending GIFs from the provider.
@@ -69,7 +69,7 @@ export interface GifProvider {
  */
 export interface GifsPluginConfig {
   /** Which GIF provider backend to use. */
-  provider: 'giphy' | 'tenor';
+  provider: 'giphy' | 'klipy' | 'tenor';
   /** Server-side API key for the selected provider. Never exposed in responses. */
   apiKey: string;
   /** Content rating filter applied to all queries. Provider-specific values apply. */
@@ -89,7 +89,7 @@ export interface GifsPluginConfig {
  * validate raw user-supplied config.
  */
 export const gifsPluginConfigSchema = z.object({
-  provider: z.enum(['giphy', 'tenor']),
+  provider: z.enum(['giphy', 'klipy', 'tenor']),
   apiKey: z.string().min(1, 'apiKey must not be empty'),
   rating: z.string().optional(),
   limit: z.number().int().positive().optional().default(25),

@@ -15,7 +15,7 @@ function parseOffset(rawOffset: string | undefined): number | undefined | null {
  * Create the slingshot-gifs plugin for proxied GIF search.
  *
  * Validates config with Zod, freezes it at the boundary, and resolves the
- * appropriate provider (Giphy or Tenor) in the closure. Routes are mounted
+ * appropriate provider (Giphy, KLIPY, or Tenor) in the closure. Routes are mounted
  * during `setupRoutes`.
  *
  * The server-side API key is never exposed in HTTP responses — all provider

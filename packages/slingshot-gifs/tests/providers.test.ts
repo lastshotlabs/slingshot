@@ -8,6 +8,7 @@ import {
 import { createGifsPlugin } from '../src/plugin';
 import { resolveGifProvider } from '../src/providers';
 import { createGiphyProvider } from '../src/providers/giphy';
+import { createKlipyProvider } from '../src/providers/klipy';
 import { createTenorProvider } from '../src/providers/tenor';
 
 function createTestBusAndEvents() {
@@ -93,6 +94,73 @@ describe('slingshot-gifs providers', () => {
     );
   });
 
+  test('klipy search applies request params and normalizes payloads', async () => {
+    fetchSpy = spyOnFetch().mockImplementationOnce(async input => {
+      const url = new URL(String(input));
+      expect(url.origin).toBe('https://api.klipy.com');
+      expect(url.pathname).toBe('/v2/search');
+      expect(url.searchParams.get('key')).toBe('klipy-key');
+      expect(url.searchParams.get('client_key')).toBe('slingshot-gifs');
+      expect(url.searchParams.get('limit')).toBe('4');
+      expect(url.searchParams.get('pos')).toBe('6');
+      expect(url.searchParams.get('contentfilter')).toBe('medium');
+      expect(url.searchParams.get('media_filter')).toBe('gif,tinygif');
+      expect(url.searchParams.get('q')).toBe('celebration');
+
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: 'klipy-1',
+              content_description: 'Celebration dance',
+              media_formats: {
+                gif: {
+                  url: 'https://media.example.com/celebration.gif',
+                  dims: [640, 360],
+                },
+                tinygif: {
+                  url: 'https://media.example.com/celebration-tiny.gif',
+                  dims: [220, 124],
+                },
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    });
+
+    const provider = createKlipyProvider({ apiKey: 'klipy-key', rating: 'low', limit: 12 });
+
+    await expect(
+      provider.search('celebration', { limit: 4, offset: 6, rating: 'medium' }),
+    ).resolves.toEqual([
+      {
+        id: 'klipy-1',
+        url: 'https://media.example.com/celebration.gif',
+        preview: 'https://media.example.com/celebration-tiny.gif',
+        width: 640,
+        height: 360,
+        title: 'Celebration dance',
+      },
+    ]);
+  });
+
+  test('klipy trending surfaces provider failures', async () => {
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
+      new Response('rate limited', { status: 429, statusText: 'Too Many Requests' }),
+    );
+
+    const provider = createKlipyProvider({ apiKey: 'klipy-key' });
+
+    await expect(provider.trending()).rejects.toThrow(
+      '[slingshot-gifs] KLIPY featured request failed: 429 Too Many Requests',
+    );
+  });
+
   test('tenor search applies request params and normalizes payloads', async () => {
     fetchSpy = spyOnFetch().mockImplementationOnce(async input => {
       const url = new URL(String(input));
@@ -159,14 +227,16 @@ describe('slingshot-gifs providers', () => {
     );
   });
 
-  test('plugin search route honors mountPath and forwards numeric offset', async () => {
+  test('klipy plugin search route honors mountPath and forwards numeric offset', async () => {
     fetchSpy = spyOnFetch().mockImplementationOnce(async input => {
       const url = new URL(String(input));
+      expect(url.origin).toBe('https://api.klipy.com');
       expect(url.pathname).toBe('/v2/search');
       expect(url.searchParams.get('q')).toBe('wave');
       expect(url.searchParams.get('pos')).toBe('12');
       expect(url.searchParams.get('limit')).toBe('7');
       expect(url.searchParams.get('contentfilter')).toBe('medium');
+      expect(url.searchParams.get('media_filter')).toBe('gif,tinygif');
 
       return new Response(JSON.stringify({ results: [] }), {
         status: 200,
@@ -176,8 +246,8 @@ describe('slingshot-gifs providers', () => {
 
     const app = new Hono();
     const plugin = createGifsPlugin({
-      provider: 'tenor',
-      apiKey: 'tenor-key',
+      provider: 'klipy',
+      apiKey: 'klipy-key',
       mountPath: '/media/gifs',
       limit: 7,
       rating: 'medium',
@@ -206,5 +276,16 @@ describe('slingshot-gifs providers', () => {
         mountPath: '/gifs',
       }),
     ).toThrow('Unknown GIF provider "unknown"');
+  });
+
+  test('resolveGifProvider constructs the klipy provider', () => {
+    expect(
+      resolveGifProvider({
+        provider: 'klipy',
+        apiKey: 'klipy-key',
+        limit: 25,
+        mountPath: '/gifs',
+      }).name,
+    ).toBe('klipy');
   });
 });

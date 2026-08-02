@@ -7,6 +7,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { createGifsPlugin } from '../src/plugin';
 import { createGiphyProvider } from '../src/providers/giphy';
+import { createKlipyProvider } from '../src/providers/klipy';
 import { createTenorProvider } from '../src/providers/tenor';
 import { gifsPluginConfigSchema } from '../src/types';
 
@@ -62,6 +63,19 @@ describe('slingshot-gifs empty upstream responses', () => {
 
     expect(results).toEqual([]);
   });
+
+  test('klipy trending returns empty array when upstream returns no results', async () => {
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
+      new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const provider = createKlipyProvider({ apiKey: 'key' });
+
+    await expect(provider.trending()).resolves.toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -93,6 +107,19 @@ describe('slingshot-gifs malformed upstream responses', () => {
     const provider = createTenorProvider({ apiKey: 'key' });
 
     await expect(provider.search('cats')).rejects.toThrow('Tenor search returned malformed JSON');
+  });
+
+  test('klipy search throws on non-JSON response body', async () => {
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
+      new Response('<html>bad</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+
+    const provider = createKlipyProvider({ apiKey: 'key' });
+
+    await expect(provider.search('cats')).rejects.toThrow('KLIPY search returned malformed JSON');
   });
 
   test('giphy search throws when data field is missing', async () => {
@@ -169,6 +196,31 @@ describe('slingshot-gifs malformed upstream responses', () => {
       'Tenor trending response invalid: results[0] missing "media_formats"',
     );
   });
+
+  test('klipy throws when a result item is missing media_formats', async () => {
+    fetchSpy = spyOnFetch().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: 'klipy-1',
+              content_description: 'Test',
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+
+    const provider = createKlipyProvider({ apiKey: 'key' });
+
+    await expect(provider.trending()).rejects.toThrow(
+      'KLIPY trending response invalid: results[0] missing "media_formats"',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -218,6 +270,27 @@ describe('slingshot-gifs fetch timeout', () => {
       '[slingshot-gifs] Tenor request timed out after 50ms',
     );
   });
+
+  test('klipy throws a timeout error when fetch takes too long', async () => {
+    fetchSpy = spyOnFetch().mockImplementationOnce(
+      (_input: string | URL | Request, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          if (init?.signal) {
+            init.signal.addEventListener('abort', () => {
+              const err = new DOMException('The operation was aborted.', 'AbortError');
+              reject(err);
+            });
+          }
+        });
+      },
+    );
+
+    const provider = createKlipyProvider({ apiKey: 'key', fetchTimeoutMs: 50 });
+
+    await expect(provider.search('cats')).rejects.toThrow(
+      '[slingshot-gifs] KLIPY request timed out after 50ms',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -259,6 +332,15 @@ describe('slingshot-gifs default config', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  test('schema accepts klipy as a provider', () => {
+    const result = gifsPluginConfigSchema.parse({
+      provider: 'klipy',
+      apiKey: 'test-key',
+    });
+
+    expect(result.provider).toBe('klipy');
   });
 
   test('schema rejects negative fetchTimeoutMs', () => {

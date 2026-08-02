@@ -3,7 +3,7 @@
  *
  * Stateless GIF search proxy plugin for slingshot.
  *
- * Provides swappable provider backends (Giphy, Tenor) with server-side API key
+ * Provides swappable provider backends (Giphy, KLIPY, Tenor) with server-side API key
  * management. API keys are never exposed in HTTP responses — all provider calls
  * happen server-side and only normalized GIF result arrays are returned.
  *
@@ -22,4 +22,5 @@ export { createGifsPlugin } from './plugin';
 export type { GifProvider, GifResult, GifSearchOptions, GifsPluginConfig } from './types';
 export { gifsPluginConfigSchema } from './types';
 export { createGiphyProvider } from './providers/giphy';
+export { createKlipyProvider } from './providers/klipy';
 export { createTenorProvider } from './providers/tenor';

@@ -11,6 +11,7 @@ the server; the plugin returns normalized result payloads to callers.
 | src/plugin.ts          | `createGifsPlugin()` factory                            |
 | src/types.ts           | GIF result types and plugin config types                |
 | src/providers/giphy.ts | Giphy provider implementation                           |
+| src/providers/klipy.ts | KLIPY provider implementation                           |
 | src/providers/tenor.ts | Tenor provider implementation                           |
 | docs/human/index.md    | Package guide synced into the docs site                 |
 

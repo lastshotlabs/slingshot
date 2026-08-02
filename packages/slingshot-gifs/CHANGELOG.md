@@ -1,5 +1,11 @@
 # @lastshotlabs/slingshot-gifs
 
+## 0.3.0
+
+### Minor Changes
+
+- ed49b6a: Add KLIPY as a first-class GIF search and trending provider using its Tenor-v2-compatible API.
+
 ## 0.2.11
 
 ### Patch Changes

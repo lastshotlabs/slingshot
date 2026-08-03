@@ -173,6 +173,54 @@ describe('mountOptionalEndpoints', () => {
     expect(await res.text()).toBe('');
   });
 
+  /**
+   * The stub is a CONCRETE route mounted during the framework phase, so it
+   * beats any static-asset or SPA-fallback handler an app registers later. For
+   * an app that ships its own service worker that is not noise absorption, it
+   * is silent destruction: the browser gets 200 + `application/javascript` + a
+   * ZERO-BYTE body, registration "succeeds", and every push and fetch handler
+   * the app wrote is absent. Nothing 404s and nothing errors — push
+   * notifications and offline mode simply never happen.
+   *
+   * Found in sgforum, where a shipped 2.6 KB worker was served as 0 bytes
+   * (sgforum 59b80a45).
+   */
+  test('the stub can be declined, so an app that ships a service worker keeps it', async () => {
+    const app = new OpenAPIHono<AppEnv>();
+    mountOptionalEndpoints(
+      app,
+      undefined,
+      undefined,
+      undefined,
+      createMetricsState(),
+      {},
+      false,
+      undefined,
+      undefined,
+      false,
+    );
+    // The app's own handler, registered after the framework phase as a real
+    // app would register its static-asset or SPA fallback.
+    app.get('/sw.js', c =>
+      c.body("self.addEventListener('push', () => {});", 200, {
+        'Content-Type': 'application/javascript',
+      }),
+    );
+
+    const res = await app.request('/sw.js');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('push');
+  });
+
+  test('the stub still wins by default, so existing apps are unaffected', async () => {
+    const app = new OpenAPIHono<AppEnv>();
+    mountOptionalEndpoints(app, undefined, undefined, undefined, createMetricsState(), {}, false);
+    app.get('/sw.js', c => c.body('real worker', 200));
+
+    // Registration order, unchanged: the framework's stub is first and answers.
+    expect(await (await app.request('/sw.js')).text()).toBe('');
+  });
+
   test('all queueFactory proxy methods delegate to the lazy factory', async () => {
     const createQueue = mock(() => ({
       getJobs: async () => [],

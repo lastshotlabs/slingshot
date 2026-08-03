@@ -160,6 +160,19 @@ export type { ObservabilityConfig, TracingConfig } from './config/types/observab
 export { createChildSpan } from '@framework/otel/spans';
 
 export interface CreateAppConfig<T extends object = object> {
+  /**
+   * Mount an empty `/sw.js` stub to absorb browser service-worker probes.
+   * Defaults to `true`.
+   *
+   * SET THIS FALSE IF YOUR APP SHIPS A SERVICE WORKER. The stub is a concrete
+   * route mounted during the framework phase, so it beats any static-asset or
+   * SPA-fallback handler you register later: your real worker is served as
+   * HTTP 200 with a ZERO-BYTE body. Registration then "succeeds" with no push
+   * or fetch handlers at all, and the only symptom is that push notifications
+   * and offline mode quietly never happen.
+   */
+  absorbServiceWorkerProbe?: boolean;
+
   /** Absolute path to the service's routes directory (use import.meta.dir + "/routes"). Optional — omit when all routes are registered via plugins. */
   routesDir?: string;
   /**
@@ -878,6 +891,7 @@ async function mountAppRoutes<T extends object>(
       assembly.isProd,
       infra.postgres,
       config.events?.operator,
+      config.absorbServiceWorkerProbe ?? true,
     );
     return Promise.resolve();
   });

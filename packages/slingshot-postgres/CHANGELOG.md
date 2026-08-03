@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-postgres
 
+## 0.3.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+
 ## 0.3.8
 
 ### Patch Changes

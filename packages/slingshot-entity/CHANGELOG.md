@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-entity
 
+## 0.5.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+
 ## 0.5.4
 
 ### Patch Changes

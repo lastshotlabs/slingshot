@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-postgres",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Postgres adapter and connection helper for Slingshot",
   "license": "MIT",
   "type": "module",

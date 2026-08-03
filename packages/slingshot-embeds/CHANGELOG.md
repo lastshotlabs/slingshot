@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-embeds
 
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+
 ## 0.2.12
 
 ### Patch Changes

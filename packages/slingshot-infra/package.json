@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-infra",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps",
   "license": "MIT",
   "type": "module",

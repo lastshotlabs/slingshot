@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-gifs
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+
 ## 0.3.1
 
 ### Patch Changes

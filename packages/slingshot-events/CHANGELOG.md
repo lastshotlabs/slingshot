@@ -1,5 +1,12 @@
 # @lastshotlabs/slingshot-events
 
+## 0.3.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+
 ## 0.3.4
 
 ### Patch Changes

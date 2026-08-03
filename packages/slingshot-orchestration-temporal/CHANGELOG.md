@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-orchestration-temporal
 
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+  - @lastshotlabs/slingshot-orchestration-engine@0.2.13
+
 ## 0.2.12
 
 ### Patch Changes

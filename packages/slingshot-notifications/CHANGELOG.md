@@ -1,5 +1,13 @@
 # @lastshotlabs/slingshot-notifications
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @lastshotlabs/slingshot-core@0.6.5
+  - @lastshotlabs/slingshot-entity@0.5.5
+
 ## 0.4.5
 
 ### Patch Changes

@@ -1,5 +1,42 @@
 # @lastshotlabs/slingshot-core
 
+## 0.6.5
+
+### Patch Changes
+
+- Carry the provider's asserted `email_verified` into the account OAuth creates
+
+  An OAuth identity could never satisfy `emailVerification.required`, so turning
+  that flag on permanently locked out every social login. `findOrCreateByProvider`
+  inserted the user without touching `emailVerified` (`NOT NULL DEFAULT 0`), and
+  the OAuth callback then ran the verification guard against the account it had
+  just created — a brand new Google sign-in 403'd at its own callback, and because
+  the same check runs on every `userAuth` request, every route 403'd
+  `EMAIL_NOT_VERIFIED` for the whole session. There was no code path that could
+  have set the flag in between. This took a downstream app's production down for
+  roughly 9.5 hours.
+
+  The provider was asserting the address the whole time and we were dropping the
+  claim.
+  - `IdentityProfile.emailVerified` is new on the adapter contract. It is optional
+    and additive: leaving it undefined means "the provider said nothing" and the
+    local flag is untouched, so nothing about existing behaviour changes.
+  - `findOrCreateByProvider` honours it in all three adapters (memory, sqlite,
+    mongo). Only a literal `true` counts — an absent or false claim never marks an
+    address verified, because inventing that evidence is the one error in this area
+    that matters.
+  - A **returning** sign-in also upgrades an account that was linked before the
+    claim was carried, so existing OAuth users repair themselves on their next
+    login instead of needing a migration.
+  - Google and Apple are wired. Apple's claim was already parsed and verified by
+    `appleIdentityToken.ts` and was being dropped at the call site; it is accepted
+    as either the boolean or the string `"true"`, which is what Apple sends
+    depending on the flow.
+
+  The remaining seven providers still pass no claim, which is safe (silence leaves
+  the flag untouched) and tracked separately — each needs its own answer to whether
+  that provider genuinely asserts verification.
+
 ## 0.6.4
 
 ### Patch Changes

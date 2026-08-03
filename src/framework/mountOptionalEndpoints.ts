@@ -91,6 +91,13 @@ export function mountOptionalEndpoints(
   isProd: boolean,
   postgres?: PostgresBundle | null,
   eventOperator?: EventOperatorConfig,
+  /**
+   * Mount the empty `/sw.js` stub. Default true, for the apps that have no
+   * service worker and just want the 404 noise gone.
+   *
+   * MUST be false for an app that SHIPS one — see the note at the mount site.
+   */
+  absorbServiceWorkerProbe = true,
 ): void {
   // Security validation runs before infrastructure creation so config errors
   // take priority over missing infrastructure (Redis) errors.
@@ -179,5 +186,19 @@ export function mountOptionalEndpoints(
   // page load in a PWA-capable browser triggers a 404 for /sw.js, which
   // pollutes request logs and can confuse error-tracking tools. The empty
   // response tells the browser there is no service worker to install.
-  app.get('/sw.js', c => c.body('', 200, { 'Content-Type': 'application/javascript' }));
+  //
+  // THIS STUB CLOBBERS A REAL SERVICE WORKER, WHICH IS WHY IT IS OPTIONAL.
+  // Hono dispatches in registration order and this is a CONCRETE route mounted
+  // during the framework phase, so it beats any static-asset or SPA-fallback
+  // handler an app registers later — including one serving its own
+  // `public/sw.js`. The app then gets HTTP 200, `Content-Type:
+  // application/javascript`, and a ZERO-BYTE body: registration "succeeds",
+  // `navigator.serviceWorker.controller` is set, and every push handler and
+  // fetch handler the app wrote is silently absent. Nothing 404s, nothing
+  // errors, and the only symptom is that push notifications and offline mode
+  // do not happen. Found in sgforum, where a shipped 2.6 KB worker was being
+  // served as 0 bytes (sgforum 59b80a45).
+  if (absorbServiceWorkerProbe) {
+    app.get('/sw.js', c => c.body('', 200, { 'Content-Type': 'application/javascript' }));
+  }
 }

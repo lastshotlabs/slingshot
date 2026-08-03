@@ -875,7 +875,15 @@ export const createOAuthRouter = (
           runtime,
           'apple',
           claims.sub,
-          { email: claims.email, name },
+          {
+            email: claims.email,
+            // Apple asserts this in the identity token and `appleIdentityToken.ts`
+            // has always parsed it — it was being dropped right here. The claim is
+            // typed `boolean | string` because Apple sends the string "true" in
+            // some flows, so both spellings are accepted and nothing else is.
+            emailVerified: claims.email_verified === true || claims.email_verified === 'true',
+            name,
+          },
           resolveCallbackRedirect(state),
         );
       },

@@ -1,5 +1,23 @@
 # @lastshotlabs/slingshot
 
+## 3.1.7
+
+### Patch Changes
+
+- Stop the `/sw.js` stub clobbering a real service worker.
+
+  `mountOptionalEndpoints` mounted `GET /sw.js -> 200, empty body`
+  unconditionally to absorb browser probes. It is a concrete route registered
+  during the framework phase, so it beat any static-asset or SPA-fallback
+  handler an app registered later — including one serving the app's own
+  `public/sw.js`. The app then received 200, `Content-Type:
+application/javascript` and ZERO BYTES, which REGISTERS successfully and
+  leaves an active worker with no push handler and no fetch handler. Push
+  notifications and offline mode silently never ran.
+
+  New `absorbServiceWorkerProbe` config, defaulting to `true` so no existing
+  app changes behaviour. Apps that ship a service worker set it `false`.
+
 ## 3.1.6
 
 ### Patch Changes

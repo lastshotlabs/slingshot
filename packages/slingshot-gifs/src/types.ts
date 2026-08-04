@@ -9,6 +9,16 @@ import { z } from 'zod';
 export interface GifResult {
   /** Provider-specific unique identifier for the GIF. */
   id: string;
+  /**
+   * Whether this is a regular GIF or a transparent sticker.
+   *
+   * Carried on the RESULT, not just the request, because it changes how a
+   * client must paint it: a sticker has an alpha channel and is meant to sit
+   * directly on the page, so drawing it in the bordered, background-filled
+   * tile a GIF wants produces a visible box around the artwork. A caller
+   * merging both kinds into one list would otherwise have no way to tell.
+   */
+  kind: MediaKind;
   /** Full-resolution GIF URL. */
   url: string;
   /** Smaller preview GIF URL suitable for thumbnails or grid views. */
@@ -26,7 +36,19 @@ export interface GifResult {
  *
  * All fields are optional — providers apply their own defaults when omitted.
  */
+export type MediaKind = 'gif' | 'sticker';
+
 export interface GifSearchOptions {
+  /**
+   * Which media kind to fetch. Defaults to `'gif'`.
+   *
+   * Not every provider serves stickers; a provider that cannot MUST reject
+   * the request rather than quietly return GIFs. Silently substituting a
+   * different kind of media than the caller asked for is the failure mode
+   * that reaches an end user as "the sticker tab is just GIFs again", with
+   * nothing in any log to explain it.
+   */
+  kind?: MediaKind;
   /** Maximum number of results to return. */
   limit?: number;
   /** Zero-based offset for pagination. */

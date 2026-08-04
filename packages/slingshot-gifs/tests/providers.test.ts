@@ -73,6 +73,7 @@ describe('slingshot-gifs providers', () => {
     await expect(provider.trending({ limit: 2, offset: 4, rating: 'g' })).resolves.toEqual([
       {
         id: 'gif-1',
+        kind: 'gif',
         url: 'https://cdn.example.com/gif-1.gif',
         preview: 'https://cdn.example.com/gif-1-preview.gif',
         width: 320,
@@ -140,6 +141,7 @@ describe('slingshot-gifs providers', () => {
     ).resolves.toEqual([
       {
         id: 'klipy-1',
+        kind: 'gif',
         url: 'https://media.example.com/celebration.gif',
         preview: 'https://media.example.com/celebration-tiny.gif',
         width: 640,
@@ -206,6 +208,7 @@ describe('slingshot-gifs providers', () => {
     ).resolves.toEqual([
       {
         id: 'tenor-1',
+        kind: 'gif',
         url: 'https://media.example.com/party-parrot.gif',
         preview: 'https://media.example.com/party-parrot-tiny.gif',
         width: 480,

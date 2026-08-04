@@ -75,6 +75,7 @@ describe('slingshot-gifs smoke', () => {
       results: [
         {
           id: 'gif-1',
+          kind: 'gif',
           url: 'https://cdn.example.com/gif-1.gif',
           preview: 'https://cdn.example.com/gif-1-preview.gif',
           width: 320,

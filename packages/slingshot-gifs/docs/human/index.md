@@ -41,9 +41,19 @@ The plugin mounts:
 - `GET {mountPath}/trending`
 - `GET {mountPath}/search?q=...`
 
+Both routes accept an optional `kind` parameter — `gif` (the default) or `sticker`:
+
+- `GET {mountPath}/search?q=cat&kind=sticker`
+- `GET {mountPath}/trending?kind=sticker`
+
+An unrecognised `kind` returns `400`. It does **not** fall back to GIFs: a typo'd
+`?kind=stickers` that quietly served GIFs would reach a user as "the sticker tab is just
+GIFs again", with a `200` in the access log and nothing to explain it.
+
 Both routes return normalized results with:
 
 - `id`
+- `kind` — `'gif' | 'sticker'`
 - `url`
 - `preview`
 - `width`
@@ -86,9 +96,26 @@ If you need to extend provider behavior, start in:
 - `src/providers/giphy.ts`, `src/providers/klipy.ts`, and `src/providers/tenor.ts` for
   backend-specific mapping
 
+## Stickers
+
+Stickers are transparent artwork meant to sit directly on the page, rather than a GIF drawn
+inside a tile. Two things follow from that:
+
+- **Paint them without a background or border.** `kind` is returned on every result precisely
+  so a client merging both kinds into one list can tell them apart. Drawing a sticker in the
+  bordered, background-filled tile a GIF wants puts a visible box around the artwork.
+- **The providers disagree about what a sticker is.** KLIPY and Tenor take
+  `searchfilter=sticker` on the same endpoint and return the artwork under
+  `media_formats.gif_transparent` / `tinygif_transparent` — the opaque `gif` / `tinygif` keys
+  are _absent_, not merely unused. Giphy instead serves a sibling resource at
+  `/v1/stickers/{search,trending}`. The plugin normalizes both away; you only pass `kind`.
+
 ## Gotchas
 
 - Search requires the `q` query parameter and returns `400` when it is missing or blank.
+- Sticker availability and quality vary by provider and query. A sticker search can legitimately
+  return fewer results than the same query as a GIF search — that is the provider's catalogue,
+  not a bug in the filter.
 - Provider-specific rating vocabularies still apply. The plugin passes `rating` through rather than
   inventing a cross-provider moderation policy.
 - KLIPY requires consumer-facing attribution. Follow the

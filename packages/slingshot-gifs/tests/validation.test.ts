@@ -408,6 +408,7 @@ describe('slingshot-gifs tenor trending route', () => {
       results: [
         {
           id: 'tenor-1',
+          kind: 'gif',
           url: 'https://media.example.com/dance.gif',
           preview: 'https://media.example.com/dance-tiny.gif',
           width: 400,

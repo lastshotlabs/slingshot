@@ -91,8 +91,18 @@ function validateResponse(body: unknown, kind: MediaKind): string | null {
 
 function mapGif(gif: TenorCompatibleGif, kind: MediaKind): GifResult {
   const { full, preview } = FORMAT_KEYS[kind];
-  const fullFormat = gif.media_formats[full]!;
-  const previewFormat = gif.media_formats[preview]!;
+  const fullFormat = gif.media_formats[full];
+  const previewFormat = gif.media_formats[preview];
+  if (fullFormat === undefined || previewFormat === undefined) {
+    // Unreachable today: `validateResponse` checks both keys for this kind
+    // before anything is mapped. Kept as a throw rather than a non-null
+    // assertion so that a future change which reorders or skips validation
+    // fails loudly here, instead of emitting `undefined` into `url` and
+    // shipping a result set full of broken images.
+    throw new Error(
+      `[slingshot-gifs] result ${gif.id} is missing the "${full}"/"${preview}" media formats`,
+    );
+  }
   return {
     id: gif.id,
     kind,

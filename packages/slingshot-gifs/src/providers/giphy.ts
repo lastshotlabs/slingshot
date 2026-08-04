@@ -1,4 +1,4 @@
-import type { GifProvider, GifResult, GifSearchOptions } from '../types';
+import type { GifProvider, GifResult, GifSearchOptions, MediaKind } from '../types';
 
 /** Shape of a single item in the Giphy API `data` array. */
 interface GiphyGif {
@@ -52,9 +52,10 @@ function validateGiphyResponse(body: unknown): string | null {
 /**
  * Map a raw Giphy API item to the normalized {@link GifResult} shape.
  */
-function mapGiphyGif(g: GiphyGif): GifResult {
+function mapGiphyGif(g: GiphyGif, kind: MediaKind): GifResult {
   return {
     id: g.id,
+    kind,
     url: g.images.original.url,
     preview: g.images.fixed_height.url,
     width: Number(g.images.original.width),
@@ -79,7 +80,12 @@ export function createGiphyProvider(config: {
   fetchTimeoutMs?: number;
 }): GifProvider {
   const { apiKey, rating, limit = 25, fetchTimeoutMs = 10_000 } = config;
-  const baseUrl = 'https://api.giphy.com/v1/gifs';
+  // Giphy serves stickers from a SIBLING resource path with an identical
+  // response shape — `/v1/stickers/{trending,search}` — so the kind selects
+  // the path rather than a query parameter, unlike the Tenor-compatible
+  // providers. Sticker results carry alpha in `images.original.url`.
+  const baseUrlFor = (kind: MediaKind): string =>
+    kind === 'sticker' ? 'https://api.giphy.com/v1/stickers' : 'https://api.giphy.com/v1/gifs';
 
   function buildParams(opts?: GifSearchOptions): URLSearchParams {
     const params = new URLSearchParams();
@@ -126,28 +132,30 @@ export function createGiphyProvider(config: {
     name: 'giphy',
 
     async trending(opts?: GifSearchOptions): Promise<GifResult[]> {
+      const kind = opts?.kind ?? 'gif';
       const params = buildParams(opts);
-      const res = await fetchWithTimeout(`${baseUrl}/trending?${params.toString()}`);
+      const res = await fetchWithTimeout(`${baseUrlFor(kind)}/trending?${params.toString()}`);
       if (!res.ok) {
         throw new Error(
           `[slingshot-gifs] Giphy trending request failed: ${res.status} ${res.statusText}`,
         );
       }
       const body = await parseAndValidate(res, 'trending');
-      return body.data.map(mapGiphyGif);
+      return body.data.map(g => mapGiphyGif(g, kind));
     },
 
     async search(query: string, opts?: GifSearchOptions): Promise<GifResult[]> {
+      const kind = opts?.kind ?? 'gif';
       const params = buildParams(opts);
       params.set('q', query);
-      const res = await fetchWithTimeout(`${baseUrl}/search?${params.toString()}`);
+      const res = await fetchWithTimeout(`${baseUrlFor(kind)}/search?${params.toString()}`);
       if (!res.ok) {
         throw new Error(
           `[slingshot-gifs] Giphy search request failed: ${res.status} ${res.statusText}`,
         );
       }
       const body = await parseAndValidate(res, 'search');
-      return body.data.map(mapGiphyGif);
+      return body.data.map(g => mapGiphyGif(g, kind));
     },
   };
 }

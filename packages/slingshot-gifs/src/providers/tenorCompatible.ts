@@ -1,14 +1,37 @@
-import type { GifProvider, GifResult, GifSearchOptions } from '../types';
+import type { GifProvider, GifResult, GifSearchOptions, MediaKind } from '../types';
 
 /** Shape shared by Tenor v2 and KLIPY's Tenor-compatible v2 API. */
 interface TenorCompatibleGif {
   id: string;
   content_description: string;
-  media_formats: {
-    gif: { url: string; dims: [number, number] };
-    tinygif: { url: string; dims: [number, number] };
-  };
+  media_formats: Record<string, { url: string; dims: [number, number] }>;
 }
+
+/**
+ * The `media_formats` keys a response carries depend on the kind requested.
+ *
+ * Stickers come back under `gif_transparent` / `tinygif_transparent` and do
+ * NOT include the opaque `gif` / `tinygif` keys at all — so a validator that
+ * hard-requires `media_formats.gif` rejects every sticker response as
+ * malformed. Verified against the live KLIPY v2 API: a sticker search returns
+ * exactly `['gif_transparent', 'tinygif_transparent']` and nothing else.
+ */
+const FORMAT_KEYS: Record<MediaKind, { full: string; preview: string }> = {
+  gif: { full: 'gif', preview: 'tinygif' },
+  sticker: { full: 'gif_transparent', preview: 'tinygif_transparent' },
+};
+
+/**
+ * Media filters requested per kind.
+ *
+ * Asking for the transparent formats is what actually makes a sticker a
+ * sticker. Without it the provider answers with flattened artwork on an
+ * opaque background, which renders as a picture of a sticker in a white box.
+ */
+const MEDIA_FILTERS: Record<MediaKind, string> = {
+  gif: 'gif,tinygif',
+  sticker: 'gif_transparent,tinygif_transparent',
+};
 
 interface TenorCompatibleResponse {
   results: TenorCompatibleGif[];
@@ -25,7 +48,8 @@ interface TenorCompatibleProviderConfig {
   mediaFilter?: string;
 }
 
-function validateResponse(body: unknown): string | null {
+function validateResponse(body: unknown, kind: MediaKind): string | null {
+  const { full, preview } = FORMAT_KEYS[kind];
   if (body == null || typeof body !== 'object') {
     return 'Response is not an object';
   }
@@ -43,33 +67,39 @@ function validateResponse(body: unknown): string | null {
     if (formats == null || typeof formats !== 'object') {
       return `results[${i}] missing "media_formats"`;
     }
-    const gif = formats.gif as Record<string, unknown> | undefined;
-    if (gif == null || typeof gif !== 'object') return `results[${i}] missing "media_formats.gif"`;
-    if (typeof gif.url !== 'string') return `results[${i}] missing "media_formats.gif.url"`;
-    if (!Array.isArray(gif.dims) || gif.dims.length < 2) {
-      return `results[${i}] missing "media_formats.gif.dims"`;
+    const gif = formats[full] as Record<string, unknown> | undefined;
+    if (gif == null || typeof gif !== 'object') {
+      return `results[${i}] missing "media_formats.${full}"`;
     }
-    const tinygif = formats.tinygif as Record<string, unknown> | undefined;
+    if (typeof gif.url !== 'string') return `results[${i}] missing "media_formats.${full}.url"`;
+    if (!Array.isArray(gif.dims) || gif.dims.length < 2) {
+      return `results[${i}] missing "media_formats.${full}.dims"`;
+    }
+    const tinygif = formats[preview] as Record<string, unknown> | undefined;
     if (tinygif == null || typeof tinygif !== 'object') {
-      return `results[${i}] missing "media_formats.tinygif"`;
+      return `results[${i}] missing "media_formats.${preview}"`;
     }
     if (typeof tinygif.url !== 'string') {
-      return `results[${i}] missing "media_formats.tinygif.url"`;
+      return `results[${i}] missing "media_formats.${preview}.url"`;
     }
     if (!Array.isArray(tinygif.dims) || tinygif.dims.length < 2) {
-      return `results[${i}] missing "media_formats.tinygif.dims"`;
+      return `results[${i}] missing "media_formats.${preview}.dims"`;
     }
   }
   return null;
 }
 
-function mapGif(gif: TenorCompatibleGif): GifResult {
+function mapGif(gif: TenorCompatibleGif, kind: MediaKind): GifResult {
+  const { full, preview } = FORMAT_KEYS[kind];
+  const fullFormat = gif.media_formats[full]!;
+  const previewFormat = gif.media_formats[preview]!;
   return {
     id: gif.id,
-    url: gif.media_formats.gif.url,
-    preview: gif.media_formats.tinygif.url,
-    width: gif.media_formats.gif.dims[0],
-    height: gif.media_formats.gif.dims[1],
+    kind,
+    url: fullFormat.url,
+    preview: previewFormat.url,
+    width: fullFormat.dims[0],
+    height: fullFormat.dims[1],
     title: gif.content_description,
   };
 }
@@ -95,7 +125,16 @@ export function createTenorCompatibleProvider(config: TenorCompatibleProviderCon
     if (opts?.offset !== undefined) params.set('pos', String(opts.offset));
     const contentFilter = opts?.rating ?? rating;
     if (contentFilter) params.set('contentfilter', contentFilter);
-    if (mediaFilter) params.set('media_filter', mediaFilter);
+    // The media filter is chosen by KIND, not by static config. The
+    // configured `mediaFilter` remains the default for plain GIFs so an
+    // existing provider config keeps its exact behaviour.
+    const kind = opts?.kind ?? 'gif';
+    const filter = kind === 'gif' ? (mediaFilter ?? MEDIA_FILTERS.gif) : MEDIA_FILTERS[kind];
+    if (filter) params.set('media_filter', filter);
+    // Tenor's own parameter name, which KLIPY's v2 honours — confirmed
+    // against the live API: the same query returns a different, sticker-only
+    // result set with this set.
+    if (kind === 'sticker') params.set('searchfilter', 'sticker');
     return params;
   }
 
@@ -120,6 +159,7 @@ export function createTenorCompatibleProvider(config: TenorCompatibleProviderCon
   async function parseAndValidate(
     response: Response,
     label: string,
+    kind: MediaKind,
   ): Promise<TenorCompatibleResponse> {
     let body: unknown;
     try {
@@ -127,7 +167,7 @@ export function createTenorCompatibleProvider(config: TenorCompatibleProviderCon
     } catch {
       throw new Error(`[slingshot-gifs] ${providerLabel} ${label} returned malformed JSON`);
     }
-    const validationError = validateResponse(body);
+    const validationError = validateResponse(body, kind);
     if (validationError != null) {
       throw new Error(
         `[slingshot-gifs] ${providerLabel} ${label} response invalid: ${validationError}`,
@@ -147,8 +187,9 @@ export function createTenorCompatibleProvider(config: TenorCompatibleProviderCon
           `[slingshot-gifs] ${providerLabel} featured request failed: ${response.status} ${response.statusText}`,
         );
       }
-      const body = await parseAndValidate(response, 'trending');
-      return body.results.map(mapGif);
+      const kind = opts?.kind ?? 'gif';
+      const body = await parseAndValidate(response, 'trending', kind);
+      return body.results.map(g => mapGif(g, kind));
     },
 
     async search(query: string, opts?: GifSearchOptions): Promise<GifResult[]> {
@@ -160,8 +201,9 @@ export function createTenorCompatibleProvider(config: TenorCompatibleProviderCon
           `[slingshot-gifs] ${providerLabel} search request failed: ${response.status} ${response.statusText}`,
         );
       }
-      const body = await parseAndValidate(response, 'search');
-      return body.results.map(mapGif);
+      const kind = opts?.kind ?? 'gif';
+      const body = await parseAndValidate(response, 'search', kind);
+      return body.results.map(g => mapGif(g, kind));
     },
   };
 }

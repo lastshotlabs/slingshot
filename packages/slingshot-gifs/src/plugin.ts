@@ -3,6 +3,7 @@ import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingsho
 import { validatePluginConfig } from '@lastshotlabs/slingshot-core';
 import { resolveGifProvider } from './providers/index';
 import { gifsPluginConfigSchema } from './types';
+import type { MediaKind } from './types';
 
 function parseOffset(rawOffset: string | undefined): number | undefined | null {
   if (rawOffset === undefined) return undefined;
@@ -37,6 +38,21 @@ function parseOffset(rawOffset: string | undefined): number | undefined | null {
  * });
  * ```
  */
+/**
+ * Parse the `kind` query parameter into a {@link MediaKind}.
+ *
+ * Returns `null` for anything unrecognised so the route can answer 400. An
+ * unknown kind MUST NOT fall back to `'gif'`: a typo'd `?kind=stickers` that
+ * quietly returns GIFs reaches the user as "the sticker tab is just GIFs",
+ * with a 200 in the logs and nothing to explain it. The same reasoning the
+ * rating filter follows — a value we do not understand is an error, not a
+ * default.
+ */
+function parseKind(raw: string | undefined): MediaKind | null {
+  if (raw === undefined || raw === '') return 'gif';
+  return raw === 'gif' || raw === 'sticker' ? raw : null;
+}
+
 export function createGifsPlugin(rawConfig: unknown): SlingshotPlugin {
   const config = Object.freeze(
     validatePluginConfig('slingshot-gifs', rawConfig, gifsPluginConfigSchema),
@@ -56,10 +72,15 @@ export function createGifsPlugin(rawConfig: unknown): SlingshotPlugin {
         if (offset === null) {
           return c.json({ error: 'Query parameter "offset" must be a non-negative integer.' }, 400);
         }
+        const kind = parseKind(c.req.query('kind'));
+        if (kind === null) {
+          return c.json({ error: 'Query parameter "kind" must be "gif" or "sticker".' }, 400);
+        }
         const results = await provider.trending({
           limit: config.limit,
           rating: config.rating,
           offset,
+          kind,
         });
         return c.json({ results });
       });
@@ -73,10 +94,15 @@ export function createGifsPlugin(rawConfig: unknown): SlingshotPlugin {
         if (offset === null) {
           return c.json({ error: 'Query parameter "offset" must be a non-negative integer.' }, 400);
         }
+        const kind = parseKind(c.req.query('kind'));
+        if (kind === null) {
+          return c.json({ error: 'Query parameter "kind" must be "gif" or "sticker".' }, 400);
+        }
         const results = await provider.search(q, {
           limit: config.limit,
           rating: config.rating,
           offset,
+          kind,
         });
         return c.json({ results });
       });

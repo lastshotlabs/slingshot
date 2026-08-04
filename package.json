@@ -333,7 +333,7 @@
     "samlify": "2.13.1",
     "tsc-alias": "1.8.16",
     "tsup": "8.5.1",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "typescript-eslint": "8.65.0",
     "vitest": "4.1.10",
     "ws": "8.21.1",

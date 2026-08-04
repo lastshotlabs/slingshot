@@ -322,7 +322,7 @@
     "eslint": "10.1.0",
     "eslint-config-prettier": "10.1.8",
     "fast-glob": "3.3.3",
-    "hono": "4.12.32",
+    "hono": "4.12.33",
     "ioredis": "5.10.0",
     "mongoose": "9.8.1",
     "oclif": "4.23.29",

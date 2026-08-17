@@ -12,7 +12,7 @@
         "@lastshotlabs/slingshot-entity": "workspace:*",
         "@lastshotlabs/slingshot-events": "workspace:*",
         "@lastshotlabs/slingshot-organizations": "workspace:*",
-        "@oclif/core": "4.13.2",
+        "@oclif/core": "4.13.3",
         "@opentelemetry/api": "1.9.1",
         "@scalar/hono-api-reference": "0.10.0",
       },
@@ -54,7 +54,7 @@
         "hono": "4.12.32",
         "ioredis": "5.10.0",
         "mongoose": "9.8.1",
-        "oclif": "4.23.29",
+        "oclif": "4.23.30",
         "otpauth": "9.5.1",
         "pagefind": "1.4.0",
         "pg": "8.20.0",
@@ -65,7 +65,7 @@
         "typescript": "5.9.3",
         "typescript-eslint": "8.65.0",
         "vitest": "4.1.10",
-        "ws": "8.21.1",
+        "ws": "8.21.3",
         "zod": "4.3.6",
       },
       "peerDependencies": {
@@ -143,7 +143,7 @@
     },
     "packages/runtime-bun": {
       "name": "@lastshotlabs/slingshot-runtime-bun",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -153,7 +153,7 @@
     },
     "packages/runtime-edge": {
       "name": "@lastshotlabs/slingshot-runtime-edge",
-      "version": "4.0.2",
+      "version": "4.0.5",
       "devDependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-ssr": "workspace:*",
@@ -169,7 +169,7 @@
     },
     "packages/runtime-node": {
       "name": "@lastshotlabs/slingshot-runtime-node",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -178,7 +178,7 @@
         "@types/better-sqlite3": "7.6.13",
         "@types/ws": "8.18.1",
         "typescript": "6.0.2",
-        "ws": "8.21.1",
+        "ws": "8.21.3",
       },
       "peerDependencies": {
         "@hono/node-server": ">=2.0.5 <3",
@@ -190,7 +190,7 @@
     },
     "packages/slingshot-admin": {
       "name": "@lastshotlabs/slingshot-admin",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -202,7 +202,7 @@
     },
     "packages/slingshot-ai": {
       "name": "@lastshotlabs/slingshot-ai",
-      "version": "0.4.8",
+      "version": "0.4.11",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -221,7 +221,7 @@
     },
     "packages/slingshot-assets": {
       "name": "@lastshotlabs/slingshot-assets",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -259,7 +259,7 @@
     },
     "packages/slingshot-auth": {
       "name": "@lastshotlabs/slingshot-auth",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -295,7 +295,7 @@
     },
     "packages/slingshot-billing": {
       "name": "@lastshotlabs/slingshot-billing",
-      "version": "0.2.11",
+      "version": "0.2.14",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -308,7 +308,7 @@
     },
     "packages/slingshot-bullmq": {
       "name": "@lastshotlabs/slingshot-bullmq",
-      "version": "0.3.3",
+      "version": "0.3.6",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -324,7 +324,7 @@
     },
     "packages/slingshot-chat": {
       "name": "@lastshotlabs/slingshot-chat",
-      "version": "0.2.14",
+      "version": "0.2.17",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -350,7 +350,7 @@
     },
     "packages/slingshot-community": {
       "name": "@lastshotlabs/slingshot-community",
-      "version": "0.2.17",
+      "version": "0.2.20",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -373,7 +373,7 @@
     },
     "packages/slingshot-core": {
       "name": "@lastshotlabs/slingshot-core",
-      "version": "0.6.2",
+      "version": "0.6.5",
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "8.4.3",
         "@faker-js/faker": "10.4.0",
@@ -390,7 +390,7 @@
     },
     "packages/slingshot-deep-links": {
       "name": "@lastshotlabs/slingshot-deep-links",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "zod": "4.3.6",
@@ -401,7 +401,7 @@
     },
     "packages/slingshot-embeds": {
       "name": "@lastshotlabs/slingshot-embeds",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -412,7 +412,7 @@
     },
     "packages/slingshot-emoji": {
       "name": "@lastshotlabs/slingshot-emoji",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -434,7 +434,7 @@
     },
     "packages/slingshot-entity": {
       "name": "@lastshotlabs/slingshot-entity",
-      "version": "0.5.2",
+      "version": "0.5.5",
       "dependencies": {
         "@faker-js/faker": "10.4.0",
         "@lastshotlabs/slingshot-core": "workspace:*",
@@ -455,7 +455,7 @@
     },
     "packages/slingshot-events": {
       "name": "@lastshotlabs/slingshot-events",
-      "version": "0.3.2",
+      "version": "0.3.5",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "zod": "4.3.6",
@@ -463,7 +463,7 @@
     },
     "packages/slingshot-game-engine": {
       "name": "@lastshotlabs/slingshot-game-engine",
-      "version": "0.2.14",
+      "version": "0.2.17",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -475,7 +475,7 @@
     },
     "packages/slingshot-gifs": {
       "name": "@lastshotlabs/slingshot-gifs",
-      "version": "0.2.10",
+      "version": "0.4.0",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -486,7 +486,7 @@
     },
     "packages/slingshot-image": {
       "name": "@lastshotlabs/slingshot-image",
-      "version": "4.0.2",
+      "version": "4.0.5",
       "devDependencies": {
         "@types/node": "20.19.39",
       },
@@ -501,7 +501,7 @@
     },
     "packages/slingshot-infra": {
       "name": "@lastshotlabs/slingshot-infra",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "yaml": "2.8.3",
@@ -526,7 +526,7 @@
     },
     "packages/slingshot-interactions": {
       "name": "@lastshotlabs/slingshot-interactions",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -539,7 +539,7 @@
     },
     "packages/slingshot-kafka": {
       "name": "@lastshotlabs/slingshot-kafka",
-      "version": "0.3.3",
+      "version": "0.3.6",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -553,7 +553,7 @@
     },
     "packages/slingshot-m2m": {
       "name": "@lastshotlabs/slingshot-m2m",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -569,7 +569,7 @@
     },
     "packages/slingshot-mail": {
       "name": "@lastshotlabs/slingshot-mail",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -590,7 +590,7 @@
     },
     "packages/slingshot-notifications": {
       "name": "@lastshotlabs/slingshot-notifications",
-      "version": "0.4.3",
+      "version": "0.4.6",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -602,7 +602,7 @@
     },
     "packages/slingshot-oauth": {
       "name": "@lastshotlabs/slingshot-oauth",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -616,7 +616,7 @@
     },
     "packages/slingshot-oidc": {
       "name": "@lastshotlabs/slingshot-oidc",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -629,7 +629,7 @@
     },
     "packages/slingshot-orchestration": {
       "name": "@lastshotlabs/slingshot-orchestration",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -641,7 +641,7 @@
     },
     "packages/slingshot-orchestration-bullmq": {
       "name": "@lastshotlabs/slingshot-orchestration-bullmq",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -654,7 +654,7 @@
     },
     "packages/slingshot-orchestration-engine": {
       "name": "@lastshotlabs/slingshot-orchestration-engine",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "better-sqlite3": "12.8.0",
@@ -665,7 +665,7 @@
     },
     "packages/slingshot-orchestration-temporal": {
       "name": "@lastshotlabs/slingshot-orchestration-temporal",
-      "version": "0.2.10",
+      "version": "0.2.13",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration-engine": "workspace:*",
@@ -684,7 +684,7 @@
     },
     "packages/slingshot-organizations": {
       "name": "@lastshotlabs/slingshot-organizations",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -701,7 +701,7 @@
     },
     "packages/slingshot-permissions": {
       "name": "@lastshotlabs/slingshot-permissions",
-      "version": "0.2.11",
+      "version": "0.2.14",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -717,7 +717,7 @@
     },
     "packages/slingshot-polls": {
       "name": "@lastshotlabs/slingshot-polls",
-      "version": "0.2.12",
+      "version": "0.2.15",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -729,7 +729,7 @@
     },
     "packages/slingshot-postgres": {
       "name": "@lastshotlabs/slingshot-postgres",
-      "version": "0.3.6",
+      "version": "0.3.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -745,7 +745,7 @@
     },
     "packages/slingshot-push": {
       "name": "@lastshotlabs/slingshot-push",
-      "version": "2.0.3",
+      "version": "2.0.6",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -769,7 +769,7 @@
     },
     "packages/slingshot-scim": {
       "name": "@lastshotlabs/slingshot-scim",
-      "version": "1.0.6",
+      "version": "1.0.9",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -781,7 +781,7 @@
     },
     "packages/slingshot-search": {
       "name": "@lastshotlabs/slingshot-search",
-      "version": "0.2.11",
+      "version": "0.2.14",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -793,7 +793,7 @@
     },
     "packages/slingshot-ssg": {
       "name": "@lastshotlabs/slingshot-ssg",
-      "version": "0.2.12",
+      "version": "0.2.15",
       "bin": {
         "slingshot-ssg": "./dist/src/cli.js",
       },
@@ -807,7 +807,7 @@
     },
     "packages/slingshot-ssr": {
       "name": "@lastshotlabs/slingshot-ssr",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -819,7 +819,7 @@
     },
     "packages/slingshot-ssr-tanstack": {
       "name": "@lastshotlabs/slingshot-ssr-tanstack",
-      "version": "0.2.15",
+      "version": "0.2.18",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",
@@ -837,7 +837,7 @@
     },
     "packages/slingshot-webhooks": {
       "name": "@lastshotlabs/slingshot-webhooks",
-      "version": "0.2.12",
+      "version": "0.2.15",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -1329,7 +1329,7 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
-    "@oclif/core": ["@oclif/core@4.13.2", "", { "dependencies": { "ansi-escapes": "^4.3.2", "ansis": "^3.17.0", "clean-stack": "^3.0.1", "cli-spinners": "^2.9.2", "debug": "^4.4.3", "ejs": "^3.1.10", "get-package-type": "^0.1.0", "indent-string": "^4.0.0", "is-wsl": "^2.2.0", "lilconfig": "^3.1.3", "minimatch": "^10.2.5", "semver": "^7.8.1", "string-width": "^4.2.3", "supports-color": "^8", "tinyglobby": "^0.2.17", "widest-line": "^3.1.0", "wordwrap": "^1.0.0", "wrap-ansi": "^7.0.0" } }, "sha512-YWQs0JvESCliWopKtCZqPLgEB1e3oqR+KYecMReseYWbo7E73Rz2tFwQDFQtAp48VLMiAsiTPKKQaZAo+ghzLw=="],
+    "@oclif/core": ["@oclif/core@4.13.3", "", { "dependencies": { "ansi-escapes": "^4.3.2", "ansis": "^3.17.0", "clean-stack": "^3.0.1", "cli-spinners": "^2.9.2", "debug": "^4.4.3", "ejs": "^3.1.10", "get-package-type": "^0.1.0", "indent-string": "^4.0.0", "is-wsl": "^2.2.0", "lilconfig": "^3.1.3", "minimatch": "^10.2.5", "semver": "^7.8.1", "string-width": "^4.2.3", "supports-color": "^8", "tinyglobby": "^0.2.17", "widest-line": "^3.1.0", "wordwrap": "^1.0.0", "wrap-ansi": "^7.0.0" } }, "sha512-wBp2igI2KVwq2ZmpnfmGtOROo7aXZIr3OEtAS16g1wHFBqyEuswL+9K50NJWJvlpAmxd+4dVj/ycawXESU3wQQ=="],
 
     "@oclif/plugin-help": ["@oclif/plugin-help@6.2.53", "", { "dependencies": { "@oclif/core": "^4" } }, "sha512-njx2nTH87EQEEuz4ShNtL0gzzN981MRkDPqScbu+Tkd7NpIv30OHdTjQK1GzGtkf+V2RvSYIrX+LrLsUVh9DJw=="],
 
@@ -2299,7 +2299,7 @@
 
     "obug": ["obug@2.1.1", "", {}, "sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ=="],
 
-    "oclif": ["oclif@4.23.29", "", { "dependencies": { "@aws-sdk/client-cloudfront": "^3.1079.0", "@aws-sdk/client-s3": "^3.1079.0", "@inquirer/confirm": "^3.1.22", "@inquirer/input": "^2.2.4", "@inquirer/select": "^2.5.0", "@oclif/core": "^4.11.11", "@oclif/plugin-help": "^6.2.53", "@oclif/plugin-not-found": "^3.2.87", "@oclif/plugin-warn-if-update-available": "^3.1.67", "ansis": "^3.16.0", "async-retry": "^1.3.3", "change-case": "^4", "cross-spawn": "^7.0.6", "debug": "^4.4.0", "ejs": "^3.1.10", "find-yarn-workspace-root": "^2.0.0", "fs-extra": "^8.1", "github-slugger": "^2", "got": "^13", "normalize-package-data": "^6", "semver": "^7.8.5", "tiny-jsonc": "^1.0.2", "validate-npm-package-name": "^5.0.1" }, "bin": { "oclif": "bin/run.js" } }, "sha512-pUekmMh+wwIbFq3xX1EfkgZ7RuYuuSbdhJiB+20zqSfGE8Tt9T+K9br1/vmsaIOxfDo0Dw3jxLBk4JZOMFEMeQ=="],
+    "oclif": ["oclif@4.23.30", "", { "dependencies": { "@aws-sdk/client-cloudfront": "^3.1079.0", "@aws-sdk/client-s3": "^3.1079.0", "@inquirer/confirm": "^3.1.22", "@inquirer/input": "^2.2.4", "@inquirer/select": "^2.5.0", "@oclif/core": "^4.11.11", "@oclif/plugin-help": "^6.2.53", "@oclif/plugin-not-found": "^3.2.87", "@oclif/plugin-warn-if-update-available": "^3.1.67", "ansis": "^3.16.0", "async-retry": "^1.3.3", "change-case": "^4", "cross-spawn": "^7.0.6", "debug": "^4.4.0", "ejs": "^3.1.10", "find-yarn-workspace-root": "^2.0.0", "fs-extra": "^8.1", "github-slugger": "^2", "got": "^13", "normalize-package-data": "^6", "semver": "^7.8.5", "tiny-jsonc": "^1.0.2", "validate-npm-package-name": "^5.0.1" }, "bin": { "oclif": "bin/run.js" } }, "sha512-x8sMRv606XqZAWEfGh981PP2JM4G2CKt4/z2KDntoNHljD8slfJ5sHaDFUQya9w6W8xOJDMFF3UaLAFFYHo13w=="],
 
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
 
@@ -2695,7 +2695,7 @@
 
     "wrappy": ["wrappy@1.0.2", "", {}, "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="],
 
-    "ws": ["ws@8.21.1", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw=="],
+    "ws": ["ws@8.21.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw=="],
 
     "xml": ["xml@1.0.1", "", {}, "sha512-huCv9IH9Tcf95zuYCsQraZtWnJvBtLVE0QHMOs8bWyZAFZNDcYjsPq1nEx8jKA9y+Beo9v+7OBPRisQTjinQMw=="],
 

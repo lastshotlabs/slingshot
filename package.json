@@ -314,7 +314,7 @@
     "@types/ws": "8.18.1",
     "@typescript-eslint/eslint-plugin": "8.57.2",
     "@typescript-eslint/parser": "8.57.2",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "argon2": "0.44.0",
     "better-sqlite3": "12.8.0",
     "bullmq": "6.0.0",
@@ -325,7 +325,7 @@
     "hono": "4.12.32",
     "ioredis": "5.10.0",
     "mongoose": "9.8.1",
-    "oclif": "4.23.29",
+    "oclif": "4.23.30",
     "otpauth": "9.5.1",
     "pagefind": "1.4.0",
     "pg": "8.20.0",
@@ -335,8 +335,8 @@
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.65.0",
-    "vitest": "4.1.10",
-    "ws": "8.21.1",
+    "vitest": "4.1.11",
+    "ws": "8.21.3",
     "zod": "4.3.6"
   },
   "overrides": {

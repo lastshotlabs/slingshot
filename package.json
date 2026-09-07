@@ -326,7 +326,7 @@
     "ioredis": "5.10.0",
     "mongoose": "9.8.1",
     "oclif": "4.23.29",
-    "otpauth": "9.5.1",
+    "otpauth": "9.5.2",
     "pagefind": "1.4.0",
     "pg": "8.20.0",
     "prettier": "3.8.1",
@@ -336,7 +336,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.65.0",
     "vitest": "4.1.10",
-    "ws": "8.21.1",
+    "ws": "8.21.3",
     "zod": "4.3.6"
   },
   "overrides": {
